@@ -33,17 +33,35 @@
 /* Ajoutez d'autres sections pour d'autres sites si nécessaire */
 
 /* Styles généraux pour la date room */
-.date-room {
-  background-color: var(--dateRoom-bgColor);
-  color: var(--dateRoom-textColor);
+
+.room{
   min-width: 250px;
   width: 20vw;
   max-width: 350px;
   text-align: center;
   line-height: 1em;
   margin-left: 15px;
+}
+
+.date-room {
+  background-color: var(--dateRoom-bgColor);
+  color: var(--dateRoom-textColor);
   border: 5px solid var(--dateRoom-bgColor);
 }
+
+.date{
+  font-size: large;
+  font-weight: bold;
+  line-height: 2em;
+  color: var(--dateRoom-textColor);
+}
+
+.nameRoom{
+  font-size: large;
+  line-height: 2em;
+  color: var(--dateRoom-textColor);
+}
+
 
 /* Styles pour la ligne de séparation */
 .breakLine {
@@ -69,6 +87,8 @@
   background-color: var(--tpi-timeSlot-bgColor);
   display: grid;
   grid-template-columns: 25% auto;
+  margin: 0 auto;
+  padding: 1px;
 }
 
 .timeSlot {
@@ -81,10 +101,12 @@
 
 .top {
   align-self: flex-start;
+  margin-top: 2px;
 }
 
 .bottom {
   align-self: flex-end;
+  margin-bottom: 2px;
 }
 
 /* Styles généraux pour le TPICard */
@@ -116,4 +138,50 @@
   background-color: var(--tpi-card-boss-bgColor);
   border-top: 2px solid var(--tpi-card-textColor);
   padding: 5px;
+}
+
+/* Button delete */
+
+.buttonDelete {
+  text-align: end;
+  padding-top: 6px;
+  padding-bottom: 3px;
+  position: relative;
+}
+
+.buttonDelete button {
+  color: #ffffff;
+  background-color: #ff4081;
+  font-size: medium;
+  font-weight: bold;
+  text-align: end;
+  border: none;
+  transition: background-color 0.3s ease-in-out;
+}
+
+.buttonDelete button:hover {
+  background-color: #ff0000; 
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.buttonDelete:hover::after {
+  content: "Attention: Tout sera supprimé !";
+  position: absolute;
+  text-align: center;
+  bottom: 31px;
+  left: 50%;
+  width: 200px;
+  background-color: #ff0000;
+  color: #ffffff;
+  padding: 2px;
+  font-size: 16px;
+  font-weight: bold;
+  transition: opacity 1s ease-in-out;
+  opacity: 1;
+}
+
+.buttonDelete:not(:hover)::after {
+  opacity: 0;
 }
