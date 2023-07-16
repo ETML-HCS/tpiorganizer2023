@@ -4,7 +4,7 @@ import React from 'react';
 
 const BreakLine = ({ duration }) => {
   return (
-    <div className="break-line">
+    <div className="breakLine">
       <p>Break: {duration} minutes</p>
     </div>
   );

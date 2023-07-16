@@ -1,80 +1,119 @@
-/* Styles pour ETML */
-.site_etml {
-    /* DateRoom */
-    --dateRoom-textColor: #ffffff;
-    --dateRoom-bgColor: #252525; /* Noir */
-    --lineBreak-color: #ffffff; /* Blanc */
-    --deleteButton-textColor: #252525; /* Noir */
-    --deleteButton-bgColor: #66bb6a; /* Vert */
-  
-    /* TPI Styles pour ETML */
-    --tpi-timeSlot-textColor: #252525; /* Noir */
-    --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
-    --tpi-card-textColor: #252525; /* Noir */
-    --tpi-card-candidat-bgColor: #f5f5f5; /* Gris clair */
-    --tpi-card-experts-bgColor: #2196f3; /* Bleu */
-    --tpi-card-chefDeProjet-bgColor: #37474f; /* Bleu foncé */
-  }
-  
-  /* Styles pour CFPV */
-  .site_cfpv {
-    /* DateRoom */
-    --dateRoom-bgColor: #252525; /* Noir */
-    --lineBreak-color: #ffffff; /* Blanc */
-    --deleteButton-textColor: #252525; /* Noir */
-    --deleteButton-bgColor: #ff5252; /* Rouge */
-  
-    /* TPI Styles pour CFPV */
-    --tpi-timeSlot-textColor: #252525; /* Noir */
-    --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
-    --tpi-card-textColor: #252525; /* Noir */
-    --tpi-card-candidat-bgColor: #fce4ec; /* Rose */
-    --tpi-card-experts-bgColor: #ff4081; /* Rose foncé */
-    --tpi-card-chefDeProjet-bgColor: #d50000; /* Rouge foncé */
-  }
-  
-  /* Ajoutez d'autres sections pour d'autres sites si nécessaire */
-  
-  /* Styles généraux pour la date room */
-  .date-room {
-    background-color: var(--dateRoom-bgColor);
-    color: var(--dateRoom-textColor);
-  }
-  
-  /* Styles pour la ligne de séparation */
-  .line-break {
-    border-top: 2px solid var(--lineBreak-color);
-  }
-  
-  /* Styles pour le bouton de suppression */
-  .delete-button {
-    color: var(--deleteButton-textColor);
-    background-color: var(--deleteButton-bgColor);
-  }
-  
-  /* Styles généraux pour le TPISlot */
-  .tpi-slot {
-    color: var(--tpi-timeSlot-textColor);
-    background-color: var(--tpi-timeSlot-bgColor);
-  }
-  
-  /* Styles généraux pour le TPICard */
-  .tpi-card {
-    color: var(--tpi-card-textColor);
-  }
-  
-  /* Styles pour le fond du candidat */
-  .tpi-card .candidat {
-    background-color: var(--tpi-card-candidat-bgColor);
-  }
-  
-  /* Styles pour le fond des experts */
-  .tpi-card .experts {
-    background-color: var(--tpi-card-experts-bgColor);
-  }
-  
-  /* Styles pour le fond du chef de projet */
-  .tpi-card .chef-de-projet {
-    background-color: var(--tpi-card-chefDeProjet-bgColor);
-  }
-  
+/* Styles pour ETML et CFPV */
+.site_etml,
+.site_cfpv {
+  /* DateRoom */
+  --dateRoom-textColor: #ffffff;
+  --dateRoom-bgColor: #252525; /* Noir */
+
+  --breakLine-TextColor: #333;
+  --breakLine-bgColor: #f4fea7;
+
+  --deleteButton-textColor: #252525; /* Noir */
+  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a); /* Vert par défaut */
+
+  /* TPI Styles */
+  --tpi-timeSlot-textColor: #252525; /* Noir */
+  --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
+
+  --tpi-card-textColor: var(--site-textColor, #ffffff); /* Noir par défaut */
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #696969); /* Gris clair par défaut */
+  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3); /* Bleu par défaut */
+  --tpi-card-boss-bgColor: var(--site-bossColor, #283840); /* Bleu foncé par défaut */
+}
+
+/* Styles pour CFPV */
+.site_cfpv {
+  --deleteButton-bgColor: var(--site-buttonColor, #ff5252); /* Rouge par défaut */
+  --tpi-card-textColor: var(--site-textColor, #252525); /* Noir par défaut */
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #fce4ec); /* Rose par défaut */
+  --tpi-card-experts-bgColor: var(--site-expertsColor, #ff4081); /* Rose foncé par défaut */
+  --tpi-card-boss-bgColor: var(--site-bossColor, #d50000); /* Rouge foncé par défaut */
+}
+
+/* Ajoutez d'autres sections pour d'autres sites si nécessaire */
+
+/* Styles généraux pour la date room */
+.date-room {
+  background-color: var(--dateRoom-bgColor);
+  color: var(--dateRoom-textColor);
+  min-width: 250px;
+  width: 20vw;
+  max-width: 350px;
+  text-align: center;
+  line-height: 1em;
+  margin-left: 15px;
+  border: 5px solid var(--dateRoom-bgColor);
+}
+
+/* Styles pour la ligne de séparation */
+.breakLine {
+  color: var(--breakLine-TextColor);
+  border-block: 2px solid var(--breakLine-TextColor);
+  background-color: var(--breakLine-bgColor);
+  height: 20px;
+}
+
+.breakLine p {
+  margin: 1%;
+}
+
+/* Styles pour le bouton de suppression */
+.delete-button {
+  color: var(--deleteButton-textColor);
+  background-color: var(--deleteButton-bgColor);
+}
+
+/* Styles généraux pour le TPISlot */
+.tpiSlot {
+  color: var(--tpi-timeSlot-textColor);
+  background-color: var(--tpi-timeSlot-bgColor);
+  display: grid;
+  grid-template-columns: 25% auto;
+}
+
+.timeSlot {
+  text-align: left;
+  display: grid;
+  grid-template-rows: 50% auto;
+  gap: 10px;
+  border-right: 1px solid var(--tpi-timeSlot-textColor);
+}
+
+.top {
+  align-self: flex-start;
+}
+
+.bottom {
+  align-self: flex-end;
+}
+
+/* Styles généraux pour le TPICard */
+.tpiCard {
+  color: var(--tpi-card-textColor);
+  text-align: left;
+  min-width: 100px;
+  max-width: 260px;
+  grid-template-rows: 25% 25% 25% auto;
+}
+
+/* Styles pour le fond du candidat */
+.tpiCard .candidat {
+  text-align: center;
+  font-weight: bolder;
+  background-color: var(--tpi-card-candidat-bgColor);
+  border-bottom: 2px solid var(--tpi-card-textColor);
+  padding: 5px;
+}
+
+/* Styles pour le fond des experts */
+.tpiCard .expert {
+  background-color: var(--tpi-card-experts-bgColor);
+  padding: 5px;
+}
+
+/* Styles pour le fond du chef de projet */
+.tpiCard .boss {
+  background-color: var(--tpi-card-boss-bgColor);
+  border-top: 2px solid var(--tpi-card-textColor);
+  padding: 5px;
+}

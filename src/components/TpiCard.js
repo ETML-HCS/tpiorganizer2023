@@ -1,14 +1,14 @@
 // TPICard.js
-import React from 'react';
+import React, { Fragment } from 'react';
 
 const TPICard = ({ candidat, expert1, expert2, chefDeProjet }) => {
   return (
-    <div className="tpi-card">
-      <h4>Candidat: {candidat}</h4>
-      <p>Expert 1: {expert1}</p>
-      <p>Expert 2: {expert2}</p>
-      <p>Chef de projet: {chefDeProjet}</p>
-    </div>
+    <Fragment>
+      <div className='candidat'>Candidat: {candidat}</div>
+      <div className='expert'>Expert 1: {expert1}</div>
+      <div className='expert' >Expert 2: {expert2}</div>
+      <div className='boss' >Chef de projet: {chefDeProjet}</div>
+    </Fragment>
   );
 };
 
