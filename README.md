@@ -42,3 +42,14 @@ Assurez-vous de tester votre code et de suivre les bonnes pratiques de développ
 
 Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier LICENSE.
 
+## Voici une synthèse de l'état actuel de mon programme
+
+J'ai travaillé sur le développement de mon application en React, TPIorganizer version 2023. Jusqu'à présent, j'ai réussi à mettre en place l'affichage de base, mais je n'ai pas encore implémenté la fonctionnalité d'édition ni les données réelles.
+
+Pour le moment, l'application affiche les soutenances en fonction des filtres de date, de site et d'autres critères. J'ai créé le composant principal, DateRoom, qui contient l'en-tête, les TPISlots et le bouton de suppression. Chaque TPISlot affiche l'heure de début et de fin, ainsi qu'une TpiCard simulée, mais sans données réelles.
+
+Concernant les fonctionnalités d'édition, je n'ai pas encore implémenté la possibilité de modifier les éléments du composant principal ou de créer de nouveaux éléments. Cela reste à faire dans les prochaines étapes de développement.
+
+De plus, pour le moment, l'application ne gère pas de données réelles. Les informations affichées sont fictives et statiques, et il n'y a pas de fonctionnalité d'importation ou d'exportation de données via un fichier CSV.
+
+Malgré ces limitations, je suis satisfait de la progression de mon application jusqu'à présent. J'ai réussi à mettre en place l'infrastructure de base et à afficher les éléments nécessaires. Mon prochain objectif sera de travailler sur l'implémentation de l'édition et de la gestion des données réelles pour rendre l'application plus fonctionnelle et interactive.

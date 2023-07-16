@@ -1,67 +1,118 @@
 /* Styles pour ETML et CFPV */
+
+:root
+{
+    /*Taille   */
+    --MinSizeWidth : 260px;
+    --MaxSizeWidth : 340px;
+}
+
 .site_etml,
 .site_cfpv {
+  
   /* DateRoom */
   --dateRoom-textColor: #ffffff;
-  --dateRoom-bgColor: #252525; /* Noir */
+  --dateRoom-bgColor: #252525;
+  /* Noir */
 
   --breakLine-TextColor: #333;
   --breakLine-bgColor: #f4fea7;
 
-  --deleteButton-textColor: #252525; /* Noir */
-  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a); /* Vert par défaut */
+  --deleteButton-textColor: #252525;
+  /* Noir */
+  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a);
+  /* Vert par défaut */
 
   /* TPI Styles */
-  --tpi-timeSlot-textColor: #252525; /* Noir */
-  --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
+  --tpi-timeSlot-textColor: #252525;
+  /* Noir */
+  --tpi-timeSlot-bgColor: #ffffff;
+  /* Blanc */
 
-  --tpi-card-textColor: var(--site-textColor, #ffffff); /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #696969); /* Gris clair par défaut */
-  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3); /* Bleu par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #283840); /* Bleu foncé par défaut */
+  --tpi-card-textColor: var(--site-textColor, #ffffff);
+  /* Noir par défaut */
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #696969);
+  /* Gris clair par défaut */
+  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3);
+  /* Bleu par défaut */
+  --tpi-card-boss-bgColor: var(--site-bossColor, #283840);
+  /* Bleu foncé par défaut */
 }
 
 /* Styles pour CFPV */
 .site_cfpv {
-  --deleteButton-bgColor: var(--site-buttonColor, #ff5252); /* Rouge par défaut */
-  --tpi-card-textColor: var(--site-textColor, #252525); /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #fce4ec); /* Rose par défaut */
-  --tpi-card-experts-bgColor: var(--site-expertsColor, #ff4081); /* Rose foncé par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #d50000); /* Rouge foncé par défaut */
+  --deleteButton-bgColor: var(--site-buttonColor, #ff5252);
+  /* Rouge par défaut */
+  --tpi-card-textColor: var(--site-textColor, #252525);
+  /* Noir par défaut */
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #fce4ec);
+  /* Rose par défaut */
+  --tpi-card-experts-bgColor: var(--site-expertsColor, #ff4081);
+  /* Rose foncé par défaut */
+  --tpi-card-boss-bgColor: var(--site-bossColor, #d50000);
+  /* Rouge foncé par défaut */
 }
 
 /* Ajoutez d'autres sections pour d'autres sites si nécessaire */
 
 /* Styles généraux pour la date room */
 
-.room{
-  min-width: 250px;
-  width: 20vw;
-  max-width: 350px;
-  text-align: center;
+.room {
   line-height: 1em;
   margin-left: 15px;
+  min-width: var(--MinSizeWidth);
+  max-width: var(--MaxSizeWidth); 
+}
+
+@media screen and (min-width: 454px) {
+  .room {
+    padding-top: calc(100vh - 43.5em);
+  }
+}
+
+@media screen and (max-width: 453px) {
+  .room {
+    padding-top: calc(100vh - 44.5em);
+  }
+}
+
+@media screen and (max-width: 395px) {
+  .room {
+    padding-top: calc(100vh - 39.5em);
+  }
+}
+
+@media screen and (max-width: 383px) {
+  .room {
+    padding-top: calc(100vh - 34em);
+  }
+}
+
+@media screen and (max-width: 379px) {
+  .room {
+    padding-top: calc(100vh - 37.5em);
+  }
 }
 
 .date-room {
+  text-align: center;
   background-color: var(--dateRoom-bgColor);
   color: var(--dateRoom-textColor);
   border: 5px solid var(--dateRoom-bgColor);
 }
 
-.date{
+.date {
   font-size: large;
   font-weight: bold;
   line-height: 2em;
   color: var(--dateRoom-textColor);
 }
 
-.nameRoom{
+.nameRoom {
   font-size: large;
   line-height: 2em;
   color: var(--dateRoom-textColor);
 }
-
 
 /* Styles pour la ligne de séparation */
 .breakLine {
@@ -140,27 +191,30 @@
   padding: 5px;
 }
 
-/* Button delete */
+/************************
+*****Button delete   ****
+*************************/
 
 .buttonDelete {
-  text-align: end;
+  background-color: white;
   padding-top: 6px;
   padding-bottom: 3px;
-  position: relative;
+  text-align: right;
 }
 
 .buttonDelete button {
+  border-radius: 2px;
+  padding: 5px;
   color: #ffffff;
   background-color: #ff4081;
   font-size: medium;
   font-weight: bold;
-  text-align: end;
   border: none;
   transition: background-color 0.3s ease-in-out;
 }
 
 .buttonDelete button:hover {
-  background-color: #ff0000; 
+  background-color: #ff0000;
   color: #ffffff;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);

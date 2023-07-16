@@ -1,0 +1,87 @@
+#header {
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    display: grid;
+    grid-template-rows: auto auto;
+}
+
+#title {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    background-color: #f2f2f2;
+    color: #333;
+    padding: 5px;
+    font-weight: bold;
+    font-size: 20px;
+}
+
+#left {
+    text-align: left;
+}
+
+@keyframes coolColor {
+    0% {
+        color: red;
+    }
+
+    25% {
+        color: #001933;
+    }
+
+
+    50% {
+        color: #003366;
+    }
+
+    75% {
+        color: #006699;
+    }
+
+    100% {
+        color: #0099CC;
+    }
+}
+
+#center {
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    animation: coolColor 10s infinite;
+}
+
+
+#center:hover {
+    color: blue;
+}
+
+
+#right {
+    text-align: right;
+}
+
+.etml {
+    font-family: "ETML L";
+    color: blue;
+}
+
+#tools {
+    background-color: #f2f2f2;
+    padding: 10px;
+}
+
+#tools button,
+#tools select {
+    margin: 5px;
+    border: none;
+    font-size: medium;
+    width: 150px;
+    height: 25px;
+    border-radius: 5%;
+    margin-left: 10px;
+    background-color: #333;
+    color: #f2f2f2;
+}

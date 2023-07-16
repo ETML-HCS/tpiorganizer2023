@@ -13,16 +13,19 @@ const DateRoom = ({ date, room, numSlots = 8, breakDuration = 10, site, onDelete
         <div className='nameRoom'>Room: {room}</div>
         {slots.map((_, index) => (
           <React.Fragment key={index}>
+
             <TPISlot site={site} />
+
             {index !== slots.length - 1 && <BreakLine duration={breakDuration} />}
           </React.Fragment>
         ))}
       </div>
-
       <div className='buttonDelete'>
-        <button onClick={onDelete}>Supprimer</button>
-      </div>
+          <button onClick={onDelete}>Supprimer</button>
+        </div>
     </div>
+
+
   );
 };
 
