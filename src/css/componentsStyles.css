@@ -1,0 +1,80 @@
+/* Styles pour ETML */
+.site_etml {
+    /* DateRoom */
+    --dateRoom-textColor: #ffffff;
+    --dateRoom-bgColor: #252525; /* Noir */
+    --lineBreak-color: #ffffff; /* Blanc */
+    --deleteButton-textColor: #252525; /* Noir */
+    --deleteButton-bgColor: #66bb6a; /* Vert */
+  
+    /* TPI Styles pour ETML */
+    --tpi-timeSlot-textColor: #252525; /* Noir */
+    --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
+    --tpi-card-textColor: #252525; /* Noir */
+    --tpi-card-candidat-bgColor: #f5f5f5; /* Gris clair */
+    --tpi-card-experts-bgColor: #2196f3; /* Bleu */
+    --tpi-card-chefDeProjet-bgColor: #37474f; /* Bleu foncé */
+  }
+  
+  /* Styles pour CFPV */
+  .site_cfpv {
+    /* DateRoom */
+    --dateRoom-bgColor: #252525; /* Noir */
+    --lineBreak-color: #ffffff; /* Blanc */
+    --deleteButton-textColor: #252525; /* Noir */
+    --deleteButton-bgColor: #ff5252; /* Rouge */
+  
+    /* TPI Styles pour CFPV */
+    --tpi-timeSlot-textColor: #252525; /* Noir */
+    --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
+    --tpi-card-textColor: #252525; /* Noir */
+    --tpi-card-candidat-bgColor: #fce4ec; /* Rose */
+    --tpi-card-experts-bgColor: #ff4081; /* Rose foncé */
+    --tpi-card-chefDeProjet-bgColor: #d50000; /* Rouge foncé */
+  }
+  
+  /* Ajoutez d'autres sections pour d'autres sites si nécessaire */
+  
+  /* Styles généraux pour la date room */
+  .date-room {
+    background-color: var(--dateRoom-bgColor);
+    color: var(--dateRoom-textColor);
+  }
+  
+  /* Styles pour la ligne de séparation */
+  .line-break {
+    border-top: 2px solid var(--lineBreak-color);
+  }
+  
+  /* Styles pour le bouton de suppression */
+  .delete-button {
+    color: var(--deleteButton-textColor);
+    background-color: var(--deleteButton-bgColor);
+  }
+  
+  /* Styles généraux pour le TPISlot */
+  .tpi-slot {
+    color: var(--tpi-timeSlot-textColor);
+    background-color: var(--tpi-timeSlot-bgColor);
+  }
+  
+  /* Styles généraux pour le TPICard */
+  .tpi-card {
+    color: var(--tpi-card-textColor);
+  }
+  
+  /* Styles pour le fond du candidat */
+  .tpi-card .candidat {
+    background-color: var(--tpi-card-candidat-bgColor);
+  }
+  
+  /* Styles pour le fond des experts */
+  .tpi-card .experts {
+    background-color: var(--tpi-card-experts-bgColor);
+  }
+  
+  /* Styles pour le fond du chef de projet */
+  .tpi-card .chef-de-projet {
+    background-color: var(--tpi-card-chefDeProjet-bgColor);
+  }
+  

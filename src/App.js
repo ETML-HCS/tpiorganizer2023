@@ -5,7 +5,7 @@ const App = () => {
   return (
     <div>
       <h1>TPIorganizer version 2023</h1>
-      <DateRoom date="2023-07-16" room="Salle A" numSlots={8} breakDuration={10} onDelete={() => {}} />
+      <DateRoom date="2023-07-16" room="Salle A" site={"ETML"} numSlots={8} breakDuration={10} onDelete={() => {}} />
     </div>
   );
 };
