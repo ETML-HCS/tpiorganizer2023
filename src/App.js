@@ -1,4 +1,4 @@
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import NavButton from './components/NavButtons';
 import DateRoom from './components/DateRoom';
 import './css/globalStyles.css';
@@ -7,20 +7,42 @@ const App = () => {
   const dateAujourdhui = new Date();
   const dateFormatted = dateAujourdhui.toLocaleDateString();
 
-  var site="";
+  const [newRooms, setNewRooms] = useState([]);
+
+  const handleNewRoom = (roomInfo) => {
+    console.log('Nouvelle salle ajoutée :', roomInfo);
+    setNewRooms([...newRooms, roomInfo]);
+  };
 
   return (
-
     <Fragment>
       <div id='header'>
         <div id="title">
           <span id="left"> <span className="etml">ETML</span> / CFPV</span>
-          <span id="center">O'2023</span>
+          <span id="center">O2023</span>
           <span id="right" className="dateToday">aujourd'hui: {dateFormatted}</span>
         </div>
-        <NavButton />
+        <NavButton onNewRoom={handleNewRoom} />
       </div>
-      <DateRoom date="2023-07-16" room="Salle A" site={"CFPV"} onDelete={() => { }} />
+
+      {newRooms.map((room, index) => (
+        
+      
+        
+        <DateRoom
+          key={index}
+          date={room.date}
+          site={room.site}
+          room={room.room}
+          
+          onDelete={() => {
+            console.log('Suppression de la salle :', room);
+            const updatedRooms = [...newRooms];
+            updatedRooms.splice(index, 1);
+            setNewRooms(updatedRooms);
+          }}
+        />
+        ))}
     </Fragment>
   );
 };
