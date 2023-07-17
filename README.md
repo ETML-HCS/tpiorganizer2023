@@ -42,14 +42,14 @@ Assurez-vous de tester votre code et de suivre les bonnes pratiques de développ
 
 Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier LICENSE.
 
-## Voici une synthèse de l'état actuel de mon programme
+## Journal de développement
 
-J'ai travaillé sur le développement de mon application en React, TPIorganizer version 2023. Jusqu'à présent, j'ai réussi à mettre en place l'affichage de base, mais je n'ai pas encore implémenté la fonctionnalité d'édition ni les données réelles.
+- 17 juillet : J'ai terminé la fonctionnalité qui permet l'ajout et la suppression des salles. Maintenant, les utilisateurs peuvent créer de nouveaux créneaux de soutenance en sélectionnant la date, le site et la salle. De plus, j'ai mis en place un design adaptatif qui s'ajuste parfaitement en fonction des choix de site (ETML/CFPV). Les utilisateurs peuvent également sélectionner les salles disponibles et remplir le champ de date au format valide pour simplifier leur expérience.
 
-Pour le moment, l'application affiche les soutenances en fonction des filtres de date, de site et d'autres critères. J'ai créé le composant principal, DateRoom, qui contient l'en-tête, les TPISlots et le bouton de suppression. Chaque TPISlot affiche l'heure de début et de fin, ainsi qu'une TpiCard simulée, mais sans données réelles.
+### Pour les prochaines sessions :
 
-Concernant les fonctionnalités d'édition, je n'ai pas encore implémenté la possibilité de modifier les éléments du composant principal ou de créer de nouveaux éléments. Cela reste à faire dans les prochaines étapes de développement.
+1. Mise en place des fonctionnalités d'édition : Je vais travailler sur la mise en place des boutons d'édition qui permettront aux utilisateurs de modifier les créneaux de soutenance existants. Ils pourront mettre à jour les informations telles que la date, le site et la salle.
 
-De plus, pour le moment, l'application ne gère pas de données réelles. Les informations affichées sont fictives et statiques, et il n'y a pas de fonctionnalité d'importation ou d'exportation de données via un fichier CSV.
+1. Envoi de mails : Je vais mettre en place la fonctionnalité d'envoi de mails en utilisant une liste prédéfinie au format JSON. Les utilisateurs pourront envoyer des notifications par e-mail aux participants des soutenances.
 
-Malgré ces limitations, je suis satisfait de la progression de mon application jusqu'à présent. J'ai réussi à mettre en place l'infrastructure de base et à afficher les éléments nécessaires. Mon prochain objectif sera de travailler sur l'implémentation de l'édition et de la gestion des données réelles pour rendre l'application plus fonctionnelle et interactive.
+> Je suis satisfait des progrès réalisés jusqu'à présent et je suis impatient de continuer à améliorer TPIorganizer version 2023 pour offrir une expérience plus complète et fonctionnelle aux utilisateurs.

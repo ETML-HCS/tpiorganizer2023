@@ -26,9 +26,7 @@ const App = () => {
       </div>
 
       {newRooms.map((room, index) => (
-        
-      
-        
+              
         <DateRoom
           key={index}
           date={room.date}
