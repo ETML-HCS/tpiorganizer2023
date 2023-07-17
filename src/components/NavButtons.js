@@ -1,31 +1,34 @@
 import React, { useState } from 'react';
 import NewRoomForm from './NewRoomForm';
 
-const NavButton = ({ onNewRoom }) => {
+const NavButton = ({ onNewRoom, onToggleEditing }) => {
   const [showForm, setShowForm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleAddRoom = () => {
     setShowForm(true);
   };
 
   const handleNewRoom = (roomInfo) => {
-    // Gérer les informations de la nouvelle salle (ex : les afficher, les enregistrer, etc.)
-    console.log(roomInfo);
-    
-    onNewRoom(roomInfo); // Appeler la fonction onNewRoom transmise en tant que prop
-
-    // Cacher le formulaire après l'ajout de la salle
+    console.log('Nouvelle salle ajoutée :', roomInfo);
+    onNewRoom(roomInfo);
     setShowForm(false);
   };
 
   const handleSend = () => {
-    // Gérer l'événement du bouton "Send"
     console.log("Send button clicked");
   };
 
   const handleEdition = () => {
-    // Gérer l'événement du bouton "Edition"
     console.log("Edition button clicked");
+    setIsEditing(true);
+    onToggleEditing(true);
+  };
+
+  const handleSave = () => {
+    console.log("Save button clicked");
+    setIsEditing(false);
+    onToggleEditing(false);
   };
 
   return (
@@ -40,6 +43,11 @@ const NavButton = ({ onNewRoom }) => {
           <button id="btSendEmail" onClick={handleSend}>
             &#x1F4E7; Send
           </button>
+          {isEditing ? (
+            <button id="btSave" onClick={handleSave}>
+              Save
+            </button>
+          ) : null}
           <button id="btEdition" onClick={handleEdition}>
             &#x1F4DD; Edition
           </button>

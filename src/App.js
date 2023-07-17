@@ -8,10 +8,15 @@ const App = () => {
   const dateFormatted = dateAujourdhui.toLocaleDateString();
 
   const [newRooms, setNewRooms] = useState([]);
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleNewRoom = (roomInfo) => {
     console.log('Nouvelle salle ajoutée :', roomInfo);
     setNewRooms([...newRooms, roomInfo]);
+  };
+
+  const toggleEditing = () => {
+    setIsEditing(!isEditing);
   };
 
   return (
@@ -22,17 +27,16 @@ const App = () => {
           <span id="center">&#xF3; 2023</span>
           <span id="right" className="dateToday">aujourd'hui: {dateFormatted}</span>
         </div>
-        <NavButton onNewRoom={handleNewRoom} />
+        <NavButton onNewRoom={handleNewRoom} onToggleEditing={toggleEditing} />
       </div>
 
       {newRooms.map((room, index) => (
-              
         <DateRoom
           key={index}
           date={room.date}
           site={room.site}
           room={room.room}
-
+          isEditOfRoom={isEditing}
           onDelete={() => {
             console.log('Suppression de la salle :', room);
             const updatedRooms = [...newRooms];
@@ -40,7 +44,7 @@ const App = () => {
             setNewRooms(updatedRooms);
           }}
         />
-        ))}
+      ))}
     </Fragment>
   );
 };
