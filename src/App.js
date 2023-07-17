@@ -19,7 +19,7 @@ const App = () => {
       <div id='header'>
         <div id="title">
           <span id="left"> <span className="etml">ETML</span> / CFPV</span>
-          <span id="center">O2023</span>
+          <span id="center">&#xF3; 2023</span>
           <span id="right" className="dateToday">aujourd'hui: {dateFormatted}</span>
         </div>
         <NavButton onNewRoom={handleNewRoom} />
@@ -34,7 +34,7 @@ const App = () => {
           date={room.date}
           site={room.site}
           room={room.room}
-          
+
           onDelete={() => {
             console.log('Suppression de la salle :', room);
             const updatedRooms = [...newRooms];
