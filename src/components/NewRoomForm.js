@@ -2,18 +2,19 @@ import React, { useState } from 'react';
 import roomsData from './rooms.json'; // Importez les données du fichier JSON
 
 const NewRoomForm = ({ onNewRoom }) => {
+  
   const [date, setDate] = useState('');
-  const [room, setRoom] = useState('');
+  const [nameRoom, setNameRoom] = useState('');
   const [site, setSite] = useState('');
   const [availableRooms, setAvailableRooms] = useState([]);
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
 
-    if (date && room && site) {
-      onNewRoom({ date, room, site });
+    if (date && nameRoom && site) {
+      onNewRoom({ date, nameRoom, site });
       setDate('');
-      setRoom('');
+      setNameRoom('');
       setSite('');
     }
   };
@@ -60,8 +61,8 @@ const NewRoomForm = ({ onNewRoom }) => {
       <label htmlFor="availableRooms">Salles disponibles :</label>
       <select
         id="availableRooms"
-        value={room}
-        onChange={(e) => setRoom(e.target.value)}
+        value={nameRoom}
+        onChange={(e) => setNameRoom(e.target.value)}
         required
       >
         <option value="">Sélectionner une salle</option>

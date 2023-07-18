@@ -1,11 +1,8 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 
-const TPICard = ({ isEditingTpiCard, candidat, expert1, expert2, boss }) => {
+const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedCandidat, setEditedCandidat] = useState(candidat);
-  const [editedExpert1, setEditedExpert1] = useState(expert1);
-  const [editedExpert2, setEditedExpert2] = useState(expert2);
-  const [editedBoss, setEditedBoss] = useState(boss);
+  const [editedTpi, setEditedTpi] = useState(tpi || {}); // Assurez-vous que tpi est défini
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -13,14 +10,14 @@ const TPICard = ({ isEditingTpiCard, candidat, expert1, expert2, boss }) => {
 
   const handleSave = () => {
     setIsEditing(false);
-    console.log("Save button clicked");
-    // Perform save logic here
-    // You can update the backend or store the edited values as needed
-    // For this example, I'll just update the edited values in the component state
-    setEditedCandidat(editedCandidat);
-    setEditedExpert1(editedExpert1);
-    setEditedExpert2(editedExpert2);
-    setEditedBoss(editedBoss);
+    onUpdateTpi(editedTpi);
+  };
+
+  const handleChange = (e, field) => {
+    setEditedTpi((prevTpi) => ({
+      ...prevTpi,
+      [field]: e.target.value,
+    }));
   };
 
   return (
@@ -29,30 +26,31 @@ const TPICard = ({ isEditingTpiCard, candidat, expert1, expert2, boss }) => {
         <>
           <input
             type="text"
-            value={editedCandidat}
-            onChange={(e) => setEditedCandidat(e.target.value)}
+            value={editedTpi.candidat || ''} // Vérifiez si candidat est défini
+            onChange={(e) => handleChange(e, 'candidat')}
           />
           <input
             type="text"
-            value={editedExpert1}
-            onChange={(e) => setEditedExpert1(e.target.value)}
+            value={editedTpi.expert1 || ''} // Vérifiez si expert1 est défini
+            onChange={(e) => handleChange(e, 'expert1')}
           />
           <input
             type="text"
-            value={editedExpert2}
-            onChange={(e) => setEditedExpert2(e.target.value)}
+            value={editedTpi.expert2 || ''} // Vérifiez si expert2 est défini
+            onChange={(e) => handleChange(e, 'expert2')}
           />
-          <textarea
-            value={editedBoss}
-            onChange={(e) => setEditedBoss(e.target.value)}
+          <input
+            type="text"
+            value={editedTpi.boss || ''} // Vérifiez si boss est défini
+            onChange={(e) => handleChange(e, 'boss')}
           />
         </>
       ) : (
         <>
-          <div className="candidat">Candidat: {editedCandidat}</div>
-          <div className="expert">Expert 1: {editedExpert1}</div>
-          <div className="expert">Expert 2: {editedExpert2}</div>
-          <div className="boss">Chef de projet: {editedBoss}</div>
+          <div className='candidat'>Candidat: {editedTpi.candidat}</div>
+          <div className='expert'>Expert 1: {editedTpi.expert1}</div>
+          <div className='expert' >Expert 2: {editedTpi.expert2}</div>
+          <div className='boss'>Chef de projet: {editedTpi.boss}</div>
         </>
       )}
 

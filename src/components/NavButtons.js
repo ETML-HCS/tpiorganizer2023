@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import NewRoomForm from './NewRoomForm';
 
-const NavButton = ({ onNewRoom, onToggleEditing }) => {
+const NavButton = ({ onNewRoom, onToggleEditing, onSave }) => {
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -28,9 +28,10 @@ const NavButton = ({ onNewRoom, onToggleEditing }) => {
   const handleSave = () => {
     console.log("Save button clicked");
     setIsEditing(false);
-    onToggleEditing(false);
+    onToggleEditing(false);  
+    onSave();
   };
-
+  
   return (
     <div id="tools">
       {showForm ? (
