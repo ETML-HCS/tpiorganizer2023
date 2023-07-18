@@ -44,12 +44,14 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 ## Journal de développement
 
-- 17 juillet : J'ai terminé la fonctionnalité qui permet l'ajout et la suppression des salles. Maintenant, les utilisateurs peuvent créer de nouveaux créneaux de soutenance en sélectionnant la date, le site et la salle. De plus, j'ai mis en place un design adaptatif qui s'ajuste parfaitement en fonction des choix de site (ETML/CFPV). Les utilisateurs peuvent également sélectionner les salles disponibles et remplir le champ de date au format valide pour simplifier leur expérience.
+- **17 juillet** : J'ai terminé la fonctionnalité qui permet l'ajout et la suppression des salles. Maintenant, les utilisateurs peuvent créer de nouveaux créneaux de soutenance en sélectionnant la date, le site et la salle. De plus, j'ai mis en place un design adaptatif qui s'ajuste parfaitement en fonction des choix de site (ETML/CFPV). Les utilisateurs peuvent également sélectionner les salles disponibles et remplir le champ de date au format valide pour simplifier leur expérience.
 
-### Pour les prochaines sessions :
+- **18 juillet** : J'ai ajouté les fonctionnalités d'édition des créneaux de soutenance existants. Les utilisateurs peuvent maintenant modifier les informations telles que la date, le site et la salle pour les créneaux de soutenance existants. J'ai également corrigé un bug qui inversait l'état d'édition avec le bouton "Save" après plusieurs basculements entre le mode édition et le mode sauvegarde.
 
-1. Mise en place des fonctionnalités d'édition : Je vais travailler sur la mise en place des boutons d'édition qui permettront aux utilisateurs de modifier les créneaux de soutenance existants. Ils pourront mettre à jour les informations telles que la date, le site et la salle.
+### Prochaines étapes :
 
 1. Envoi de mails : Je vais mettre en place la fonctionnalité d'envoi de mails en utilisant une liste prédéfinie au format JSON. Les utilisateurs pourront envoyer des notifications par e-mail aux participants des soutenances.
+
+2. Sauvegarde dans une base de données NoSQL (cloud) : Je prévois d'ajouter la possibilité de sauvegarder les données dans une base de données NoSQL hébergée dans le cloud. Cela permettra aux utilisateurs de stocker leurs informations de manière sécurisée et durable.
 
 > Je suis satisfait des progrès réalisés jusqu'à présent et je suis impatient de continuer à améliorer TPIorganizer version 2023 pour offrir une expérience plus complète et fonctionnelle aux utilisateurs.
