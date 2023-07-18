@@ -134,6 +134,7 @@
 
 /* Styles généraux pour le TPISlot */
 .tpiSlot {
+
   color: var(--tpi-timeSlot-textColor);
   background-color: var(--tpi-timeSlot-bgColor);
   display: grid;
@@ -143,21 +144,24 @@
 }
 
 .timeSlot {
+  font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  font-size: large;
   text-align: left;
   display: grid;
   grid-template-rows: 50% auto;
   gap: 10px;
   border-right: 1px solid var(--tpi-timeSlot-textColor);
+  margin-left: 8px;
 }
 
 .top {
   align-self: flex-start;
-  margin-top: 2px;
+  margin-top: 5px;
 }
 
 .bottom {
   align-self: flex-end;
-  margin-bottom: 2px;
+  margin-bottom: 5px;
 }
 
 /* Styles généraux pour le TPICard */
@@ -238,4 +242,30 @@
 
 .buttonDelete:not(:hover)::after {
   opacity: 0;
+}
+
+/*******************************
+** design pour le mode edition *
+********************************/
+
+.edit {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-left: auto;
+  margin-right: auto;
+  background-color: #f8f8f8;
+  width: 80%;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 8px;
+  transition: background-color 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.edit:focus {
+  background-color: #fff;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3);
+  outline: none;
+  transform: scale(1.1);
 }

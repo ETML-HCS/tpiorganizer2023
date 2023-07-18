@@ -3,8 +3,8 @@ import TPICard from './TpiCard';
 
 const TPISlot = ({
   isEditTPISlot,
-  startTime,
-  endTime,
+  startTime="08:00",
+  endTime="09:00",
   candidat,
   expert1,
   expert2,
@@ -37,7 +37,7 @@ const TPISlot = ({
           <>
             <input
               type="time"
-              className="top"
+              className="top edit"
               value={editedTpi.startTime}
               onChange={(e) =>
                 setEditedTpi((prevTpi) => ({
@@ -48,7 +48,7 @@ const TPISlot = ({
             />
             <input
               type="time"
-              className="bottom"
+              className="bottom edit"
               value={editedTpi.endTime}
               onChange={(e) =>
                 setEditedTpi((prevTpi) => ({
@@ -60,8 +60,8 @@ const TPISlot = ({
           </>
         ) : (
           <>
-            <p className="top">Début : {startTime}</p>
-            <p className="bottom">Fin : {endTime}</p>
+            <p className="top">{startTime}</p>
+            <p className="bottom">{endTime}</p>
           </>
         )}
       </div>

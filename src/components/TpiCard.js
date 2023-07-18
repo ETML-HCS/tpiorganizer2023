@@ -25,22 +25,22 @@ const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
       {isEditing ? (
         <>
           <input
-            type="text"
+            type="text" className='edit'
             value={editedTpi.candidat || ''} // Vérifiez si candidat est défini
             onChange={(e) => handleChange(e, 'candidat')}
           />
           <input
-            type="text"
+            type="text" className='edit'
             value={editedTpi.expert1 || ''} // Vérifiez si expert1 est défini
             onChange={(e) => handleChange(e, 'expert1')}
           />
           <input
-            type="text"
+            type="text" className='edit'
             value={editedTpi.expert2 || ''} // Vérifiez si expert2 est défini
             onChange={(e) => handleChange(e, 'expert2')}
           />
           <input
-            type="text"
+            type="text" className='edit'
             value={editedTpi.boss || ''} // Vérifiez si boss est défini
             onChange={(e) => handleChange(e, 'boss')}
           />
