@@ -9,6 +9,11 @@ const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   };
 
   const handleSave = () => {
+    // Vérifier si tous les champs requis sont remplis
+    if (!editedTpi.candidat || !editedTpi.expert1 || !editedTpi.expert2 || !editedTpi.boss) {
+      console.log("Veuillez remplir tous les champs avant de sauvegarder.");
+      return;
+    }
     setIsEditing(false);
     onUpdateTpi(editedTpi);
   };
@@ -47,10 +52,10 @@ const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
         </>
       ) : (
         <>
-          <div className='candidat'>Candidat: {editedTpi.candidat}</div>
-          <div className='expert'>Expert 1: {editedTpi.expert1}</div>
-          <div className='expert' >Expert 2: {editedTpi.expert2}</div>
-          <div className='boss'>Chef de projet: {editedTpi.boss}</div>
+          <div className='candidat'>🎓{editedTpi.candidat}</div>
+          <div className='expert'>🔍1 {editedTpi.expert1}</div>
+          <div className='expert'>💡2 {editedTpi.expert2}</div>
+          <div className='boss'>💼 {editedTpi.boss}</div>
         </>
       )}
 

@@ -31,7 +31,8 @@ const NavButton = ({ onNewRoom, onToggleEditing, onSave }) => {
     onToggleEditing(false);  
     onSave();
   };
-  
+
+
   return (
     <div id="tools">
       {showForm ? (
@@ -39,18 +40,18 @@ const NavButton = ({ onNewRoom, onToggleEditing, onSave }) => {
       ) : (
         <>
           <button id="btNewRoom" onClick={handleAddRoom}>
-            &#x1F4DA; New room
+            &#x1F4DA; Nouvelle salle
           </button>
           <button id="btSendEmail" onClick={handleSend}>
-            &#x1F4E7; Send
+            &#x1F4E7; Envoyer
           </button>
           {isEditing ? (
             <button id="btSave" onClick={handleSave}>
-              Save
+              Enregistrer
             </button>
           ) : null}
           <button id="btEdition" onClick={handleEdition}>
-            &#x1F4DD; Edition
+            &#x1F4DD; Édition
           </button>
         </>
       )}

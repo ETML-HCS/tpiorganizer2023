@@ -3,8 +3,8 @@ import TPICard from './TpiCard';
 
 const TPISlot = ({
   isEditTPISlot,
-  startTime="08:00",
-  endTime="09:00",
+  startTime = "08:00",
+  endTime = "09:00",
   candidat,
   expert1,
   expert2,
@@ -28,6 +28,11 @@ const TPISlot = ({
   const handleSave = () => {
     setIsEditing(false);
     onUpdateTpi(editedTpi);
+  };
+
+  const handleUpdateTpiCard = (updatedTpi) => {
+    setEditedTpi(updatedTpi);
+    onUpdateTpi(updatedTpi); // Appeler la fonction de rappel onUpdateTpi avec les données mises à jour
   };
 
   return (
@@ -68,7 +73,7 @@ const TPISlot = ({
       <TPICard
         tpi={editedTpi}
         isEditingTpiCard={isEditTPISlot}
-        onUpdateTpi={(updatedTpi) => setEditedTpi(updatedTpi)}
+        onUpdateTpi={handleUpdateTpiCard} 
       />
       {!isEditing && isEditTPISlot && (
         <div className="editButton">

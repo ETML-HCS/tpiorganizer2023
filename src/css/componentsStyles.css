@@ -2,7 +2,7 @@
 
 :root
 {
-    /*Taille   */
+  --room-padding-top: 0;
     --MinSizeWidth : 260px;
     --MaxSizeWidth : 340px;
 }
@@ -31,67 +31,47 @@
 
   --tpi-card-textColor: var(--site-textColor, #ffffff);
   /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #696969);
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #130559);
   /* Gris clair par défaut */
   --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3);
   /* Bleu par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #283840);
+  --tpi-card-boss-bgColor: var(--site-bossColor, #1a4961);
   /* Bleu foncé par défaut */
+  transition: background-color 0.3s ease-in-out; 
+
 }
 
 /* Styles pour CFPV */
 .site_cfpv {
-  --deleteButton-bgColor: var(--site-buttonColor, #ff5252);
-  /* Rouge par défaut */
-  --tpi-card-textColor: var(--site-textColor, #252525);
-  /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #fce4ec);
-  /* Rose par défaut */
-  --tpi-card-experts-bgColor: var(--site-expertsColor, #ff4081);
-  /* Rose foncé par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #d50000);
-  /* Rouge foncé par défaut */
+  --deleteButton-bgColor: #8B4513; 
+  --tpi-card-candidat-bgColor: #f8b334;
+  --tpi-card-experts-bgColor: #D2691E;
+  --tpi-card-boss-bgColor: #CD853F;
+  transition: background-color 0.3s ease-in-out; 
+}
+
+.site_etml:hover, 
+.site_cfpv:hover {
+  background-color: #545151;
 }
 
 /* Ajoutez d'autres sections pour d'autres sites si nécessaire */
 
 /* Styles généraux pour la date room */
+#root {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
 
 .room {
+  padding-top: var(--room-padding-top);
+  flex: 1 0 200px;
+  transition: flex-basis 0.3s ease;
   line-height: 1em;
   margin-left: 15px;
-  min-width: var(--MinSizeWidth);
-  max-width: var(--MaxSizeWidth); 
-}
-
-@media screen and (min-width: 454px) {
-  .room {
-    padding-top: calc(100vh - 43.5em);
-  }
-}
-
-@media screen and (max-width: 453px) {
-  .room {
-    padding-top: calc(100vh - 44.5em);
-  }
-}
-
-@media screen and (max-width: 395px) {
-  .room {
-    padding-top: calc(100vh - 39.5em);
-  }
-}
-
-@media screen and (max-width: 383px) {
-  .room {
-    padding-top: calc(100vh - 34em);
-  }
-}
-
-@media screen and (max-width: 379px) {
-  .room {
-    padding-top: calc(100vh - 37.5em);
-  }
+  min-width: 200px;
+  max-width: 300px;
 }
 
 .date-room {
@@ -134,13 +114,24 @@
 
 /* Styles généraux pour le TPISlot */
 .tpiSlot {
-
   color: var(--tpi-timeSlot-textColor);
   background-color: var(--tpi-timeSlot-bgColor);
   display: grid;
   grid-template-columns: 25% auto;
   margin: 0 auto;
   padding: 1px;
+  animation: slide-in 0.5s ease-in-out;
+}
+
+@keyframes slide-in {
+  0% {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .timeSlot {
@@ -171,6 +162,7 @@
   min-width: 100px;
   max-width: 260px;
   grid-template-rows: 25% 25% 25% auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Styles pour le fond du candidat */
@@ -215,6 +207,7 @@
   font-weight: bold;
   border: none;
   transition: background-color 0.3s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .buttonDelete button:hover {

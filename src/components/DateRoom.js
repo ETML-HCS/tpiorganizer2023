@@ -23,6 +23,7 @@ const DateRoom = ({ date, name, site, numSlots = 8, breakDuration = 10, tpiData,
                 expert1={tpi.expert1}
                 expert2={tpi.expert2}
                 boss={tpi.boss}
+                //onUpdateTpi={(tpiIndex, updatedTpi) => handleUpdateTpi(index, tpiIndex, updatedTpi)}
                 onUpdateTpi={(updatedTpi) => onUpdateTpi(index, updatedTpi)}
                 isEditTPISlot={isEditOfRoom}
               />

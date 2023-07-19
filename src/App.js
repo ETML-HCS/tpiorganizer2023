@@ -1,10 +1,30 @@
-// App.js
-import React, { Fragment, useState } from 'react';
+import React, { Fragment, useState, useEffect } from 'react';
 import NavButton from './components/NavButtons';
 import DateRoom from './components/DateRoom';
 import './css/globalStyles.css';
 
+
 const App = () => {
+
+  useEffect(() => {
+    const updateRoomPaddingTop = () => {
+      const rootElement = document.getElementById('root');
+      const headerElement = document.getElementById('header');
+
+      const { height } = headerElement.getBoundingClientRect();
+
+      rootElement.style.setProperty('--room-padding-top', `${height + 6}px`);
+    };
+
+    window.addEventListener('load', updateRoomPaddingTop);
+    window.addEventListener('resize', updateRoomPaddingTop);
+
+    return () => {
+      window.removeEventListener('load', updateRoomPaddingTop);
+      window.removeEventListener('resize', updateRoomPaddingTop);
+    };
+  }, []);
+
   const dateAujourdhui = new Date();
   const dateFormatted = dateAujourdhui.toLocaleDateString();
 
@@ -44,17 +64,33 @@ const App = () => {
       return;
     }
 
-    const jsonRooms = JSON.stringify(newRooms);
+    const updatedRooms = [...newRooms];
 
-    const blob = new Blob([jsonRooms], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+    Promise.all(
+      updatedRooms.map((room, roomIndex) =>
+        Promise.all(
+          room.tpiData.map((tpi, tpiIndex) =>
+            handleUpdateTpi(roomIndex, tpiIndex, tpi)
+          )
+        )
+      )
+    )
+      .then(() => {
+        const jsonRooms = JSON.stringify(updatedRooms);
 
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "rooms.json";
-    link.click();
+        const blob = new Blob([jsonRooms], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
 
-    URL.revokeObjectURL(url);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "rooms.json";
+        link.click();
+
+        URL.revokeObjectURL(url);
+      })
+      .catch((error) => {
+        console.error("Erreur lors de l'enregistrement des données :", error);
+      });
   };
 
   return (
@@ -65,12 +101,16 @@ const App = () => {
           <span id="center">&#xF3; 2023</span>
           <span id="right" className="dateToday">aujourd'hui: {dateFormatted}</span>
         </div>
-        <NavButton onNewRoom={handleNewRoom} onToggleEditing={toggleEditing} onSave={handleSave} />
+        <NavButton
+          onNewRoom={handleNewRoom}
+          onToggleEditing={toggleEditing}
+          onSave={handleSave}
+        />
       </div>
 
       {newRooms.map((room, index) => (
         <DateRoom
-          key={index}
+          key={index} // Ajoutez une prop key unique en utilisant l'index
           roomIndex={index}
           date={room.date}
           name={room.nameRoom}
@@ -78,7 +118,6 @@ const App = () => {
           tpiData={room.tpiData}
           isEditOfRoom={isEditing}
           onUpdateTpi={(tpiIndex, updatedTpi) => handleUpdateTpi(index, tpiIndex, updatedTpi)}
-
           onDelete={() => {
             console.log('Suppression de la salle :', room);
             setNewRooms((prevRooms) => {
