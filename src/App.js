@@ -3,12 +3,9 @@ import NavButton from "./components/NavButtons";
 import DateRoom from "./components/DateRoom";
 import "./css/globalStyles.css";
 
-const configO2023 = require("./config/configO2023.json"); // Utilise require() pour importer le fichier JSON
-
+const configO2023 = require("./config/configO2023.json"); 
 if (!configO2023) {
   console.error("Erreur lors du chargement du fichier de configuration.");
-  // Afficher un message d'erreur ou effectuer une action appropriée lorsque le chargement échoue
-  // Par exemple, afficher un message à l'utilisateur ou rediriger vers une page d'erreur
 }
 
 const App = () => {
@@ -124,24 +121,24 @@ const App = () => {
 
       {configO2023 &&
         newRooms.map((room, index) => {
+
           const siteConfig = configO2023[room.site.toLowerCase()]; // Convertir en minuscules
           if (!siteConfig) {
             // Gérer le cas où la configuration du site n'est pas définie
             console.error(`Configuration du site "${room.site}" introuvable.`);
             return null;
           }
-      
-          const { numSlots, breakline } = siteConfig;
+
           return (
             <DateRoom
               key={index}
               date={room.date}
               name={room.nameRoom}
               site={room.site}
-              numSlots={numSlots}
-              breakDuration={breakline}
+              siteData={siteConfig}
               tpiData={room.tpiData}
               isEditOfRoom={isEditing}
+              
               onUpdateTpi={(tpiIndex, updatedTpi) =>
                 handleUpdateTpi(index, tpiIndex, updatedTpi)
               }
