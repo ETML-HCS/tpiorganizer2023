@@ -1,0 +1,16 @@
+{
+  "etml": {
+    "rooms": ["Salle A", "Salle B", "Salle C"],
+    "breakline": "00:10",
+    "tpiTime": "01:00",
+    "firstTpiStart": "08:00",
+    "numSlots": 8
+  },
+  "cfpv": {
+    "rooms": ["Salle X", "Salle Y", "Salle Z"],
+    "breakline": "00:10",
+    "tpiTime": "01:00",
+    "firstTpiStart": "08:00",
+    "numSlots": 8
+  }
+}

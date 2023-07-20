@@ -1,27 +1,33 @@
-import React, { Fragment, useState, useEffect } from 'react';
-import NavButton from './components/NavButtons';
-import DateRoom from './components/DateRoom';
-import './css/globalStyles.css';
+import React, { Fragment, useState, useEffect } from "react";
+import NavButton from "./components/NavButtons";
+import DateRoom from "./components/DateRoom";
+import "./css/globalStyles.css";
 
+const configO2023 = require("./config/configO2023.json"); // Utilise require() pour importer le fichier JSON
+
+if (!configO2023) {
+  console.error("Erreur lors du chargement du fichier de configuration.");
+  // Afficher un message d'erreur ou effectuer une action appropriée lorsque le chargement échoue
+  // Par exemple, afficher un message à l'utilisateur ou rediriger vers une page d'erreur
+}
 
 const App = () => {
-
   useEffect(() => {
     const updateRoomPaddingTop = () => {
-      const rootElement = document.getElementById('root');
-      const headerElement = document.getElementById('header');
+      const rootElement = document.getElementById("root");
+      const headerElement = document.getElementById("header");
 
       const { height } = headerElement.getBoundingClientRect();
 
-      rootElement.style.setProperty('--room-padding-top', `${height + 6}px`);
+      rootElement.style.setProperty("--room-padding-top", `${height + 6}px`);
     };
 
-    window.addEventListener('load', updateRoomPaddingTop);
-    window.addEventListener('resize', updateRoomPaddingTop);
+    window.addEventListener("load", updateRoomPaddingTop);
+    window.addEventListener("resize", updateRoomPaddingTop);
 
     return () => {
-      window.removeEventListener('load', updateRoomPaddingTop);
-      window.removeEventListener('resize', updateRoomPaddingTop);
+      window.removeEventListener("load", updateRoomPaddingTop);
+      window.removeEventListener("resize", updateRoomPaddingTop);
     };
   }, []);
 
@@ -32,7 +38,7 @@ const App = () => {
   const [isEditing, setIsEditing] = useState(false);
 
   const handleNewRoom = (roomInfo) => {
-    console.log('Nouvelle salle ajoutée :', roomInfo);
+    console.log("Nouvelle salle ajoutée :", roomInfo);
 
     const newRoom = {
       date: roomInfo.date,
@@ -83,7 +89,7 @@ const App = () => {
 
         const link = document.createElement("a");
         link.href = url;
-        link.download = "rooms.json";
+        link.download = "backupRooms.json";
         link.click();
 
         URL.revokeObjectURL(url);
@@ -95,39 +101,61 @@ const App = () => {
 
   return (
     <Fragment>
-      <div id='header'>
-        <div id="title">
-          <span id="left"> <span className="etml">ETML</span> / CFPV</span>
-          <span id="center">&#xF3; 2023</span>
-          <span id="right" className="dateToday">aujourd'hui: {dateFormatted}</span>
+      {configO2023 && (
+        <div id="header">
+          <div id="title">
+            <span id="left">
+              {" "}
+              <span className="etml">ETML</span> / CFPV
+            </span>
+            <span id="center">&#xF3; 2023</span>
+            <span id="right" className="dateToday">
+              aujourd'hui: {dateFormatted}
+            </span>
+          </div>
+          <NavButton
+            configData={configO2023}
+            onNewRoom={handleNewRoom}
+            onToggleEditing={toggleEditing}
+            onSave={handleSave}
+          />
         </div>
-        <NavButton
-          onNewRoom={handleNewRoom}
-          onToggleEditing={toggleEditing}
-          onSave={handleSave}
-        />
-      </div>
+      )}
 
-      {newRooms.map((room, index) => (
-        <DateRoom
-          key={index} // Ajoutez une prop key unique en utilisant l'index
-          roomIndex={index}
-          date={room.date}
-          name={room.nameRoom}
-          site={room.site}
-          tpiData={room.tpiData}
-          isEditOfRoom={isEditing}
-          onUpdateTpi={(tpiIndex, updatedTpi) => handleUpdateTpi(index, tpiIndex, updatedTpi)}
-          onDelete={() => {
-            console.log('Suppression de la salle :', room);
-            setNewRooms((prevRooms) => {
-              const updatedRooms = [...prevRooms];
-              updatedRooms.splice(index, 1);
-              return updatedRooms;
-            });
-          }}
-        />
-      ))}
+      {configO2023 &&
+        newRooms.map((room, index) => {
+          const siteConfig = configO2023[room.site.toLowerCase()]; // Convertir en minuscules
+          if (!siteConfig) {
+            // Gérer le cas où la configuration du site n'est pas définie
+            console.error(`Configuration du site "${room.site}" introuvable.`);
+            return null;
+          }
+      
+          const { numSlots, breakline } = siteConfig;
+          return (
+            <DateRoom
+              key={index}
+              date={room.date}
+              name={room.nameRoom}
+              site={room.site}
+              numSlots={numSlots}
+              breakDuration={breakline}
+              tpiData={room.tpiData}
+              isEditOfRoom={isEditing}
+              onUpdateTpi={(tpiIndex, updatedTpi) =>
+                handleUpdateTpi(index, tpiIndex, updatedTpi)
+              }
+              onDelete={() => {
+                console.log("Suppression de la salle :", room);
+                setNewRooms((prevRooms) => {
+                  const updatedRooms = [...prevRooms];
+                  updatedRooms.splice(index, 1);
+                  return updatedRooms;
+                });
+              }}
+            />
+          );
+        })}
     </Fragment>
   );
 };

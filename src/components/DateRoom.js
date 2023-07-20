@@ -3,7 +3,8 @@ import React from 'react';
 import TPISlot from './TpiSlot';
 import BreakLine from './BreakLine';
 import '../css/componentsStyles.css';
-const DateRoom = ({ date, name, site, numSlots = 8, breakDuration = 10, tpiData, onDelete, isEditOfRoom, onUpdateTpi }) => {
+
+const DateRoom = ({ date, name, site, numSlots, breakDuration, tpiData, onDelete, isEditOfRoom, onUpdateTpi }) => {
   const slots = Array(numSlots).fill(null);
 
   return (
@@ -12,6 +13,7 @@ const DateRoom = ({ date, name, site, numSlots = 8, breakDuration = 10, tpiData,
         <div className='date'>{date}</div>
         <div className='nameRoom'>Room: {name}</div>
         {slots.map((_, index) => {
+          
           const tpi = tpiData[index] || {}; // Récupère le TPI correspondant à l'index s'il existe, sinon utilise un objet vide
 
           return (

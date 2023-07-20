@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import roomsData from './rooms.json'; // Importez les données du fichier JSON
 
-const NewRoomForm = ({ onNewRoom }) => {
+const NewRoomForm = ({ onNewRoom, configData }) => {
   
   const [date, setDate] = useState('');
   const [nameRoom, setNameRoom] = useState('');
@@ -19,21 +18,24 @@ const NewRoomForm = ({ onNewRoom }) => {
     }
   };
 
-  const handleSiteChange = async (e) => {
+  const handleSiteChange = (e) => {
+    console.log(configData);
+
     const selectedSite = e.target.value;
     setSite(selectedSite);
-  
-    // Mettre à jour les salles disponibles en fonction du choix de l'école
+    
     if (selectedSite === 'ETML') {
-      const rooms = roomsData.etml; // Utilisez roomsData.etml pour accéder aux salles ETML
+      // Utiliser configData.etml.rooms pour accéder aux salles ETML
+      const rooms = configData.etml.rooms;
       setAvailableRooms(rooms);
     } else if (selectedSite === 'CFPV') {
-      const rooms = roomsData.cfpv; // Utilisez roomsData.cfpv pour accéder aux salles CFPV
+      // Utiliser configData.cfpv.rooms pour accéder aux salles CFPV
+      const rooms = configData.cfpv.rooms;
       setAvailableRooms(rooms);
     } else {
       setAvailableRooms([]);
     }
-  };
+  };  
 
   return (
     <form onSubmit={handleFormSubmit}>
