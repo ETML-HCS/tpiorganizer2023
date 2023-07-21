@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useDrag } from 'react-dnd';
+import { ItemTypes } from './Constants'; // You'll define this later
 
-const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
+const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTpi, setEditedTpi] = useState(tpi || {}); // Assurez-vous que tpi est défini
+  const [editedTpi, setEditedTpi] = useState(tpi || {});
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -25,8 +27,16 @@ const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     }));
   };
 
+  const [{ isDragging }, dragRef] = useDrag({
+    type: ItemTypes.TPI_CARD,
+    item:{ tpi },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
   return (
-    <div className="tpiCard">
+    <div ref={dragRef} className={`tpiCard ${isDragging ? 'dragging' : ''}`} >
       {isEditing ? (
         <>
           <input
@@ -52,10 +62,11 @@ const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
         </>
       ) : (
         <>
-          <div className='candidat'>🎓{editedTpi.candidat}</div>
-          <div className='expert'>🔍1 {editedTpi.expert1}</div>
-          <div className='expert'>💡2 {editedTpi.expert2}</div>
-          <div className='boss'>💼 {editedTpi.boss}</div>
+          <div className='debug'>{tpi.id}</div>
+          <div className='candidat'>{editedTpi.candidat}&nbsp;</div>
+          <div className='expert'>{editedTpi.expert1}&nbsp;</div>
+          <div className='expert'>{editedTpi.expert2}&nbsp;</div>
+          <div className='boss'> &gt; {editedTpi.boss}&nbsp;</div>
         </>
       )}
 
@@ -74,4 +85,4 @@ const TPICard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   );
 };
 
-export default TPICard;
+export default TpiCard;

@@ -1,58 +1,46 @@
-/* Styles pour ETML et CFPV */
+.debug{
+  color: #130559;
+  display: inline;
+  text-align: center;
 
-:root
-{
+}
+/* Styles pour ETML et CFPV */
+:root {
   --room-padding-top: 0;
-    --MinSizeWidth : 260px;
-    --MaxSizeWidth : 340px;
+  --MinSizeWidth: 260px;
+  --MaxSizeWidth: 340px;
 }
 
+/* Styles généraux pour les sites ETML et CFPV */
 .site_etml,
 .site_cfpv {
-  
   /* DateRoom */
   --dateRoom-textColor: #ffffff;
-  --dateRoom-bgColor: #252525;
-  /* Noir */
+  --dateRoom-bgColor: #252525; /* Noir */
 
   --breakLine-TextColor: #333;
   --breakLine-bgColor: #fbfeeb;
 
-  --deleteButton-textColor: #252525;
-  /* Noir */
-  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a);
-  /* Vert par défaut */
+  --deleteButton-textColor: #252525; /* Noir */
+  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a); /* Vert par défaut */
 
   /* TPI Styles */
-  --tpi-timeSlot-textColor: #252525;
-  /* Noir */
-  --tpi-timeSlot-bgColor: #ffffff;
-  /* Blanc */
+  --tpi-timeSlot-textColor: #252525; /* Noir */
+  --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
 
-  --tpi-card-textColor: var(--site-textColor, #ffffff);
-  /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #130559);
-  /* Gris clair par défaut */
-  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3);
-  /* Bleu par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #1a4961);
-  /* Bleu foncé par défaut */
-  transition: background-color 0.3s ease-in-out; 
-
+  --tpi-card-textColor: var(--site-textColor, #ffffff); /* Noir par défaut */
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #130559); /* Gris clair par défaut */
+  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3); /* Bleu par défaut */
+  --tpi-card-boss-bgColor: var(--site-bossColor, #1a4961); /* Bleu foncé par défaut */
+  transition: background-color 0.3s ease-in-out;
 }
 
-/* Styles pour CFPV */
+/* Styles spécifiques pour le site CFPV */
 .site_cfpv {
-  --deleteButton-bgColor: #8B4513; 
+  --deleteButton-bgColor: #8B4513;
   --tpi-card-candidat-bgColor: #f8b334;
   --tpi-card-experts-bgColor: #D2691E;
   --tpi-card-boss-bgColor: #CD853F;
-  transition: background-color 0.3s ease-in-out; 
-}
-
-.site_etml:hover, 
-.site_cfpv:hover {
-  background-color: #545151;
 }
 
 /* Ajoutez d'autres sections pour d'autres sites si nécessaire */
@@ -123,19 +111,8 @@
   animation: slide-in 0.5s ease-in-out;
 }
 
-@keyframes slide-in {
-  0% {
-    transform: translateY(50px);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
 .timeSlot {
-  font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
   font-size: large;
   text-align: left;
   display: grid;
@@ -174,23 +151,44 @@
   padding: 5px;
 }
 
+/* Styles généraux pour le TPICard */
+.tpiCard {
+  color: var(--tpi-card-textColor);
+  text-align: left;
+  min-width: 100px;
+  max-width: 260px;
+  grid-template-rows: 25% 25% 25% auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Styles pour le fond du candidat */
+.tpiCard .candidat {
+  text-align: center;
+  font-weight: bolder;
+  background-color: var(--tpi-card-candidat-bgColor);
+  border-bottom: 2px solid var(--tpi-card-textColor);
+  padding: 5px;
+}
+
 /* Styles pour le fond des experts */
 .tpiCard .expert {
-  background-color: var(--tpi-card-experts-bgColor);
+  background-color: var(--tpi-card-experts-bgColor); /* Ajout de la couleur de fond */
   padding: 5px;
 }
 
 /* Styles pour le fond du chef de projet */
 .tpiCard .boss {
-  background-color: var(--tpi-card-boss-bgColor);
+  background-color: var(--tpi-card-boss-bgColor); /* Ajout de la couleur de fond */
   border-top: 2px solid var(--tpi-card-textColor);
   padding: 5px;
 }
+
 
 /************************
 *****Button delete   ****
 *************************/
 
+/* Styles pour le bouton de suppression dans le mode édition */
 .buttonDelete {
   background-color: white;
   padding-top: 6px;
@@ -241,6 +239,7 @@
 ** design pour le mode edition *
 ********************************/
 
+/* Styles pour le mode édition */
 .edit {
   display: flex;
   justify-content: center;
@@ -261,4 +260,21 @@
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3);
   outline: none;
   transform: scale(1.1);
+}
+
+/* Style when an element is being dragged */
+.dragging {
+  opacity: 0.5;
+  border: 5px dashed #eb3c3c;
+  transform: scale(1.05);
+  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+  transition: opacity 0.2s ease, border 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Style when an element is being dragged over */
+.dragOver {
+  background-color: #f0f0f0;
+  border: 5px solid #77eb88;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+  transition: background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
 }

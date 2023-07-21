@@ -3,7 +3,7 @@ import NavButton from "./components/NavButtons";
 import DateRoom from "./components/DateRoom";
 import "./css/globalStyles.css";
 
-const configO2023 = require("./config/configO2023.json"); 
+const configO2023 = require("./config/configO2023.json");
 if (!configO2023) {
   console.error("Erreur lors du chargement du fichier de configuration.");
 }
@@ -96,6 +96,54 @@ const App = () => {
       });
   };
 
+  const handleSwapTpiCards = (roomIndex, draggedTpiID, targetTpiID) => {
+    console.log("config ", roomIndex, " > ", draggedTpiID, " > ", targetTpiID);
+  
+    const [draggedSite, draggedRoom, draggedSlot] = draggedTpiID.split("_");
+    const [targetSite, targetRoom, targetSlot] = targetTpiID.split("_");
+  
+    console.log("config ", draggedSite, " > ", draggedRoom, " > ", draggedSlot);
+    console.log("config ", targetSite, " > ", targetRoom, " > ", targetSlot);
+  
+    // Récupérer la liste newRooms
+    const updatedRooms = newRooms.map((room) => ({ ...room }));
+  
+    // Rechercher la room contenant la carte TPI draggedTpiID
+    const draggedRoomIndex = updatedRooms.findIndex((room) => roomIndex === roomIndex && draggedRoom === room.nameRoom);
+  
+    // Rechercher la room contenant la carte TPI targetTpiID
+    const targetRoomIndex = updatedRooms.findIndex((room) => targetSite === room.site && targetRoom === room.nameRoom);
+  
+    // Vérifier si les deux rooms ont été trouvées
+    if (draggedRoomIndex !== -1 && targetRoomIndex !== -1) {
+      // Récupérer l'index de la carte TPI draggedTpiID dans draggedRoom
+      const draggedTpiIndex = updatedRooms[draggedRoomIndex].tpiData.findIndex((tpi) => draggedSlot === tpi.id);
+  
+      // Récupérer l'index de la carte TPI targetTpiID dans targetRoom
+      const targetTpiIndex = updatedRooms[targetRoomIndex].tpiData.findIndex((tpi) => targetSlot === tpi.id);
+  
+      // Vérifier si les deux index ont été trouvés
+      if (draggedTpiIndex !== -1 && targetTpiIndex !== -1) {
+        // Échanger les cartes TPI entre les deux rooms
+        const draggedTpi = updatedRooms[draggedRoomIndex].tpiData[draggedTpiIndex];
+        updatedRooms[draggedRoomIndex].tpiData[draggedTpiIndex] = updatedRooms[targetRoomIndex].tpiData[targetTpiIndex];
+        updatedRooms[targetRoomIndex].tpiData[targetTpiIndex] = draggedTpi;
+  
+        // Mettre à jour les rooms dans la liste newRooms
+        setNewRooms(updatedRooms);
+      } else {
+        console.error(
+          "Erreur lors de l'échange des cartes TPI : L'index de la carte TPI n'a pas été trouvé dans l'une des rooms."
+        );
+      }
+    } else {
+      console.error(
+        "Erreur lors de l'échange des cartes TPI : L'une des rooms contenant la carte TPI n'a pas été trouvée."
+      );
+    }
+  };
+  
+  
   return (
     <Fragment>
       {configO2023 && (
@@ -120,39 +168,33 @@ const App = () => {
       )}
 
       {configO2023 &&
-        newRooms.map((room, index) => {
-
-          const siteConfig = configO2023[room.site.toLowerCase()]; // Convertir en minuscules
-          if (!siteConfig) {
-            // Gérer le cas où la configuration du site n'est pas définie
-            console.error(`Configuration du site "${room.site}" introuvable.`);
-            return null;
-          }
-
-          return (
-            <DateRoom
-              key={index}
-              date={room.date}
-              name={room.nameRoom}
-              site={room.site}
-              siteData={siteConfig}
-              tpiData={room.tpiData}
-              isEditOfRoom={isEditing}
-              
-              onUpdateTpi={(tpiIndex, updatedTpi) =>
-                handleUpdateTpi(index, tpiIndex, updatedTpi)
-              }
-              onDelete={() => {
-                console.log("Suppression de la salle :", room);
-                setNewRooms((prevRooms) => {
-                  const updatedRooms = [...prevRooms];
-                  updatedRooms.splice(index, 1);
-                  return updatedRooms;
-                });
-              }}
-            />
-          );
-        })}
+        newRooms.map((room, index) => (
+          <DateRoom
+            key={index}
+            roomIndex={index}
+            date={room.date}
+            name={room.nameRoom}
+            site={room.site}
+            siteData={configO2023[room.site.toLowerCase()]}
+            tpiData={room.tpiData}
+            isEditOfRoom={isEditing}
+            onUpdateTpi={(tpiIndex, updatedTpi) =>
+              handleUpdateTpi(index, tpiIndex, updatedTpi)
+            }
+            onDelete={() => {
+              console.log("Suppression de la salle :", room);
+              setNewRooms((prevRooms) => {
+                const updatedRooms = [...prevRooms];
+                updatedRooms.splice(index, 1);
+                return updatedRooms;
+              });
+            }}
+            // Passer la fonction handleSwapTpiCards en tant que prop
+            onSwapTpiCards={(draggedTpi, targetTpi) =>
+              handleSwapTpiCards(index, draggedTpi, targetTpi)
+            }
+          />
+        ))}
     </Fragment>
   );
 };
