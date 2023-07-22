@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
-import NewRoomForm from './NewRoomForm';
+import React, { useState } from "react";
+import NewRoomForm from "./NewRoomForm";
 
-const NavButtons = ({ onNewRoom, onToggleEditing, onSave, onExport, configData }) => {
+const NavButtons = ({
+  onNewRoom,
+  onToggleEditing,
+  onSave,
+  onExport,
+  configData,
+  onLoadConfig,
+}) => {
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -9,26 +16,45 @@ const NavButtons = ({ onNewRoom, onToggleEditing, onSave, onExport, configData }
     setShowForm(true);
   };
 
-  const handleSend = () => {
-  };
+  const handleSend = () => {};
 
   const handleEdition = () => {
     setIsEditing(true);
-    onToggleEditing((boolean)=>(!boolean));
+    onToggleEditing((boolean) => !boolean);
   };
 
   const handleExport = () => {
     setIsEditing(false);
-    onToggleEditing(false);  
+    onToggleEditing(false);
     onExport();
   };
 
-  const handleSave =() => {}
+  const handleSave = () => {
+    onSave();
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Charger le fichier .json en utilisant FileReader
+      const fileReader = new FileReader();
+      fileReader.onload = (e) => {
+        const jsonData = e.target.result;
+        onLoadConfig(jsonData); // Appeler la fonction pour traiter les données chargées
+      };
+      fileReader.readAsText(file);
+    }
+  };
+  
 
   return (
-    <div id='tools'>
+    <div id="tools">
       {showForm ? (
-        <NewRoomForm onNewRoom={onNewRoom} configData={configData} setShowForm={setShowForm} />
+        <NewRoomForm
+          onNewRoom={onNewRoom}
+          configData={configData}
+          setShowForm={setShowForm}
+        />
       ) : (
         <>
           <button id="btNewRoom" onClick={handleAddRoom}>
@@ -48,6 +74,16 @@ const NavButtons = ({ onNewRoom, onToggleEditing, onSave, onExport, configData }
           <button id="btSave" onClick={handleSave}>
             &#x1F4BE; Enregistrer
           </button>
+          <label htmlFor="configFile" className="button-label">
+            &#x1F4C2; Charger Config
+          </label>
+          <input
+            type="file"
+            id="configFile"
+            accept=".json"
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
         </>
       )}
     </div>
