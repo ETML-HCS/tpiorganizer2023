@@ -48,19 +48,21 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 - **18 juillet** : Ajout des fonctionnalités d'édition des créneaux de soutenance existants. Les utilisateurs peuvent désormais modifier les informations telles que la date, le site et la salle pour les créneaux existants. Correction d'un bug qui inversait l'état d'édition avec le bouton "Save" après plusieurs basculements entre le mode édition et le mode sauvegarde.
 
-- **19 juillet** : Implémentation d'une version fonctionnelle de drag and drop pour permettre aux utilisateurs de déplacer les créneaux de soutenance d'une salle à une autre. Cette fonctionnalité s'est révélée être un défi complexe, mais après plusieurs essais et ajustements, nous avons réussi à la rendre opérationnelle.
+- **22 juillet** : Le drag and drop initial s'est avéré plus compliqué que prévu, donc après réflexion, j'ai décidé de rendre la zone des temps non éditable pour éviter toute modification accidentelle. Cependant, j'ai mis en place un fichier de configuration qui permet de fixer les plages des différents créneaux de défenses. Ce fichier de configuration offre également la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Ces nouvelles fonctionnalités devraient améliorer l'expérience globale des utilisateurs.
 
-- **22 juillet** : Suite à l'implémentation du drag and drop, nous avons mis à jour le CSS pour améliorer la lisibilité et augmenter la visibilité des éléments. Nous avons également ajouté quelques effets simples mais sympathiques pour améliorer l'expérience utilisateur, rendant l'application plus attrayante et conviviale.
-
-### Prochaines étapes :
+### Prochaines étapes
 
 1. Envoi de mails : Je vais implémenter la fonctionnalité d'envoi de mails en utilisant une liste prédéfinie au format JSON. Les utilisateurs pourront facilement envoyer des notifications par e-mail aux participants des soutenances, ce qui améliorera la communication et la coordination des événements.
 
 2. Sauvegarde dans une base de données NoSQL (cloud) : Je prévois d'ajouter la possibilité de sauvegarder les données dans une base de données NoSQL hébergée dans le cloud. Cela permettra aux utilisateurs de stocker leurs informations de manière sécurisée et d'accéder aux données de n'importe où, ce qui garantira une meilleure accessibilité et une sauvegarde fiable des informations.
 
+3. Création d'un bouton "Publier" : J'envisage de mettre en place un bouton "Publier" qui permettra de générer un lien accessible pour les personnes souhaitant consulter le planning des soutenances. Ce lien unique dirigera les utilisateurs vers une page HTML spécifique affichant le planning de manière lisible et interactive, facilitant ainsi le partage du planning avec les étudiants, les membres du jury et autres parties prenantes.
+
+4. Personnalisation avancée avec un fichier de configuration : J'ai déjà mis en place un fichier de configuration permettant de fixer les plages des différents créneaux de défenses. Dans les prochaines étapes, je prévois d'étendre ce fichier de configuration pour offrir aux utilisateurs la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Cela permettra aux utilisateurs de définir des configurations spécifiques à leurs besoins et préférences.
+
 > Je suis extrêmement satisfait des progrès réalisés jusqu'à présent et de l'implémentation réussie du drag and drop. J'ai également effectué des améliorations significatives sur le CSS pour améliorer la lisibilité et la visibilité, tout en ajoutant des effets simples mais sympathiques. Je suis impatient de poursuivre le développement de TPIorganizer version 2023 et d'offrir une expérience plus complète et fonctionnelle aux utilisateurs. Ces ajouts renforceront l'utilité de l'application et faciliteront la gestion efficace des soutenances.
 
-### Suite 
+### Idée pour le 23 ou 24 (si je fais une pause)
 
 Voici comment vous pouvez créer un lien qui permettra aux utilisateurs d'accéder à votre programme une fois qu'il sera terminé :
 
