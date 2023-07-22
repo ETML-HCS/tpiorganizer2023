@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDrag } from 'react-dnd';
 import { ItemTypes } from './Constants'; // You'll define this later
 
 const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTpi, setEditedTpi] = useState(tpi || {});
+  const [editedTpi, setEditedTpi] = useState(tpi);
+
+  // Update the editedTpi state whenever the tpi prop changes
+  useEffect(() => {
+    setEditedTpi(tpi);
+  }, [tpi]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -62,7 +67,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
         </>
       ) : (
         <>
-          <div className='debug'>{tpi.id}</div>
+          <div className='debug'>{editedTpi.id}</div>
           <div className='candidat'>{editedTpi.candidat}&nbsp;</div>
           <div className='expert'>{editedTpi.expert1}&nbsp;</div>
           <div className='expert'>{editedTpi.expert2}&nbsp;</div>

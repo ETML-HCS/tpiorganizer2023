@@ -3,19 +3,12 @@ import { useDrop } from 'react-dnd';
 import TpiCard from './TpiCard';
 import { ItemTypes } from './Constants';
 
-const TpiSlot = ({ tpiID, isEditTPISlot, startTime = "08:00", endTime = "09:00", candidat, expert1, expert2, boss, onUpdateTpi, onSwapTpiCardsProp }) => {
+const TpiSlot = ({ tpiData, isEditTPISlot, startTime, endTime, onUpdateTpi, onSwapTpiCardsProp }) => {
 
   // Utiliser l'ID TPI généré pour le TpiSlot
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTpi, setEditedTpi] = useState({
-    id: tpiID,
-    startTime,
-    endTime,
-    candidat,
-    expert1,
-    expert2,
-    boss,
-  });
+  const [editedTpi, setEditedTpi] = useState({ startTime, endTime });
+
   const handleEdit = () => {
     setIsEditing(true);
   };
@@ -27,7 +20,7 @@ const TpiSlot = ({ tpiID, isEditTPISlot, startTime = "08:00", endTime = "09:00",
 
   const handleUpdateTpiCard = (updatedTpi) => {
     setEditedTpi(updatedTpi);
-    onUpdateTpi(updatedTpi); // Appeler la fonction de rappel onUpdateTpi avec les données mises à jour
+    onUpdateTpi(updatedTpi);
   };
 
   const [{ isOver }, dropRef] = useDrop({
@@ -35,8 +28,8 @@ const TpiSlot = ({ tpiID, isEditTPISlot, startTime = "08:00", endTime = "09:00",
     drop: (item) => {
       console.log("drop called with:", item.tpi.id);
       const draggedTpi = item.tpi.id;
-      console.log("drop called with:", editedTpi.id);
-      onSwapTpiCardsProp(draggedTpi, editedTpi.id);
+      console.log("drop called with:", tpiData.id);
+      onSwapTpiCardsProp(draggedTpi, tpiData.id);
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
@@ -80,14 +73,10 @@ const TpiSlot = ({ tpiID, isEditTPISlot, startTime = "08:00", endTime = "09:00",
       </div>
 
       <TpiCard
-        tpi={{
-          ...editedTpi,
-          id: tpiID, // Passer l'ID TPI au composant TpiCard
-        }}
+        tpi={tpiData}
         isEditingTpiCard={isEditTPISlot}
         onUpdateTpi={handleUpdateTpiCard}
       />
-
       {!isEditing && isEditTPISlot && (
         <div className="editButton">
           <button onClick={handleEdit}>Edit</button>
@@ -101,5 +90,4 @@ const TpiSlot = ({ tpiID, isEditTPISlot, startTime = "08:00", endTime = "09:00",
     </div>
   );
 };
-
 export default TpiSlot;

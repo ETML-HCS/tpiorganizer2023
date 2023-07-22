@@ -10,23 +10,19 @@ const NavButton = ({ onNewRoom, onToggleEditing, onSave, configData }) => {
   };
 
   const handleNewRoom = (roomInfo) => {
-    console.log('Nouvelle salle ajoutée :', roomInfo);
     onNewRoom(roomInfo);
     setShowForm(false);
   };
 
   const handleSend = () => {
-    console.log("Send button clicked");
   };
 
   const handleEdition = () => {
-    console.log("Edition button clicked");
     setIsEditing(true);
     onToggleEditing(true);
   };
 
   const handleSave = () => {
-    console.log("Save button clicked");
     setIsEditing(false);
     onToggleEditing(false);  
     onSave();

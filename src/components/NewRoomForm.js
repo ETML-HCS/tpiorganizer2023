@@ -19,8 +19,6 @@ const NewRoomForm = ({ onNewRoom, configData }) => {
   };
 
   const handleSiteChange = (e) => {
-    console.log(configData);
-
     const selectedSite = e.target.value;
     setSite(selectedSite);
     
