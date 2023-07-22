@@ -55,3 +55,67 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 2. Sauvegarde dans une base de données NoSQL (cloud) : Je prévois d'ajouter la possibilité de sauvegarder les données dans une base de données NoSQL hébergée dans le cloud. Cela permettra aux utilisateurs de stocker leurs informations de manière sécurisée et durable.
 
 > Je suis satisfait des progrès réalisés jusqu'à présent et je suis impatient de continuer à améliorer TPIorganizer version 2023 pour offrir une expérience plus complète et fonctionnelle aux utilisateurs.
+
+
+### Suite 
+Voici comment vous pouvez créer un lien qui permettra aux utilisateurs d'accéder à votre programme une fois qu'il sera terminé :
+
+1. Mettez en place un bouton "Publier" : Créez un bouton dans votre application que l'utilisateur peut cliquer pour publier son programme. Ce bouton déclenchera le processus de génération du lien.
+
+2. Obtenez l'entrée de l'utilisateur : Lorsque l'utilisateur clique sur le bouton "Publier", vous pouvez lui demander de saisir un nom pour le lien. Vous pouvez utiliser une boîte de dialogue, un formulaire ou tout autre élément d'interface utilisateur pour obtenir l'entrée de l'utilisateur.
+
+3. Générez le lien : Une fois que vous avez l'entrée de l'utilisateur (le nom du lien souhaité), vous devez créer un lien ou une URL qui pointe vers la page HTML de votre programme avec le nom spécifié. Vous pouvez utiliser n'importe quel format d'URL que vous préférez, comme `/nomdulien`.
+
+4. Sauvegardez le lien : Vous devez enregistrer le lien généré sur le serveur ou dans une base de données avec les données pertinentes du programme de l'utilisateur.
+
+5. Redirigez vers le lien : Après avoir généré et sauvegardé le lien, vous pouvez fournir à l'utilisateur une confirmation que son programme a été publié avec succès. Vous pouvez également inclure un lien qui lui permettra d'accéder directement au programme. En cliquant sur ce lien, l'utilisateur sera redirigé vers la page HTML associée au nom de lien fourni.
+
+Voici un exemple simplifié de comment vous pouvez réaliser cela en utilisant React et JavaScript :
+
+```jsx
+import React, { useState } from "react";
+
+const App = () => {
+  const [publishedLink, setPublishedLink] = useState(null);
+  const [linkName, setLinkName] = useState("");
+
+  const handlePublish = () => {
+    // Validez le nom du lien (assurez-vous qu'il n'est pas vide et ne contient pas de caractères invalides)
+    if (!linkName.trim() || linkName.includes("/")) {
+      alert("Veuillez entrer un nom de lien valide.");
+      return;
+    }
+
+    // Générez l'URL pour le lien publié
+    const publishedUrl = `/${linkName}`;
+
+    // Sauvegardez le lien sur le serveur ou dans une base de données (vous pouvez mettre en œuvre cette partie en fonction de votre configuration de serveur)
+    // À des fins de démonstration, nous mettons simplement à jour l'état ici.
+    setPublishedLink(publishedUrl);
+  };
+
+  return (
+    <div>
+      {publishedLink ? (
+        <div>
+          <p>Votre programme a été publié avec succès !</p>
+          <p>Accédez-y en utilisant le lien ci-dessous :</p>
+          <a href={publishedLink}>{publishedLink}</a>
+        </div>
+      ) : (
+        <div>
+          <input
+            type="text"
+            placeholder="Entrez le nom du lien"
+            value={linkName}
+            onChange={(e) => setLinkName(e.target.value)}
+          />
+          <button onClick={handlePublish}>Publier</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default App;
+```

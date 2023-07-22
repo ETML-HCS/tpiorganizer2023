@@ -1,9 +1,10 @@
-.debug{
+.debug {
+  display: none;
   color: #130559;
-  display: inline;
   text-align: center;
 
 }
+
 /* Styles pour ETML et CFPV */
 :root {
   --room-padding-top: 0;
@@ -16,22 +17,31 @@
 .site_cfpv {
   /* DateRoom */
   --dateRoom-textColor: #ffffff;
-  --dateRoom-bgColor: #252525; /* Noir */
+  --dateRoom-bgColor: #252525;
+  /* Noir */
 
   --breakLine-TextColor: #333;
   --breakLine-bgColor: #fbfeeb;
 
-  --deleteButton-textColor: #252525; /* Noir */
-  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a); /* Vert par défaut */
+  --deleteButton-textColor: #252525;
+  /* Noir */
+  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a);
+  /* Vert par défaut */
 
   /* TPI Styles */
-  --tpi-timeSlot-textColor: #252525; /* Noir */
-  --tpi-timeSlot-bgColor: #ffffff; /* Blanc */
+  --tpi-timeSlot-textColor: #252525;
+  /* Noir */
+  --tpi-timeSlot-bgColor: #ffffff;
+  /* Blanc */
 
-  --tpi-card-textColor: var(--site-textColor, #ffffff); /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #130559); /* Gris clair par défaut */
-  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3); /* Bleu par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #1a4961); /* Bleu foncé par défaut */
+  --tpi-card-textColor: var(--site-textColor, #ffffff);
+  /* Noir par défaut */
+  --tpi-card-candidat-bgColor: var(--site-candidatColor, #130559);
+  /* Gris clair par défaut */
+  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3);
+  /* Bleu par défaut */
+  --tpi-card-boss-bgColor: var(--site-bossColor, #1a4961);
+  /* Bleu foncé par défaut */
   transition: background-color 0.3s ease-in-out;
 }
 
@@ -62,12 +72,22 @@
   max-width: 300px;
 }
 
+
+/* Styles pour la classe .date-room */
 .date-room {
   text-align: center;
   background-color: var(--dateRoom-bgColor);
   color: var(--dateRoom-textColor);
   border: 5px solid var(--dateRoom-bgColor);
+  transition: border-color 0.3s ease; /* Ajoute une transition pour une animation fluide */
 }
+
+/* Styles pour le survol de .date-room */
+.date-room:hover {
+  border-color: #2196f3; /* Bordure bleue au survol */
+  box-shadow: 0 0 8px rgba(33, 150, 243, 0.3); /* Ombre bleue au survol */
+}
+
 
 .date {
   font-size: large;
@@ -118,27 +138,48 @@
   display: grid;
   grid-template-rows: 50% auto;
   gap: 10px;
-  border-right: 1px solid var(--tpi-timeSlot-textColor);
-  margin-left: 8px;
+  border-right: 2px solid var(--tpi-timeSlot-textColor);
+  margin-left: 9px;
 }
 
 .top {
   align-self: flex-start;
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .bottom {
   align-self: flex-end;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
+}
+/* Styles pour les champs éditables */
+.edit {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #cccccc; /* Bordure autour du champ éditable */
+  border-radius: 4px;
+  font-size: 16px;
 }
 
-/* Styles généraux pour le TPICard */
+/* Styles pour l'icône d'édition */
+.edit-icon {
+  cursor: pointer;
+  font-size: 20px;
+  color: #2196f3; /* Couleur de l'icône d'édition (bleu) */
+}
+
+/* Styles pour la carte TpiCard */
 .tpiCard {
-  color: var(--tpi-card-textColor);
+  color: white;
   text-align: left;
-  min-width: 100px;
+  font-size: 16px;
+  font-family: Arial, sans-serif;
+  min-width: 180px;
   max-width: 260px;
-  grid-template-rows: 25% 25% 25% auto;
+  display: grid;
+  gap: 3px;
+  padding: 4px;
+  border: 2px solid #cccccc;
+  border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -151,38 +192,31 @@
   padding: 5px;
 }
 
-/* Styles généraux pour le TPICard */
-.tpiCard {
-  color: var(--tpi-card-textColor);
-  text-align: left;
-  min-width: 100px;
-  max-width: 260px;
-  grid-template-rows: 25% 25% 25% auto;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-/* Styles pour le fond du candidat */
-.tpiCard .candidat {
-  text-align: center;
-  font-weight: bolder;
-  background-color: var(--tpi-card-candidat-bgColor);
-  border-bottom: 2px solid var(--tpi-card-textColor);
-  padding: 5px;
+.candidat .star-icon {
+  margin-right: 6px;
+  font-size: 15px;
+  color: #ff9800;
 }
 
 /* Styles pour le fond des experts */
 .tpiCard .expert {
-  background-color: var(--tpi-card-experts-bgColor); /* Ajout de la couleur de fond */
+  background-color: var(--tpi-card-experts-bgColor);
   padding: 5px;
 }
 
 /* Styles pour le fond du chef de projet */
 .tpiCard .boss {
-  background-color: var(--tpi-card-boss-bgColor); /* Ajout de la couleur de fond */
+  background-color: var(--tpi-card-boss-bgColor);
+  /* Ajout de la couleur de fond */
   border-top: 2px solid var(--tpi-card-textColor);
   padding: 5px;
 }
 
+.boss .boss-icon {
+  margin-right: 6px; /* Marge à droite de l'icône */
+  font-size: 15px;
+  color: #e6d2ea; /* Couleur de l'icône de boss (violet) */
+}
 
 /************************
 *****Button delete   ****
@@ -236,7 +270,7 @@
 }
 
 /*******************************
-** design pour le mode edition *
+*  design pour le mode edition *
 ********************************/
 
 /* Styles pour le mode édition */
@@ -265,9 +299,9 @@
 /* Style when an element is being dragged */
 .dragging {
   opacity: 0.5;
-  border: 5px dashed #eb3c3c;
+  border: 3px dashed #eb3c3c;
   transform: scale(1.05);
-  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
   transition: opacity 0.2s ease, border 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 

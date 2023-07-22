@@ -45,7 +45,6 @@ const NavButtons = ({
       fileReader.readAsText(file);
     }
   };
-  
 
   return (
     <div id="tools">
@@ -58,24 +57,24 @@ const NavButtons = ({
       ) : (
         <>
           <button id="btNewRoom" onClick={handleAddRoom}>
-            &#x1F4DA; Nouvelle salle
+            Nouvelle salle &#x1F4DA;
           </button>
           <button id="btSendEmail" onClick={handleSend}>
-            &#x1F4E7; Envoyer
+            Envoyer &#x1F4E7;
           </button>
           {isEditing && (
             <button id="btExport" onClick={handleExport}>
-              &#x1F4E5; Exporter
+              Exporter &#x1F4E5;
             </button>
           )}
           <button id="btEdition" onClick={handleEdition}>
-            &#x1F4DD; Modifier
+            Modifier &#x1F4DD;
           </button>
           <button id="btSave" onClick={handleSave}>
-            &#x1F4BE; Enregistrer
+            Enregistrer &#x1F4BE;
           </button>
-          <label htmlFor="configFile" className="button-label">
-            &#x1F4C2; Charger Config
+          <label htmlFor="configFile" id="btLoadFile" className="btInput">
+            Charger Fichier  &#x1F4C2;
           </label>
           <input
             type="file"

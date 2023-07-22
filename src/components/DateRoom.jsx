@@ -69,11 +69,10 @@ const DateRoom = ({
             return (
               <React.Fragment key={iSlot}>
                 <TpiSlot
-                  startTime={startTime}
-                  endTime={endTime}
+                  timeValues={ [ startTime, endTime]}
                   tpiData={tpi}
                   onUpdateTpi={(updatedTpi) => onUpdateTpi(iSlot, updatedTpi)}
-                  isEditTPISlot={isEditOfRoom}
+                  isEditTPICard={isEditOfRoom}
                   onSwapTpiCardsProp={onSwapTpiCards}
                 />
                 {iSlot !== numSlots - 1 && (
