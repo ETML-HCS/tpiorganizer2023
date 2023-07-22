@@ -53,11 +53,9 @@
     animation: coolColor 10s infinite;
 }
 
-
 #center:hover {
     color: blue;
 }
-
 
 #right {
     text-align: right;

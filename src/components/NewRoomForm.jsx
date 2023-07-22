@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const NewRoomForm = ({ onNewRoom, configData }) => {
+const NewRoomForm = ({ onNewRoom,setShowForm, configData }) => {
   
   const [date, setDate] = useState('');
   const [nameRoom, setNameRoom] = useState('');
@@ -12,9 +12,10 @@ const NewRoomForm = ({ onNewRoom, configData }) => {
 
     if (date && nameRoom && site) {
       onNewRoom({ date, nameRoom, site });
-      setDate('');
-      setNameRoom('');
-      setSite('');
+      setShowForm(false);
+      setDate(date);
+      setNameRoom(nameRoom);
+      setSite(site);
     }
   };
 
