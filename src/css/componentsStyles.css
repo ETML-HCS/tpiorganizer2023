@@ -23,7 +23,7 @@
   --breakLine-bgColor: #e7e2d8; /* Gris clair */
 
   --deleteButton-textColor: #252525;
-  --deleteButton-bgColor: var(--site-buttonColor, #66bb6a);
+  --deleteButton-bgColor:  #66bb6a;
   /* Vert par défaut */
 
   /* TPI Styles */
@@ -232,21 +232,20 @@
 
 /* Styles pour le bouton de suppression dans le mode édition */
 .buttonDelete {
-  background-color: white;
-  padding-top: 6px;
-  padding-bottom: 3px;
+  background-color: burlywood;
+  padding: 6px 10px;
   text-align: right;
 }
 
 .buttonDelete button {
-  border-radius: 2px;
-  padding: 5px;
+  border-radius: 5px;
+  padding: 5px 10px;
   color: #ffffff;
-  background-color: var(--deleteButton-bgColor);
+  background-color: transparent;
   font-size: medium;
   font-weight: bold;
   border: none;
-  transition: background-color 0.3s ease-in-out;
+  transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -254,28 +253,32 @@
   background-color: #ff0000;
   color: #ffffff;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .buttonDelete:hover::after {
   content: "Attention: Tout sera supprimé !";
-  position: absolute;
+  position: relative;
+  display:block;
   text-align: center;
-  bottom: 31px;
-  left: 50%;
+  top:-80px;
+  left: 200px;
   width: 200px;
   background-color: #ff0000;
   color: #ffffff;
-  padding: 2px;
-  font-size: 16px;
+  padding: 5px;
+  font-size: 14px;
   font-weight: bold;
-  transition: opacity 1s ease-in-out;
+  border-radius: 4px;
+  transition: opacity 0.3s ease-in-out;
   opacity: 1;
 }
 
 .buttonDelete:not(:hover)::after {
   opacity: 0;
 }
+
+/* Ajoutez une brève description des améliorations apportées aux styles du bouton de suppression en mode édition. */
 
 /*******************************
 *  design pour le mode edition *
