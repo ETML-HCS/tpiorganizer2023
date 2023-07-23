@@ -2,7 +2,6 @@
   display: none;
   color: #130559;
   text-align: center;
-
 }
 
 /* Styles pour ETML et CFPV */
@@ -213,22 +212,15 @@
 /* Styles pour le fond du chef de projet */
 .tpiCard .boss {
   background-color: var(--tpi-card-boss-bgColor);
-  /* Ajout de la couleur de fond */
   border-top: 2px solid var(--tpi-card-textColor);
   padding: 5px;
 }
 
 .boss .boss-icon {
   margin-right: 6px;
-  /* Marge à droite de l'icône */
   font-size: 15px;
   color: #e6d2ea;
-  /* Couleur de l'icône de boss (violet) */
 }
-
-/************************
-*****Button delete   ****
-*************************/
 
 /* Styles pour le bouton de suppression dans le mode édition */
 .buttonDelete {
@@ -278,8 +270,6 @@
   opacity: 0;
 }
 
-/* Ajoutez une brève description des améliorations apportées aux styles du bouton de suppression en mode édition. */
-
 /*******************************
 *  design pour le mode edition *
 ********************************/
@@ -323,4 +313,42 @@
   box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
   transition: background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
 }
+
+/* SaveMessage.css */
+
+/* Style du message de sauvegarde */
+.saveMessage {
+  z-index: 9999;
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #007bff;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+/* Animation d'apparition */
+.saveMessage.show {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* Animation de disparition */
+.saveMessage.hide {
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0.5s;
+}
+
 

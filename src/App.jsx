@@ -40,7 +40,7 @@ const App = () => {
       window.removeEventListener("load", updateRoomPaddingTop);
       window.removeEventListener("resize", updateRoomPaddingTop);
     };
-  }, [isArrowUp]); // Ajouter isArrowUp comme dépendance ici
+  }, [isArrowUp]);
 
   // Charger les données depuis localStorage au chargement de l'application
   useEffect(() => {
@@ -50,9 +50,7 @@ const App = () => {
     }
   }, []);
 
-  
   const toggleArrow = () => {
-
     const upArrowButton = document.getElementById("upArrowButton");
     const downArrowButton = document.getElementById("downArrowButton");
     const elementTools = document.getElementById("tools");
@@ -60,16 +58,14 @@ const App = () => {
     if (isArrowUp) {
       upArrowButton.style.display = "none";
       downArrowButton.style.display = "block";
-      elementTools.style.display ="none";
-
+      elementTools.style.display = "none";
     } else {
-      elementTools.style.display ="block";
+      elementTools.style.display = "block";
       upArrowButton.style.display = "block";
       downArrowButton.style.display = "none";
     }
     setIsArrowUp((prevIsArrowUp) => !prevIsArrowUp);
   };
-
 
   // Fonction pour générer le lien de publication
   const handlePublish = () => {
@@ -168,14 +164,15 @@ const App = () => {
 
     console.log("Données sauvegardées dans localStorage.");
 
-    // Afficher un message temporaire pour informer l'utilisateur que les données ont été sauvegardées
+    // Afficher le message de sauvegarde
     const saveMessage = document.createElement("div");
     saveMessage.innerText = "Données sauvegardées avec succès !";
-    saveMessage.className = "saveMessage";
+    saveMessage.className = "saveMessage show";
     document.body.appendChild(saveMessage);
 
     // Supprimer le message après quelques secondes (par exemple, 3 secondes)
     setTimeout(() => {
+      saveMessage.classList.remove("show");
       document.body.removeChild(saveMessage);
     }, 3000);
   };
@@ -317,7 +314,11 @@ const App = () => {
                 aujourd'hui: {dateFormatted}{" "}
               </span>
             </div>
-            <button onClick={toggleArrow} id="downArrowButton" className={!isArrowUp ? "active" : ""}>
+            <button
+              onClick={toggleArrow}
+              id="downArrowButton"
+              className={!isArrowUp ? "active" : ""}
+            >
               ▼ ▼ ▼
             </button>
             <NavButton
