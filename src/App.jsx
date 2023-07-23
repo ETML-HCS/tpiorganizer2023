@@ -1,23 +1,38 @@
 import React, { Fragment, useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import NavButton from "./components/NavButtons";
 import DateRoom from "./components/DateRoom";
+import Home from "./components/Home";
+import PublishedLink from "./components/PublishedLink";
 import "./css/globalStyles.css";
 
-const configO2023 = require("./config/configO2023.json");
-if (!configO2023) {
-  console.error("Erreur lors du chargement du fichier de configuration.");
-}
-
 const App = () => {
+  const dateAujourdhui = new Date();
+  const dateFormatted = dateAujourdhui.toLocaleDateString();
+
+  const [newRooms, setNewRooms] = useState([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [publishedLink, setPublishedLink] = useState(null);
+  const [isArrowUp, setIsArrowUp] = useState(false);
+
+  const configO2023 = require("./config/configO2023.json");
+  if (!configO2023) {
+    console.error("Erreur lors du chargement du fichier de configuration.");
+  }
+
   useEffect(() => {
     const updateRoomPaddingTop = () => {
       const rootElement = document.getElementById("root");
       const headerElement = document.getElementById("header");
 
       const { height } = headerElement.getBoundingClientRect();
+      const paddingTop = isArrowUp ? height + 12 : 70;
 
-      rootElement.style.setProperty("--room-padding-top", `${height + 6}px`);
+      rootElement.style.setProperty("--room-padding-top", `${paddingTop}px`);
     };
+
+    updateRoomPaddingTop(); // Appeler la fonction ici pour mettre à jour le padding lors du rendu initial
+
     window.addEventListener("load", updateRoomPaddingTop);
     window.addEventListener("resize", updateRoomPaddingTop);
 
@@ -25,7 +40,7 @@ const App = () => {
       window.removeEventListener("load", updateRoomPaddingTop);
       window.removeEventListener("resize", updateRoomPaddingTop);
     };
-  }, []);
+  }, [isArrowUp]); // Ajouter isArrowUp comme dépendance ici
 
   // Charger les données depuis localStorage au chargement de l'application
   useEffect(() => {
@@ -35,11 +50,48 @@ const App = () => {
     }
   }, []);
 
-  const dateAujourdhui = new Date();
-  const dateFormatted = dateAujourdhui.toLocaleDateString();
+  
+  const toggleArrow = () => {
 
-  let [newRooms, setNewRooms] = useState([]);
-  const [isEditing, setIsEditing] = useState(false);
+    const upArrowButton = document.getElementById("upArrowButton");
+    const downArrowButton = document.getElementById("downArrowButton");
+    const elementTools = document.getElementById("tools");
+
+    if (isArrowUp) {
+      upArrowButton.style.display = "none";
+      downArrowButton.style.display = "block";
+      elementTools.style.display ="none";
+
+    } else {
+      elementTools.style.display ="block";
+      upArrowButton.style.display = "block";
+      downArrowButton.style.display = "none";
+    }
+    setIsArrowUp((prevIsArrowUp) => !prevIsArrowUp);
+  };
+
+
+  // Fonction pour générer le lien de publication
+  const handlePublish = () => {
+    // Générez l'URL pour le lien publié
+    const publishedUrl = `/${generateRandomLinkName()}`;
+
+    // Sauvegardez le lien dans l'état
+    setPublishedLink(publishedUrl);
+  };
+
+  // Fonction pour générer un nom de lien aléatoire (pour la démo)
+  const generateRandomLinkName = () => {
+    const characters =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let linkName = "";
+    for (let i = 0; i < 8; i++) {
+      linkName += characters.charAt(
+        Math.floor(Math.random() * characters.length)
+      );
+    }
+    return linkName;
+  };
 
   const handleNewRoom = (roomInfo) => {
     // Récupérer la configuration du site à partir de la configuration générale
@@ -79,7 +131,7 @@ const App = () => {
     setNewRooms((prevRooms) => [...prevRooms, newRoom]);
 
     // sauvegarde
-    saveDataToLocalStorage(newRooms);
+    saveDataToLocalStorage([...newRooms, newRoom]);
 
     // Afficher un message dans la console pour indiquer que la salle a été ajoutée
     console.log("Salle ajoutée :", newRoom);
@@ -106,16 +158,13 @@ const App = () => {
   const handleSave = () => {
     console.log("App.js, newRooms: ", newRooms);
 
-    // if (newRooms.length === 0) {
-    //   console.log("Aucune salle à sauvegarder.");
-    //   return;
-    // }
-
-    // Copier les nouvelles salles dans une variable temporaire pour éviter de les modifier directement
-    const updatedRooms = [...newRooms];
+    if (newRooms.length === 0) {
+      console.log("Aucune salle à sauvegarder.");
+      return;
+    }
 
     // Mettre à jour les données dans localStorage
-    localStorage.setItem("organizerData", JSON.stringify(updatedRooms));
+    saveDataToLocalStorage(newRooms);
 
     console.log("Données sauvegardées dans localStorage.");
 
@@ -250,59 +299,98 @@ const App = () => {
     setNewRooms(updatedNewRooms);
     saveDataToLocalStorage(updatedNewRooms);
 
-    console.log(newRooms);
+    console.log(updatedNewRooms);
   };
 
   return (
-    <Fragment>
-      {configO2023 && (
-        <div id="header">
-          <div id="title">
-            <span id="left">
-              {" "}
-              <span className="etml">ETML</span> / CFPV
-            </span>
-            <span id="center">&#xF3; 2023</span>
-            <span id="right" className="dateToday">
-              aujourd'hui: {dateFormatted}
-            </span>
+    <Router>
+      <Fragment>
+        {/* Votre entête */}
+        {configO2023 && (
+          <div id="header">
+            <div id="title">
+              <span id="left">
+                <span className="etml">ETML</span> / CFPV{" "}
+              </span>
+              <span id="center">&#xF3; 2023</span>
+              <span id="right" className="dateToday">
+                aujourd'hui: {dateFormatted}{" "}
+              </span>
+            </div>
+            <button onClick={toggleArrow} id="downArrowButton" className={!isArrowUp ? "active" : ""}>
+              ▼ ▼ ▼
+            </button>
+            <NavButton
+              configData={configO2023}
+              onNewRoom={handleNewRoom}
+              onToggleEditing={toggleEditing}
+              onExport={handleExport}
+              onSave={handleSave}
+              onLoadConfig={handleLoadConfig}
+              onPublish={handlePublish}
+              setPublishedLink={setPublishedLink}
+              toggleArrow={toggleArrow}
+              isArrowUp={isArrowUp}
+            />
+            {publishedLink && (
+              <div style={{ marginTop: "20px" }}>
+                <p>Votre planification a été publiée avec succès !</p>
+                <p>Accédez-y en utilisant le lien ci-dessous :</p>
+                <div
+                  style={{
+                    backgroundColor: "#f0f0f0",
+                    padding: "10px",
+                    wordBreak: "break-all",
+                    width: "fit-content",
+                  }}
+                >
+                  <Link to={publishedLink}>{publishedLink}</Link>
+                </div>
+              </div>
+            )}
           </div>
-          <NavButton
-            configData={configO2023}
-            onNewRoom={handleNewRoom}
-            onToggleEditing={toggleEditing}
-            onExport={handleExport}
-            onSave={handleSave}
-            onLoadConfig={handleLoadConfig}
-          />
-        </div>
-      )}
+        )}
 
-      {configO2023 &&
-        newRooms.map((room, index) => (
-          <DateRoom
-            key={index}
-            roomIndex={index}
-            roomData={room}
-            isEditOfRoom={isEditing}
-            onUpdateTpi={(tpiIndex, updatedTpi) =>
-              handleUpdateTpi(index, tpiIndex, updatedTpi)
-            }
-            onDelete={() => {
-              console.log("Suppression de la salle :", room);
-              setNewRooms((prevRooms) => {
-                const updatedRooms = [...prevRooms];
-                updatedRooms.splice(index, 1);
-                return updatedRooms;
-              });
-            }}
-            // Passer la fonction handleSwapTpiCards en tant que prop
-            onSwapTpiCards={(draggedTpi, targetTpi) =>
-              handleSwapTpiCards(draggedTpi, targetTpi)
-            }
-          />
-        ))}
-    </Fragment>
+        {/* Les routes pour afficher les salles et créneaux de soutenance */}
+        {configO2023 && (
+          <Routes>
+            <Route path="/" element={<Home />}>
+              {/* Page d'accueil (peut-être la liste des salles) */}
+            </Route>
+
+            <Route
+              path="/prog"
+              element={
+                <>
+                  {newRooms.map((room, index) => (
+                    <DateRoom
+                      key={index}
+                      roomIndex={index}
+                      roomData={room}
+                      isEditOfRoom={isEditing}
+                      onUpdateTpi={(tpiIndex, updatedTpi) =>
+                        handleUpdateTpi(index, tpiIndex, updatedTpi)
+                      }
+                      onSwapTpiCards={(draggedTpi, targetTpi) =>
+                        handleSwapTpiCards(draggedTpi, targetTpi)
+                      }
+                      onDelete={() => {
+                        console.log("Suppression de la salle :", room);
+                        setNewRooms((prevRooms) => {
+                          const updatedRooms = [...prevRooms];
+                          updatedRooms.splice(index, 1);
+                          return updatedRooms;
+                        });
+                      }}
+                    />
+                  ))}
+                </>
+              }
+            />
+          </Routes>
+        )}
+      </Fragment>
+    </Router>
   );
 };
 

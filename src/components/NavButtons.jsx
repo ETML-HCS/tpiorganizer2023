@@ -8,6 +8,9 @@ const NavButtons = ({
   onExport,
   configData,
   onLoadConfig,
+  onPublish,
+  toggleArrow,
+  isArrowUp
 }) => {
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -19,8 +22,8 @@ const NavButtons = ({
   const handleSend = () => {};
 
   const handleEdition = () => {
-    setIsEditing(true);
-    onToggleEditing((boolean) => !boolean);
+    setIsEditing((prevState) => !prevState);
+    onToggleEditing((prevState) => !prevState);
   };
 
   const handleExport = () => {
@@ -43,6 +46,15 @@ const NavButtons = ({
         onLoadConfig(jsonData); // Appeler la fonction pour traiter les données chargées
       };
       fileReader.readAsText(file);
+    }
+  };
+
+  const handlePublish = () => {
+    // Implement the logic for publishing here
+    // You can call the onPublish prop if needed
+    // For example:
+    if (onPublish) {
+      onPublish();
     }
   };
 
@@ -73,8 +85,8 @@ const NavButtons = ({
           <button id="btSave" onClick={handleSave}>
             Enregistrer &#x1F4BE;
           </button>
-          <label htmlFor="configFile" id="btLoadFile" className="btInput">
-            Charger Fichier  &#x1F4C2;
+          <label htmlFor="configFile" id="btLoadFile">
+            Charger Fichier &#x1F4C2;
           </label>
           <input
             type="file"
@@ -83,6 +95,14 @@ const NavButtons = ({
             style={{ display: "none" }}
             onChange={handleFileChange}
           />
+          <button onClick={handlePublish} id="btPublier">
+            Publier{" "}
+            <span role="img" aria-label="Publish">
+              📅
+            </span>
+          </button>
+
+          <button onClick={toggleArrow} id="upArrowButton" className={!isArrowUp ? "" : "active"}>▲ ▲ ▲ </button>
         </>
       )}
     </div>

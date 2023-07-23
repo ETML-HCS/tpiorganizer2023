@@ -18,13 +18,11 @@
   /* DateRoom */
   --dateRoom-textColor: #ffffff;
   --dateRoom-bgColor: #252525;
-  /* Noir */
 
   --breakLine-TextColor: #333;
-  --breakLine-bgColor: #fbfeeb;
+  --breakLine-bgColor: #e7e2d8; /* Gris clair */
 
   --deleteButton-textColor: #252525;
-  /* Noir */
   --deleteButton-bgColor: var(--site-buttonColor, #66bb6a);
   /* Vert par défaut */
 
@@ -35,25 +33,29 @@
   /* Blanc */
 
   --tpi-card-textColor: var(--site-textColor, #ffffff);
-  /* Noir par défaut */
-  --tpi-card-candidat-bgColor: var(--site-candidatColor, #130559);
-  /* Gris clair par défaut */
-  --tpi-card-experts-bgColor: var(--site-expertsColor, #2196f3);
-  /* Bleu par défaut */
-  --tpi-card-boss-bgColor: var(--site-bossColor, #1a4961);
-  /* Bleu foncé par défaut */
   transition: background-color 0.3s ease-in-out;
 }
 
-/* Styles spécifiques pour le site CFPV */
-.site_cfpv {
-  --deleteButton-bgColor: #8B4513;
-  --tpi-card-candidat-bgColor: #f8b334;
-  --tpi-card-experts-bgColor: #D2691E;
-  --tpi-card-boss-bgColor: #CD853F;
+/* Styles spécifiques pour le site ETML avec des couleurs terreuses */
+.site_etml {
+  --tpi-card-candidat-bgColor: #130559;
+  /* Violet terreux par défaut */
+  --tpi-card-experts-bgColor: #2196f3;
+  /* Bleu clair par défaut */
+  --tpi-card-boss-bgColor: #1a4961;
+  /* Bleu foncé par défaut */
 }
 
-/* Ajoutez d'autres sections pour d'autres sites si nécessaire */
+/* Styles spécifiques pour le site CFPV avec des couleurs terreuses */
+.site_cfpv {
+  --tpi-card-candidat-bgColor: #D2B48C;
+  /* Beige par défaut */
+  --tpi-card-experts-bgColor: #A0522D;
+  /* Brun clair par défaut */
+  --tpi-card-boss-bgColor: #C68642;
+  /* Brun foncé par défaut */
+}
+
 
 /* Styles généraux pour la date room */
 #root {
@@ -72,33 +74,34 @@
   max-width: 300px;
 }
 
-
 /* Styles pour la classe .date-room */
 .date-room {
   text-align: center;
   background-color: var(--dateRoom-bgColor);
   color: var(--dateRoom-textColor);
   border: 5px solid var(--dateRoom-bgColor);
-  transition: border-color 0.3s ease; /* Ajoute une transition pour une animation fluide */
+  transition: border-color 0.3s ease;
+  /* Ajoute une transition pour une animation fluide */
 }
 
 /* Styles pour le survol de .date-room */
 .date-room:hover {
-  border-color: #2196f3; /* Bordure bleue au survol */
-  box-shadow: 0 0 8px rgba(33, 150, 243, 0.3); /* Ombre bleue au survol */
+  border-color: #2196f3;
+  /* Bordure bleue au survol */
+  box-shadow: 0 0 8px rgba(33, 150, 243, 0.3);
+  /* Ombre bleue au survol */
 }
 
-
 .date {
-  font-size: large;
+  font-size: larger;
   font-weight: bold;
-  line-height: 2em;
+  line-height: 1.8em;
   color: var(--dateRoom-textColor);
 }
 
 .nameRoom {
-  font-size: large;
-  line-height: 2em;
+  font-size: larger;
+  line-height: 1.8em;
   color: var(--dateRoom-textColor);
 }
 
@@ -151,11 +154,13 @@
   align-self: flex-end;
   margin-bottom: 6px;
 }
+
 /* Styles pour les champs éditables */
 .edit {
   width: 100%;
   padding: 8px;
-  border: 1px solid #cccccc; /* Bordure autour du champ éditable */
+  border: 1px solid #cccccc;
+  /* Bordure autour du champ éditable */
   border-radius: 4px;
   font-size: 16px;
 }
@@ -164,7 +169,8 @@
 .edit-icon {
   cursor: pointer;
   font-size: 20px;
-  color: #2196f3; /* Couleur de l'icône d'édition (bleu) */
+  color: #2196f3;
+  /* Couleur de l'icône d'édition (bleu) */
 }
 
 /* Styles pour la carte TpiCard */
@@ -213,9 +219,11 @@
 }
 
 .boss .boss-icon {
-  margin-right: 6px; /* Marge à droite de l'icône */
+  margin-right: 6px;
+  /* Marge à droite de l'icône */
   font-size: 15px;
-  color: #e6d2ea; /* Couleur de l'icône de boss (violet) */
+  color: #e6d2ea;
+  /* Couleur de l'icône de boss (violet) */
 }
 
 /************************
@@ -234,7 +242,7 @@
   border-radius: 2px;
   padding: 5px;
   color: #ffffff;
-  background-color: #ff4081;
+  background-color: var(--deleteButton-bgColor);
   font-size: medium;
   font-weight: bold;
   border: none;
@@ -312,3 +320,4 @@
   box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
   transition: background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
 }
+

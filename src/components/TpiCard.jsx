@@ -3,20 +3,23 @@ import { useDrag } from "react-dnd";
 import { ItemTypes } from "./Constants"; // You'll define this later
 
 const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
+  // État local pour stocker les modifications en cours de la carte
   const [editedTpi, setEditedTpi] = useState(tpi);
 
+  // Effet pour mettre à jour l'état editedTpi lorsque la prop tpi change
   useEffect(() => {
-    // Mettre à jour l'état editedTpi seulement si la prop tpi change
     setEditedTpi(tpi);
   }, [tpi]);
 
+  // Effet pour mettre à jour le TPI sur l'action d'édition lorsque isEditingTpiCard est vrai
   useEffect(() => {
-    // Mettre à jour le TPI sur l'action d'édition lorsque isEditingTpiCard est vrai
     if (isEditingTpiCard) {
       onUpdateTpi(editedTpi);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditingTpiCard]);
 
+  // Gestionnaire de changement pour les champs de saisie lors de l'édition de la carte
   const handleChange = (e, field) => {
     setEditedTpi((prevTpi) => ({
       ...prevTpi,
@@ -24,6 +27,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     }));
   };
 
+  // Utilisation du hook useDrag pour permettre à la carte d'être draggable
   const [{ isDragging }, dragRef] = useDrag({
     type: ItemTypes.TPI_CARD,
     item: { tpi },
@@ -35,6 +39,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   return (
     <div ref={dragRef} className={`tpiCard ${isDragging ? "dragging" : ""}`}>
       {isEditingTpiCard ? (
+        // Mode édition : affichage des champs de saisie pour modifier les données
         <>
           <input
             type="text"
@@ -62,6 +67,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
           />
         </>
       ) : (
+        // Mode non édition : affichage des données de la carte
         <>
           <div className="debug">{editedTpi.id}</div>
           <div className="candidat">
@@ -71,7 +77,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             {editedTpi.candidat}
           </div>
           <div className="expert">
-            <span role="img" aria-label="checkmark" className=" boss-icon " >
+            <span role="img" aria-label="checkmark" className=" boss-icon ">
               ✔️
             </span>
             {editedTpi.expert1}
