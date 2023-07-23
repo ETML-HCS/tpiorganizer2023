@@ -50,9 +50,7 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 - **22 juillet** : Le drag and drop initial s'est avéré plus compliqué que prévu, donc après réflexion, j'ai décidé de rendre la zone des temps non éditable pour éviter toute modification accidentelle. Cependant, j'ai mis en place un fichier de configuration qui permet de fixer les plages des différents créneaux de défenses. Ce fichier de configuration offre également la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Ces nouvelles fonctionnalités devraient améliorer l'expérience globale des utilisateurs.
 
-- **23 juillet** : Ajout d'animations CSS pour améliorer l'expérience utilisateur lors de l'interaction avec les boutons. Les boutons affichent maintenant différentes couleurs grâce à un système de couleurs aléatoires. Modification de la classe CSS saveMessage pour afficher un message temporaire lors de la sauvegarde des données dans le local storage.
-
-TPIorganizer version 2023 est maintenant le point d'entrée de l'application, ouvrant la voie au développement de plusieurs mini programmes autour des TPI. Je suis très satisfait des progrès réalisés jusqu'à présent et de l'évolution de TPIorganizer version 2023. Je suis enthousiaste à l'idée de continuer le développement de cette application et de fournir des fonctionnalités encore plus utiles et pratiques pour les utilisateurs.
+- **23 juillet** : Ajout d'animations CSS pour améliorer l'expérience utilisateur lors de l'interaction avec les boutons. Les boutons affichent maintenant différentes couleurs grâce à un système de couleurs aléatoires. Modification de la classe CSS saveMessage pour afficher un message temporaire lors de la sauvegarde des données dans le local storage. / est maintenant (home.jsx) le point d'entrée de l'application, ouvrant la voie au développement de plusieurs mini programmes autour des TPI.
 
 ## Prochaines étapes
 
