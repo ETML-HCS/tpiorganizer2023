@@ -58,9 +58,7 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 2. Sauvegarde dans une base de données NoSQL (cloud) : Je prévois d'ajouter la possibilité de sauvegarder les données dans une base de données NoSQL hébergée dans le cloud. Cela permettra aux utilisateurs de stocker leurs informations de manière sécurisée et d'accéder aux données de n'importe où, ce qui garantira une meilleure accessibilité et une sauvegarde fiable des informations.
 
-3. Création d'un bouton "Pub
-
-lier" : J'envisage de mettre en place un bouton "Publier" qui permettra de générer un lien accessible pour les personnes souhaitant consulter le planning des soutenances. Ce lien unique dirigera les utilisateurs vers une page HTML spécifique affichant le planning de manière lisible et interactive, facilitant ainsi le partage du planning avec les étudiants, les membres du jury et autres parties prenantes.
+3. Création d'un bouton "Publier" : J'envisage de mettre en place un bouton "Publier" qui permettra de générer un lien accessible pour les personnes souhaitant consulter le planning des soutenances. Ce lien unique dirigera les utilisateurs vers une page HTML spécifique affichant le planning de manière lisible et interactive, facilitant ainsi le partage du planning avec les étudiants, les membres du jury et autres parties prenantes.
 
 4. Personnalisation avancée avec un fichier de configuration : J'ai déjà mis en place un fichier de configuration permettant de fixer les plages des différents créneaux de défenses. Dans les prochaines étapes, je prévois d'étendre ce fichier de configuration pour offrir aux utilisateurs la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Cela permettra aux utilisateurs de définir des configurations spécifiques à leurs besoins et préférences.
 
