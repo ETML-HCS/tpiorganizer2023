@@ -1,76 +1,81 @@
 #header {
-    width: 100%;
-    position: fixed;
-    top: 0;
-    left: 0;
-    display: grid;
-    grid-template-rows: auto auto;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto auto;
 }
 
 #title {
-    display: grid;
-    grid-template-columns: repeat(3, 33.33%);
-    background-color: #f2f2f2;
-    color: #333;
-    padding: 5px;
-    font-weight: bold;
-    font-size: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 33.33%);
+  background-color: #f2f2f2;
+  color: #333;
+  padding: 5px;
+  font-weight: bold;
+  font-size: 20px;
 }
 
 #left {
-    text-align: left;
+  text-align: left;
 }
 
 @keyframes coolColor {
-    0% {
-        color: red;
-    }
+  0% {
+    color: red;
+  }
 
-    25% {
-        color: #001933;
-    }
+  25% {
+    color: #001933;
+  }
 
 
-    50% {
-        color: #003366;
-    }
+  50% {
+    color: #003366;
+  }
 
-    75% {
-        color: #006699;
-    }
+  75% {
+    color: #006699;
+  }
 
-    100% {
-        color: #0099CC;
-    }
+  100% {
+    color: #0099CC;
+  }
 }
 
 #center {
-    text-align: center;
-    font-size: 24px;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    animation: coolColor 10s infinite;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  animation: coolColor 10s infinite;
 }
 
 #center:hover {
-    color: blue;
+  color: blue;
 }
 
 #right {
-    text-align: right;
+  text-align: right;
 }
 
 .etml {
-    font-family: "ETML L";
-    color: blue;
+  font-family: "ETML L";
+  color: blue;
 }
 
 #tools {
-    background-color: #f2f2f2;
-    padding: 10px;
-    text-align: center;
-    display: none;
+  position: fixed;
+  left: 0;
+  background-color: #f2f2f2;
+  padding: 5px;
+  margin: 5px;
+  text-align: center;
+  display: none;
+  width: 100%;
+
 }
 
 #btLoadFile,
@@ -81,19 +86,19 @@
 #btEdition,
 #btPublier,
 #select {
-    display: inline-block;
-    text-align: center;
-    color: white;
-    font-size: medium;
-    width: 150px;
-    height: 25px;
-    border: none;
-    border-radius: 3%;
-    margin-left: 10px;
-    margin-top: 10px;
-    background-color: #333;
-    transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
-    gap: 10px;
+  display: inline-block;
+  text-align: center;
+  color: white;
+  font-size: medium;
+  width: 150px;
+  height: 25px;
+  border: none;
+  border-radius: 3%;
+  margin-left: 10px;
+  margin-top: 10px;
+  background-color: #333;
+  transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+  gap: 10px;
 }
 
 #btLoadFile:hover,
@@ -104,9 +109,9 @@
 #btEdition:hover,
 #btPublier:hover,
 #select:hover {
-    background-color: #2196f3;
-    /* Bleu vif au survol */
-    color: #fff;
+  background-color: #2196f3;
+  /* Bleu vif au survol */
+  color: #fff;
 }
 
 #upArrowButton,

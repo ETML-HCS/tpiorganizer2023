@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import NewRoomForm from "./NewRoomForm";
 
-const NavButtons = ({
+const TpiScheduleButtons = ({
   onNewRoom,
   onToggleEditing,
   onSave,
@@ -10,7 +10,7 @@ const NavButtons = ({
   onLoadConfig,
   onPublish,
   toggleArrow,
-  isArrowUp
+  isArrowUp,
 }) => {
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -102,11 +102,17 @@ const NavButtons = ({
             </span>
           </button>
 
-          <button onClick={toggleArrow} id="upArrowButton" className={!isArrowUp ? "" : "active"}>▲ ▲ ▲ </button>
+          <button
+            onClick={toggleArrow}
+            id="upArrowButton"
+            className={!isArrowUp ? "" : "active"}
+          >
+            ▲ ▲ ▲{" "}
+          </button>
         </>
       )}
     </div>
   );
 };
 
-export default NavButtons;
+export default TpiScheduleButtons;

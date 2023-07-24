@@ -4,7 +4,7 @@ import BreakLine from "./BreakLine";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
-import "../css/componentsStyles.css";
+import "../../css/tpiShedule/tpiSheduleStyle.css";
 
 const DateRoom = ({
   roomData,

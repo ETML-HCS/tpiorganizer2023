@@ -317,6 +317,8 @@
 /* SaveMessage.css */
 
 /* Style du message de sauvegarde */
+
+.errorMessage,
 .saveMessage {
   z-index: 9999;
   position: fixed;
@@ -335,6 +337,17 @@
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+.errorMessage {
+  background-color: #eb3c3c;
+}
+
+/* Animation d'apparition */
+.errorMessage.show {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
 
 /* Animation d'apparition */

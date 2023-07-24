@@ -1,4 +1,3 @@
-// PublishedLink.js
 import React from "react";
 
 const PublishedLink = ({ match }) => {
@@ -11,7 +10,9 @@ const PublishedLink = ({ match }) => {
     <div>
       {/* Contenu de la page publiée */}
       <h1>Planification publiée</h1>
-      <p>Vous visualisez actuellement la planification pour "{publishedLinkName}"</p>
+      <p>
+        Vous visualisez actuellement la planification pour "{publishedLinkName}"
+      </p>
       {/* Autres contenus */}
     </div>
   );

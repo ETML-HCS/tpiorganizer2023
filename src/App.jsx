@@ -1,9 +1,11 @@
 import React, { Fragment, useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
-import NavButton from "./components/NavButtons";
-import DateRoom from "./components/DateRoom";
+import TpiScheduleButtons from "./components/tpiSchedule/TpiScheduleButtons";
+import DateRoom from "./components/tpiSchedule/DateRoom";
+import TpiManagement from "./components/tpiManagement/TpiManagement";
+
 import Home from "./components/Home";
-import PublishedLink from "./components/PublishedLink";
+import PublishedLink from "./components/tpiSchedule/PublishedLink";
 import "./css/globalStyles.css";
 
 const App = () => {
@@ -14,6 +16,7 @@ const App = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [publishedLink, setPublishedLink] = useState(null);
   const [isArrowUp, setIsArrowUp] = useState(false);
+
 
   const configO2023 = require("./config/configO2023.json");
   if (!configO2023) {
@@ -26,7 +29,7 @@ const App = () => {
       const headerElement = document.getElementById("header");
 
       const { height } = headerElement.getBoundingClientRect();
-      const paddingTop = isArrowUp ? height + 12 : 70;
+      const paddingTop = isArrowUp ? height + 32 : 55;
 
       rootElement.style.setProperty("--room-padding-top", `${paddingTop}px`);
     };
@@ -55,15 +58,20 @@ const App = () => {
     const downArrowButton = document.getElementById("downArrowButton");
     const elementTools = document.getElementById("tools");
 
+    if (!upArrowButton || !downArrowButton || !elementTools) {
+      return; // Vérifie si les éléments existent avant de continuer
+    }
+
     if (isArrowUp) {
       upArrowButton.style.display = "none";
       downArrowButton.style.display = "block";
       elementTools.style.display = "none";
     } else {
-      elementTools.style.display = "block";
       upArrowButton.style.display = "block";
       downArrowButton.style.display = "none";
+      elementTools.style.display = "block";
     }
+
     setIsArrowUp((prevIsArrowUp) => !prevIsArrowUp);
   };
 
@@ -321,18 +329,6 @@ const App = () => {
             >
               ▼ ▼ ▼
             </button>
-            <NavButton
-              configData={configO2023}
-              onNewRoom={handleNewRoom}
-              onToggleEditing={toggleEditing}
-              onExport={handleExport}
-              onSave={handleSave}
-              onLoadConfig={handleLoadConfig}
-              onPublish={handlePublish}
-              setPublishedLink={setPublishedLink}
-              toggleArrow={toggleArrow}
-              isArrowUp={isArrowUp}
-            />
             {publishedLink && (
               <div style={{ marginTop: "20px" }}>
                 <p>Votre planification a été publiée avec succès !</p>
@@ -352,7 +348,7 @@ const App = () => {
           </div>
         )}
 
-        {/* Les routes pour afficher les salles et créneaux de soutenance */}
+        {/* Les routes du programme */}
         {configO2023 && (
           <Routes>
             <Route path="/" element={<Home />}>
@@ -360,9 +356,22 @@ const App = () => {
             </Route>
 
             <Route
-              path="/prog"
+              path="/planification"
               element={
                 <>
+                  <TpiScheduleButtons
+                    configData={configO2023}
+                    onNewRoom={handleNewRoom}
+                    onToggleEditing={toggleEditing}
+                    onExport={handleExport}
+                    onSave={handleSave}
+                    onLoadConfig={handleLoadConfig}
+                    onPublish={handlePublish}
+                    setPublishedLink={setPublishedLink}
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+
                   {newRooms.map((room, index) => (
                     <DateRoom
                       key={index}
@@ -388,6 +397,16 @@ const App = () => {
                 </>
               }
             />
+
+            <Route
+              path="/gestion-tpi"
+              element={
+                <TpiManagement
+                  toggleArrow={toggleArrow}
+                  isArrowUp={isArrowUp}
+                />
+              }
+            ></Route>
           </Routes>
         )}
       </Fragment>

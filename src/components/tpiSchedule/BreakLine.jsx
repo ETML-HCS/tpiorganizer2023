@@ -1,5 +1,4 @@
 
-// BreakLine.js
 import React from 'react';
 
 const BreakLine = ({ duration }) => {

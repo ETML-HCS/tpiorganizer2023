@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
-const NewRoomForm = ({ onNewRoom,setShowForm, configData }) => {
-  
-  const [date, setDate] = useState('');
-  const [nameRoom, setNameRoom] = useState('');
-  const [site, setSite] = useState('');
+const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
+  const [date, setDate] = useState("");
+  const [nameRoom, setNameRoom] = useState("");
+  const [site, setSite] = useState("");
   const [availableRooms, setAvailableRooms] = useState([]);
 
   const handleFormSubmit = (e) => {
@@ -22,19 +21,19 @@ const NewRoomForm = ({ onNewRoom,setShowForm, configData }) => {
   const handleSiteChange = (e) => {
     const selectedSite = e.target.value;
     setSite(selectedSite);
-    
-    if (selectedSite === 'ETML') {
+
+    if (selectedSite === "ETML") {
       // Utiliser configData.etml.rooms pour accéder aux salles ETML
       const rooms = configData.etml.rooms;
       setAvailableRooms(rooms);
-    } else if (selectedSite === 'CFPV') {
+    } else if (selectedSite === "CFPV") {
       // Utiliser configData.cfpv.rooms pour accéder aux salles CFPV
       const rooms = configData.cfpv.rooms;
       setAvailableRooms(rooms);
     } else {
       setAvailableRooms([]);
     }
-  };  
+  };
 
   return (
     <form onSubmit={handleFormSubmit}>
@@ -48,12 +47,7 @@ const NewRoomForm = ({ onNewRoom,setShowForm, configData }) => {
       />
 
       <label htmlFor="site">Site :</label>
-      <select
-        id="site"
-        value={site}
-        onChange={handleSiteChange}
-        required
-      >
+      <select id="site" value={site} onChange={handleSiteChange} required>
         <option value="">Sélectionner une option</option>
         <option value="ETML">ETML</option>
         <option value="CFPV">CFPV</option>

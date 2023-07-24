@@ -18,7 +18,7 @@ const Home = () => {
   const buttons = [
     {
       name: "Planification des TPI",
-      link: "/prog",
+      link: "/planification",
     },
     {
       name: "Gestion des TPI",

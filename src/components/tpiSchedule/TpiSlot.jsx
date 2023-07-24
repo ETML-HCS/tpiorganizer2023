@@ -1,10 +1,15 @@
-import React from 'react';
-import { useDrop } from 'react-dnd';
-import TpiCard from './TpiCard';
-import { ItemTypes } from './Constants';
+import React from "react";
+import { useDrop } from "react-dnd";
+import TpiCard from "./TpiCard";
+import { ItemTypes } from "./Constants";
 
-const TpiSlot = ({ tpiData, isEditTPICard, timeValues, onUpdateTpi, onSwapTpiCardsProp }) => {
-
+const TpiSlot = ({
+  tpiData,
+  isEditTPICard,
+  timeValues,
+  onUpdateTpi,
+  onSwapTpiCardsProp,
+}) => {
   // Utiliser l'ID TPI généré pour le TpiSlot
   const handleUpdateTpiCard = (updatedTpi) => {
     onUpdateTpi(updatedTpi);
@@ -24,7 +29,7 @@ const TpiSlot = ({ tpiData, isEditTPICard, timeValues, onUpdateTpi, onSwapTpiCar
   });
 
   return (
-    <div ref={dropRef} className={`tpiSlot ${isOver ? 'dragOver' : ''}`}>
+    <div ref={dropRef} className={`tpiSlot ${isOver ? "dragOver" : ""}`}>
       <div className="timeSlot">
         <p className="top">{timeValues[0]}</p>
         <p className="bottom">{timeValues[1]}</p>
