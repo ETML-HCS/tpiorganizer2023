@@ -1,4 +1,4 @@
-# TPIorganizer version 2023 - Mise à jour du [23.07.2023] | V 0.10
+# TPIorganizer version 2023 - Mise à jour du [28.07.2023] | V 0.11
 
 TPIorganizer version 2023 est une application React permettant d'organiser et de gérer les soutenances de TPI (Travaux de fin d'études) selon différentes dates et salles.
 
@@ -52,6 +52,9 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 - **23 juillet** : Ajout d'animations CSS pour améliorer l'expérience utilisateur lors de l'interaction avec les boutons. Les boutons affichent maintenant différentes couleurs grâce à un système de couleurs aléatoires. Modification de la classe CSS saveMessage pour afficher un message temporaire lors de la sauvegarde des données dans le local storage. / est maintenant (home.jsx) le point d'entrée de l'application, ouvrant la voie au développement de plusieurs mini programmes autour des TPI.
 
+- **28 juillet** : Intégration de la base de données MongoDB pour les éléments tpiList et TpiRooms. Mise en place de l'importation des données à partir d'un fichier CSV pour faciliter le remplissage initial de la base de données. Réorganisation du code pour une meilleure structure et une refonte complète de tpiRooms. Correction du bug lié à la perte de données des tpiData. Amélioration de la gestion des sauvegardes entre le localStorage et la base de données pour assurer une cohérence des données. Unification des aspects pour une apparence plus cohérente dans l'ensemble de l'application. Création de tpiuser dans le but de suivre et de tracer les utilisateurs. Reste encore à terminer l'implémentation du login avec le mot de passe hash, car plusieurs bugs ont été rencontrés et le processus est encore incomplet. Mise en place des tpilists dans tpiRoom afin d'accélérer la planification des soutenances.
+
+
 ## Prochaines étapes
 
 1. Envoi de mails : Je vais implémenter la fonctionnalité d'envoi de mails en utilisant une liste prédéfinie au format JSON. Les utilisateurs pourront facilement envoyer des notifications par e-mail aux participants des soutenances, ce qui améliorera la communication et la coordination des événements.
@@ -62,4 +65,4 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 4. Personnalisation avancée avec un fichier de configuration : J'ai déjà mis en place un fichier de configuration permettant de fixer les plages des différents créneaux de défenses. Dans les prochaines étapes, je prévois d'étendre ce fichier de configuration pour offrir aux utilisateurs la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Cela permettra aux utilisateurs de définir des configurations spécifiques à leurs besoins et préférences.
 
->Je suis très satisfait des progrès réalisés jusqu'à présent et de l'évolution de TPIorganizer version 2023. Je suis enthousiaste à l'idée de continuer le développement de cette application et de fournir des fonctionnalités encore plus utiles et pratiques pour les utilisateurs.
+>Je suis globalement satisfait des progrès réalisés jusqu'à présent et de l'évolution de TPIorganizer version 2023. Cependant, je dois admettre que le projet devient de plus en plus complexe, ce qui demande davantage de temps et d'efforts pour le développement. Malgré cela, je reste enthousiaste à l'idée de continuer le développement de cette application et de fournir des fonctionnalités encore plus utiles et pratiques pour les utilisateurs. Je suis convaincu que les efforts investis porteront leurs fruits, et je suis déterminé à relever les défis qui se présentent afin d'atteindre les objectifs fixés pour cette application.
