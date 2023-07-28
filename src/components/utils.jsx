@@ -14,8 +14,6 @@ export const showNotification = (message, duration) => {
 };
 
 export const updateMarginTopPage = (delta) => {
-  console.log(delta);
-
   const rootElement = document.querySelector(".container");
   if (rootElement) {
     rootElement.style.setProperty("margin-top", `${delta}px`);

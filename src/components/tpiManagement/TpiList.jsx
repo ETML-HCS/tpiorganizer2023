@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import TpiForm from "./TpiForm";
 
+const MAX_DISPLAY_TAGS = 1;
+
 const TpiList = ({ tpiList, onSave }) => {
   const [editingTpiId, setEditingTpiId] = useState(null);
+  const [displayedTags, setDisplayedTags] = useState({});
 
   const handleEdit = (tpiRef) => {
     console.log(tpiRef);
@@ -12,6 +15,20 @@ const TpiList = ({ tpiList, onSave }) => {
   const handleFormClose = () => {
     setEditingTpiId(null);
     console.log("valeur editing: ", editingTpiId);
+  };
+
+  const handleTagHover = (tpiRef, tag) => {
+    setDisplayedTags((prevDisplayedTags) => ({
+      ...prevDisplayedTags,
+      [tpiRef]: tag,
+    }));
+  };
+
+  const handleTagHoverExit = (tpiRef) => {
+    setDisplayedTags((prevDisplayedTags) => ({
+      ...prevDisplayedTags,
+      [tpiRef]: null,
+    }));
   };
 
   return (
@@ -24,29 +41,56 @@ const TpiList = ({ tpiList, onSave }) => {
           {tpiList.map((tpi) => (
             <li key={tpi.refTpi}>
               {editingTpiId === tpi.refTpi ? (
-                // Formulaire d'édition si l'ID d'édition correspond à l'ID du TPI actuel
                 <TpiForm
                   tpiToLoad={tpi}
                   onSave={onSave}
                   onClose={handleFormClose}
                 />
               ) : (
-                // Affichage normal si l'ID d'édition ne correspond pas à l'ID du TPI actuel
-                <>
+                <div>
                   <span>
                     <strong>ID : {tpi.refTpi} </strong>
                   </span>
-                  <span className="displayTags">{tpi.tags}</span>
-                  <span style={{textAlign:"center"}}>
+                  <div className="displayTagsContainer">
+                    {tpi.tags.slice(0, MAX_DISPLAY_TAGS).map((tag, index) => (
+                      <span
+                        key={index}
+                        className="displayTags"
+                        onMouseEnter={() => handleTagHover(tpi.refTpi, tag)}
+                        onMouseLeave={() => handleTagHoverExit(tpi.refTpi)}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {tpi.tags.length > MAX_DISPLAY_TAGS && (
+                      <span
+                        className="hiddenTags"
+                        onMouseEnter={() =>
+                          handleTagHover(
+                            tpi.refTpi,
+                            tpi.tags.slice(MAX_DISPLAY_TAGS).join(", ")
+                          )
+                        }
+                        onMouseLeave={() => handleTagHoverExit(tpi.refTpi)}
+                      >
+                        {displayedTags[tpi.refTpi] ||
+                          `+${tpi.tags.length - MAX_DISPLAY_TAGS}`}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ textAlign: "center" }}>
                     <strong>{tpi.candidat} </strong>
-                  </span>
+                  </div>
                   <span style={{ color: "#1e82ff" }}>{tpi.sujet}</span>
 
                   <span>Exp1 : {tpi.expert1}</span>
                   <span>Exp2 : {tpi.expert2}</span>
                   <span> &raquo; {tpi.boss}</span>
                   <span>Lieu : {tpi.lieu}</span>
-                  <span>{tpi.tags}</span>
+                  {displayedTags[tpi.refTpi] && (
+                    <div className="hoveredTag">{displayedTags[tpi.refTpi]}</div>
+                  )}
 
                   <div
                     className="btEdit"
@@ -54,7 +98,7 @@ const TpiList = ({ tpiList, onSave }) => {
                   >
                     Modifier
                   </div>
-                </>
+                </div>
               )}
             </li>
           ))}

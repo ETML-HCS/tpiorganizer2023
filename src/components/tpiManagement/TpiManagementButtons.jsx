@@ -186,11 +186,11 @@ const TpiManagementButtons = ({ onNewTpi, newTpi, toggleArrow, isArrowUp }) => {
           style={{
             position: "static",
             display: "flex",
-            width:"100%",
+            width: "100%",
             alignItems: "center",
             justifyContent: "center",
-            padding:"10px",
-            marginBottom:"20px",
+            padding: "10px",
+            marginBottom: "10px",
             backgroundColor: "rgba(255, 255, 255, 0.8)",
           }}
         >
@@ -204,10 +204,13 @@ const TpiManagementButtons = ({ onNewTpi, newTpi, toggleArrow, isArrowUp }) => {
                 accept=".csv"
               />
             </label>
-            <button type="submit">Importer</button>
-            <button type="button" onClick={handleCancelImport}>
-              Annuler
-            </button>
+            <span>
+              <button type="submit">Importer</button>
+              <button type="button" onClick={handleCancelImport}>
+                {" "}
+                Annuler{" "}
+              </button>
+            </span>
           </form>
         </div>
       )}

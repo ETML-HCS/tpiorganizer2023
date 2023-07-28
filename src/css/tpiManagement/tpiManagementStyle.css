@@ -79,7 +79,6 @@ form {
   grid-row: span 2;
 }
 
-
 .gpPerson,
 .gpSujetTpi {
   grid-column: 1;
@@ -92,7 +91,6 @@ form {
 .gpDates {
   grid-column: span 2;
 }
-
 
 .save {
   gap: 10px;
@@ -183,7 +181,6 @@ ul.tpiList:empty::before {
   /* Couleur du texte du message */
 }
 
-
 /* Style pour le bouton Modifier */
 ul.tpiList li .btEdit {
   position: absolute;
@@ -196,6 +193,50 @@ ul.tpiList li .btEdit {
   padding: 6px;
   border-radius: 3px;
   cursor: pointer;
+}
+/* Container pour les tags affichés et cachés */
+/* CSS pour les tags */
+.displayTagsContainer {
+  position: relative;
+}
+
+.displayTags {
+  background-color: #1e82ff;
+  color: #fff;
+  padding: 4px 8px;
+  margin-right: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.5s ease;
+}
+
+.hiddenTags {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: #ccc;
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.6s ease;
+}
+
+.hoveredTag {
+  display: none;
+  position: absolute;
+  top: -30px;
+  right: 0;
+  background-color: #1e82ff;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+/* Afficher les tags supplémentaires au survol */
+.displayTagsContainer:hover .hiddenTags {
+  display: inline-block;
+  transform: scale(1.2); /* Zoom au survol */
 }
 
 /* Animation de fondu */
