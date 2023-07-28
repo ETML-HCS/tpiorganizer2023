@@ -8,6 +8,15 @@ TPIorganizer version 2023 est une application React permettant d'organiser et de
 - Création de nouveaux créneaux de soutenance avec un composant principal `DateRoom` composé de `TPISlots` et de `BreakLines`.
 - Édition des créneaux de soutenance existants, ainsi que la possibilité de créer de nouveaux créneaux.
 - Exportation et importation des données des soutenances via un fichier CSV.
+- Implémentation d'un système de Routes (URL) permettant d'offrir plusieurs programmes :
+  - Gestion des TPI
+  - Suivi de l'élève (candidat)
+  - Inscription en tant qu'expert, chef de projet, doyen ou candidat
+  - Module de planification pour créer et gérer les salles ainsi que poser les TPI selon l'horaire organisé en slot
+  - Fonction pour le cliquer et déposer des TPI
+  - Possibilité future pour les abonnés de s'inscrire sur une liste d'attente pour les TPI, attribuée par un responsable selon des critères spécifiques
+  - Contrôle visuel lors de la planification selon le slot time et les noms des personnes figurant dans le TPI
+  - Amélioration en cours de développement pendant l'édition de la planification avec des propositions basées sur la liste des TPI (liée au numéro de référence du TPI)
 
 ## Installation
 
@@ -44,16 +53,37 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 ## Journal de développement
 
-- **17 juillet** : Terminé la fonctionnalité d'ajout et de suppression des salles. Les utilisateurs peuvent créer de nouveaux créneaux de soutenance en sélectionnant la date, le site et la salle. Un design adaptatif a été mis en place pour s'ajuster selon les choix de site (ETML/CFPV). Les utilisateurs peuvent également sélectionner les salles disponibles et remplir le champ de date au format valide pour une expérience simplifiée.
+**17 juillet** :
 
-- **18 juillet** : Ajout des fonctionnalités d'édition des créneaux de soutenance existants. Les utilisateurs peuvent désormais modifier les informations telles que la date, le site et la salle pour les créneaux existants. Correction d'un bug qui inversait l'état d'édition avec le bouton "Save" après plusieurs basculements entre le mode édition et le mode sauvegarde.
+- Terminé la fonctionnalité d'ajout et de suppression des salles. Design adaptatif pour les créneaux de soutenance en fonction du choix de site (ETML/CFPV). 
+- Sélection simplifiée des salles disponibles et des dates au format valide.
 
-- **22 juillet** : Le drag and drop initial s'est avéré plus compliqué que prévu, donc après réflexion, j'ai décidé de rendre la zone des temps non éditable pour éviter toute modification accidentelle. Cependant, j'ai mis en place un fichier de configuration qui permet de fixer les plages des différents créneaux de défenses. Ce fichier de configuration offre également la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Ces nouvelles fonctionnalités devraient améliorer l'expérience globale des utilisateurs.
+**18 juillet** :
 
-- **23 juillet** : Ajout d'animations CSS pour améliorer l'expérience utilisateur lors de l'interaction avec les boutons. Les boutons affichent maintenant différentes couleurs grâce à un système de couleurs aléatoires. Modification de la classe CSS saveMessage pour afficher un message temporaire lors de la sauvegarde des données dans le local storage. / est maintenant (home.jsx) le point d'entrée de l'application, ouvrant la voie au développement de plusieurs mini programmes autour des TPI.
+- Ajout des fonctionnalités d'édition des créneaux de soutenance existants. 
+- Correction d'un bug lié à l'état d'édition avec le bouton "Save".
 
-- **28 juillet** : Intégration de la base de données MongoDB pour les éléments tpiList et TpiRooms. Mise en place de l'importation des données à partir d'un fichier CSV pour faciliter le remplissage initial de la base de données. Réorganisation du code pour une meilleure structure et une refonte complète de tpiRooms. Correction du bug lié à la perte de données des tpiData. Amélioration de la gestion des sauvegardes entre le localStorage et la base de données pour assurer une cohérence des données. Unification des aspects pour une apparence plus cohérente dans l'ensemble de l'application. Création de tpiuser dans le but de suivre et de tracer les utilisateurs. Reste encore à terminer l'implémentation du login avec le mot de passe hash, car plusieurs bugs ont été rencontrés et le processus est encore incomplet. Mise en place des tpilists dans tpiRoom afin d'accélérer la planification des soutenances.
+**22 juillet** : 
 
+- Mise en place d'un fichier de configuration pour les plages de créneaux de défenses. 
+- Possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation.
+
+**23 juillet** :
+
+- Ajout d'animations CSS pour améliorer l'expérience utilisateur avec les boutons.
+- Affichage de différentes couleurs de boutons grâce à un système de couleurs aléatoires.
+
+**28 juillet** :
+
+- Intégration de la base de données MongoDB pour les éléments tpiList et TpiRooms.
+- Importation des données à partir d'un fichier CSV pour faciliter le remplissage initial de la base de données.
+- Réorganisation du code pour une meilleure structure et refonte complète de tpiRooms.
+- Correction du bug de perte de données des tpiData.
+- Amélioration de la gestion des sauvegardes entre le localStorage et la base de données.
+- Unification des aspects pour une apparence plus cohérente dans l'ensemble de l'application.
+- Création de tpiuser dans le but de suivre et de tracer les utilisateurs.
+- Travaux en cours pour l'implémentation du login avec le mot de passe hash.
+- Mise en place des tpilists dans tpiRoom pour accélérer la planification des soutenances.
 
 ## Prochaines étapes
 
@@ -65,4 +95,4 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 
 4. Personnalisation avancée avec un fichier de configuration : J'ai déjà mis en place un fichier de configuration permettant de fixer les plages des différents créneaux de défenses. Dans les prochaines étapes, je prévois d'étendre ce fichier de configuration pour offrir aux utilisateurs la possibilité d'ajouter de nouvelles classes pour une meilleure personnalisation et adaptabilité de l'application. Cela permettra aux utilisateurs de définir des configurations spécifiques à leurs besoins et préférences.
 
->Je suis globalement satisfait des progrès réalisés jusqu'à présent et de l'évolution de TPIorganizer version 2023. Cependant, je dois admettre que le projet devient de plus en plus complexe, ce qui demande davantage de temps et d'efforts pour le développement. Malgré cela, je reste enthousiaste à l'idée de continuer le développement de cette application et de fournir des fonctionnalités encore plus utiles et pratiques pour les utilisateurs. Je suis convaincu que les efforts investis porteront leurs fruits, et je suis déterminé à relever les défis qui se présentent afin d'atteindre les objectifs fixés pour cette application.
+>Je suis satisfait des progrès réalisés jusqu'à présent dans TPIorganizer version 2023. Le projet devient plus complexe, demandant plus de temps et d'efforts pour le développement. Malgré cela, je reste enthousiaste à l'idée de continuer à fournir des fonctionnalités utiles et pratiques aux utilisateurs. Je suis convaincu que nos efforts porteront leurs fruits, et je suis déterminé à relever les défis pour atteindre nos objectifs.
