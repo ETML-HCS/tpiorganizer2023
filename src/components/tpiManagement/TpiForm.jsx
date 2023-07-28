@@ -1,36 +1,43 @@
 import React, { useState, useEffect } from "react";
+import { format, parseISO } from "date-fns";
 
 const TpiForm = ({ onSave, tpiToLoad }) => {
-  
+  const [cancelled, setCancelled] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [refTpi, setRefTpi] = useState("");
   const [candidat, setCandidat] = useState("");
+
   const [expert1, setExpert1] = useState("");
   const [expert2, setExpert2] = useState("");
   const [boss, setBoss] = useState("");
+
   const [sujet, setSujet] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
+  const [lieu, setLieu] = useState("");
+
   const [dateSoutenance, setDateSoutenance] = useState("");
   const [dateDepart, setDateDepart] = useState("");
   const [dateFin, setDateFin] = useState("");
   const [date1ereVisite, setDate1ereVisite] = useState("");
   const [date2emeVisite, setDate2emeVisite] = useState("");
   const [dateRenduFinal, setDateRenduFinal] = useState("");
+
   const [lienDepot, setLienDepot] = useState("");
   const [noteEvaluation, setNoteEvaluation] = useState("");
   const [lienEvaluation, setLienEvaluation] = useState("");
 
   // Utiliser useEffect pour rafraîchir la page lorsque 'saved' devient true
   useEffect(() => {
-    if (saved) {
+    if (saved || cancelled) {
       window.location.reload();
     }
-  }, [saved]);
+  }, [saved, cancelled]);
 
   useEffect(() => {
     // Si tpiToLoad est fourni, chargez les détails du TPI depuis tpiToLoad
+    console.log(tpiToLoad.dateDepart);
     if (tpiToLoad) {
       const {
         refTpi,
@@ -38,6 +45,7 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
         expert1,
         expert2,
         boss,
+        lieu,
         sujet,
         description,
         tags,
@@ -57,18 +65,37 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
       setExpert1(expert1);
       setExpert2(expert2);
       setBoss(boss);
+      setLieu(lieu);
       setSujet(sujet);
       setDescription(description);
       setTags(tags);
-      setDateSoutenance(dateSoutenance);
-      setDateDepart(dateDepart);
-      setDateFin(dateFin);
-      setDate1ereVisite(date1ereVisite);
-      setDate2emeVisite(date2emeVisite);
-      setDateRenduFinal(dateRenduFinal);
+
+      const formatDate = (dateStr) => {
+        if (!dateStr) {
+          return "";
+        }
+
+        const dateISO = dateStr.slice(2, 12); // "202023-05-07"
+        const year = parseInt(dateISO.slice(0, 4));
+        const month = parseInt(dateISO.slice(5, 7)) - 1;
+        const day = parseInt(dateISO.slice(8, 10));
+        const dateObject = new Date(year, month, day);
+
+        return format(dateObject, "yyyy-MM-dd");
+      };
+
+      setDateSoutenance(formatDate(dateSoutenance));
+      setDateDepart(formatDate(dateDepart));
+      setDateFin(formatDate(dateFin));
+      setDate1ereVisite(formatDate(date1ereVisite));
+      setDate2emeVisite(formatDate(date2emeVisite));
+      setDateRenduFinal(formatDate(dateRenduFinal));
+
+      setLienDepot(lienDepot);
       setLienDepot(lienDepot);
       setNoteEvaluation(noteEvaluation);
       setLienEvaluation(lienEvaluation);
+      console.log(tpiToLoad);
     }
   }, [tpiToLoad]);
 
@@ -85,6 +112,7 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
       sujet,
       description,
       tags,
+      lieu,
       dateSoutenance,
       dateDepart,
       dateFin,
@@ -108,6 +136,7 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
     setSujet("");
     setDescription("");
     setTags("");
+    setLieu("");
     setDateSoutenance("");
     setDateDepart("");
     setDateFin("");
@@ -121,7 +150,33 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
     setSaved(true);
   };
 
-  return (  
+  // Function to handle cancellation
+  const handleCancel = () => {
+    // Reset all the form fields
+    setRefTpi("");
+    setCandidat("");
+    setExpert1("");
+    setExpert2("");
+    setBoss("");
+    setSujet("");
+    setDescription("");
+    setTags("");
+    setLieu("");
+    setDateSoutenance("");
+    setDateDepart("");
+    setDateFin("");
+    setDate1ereVisite("");
+    setDate2emeVisite("");
+    setDateRenduFinal("");
+    setLienDepot("");
+    setNoteEvaluation("");
+    setLienEvaluation("");
+
+    // Set the cancelled state to true
+    setCancelled(true);
+  };
+
+  return (
     <div className="containerForm">
       <form onSubmit={handleSubmit}>
         <div className="gpRef">
@@ -195,6 +250,14 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
+          <div className="form-row">
+            <label>Lieu:</label>
+            <input
+              type="text"
+              value={lieu}
+              onChange={(e) => setLieu(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="grExterne">
@@ -202,8 +265,8 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
             <label>Liens du dépot git:</label>
             <input
               type="text"
-              min="1"
-              max="6"
+              min="1.0"
+              max="6.o"
               value={lienDepot}
               onChange={(e) => setLienDepot(e.target.value)}
             />
@@ -279,6 +342,9 @@ const TpiForm = ({ onSave, tpiToLoad }) => {
         </div>
 
         <div className="form-row save">
+          <button id="btConcel" type="button" onClick={handleCancel}>
+            Annuler
+          </button>
           <button type="submit">Enregistrer</button>
         </div>
       </form>

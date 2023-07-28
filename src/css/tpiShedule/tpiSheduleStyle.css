@@ -64,7 +64,7 @@
 }
 
 .room {
-  padding-top: var(--room-padding-top);
+  padding-top: calc( var(--room-padding-top) + 40px);
   flex: 1 0 200px;
   transition: flex-basis 0.3s ease;
   line-height: 1em;

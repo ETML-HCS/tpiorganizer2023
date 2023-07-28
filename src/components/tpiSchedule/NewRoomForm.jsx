@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { showNotification } from "../utils";
 
 const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
   const [date, setDate] = useState("");
@@ -15,7 +16,21 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
       setDate(date);
       setNameRoom(nameRoom);
       setSite(site);
+    } else {
+      showNotification(
+        "Veuillez saisir les informations demandées avant de valider la salle, s'il vous plaît.",
+        3000
+      );
     }
+  };
+
+  const handleCancel = () => {
+    // Reset the form fields and hide the form
+    setDate("");
+    setNameRoom("");
+    setSite("");
+    setAvailableRooms([]);
+    setShowForm(false);
   };
 
   const handleSiteChange = (e) => {
@@ -68,7 +83,32 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
         ))}
       </select>
 
-      <button type="submit">Valider</button>
+      <div
+        type="submit"
+        onClick={handleFormSubmit}
+        style={{
+          fontWeight: "bolder",
+          backgroundColor: "#0074D9",
+          color: "white",
+          padding: "3px",
+          textAlign: "center",
+        }}
+      >
+        Valider
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          top: "4px",
+          right: "15px",
+          cursor: "pointer",
+          fontSize: "20px",
+          fontWeight: "bold",
+        }}
+        onClick={handleCancel}
+      >
+        &times;
+      </div>
     </form>
   );
 };

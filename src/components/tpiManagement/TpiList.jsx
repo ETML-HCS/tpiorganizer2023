@@ -1,19 +1,18 @@
 import React, { useState } from "react";
 import TpiForm from "./TpiForm";
 
-const TpiList = ({ tpiList,onSave }) => {
-
+const TpiList = ({ tpiList, onSave }) => {
   const [editingTpiId, setEditingTpiId] = useState(null);
 
   const handleEdit = (tpiRef) => {
+    console.log(tpiRef);
     setEditingTpiId(tpiRef);
-    
   };
 
   const handleFormClose = () => {
     setEditingTpiId(null);
-    console.log("valeur editing: ",editingTpiId);
-  } 
+    console.log("valeur editing: ", editingTpiId);
+  };
 
   return (
     <>
@@ -34,15 +33,27 @@ const TpiList = ({ tpiList,onSave }) => {
               ) : (
                 // Affichage normal si l'ID d'édition ne correspond pas à l'ID du TPI actuel
                 <>
-                  <span>ID : {tpi.refTpi}</span>
-                  <span>Candidat : {tpi.candidat}</span>
-                  <span>Expert 1 : {tpi.expert1}</span>
-                  <span>Expert 2 : {tpi.expert2}</span>
-                  <span>Boss : {tpi.boss}</span>
+                  <span>
+                    <strong>ID : {tpi.refTpi} </strong>
+                  </span>
+                  <span className="displayTags">{tpi.tags}</span>
+                  <span style={{textAlign:"center"}}>
+                    <strong>{tpi.candidat} </strong>
+                  </span>
+                  <span style={{ color: "#1e82ff" }}>{tpi.sujet}</span>
 
-                  <button onClick={() => handleEdit(tpi.refTpi)}>
+                  <span>Exp1 : {tpi.expert1}</span>
+                  <span>Exp2 : {tpi.expert2}</span>
+                  <span> &raquo; {tpi.boss}</span>
+                  <span>Lieu : {tpi.lieu}</span>
+                  <span>{tpi.tags}</span>
+
+                  <div
+                    className="btEdit"
+                    onClick={() => handleEdit(tpi.refTpi)}
+                  >
                     Modifier
-                  </button>
+                  </div>
                 </>
               )}
             </li>

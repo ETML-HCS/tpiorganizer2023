@@ -8,7 +8,6 @@ const TpiScheduleButtons = ({
   onExport,
   configData,
   onLoadConfig,
-  onPublish,
   toggleArrow,
   isArrowUp,
 }) => {
@@ -52,10 +51,7 @@ const TpiScheduleButtons = ({
   const handlePublish = () => {
     // Implement the logic for publishing here
     // You can call the onPublish prop if needed
-    // For example:
-    if (onPublish) {
-      onPublish();
-    }
+   
   };
 
   return (
@@ -85,8 +81,8 @@ const TpiScheduleButtons = ({
           <button id="btSave" onClick={handleSave}>
             Enregistrer &#x1F4BE;
           </button>
-          <label htmlFor="configFile" id="btLoadFile">
-            Charger Fichier &#x1F4C2;
+          <label htmlFor="configFile"
+          style={{padding: "1px 6px", height:"24px"}} id="btLoadFile"> Charger Fichier &#x1F4C2;
           </label>
           <input
             type="file"
@@ -102,13 +98,13 @@ const TpiScheduleButtons = ({
             </span>
           </button>
 
-          <button
+          <div
             onClick={toggleArrow}
             id="upArrowButton"
             className={!isArrowUp ? "" : "active"}
           >
             ▲ ▲ ▲{" "}
-          </button>
+          </div>
         </>
       )}
     </div>

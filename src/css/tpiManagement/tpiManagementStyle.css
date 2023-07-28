@@ -1,17 +1,20 @@
 /* Centrer le formulaire */
-.container{
-  margin-top:var(--room-padding-top) ;
+.container {
+  width: 96%;
+  justify-content: center;
+  align-items: center;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .containerForm {
   display: flex;
   justify-content: center;
   align-items: center;
-  animation: fadeIn 0.5s; /* Utilisez l'animation de fondu avec une durée de 0.5 seconde */
+  animation: fadeIn 0.5s;
 }
 
-li .containerForm
-{
+li .containerForm {
   display: flex;
   position: absolute;
   background-color: white;
@@ -19,9 +22,13 @@ li .containerForm
 }
 
 form {
+  display: grid;
+  position: relative;
+  gap: 5px;
   width: 100%;
+  min-width: 400px;
   max-width: 700px;
-  padding: 20px;
+  padding: 15px;
   border: 1px solid #ccc;
   border-radius: 5px;
   background-color: #fff;
@@ -60,8 +67,6 @@ form {
 }
 
 /* Groupes de champs */
-.gpRef,
-.gpPerson,
 .gpSujetTpi,
 .grExterne,
 .gpDates {
@@ -69,12 +74,17 @@ form {
   padding-top: 10px;
 }
 
-.gpRef,
-.gpPerson {
+.gpRef {
+  grid-column: 2;
+  grid-row: span 2;
+}
+
+
+.gpPerson,
+.gpSujetTpi {
   grid-column: 1;
 }
 
-.gpSujetTpi,
 .grExterne {
   grid-column: 2;
 }
@@ -83,10 +93,12 @@ form {
   grid-column: span 2;
 }
 
-/* Style pour le bouton d'enregistrement */
+
 .save {
-  display: flex;
-  justify-content: flex-end;
+  gap: 10px;
+  justify-content: end;
+  grid-column: 2;
+
 }
 
 .save button {
@@ -105,49 +117,85 @@ form {
   background-color: #c70000;
 }
 
+#btConcel {
+  background-color: darkgreen;
+  margin-right: 0px;
+}
+
 /* Style pour la liste des TPI */
-h2 {
-  margin-top: 12px;
-  text-align: center;
-}
-
-.tpiList{
-  display: block;
-}
-
 ul.tpiList {
   display: grid;
-  grid-template-columns: repeat(6, minmax(200px, 1fr));
-  gap: 12px;
-  padding: 1px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 2fr));
+  /* Adapter le nombre de colonnes à l'écran */
+  gap: 20px;
+  /* Espacement entre les éléments de la liste */
+  padding: 2px;
+  /* Espace autour de la liste */
   list-style-type: none;
+  /* Masquer les puces de la liste */
 }
 
+/* Style pour chaque élément de la liste des TPI */
 ul.tpiList li {
-  padding: 10px;
-  border: 1px solid #f2f2f2;
+  position: relative;
+  width: 97%;
+  height: 97%;
+  padding: 6px;
+  /* Espacement interne pour chaque élément */
+  border: 2px solid #f2f2f2;
+  /* Bordure autour de chaque élément */
   border-radius: 5px;
+  /* Coins arrondis pour chaque élément */
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* Ombre autour de chaque élément */
   background-color: #fff;
 }
 
+/* Style pour le texte dans chaque élément de la liste des TPI */
 ul.tpiList li span {
   display: block;
+  /* Afficher le texte en tant que bloc pour une nouvelle ligne */
   margin-bottom: 5px;
+  /* Marge en bas du texte */
   color: #333;
+  /* Couleur du texte */
 }
 
-/* Style pour un message lorsqu'il n'y a aucun TPI */
+/* Style pour afficher un message lorsque la liste des TPI est vide */
 ul.tpiList:empty::before {
   content: "Aucun TPI trouvé.";
+  /* Texte du message */
   display: block;
+  /* Afficher le message en tant que bloc pour une nouvelle ligne */
   padding: 10px;
+  /* Espacement interne pour le message */
   border: 1px solid #f2f2f2;
+  /* Bordure autour du message */
   border-radius: 5px;
+  /* Coins arrondis pour le message */
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* Ombre autour du message */
   background-color: #fff;
+  /* Couleur de fond pour le message */
   margin-bottom: 10px;
+  /* Marge en bas du message */
   color: #666;
+  /* Couleur du texte du message */
+}
+
+
+/* Style pour le bouton Modifier */
+ul.tpiList li .btEdit {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 80px;
+  background-color: #3593e4;
+  color: #fff;
+  border: none;
+  padding: 6px;
+  border-radius: 3px;
+  cursor: pointer;
 }
 
 /* Animation de fondu */
@@ -155,6 +203,7 @@ ul.tpiList:empty::before {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }

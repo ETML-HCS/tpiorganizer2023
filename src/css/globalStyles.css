@@ -1,10 +1,11 @@
 #header {
-  width: 100%;
+  display: grid;
+  grid-template-rows: auto auto;
   position: fixed;
   top: 0;
   left: 0;
-  display: grid;
-  grid-template-rows: auto auto;
+  width: 100%;
+  max-height: 80px;
 }
 
 #title {
@@ -67,25 +68,31 @@
 }
 
 #tools {
+  display: none;
   position: fixed;
   left: 0;
+  height: 53px;
+  /* Pas sur que cela fonction partout !!! HCS */
+  top: calc(var(--room-padding-top) - 32px);
   background-color: #f2f2f2;
   padding: 5px;
-  margin: 5px;
   text-align: center;
-  display: none;
   width: 100%;
-
 }
 
+#tools form{
+  text-align: left;
+  width: 100px;
+}
+
+#btTpiListImport{
+  margin: 0 auto;
+  padding: 2px;
+}
+
+
 #btLoadFile,
-#btSave,
-#btExport,
-#btSendEmail,
-#btNewRoom,
-#btEdition,
-#btPublier,
-#select {
+#tools button {
   display: inline-block;
   text-align: center;
   color: white;
@@ -100,7 +107,18 @@
   transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
   gap: 10px;
 }
+/* 
 
+#btPlanner,
+#bt
+#btLoadFile,
+#btSave,
+#btExport,
+#btSendEmail,
+#btNewRoom,
+#btEdition,
+#btPublier,
+#select
 #btLoadFile:hover,
 #btSave:hover,
 #btExport:hover,
@@ -108,7 +126,10 @@
 #btNewRoom:hover,
 #btEdition:hover,
 #btPublier:hover,
-#select:hover {
+#select:hover
+ */
+ #tools #btLoadFile:hover,
+#tools button:hover{
   background-color: #2196f3;
   /* Bleu vif au survol */
   color: #fff;

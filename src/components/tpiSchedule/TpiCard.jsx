@@ -19,14 +19,17 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditingTpiCard]);
 
+
   // Gestionnaire de changement pour les champs de saisie lors de l'édition de la carte
   const handleChange = (e, field) => {
-    setEditedTpi((prevTpi) => ({
-      ...prevTpi,
+    const updatedTpi = {
+      ...editedTpi,
       [field]: e.target.value,
-    }));
+    };
+    setEditedTpi(updatedTpi);
+    onUpdateTpi(updatedTpi); // Mettre à jour le TPI dans la carte TpiCard immédiatement
   };
-
+  
   // Utilisation du hook useDrag pour permettre à la carte d'être draggable
   const [{ isDragging }, dragRef] = useDrag({
     type: ItemTypes.TPI_CARD,
