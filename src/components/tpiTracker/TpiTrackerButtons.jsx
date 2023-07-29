@@ -4,11 +4,8 @@ const TpiTrackerButtons = ({ toggleArrow, isArrowUp, user }) => {
   const [onConnecting, setOnConnecting] = useState(user);
 
   useEffect(() => {
-    // Mettre à jour l'état local lorsque la prop 'user' change
     setOnConnecting(user);
   }, [user]);
-
-  console.log("valeur de user: ", onConnecting);
 
   return (
     <>

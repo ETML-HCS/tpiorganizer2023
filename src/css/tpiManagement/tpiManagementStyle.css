@@ -154,9 +154,6 @@ ul.tpiList li span {
   display: block;
   /* Afficher le texte en tant que bloc pour une nouvelle ligne */
   margin-bottom: 5px;
-  /* Marge en bas du texte */
-  color: #333;
-  /* Couleur du texte */
 }
 
 /* Style pour afficher un message lorsque la liste des TPI est vide */
@@ -194,17 +191,21 @@ ul.tpiList li .btEdit {
   border-radius: 3px;
   cursor: pointer;
 }
+
 /* Container pour les tags affichés et cachés */
-/* CSS pour les tags */
 .displayTagsContainer {
+  color: white;
   position: relative;
 }
 
 .displayTags {
+  display: flex;
+  position: absolute;
+  top: -30px;
+  right: 0;
+  width: 50%;
   background-color: #1e82ff;
-  color: #fff;
   padding: 4px 8px;
-  margin-right: 4px;
   border-radius: 4px;
   cursor: pointer;
   transition: opacity 0.5s ease;
@@ -213,10 +214,9 @@ ul.tpiList li .btEdit {
 .hiddenTags {
   display: none;
   position: absolute;
-  top: 0;
+  top: -30px;
   right: 0;
   background-color: #ccc;
-  color: #000;
   padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -228,15 +228,14 @@ ul.tpiList li .btEdit {
   position: absolute;
   top: -30px;
   right: 0;
-  background-color: #1e82ff;
-  color: #fff;
+  background-color: #2b80e8;
   padding: 4px 8px;
   border-radius: 4px;
 }
 /* Afficher les tags supplémentaires au survol */
 .displayTagsContainer:hover .hiddenTags {
   display: inline-block;
-  transform: scale(1.2); /* Zoom au survol */
+  transform: scale(1.1); /* Zoom au survol */
 }
 
 /* Animation de fondu */

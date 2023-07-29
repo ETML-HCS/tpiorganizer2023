@@ -4,9 +4,10 @@ import { saveTpiToServer, getTpiFromServer } from "./TpiData";
 import TpiForm from "./TpiForm";
 import TpiList from "./TpiList";
 import TpiManagementButtons from "./TpiManagementButtons";
-import { updateMarginTopPage } from "../utils";
+import { updateMarginTopPage } from "../Utils";
 
 import "../../css/tpiManagement/tpiManagementStyle.css";
+
 
 const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   const [newTpi, setNewTpi] = useState(false);

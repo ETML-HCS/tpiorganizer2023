@@ -2,11 +2,13 @@ import React, { Fragment, useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import Home from "./components/Home";
-import TpiSchedule from "./components/tpiSchedule/tpiSchedule";
+import TpiSchedule from "./components/tpiSchedule/TpiSchedule";
 import TpiManagement from "./components/tpiManagement/TpiManagement";
 import TpiTracker from "./components/tpiTracker/TpiTracker";
 
 import "./css/globalStyles.css";
+
+//https://www.wanadev.fr/204-react-js-2-comment-gerer-le-routing-et-la-securite-sur-une-application-react/
 
 const App = () => {
   const [isArrowUp, setIsArrowUp] = useState(false);

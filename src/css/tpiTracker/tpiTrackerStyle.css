@@ -117,7 +117,7 @@
 
 /* Styles pour les formulaires d'inscription individuels */
 .student-registration,
-.project-manager-registration,
+.projectManager-registration,
 .dean-registration,
 .expert-registration {
     display: none;
@@ -125,7 +125,7 @@
 }
 
 .student-registration.active,
-.project-manager-registration.active,
+.projectManager-registration.active,
 .dean-registration.active,
 .expert-registration.active {
     display: flex;
@@ -151,7 +151,7 @@
 }
 
 .student-registration h3,
-.project-manager-registration h3,
+.projectManager-registration h3,
 .dean-registration h3,
 .expert-registration h3 {
     font-size: medium;
@@ -159,7 +159,7 @@
 
 /* Utiliser flexbox pour les champs d'inscription */
 .student-registration div,
-.project-manager-registration div,
+.projectManager-registration div,
 .dean-registration div,
 .expert-registration div {
     display: flex;
@@ -171,7 +171,7 @@
 @media screen and (max-width: 600px) {
 
     .student-registration div,
-    .project-manager-registration div,
+    .projectManager-registrationn div,
     .dean-registration div,
     .expert-registration div {
         flex-direction: column;
@@ -180,7 +180,7 @@
 
 /* Styles pour les inputs */
 .student-registration input,
-.project-manager-registration input,
+.projectManager-registration input,
 .dean-registration input,
 .expert-registration input {
     flex: 1;
@@ -194,7 +194,7 @@
 
 /* Styles pour le bouton */
 .student-registration button,
-.project-manager-registration button,
+.projectManager-registration button,
 .dean-registration button,
 .expert-registration button {
     background-color: #007bff;
@@ -209,7 +209,7 @@
 
 /* Styles pour la ligne suivante (bouton) */
 .student-registration .button-container,
-.project-manager-registration .button-container,
+.projectManager-registration .button-container,
 .dean-registration .button-container,
 .expert-registration .button-container {
     display: flex;
@@ -230,14 +230,14 @@
 
 /* Styles pour les espaces entre les champs d'inscription et le bouton */
 .student-registration .button-container button,
-.project-manager-registration .button-container button,
+.projectManager-registration .button-container button,
 .dean-registration .button-container button,
 .expert-registration .button-container button {
     margin-top: 10px;
 }
 
 .student-registration button:hover,
-.project-manager-registration button:hover,
+.projectManager-registration button:hover,
 .dean-registration button:hover,
 .expert-registration button:hover {
     background-color: #0056b3;

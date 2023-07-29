@@ -5,8 +5,13 @@ import Register from "./Register";
 import RegisterToProjects from "./RegisterToProjets";
 import TpiTrackerButtons from "./TpiTrackerButtons";
 
-import usersData from "../../config/subscribers.json";
+import { getUsers } from "../tpiControllers/TpiUsersController";
+
+import { showNotification } from "../Utils";
+
 import "../../css/tpiTracker/tpiTrackerStyle.css";
+
+const secret = "Le ciel étoilé brille de mille feux dans la nuit.";
 
 const Home = () => {
   return (
@@ -41,46 +46,59 @@ const Home = () => {
 
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [passwordField, setPasswordField] = useState("");
+  // nous ne pouvons initiliser le variable d'état avec getUsers()
   const [usersDataState, setUsersDataState] = useState([]);
 
+  // Utilisation de useEffect pour récupérer les données des utilisateurs une fois que le composant est monté
   useEffect(() => {
-    // Affichez la valeur mise à jour de usersDataState
-    console.log(usersDataState);
-  }, [usersDataState]);
+    const fetchUsersData = async () => {
+      try {
+        // Appel à getUsers() pour obtenir les données des utilisateurs
+        const usersData = await getUsers();
+        setUsersDataState(usersData); // Mettre à jour l'état avec les données des utilisateurs
+      } catch (error) {
+        console.error(
+          "Erreur lors de la récupération des données des utilisateurs :",
+          error
+        );
+        showNotification(
+          "Erreur lors de la vérification des identifiants",
+          4000
+        );
+      }
+    };
 
-  useEffect(() => {
-    // Déchiffrez les mots de passe des utilisateurs en utilisant le mot de passe "secret"
-    const decryptedUsersData = usersData.map((user) => {
-      return {
-        ...user,
-        password: decryptData(user.password, "secret"),
-      };
-    });
-    // Définissez les données déchiffrées comme état usersDataState
-    setUsersDataState(decryptedUsersData);
+    // Appeler la fonction fetchUsersData pour récupérer les données des utilisateurs
+    fetchUsersData();
   }, []);
 
-  // Fonction pour déchiffrer les données en utilisant AES
-  const decryptData = (encryptedData, password) => {
+  const handleLogin = async () => {
     try {
-      const bytes = AES.decrypt(encryptedData.toString(), password);
-      const decryptedData = bytes.toString(enc.Utf8);
-      return decryptedData;
-    } catch (error) {
-      console.error("Erreur lors du déchiffrement des données :", error);
-      return null;
-    }
-  };
+      // Attendre la résolution de la promesse pour obtenir les données des utilisateurs
+      const usersData = await usersDataState;
 
-  const handleLogin = () => {
-    const user = usersDataState.find(
-      (userData) => userData.username === username
-    );
-    if (user && password === user.password) {
-      onLogin(username, user.role);
-    } else {
-      alert("Identifiants incorrects");
+      // Rechercher l'utilisateur dans le tableau résolu (usersData) au lieu de la promesse (usersDataState)
+      const user = usersData.find((userData) => userData.login === username);
+      if (user) {
+        const decryptedPassword = AES.decrypt(user.password, secret).toString(
+          enc.Utf8
+        );
+
+        if (decryptedPassword === passwordField) {
+          onLogin(user);
+        } else {
+          showNotification("Identifiants incorrects", 4000);
+        }
+      } else {
+        showNotification("Utilisateur non trouvé", 4000);
+      }
+    } catch (error) {
+      console.error(
+        "Erreur lors de la récupération des données des utilisateurs :",
+        error
+      );
+      showNotification("Erreur lors de la vérification des identifiants", 4000);
     }
   };
 
@@ -98,8 +116,8 @@ const Login = ({ onLogin }) => {
         className="password"
         type="password"
         placeholder="Mot de passe"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        value={passwordField}
+        onChange={(e) => setPasswordField(e.target.value)}
       />
       <button onClick={handleLogin}>Se connecter</button>
     </div>
@@ -109,8 +127,8 @@ const Login = ({ onLogin }) => {
 const TpiTracker = ({ toggleArrow, isArrowUp }) => {
   const [user, setUser] = useState(null);
 
-  const handleOnLogin = (username, role) => {
-    setUser({ username, role });
+  const handleOnLogin = (user) => {
+    setUser(user);
   };
 
   return (
@@ -123,11 +141,13 @@ const TpiTracker = ({ toggleArrow, isArrowUp }) => {
       {user ? (
         <>
           <div className="container">
-            <h1>Bienvenue, {user.username} !</h1>
-            {user.role === "etudiant" ? (
-              <RegisterToProjects userRole="etudiant" />
-            ) : user.role === "boss" ? (
-              <RegisterToProjects userRole="boss" />
+            <h1>Bienvenue, {user.firstName} !</h1>
+            {user.role === "student" ? (
+              <RegisterToProjects userRole="student" />
+            ) : user.role === "projectManager" ? (
+              <RegisterToProjects userRole="projectManager" />
+            ) : user.role === "dean" ? (
+              <RegisterToProjects userRole="dean" />
             ) : user.role === "expert" ? (
               <RegisterToProjects userRole="expert" />
             ) : (
@@ -139,7 +159,7 @@ const TpiTracker = ({ toggleArrow, isArrowUp }) => {
         <div className="box">
           <Home />
           <Login onLogin={handleOnLogin} />
-          <Register />
+          <Register secret={secret} />
         </div>
       )}
     </>

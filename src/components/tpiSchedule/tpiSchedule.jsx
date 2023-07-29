@@ -1,11 +1,11 @@
 import React, { Fragment, useState, useEffect } from "react";
 import TpiScheduleButtons from "./TpiScheduleButtons";
-import {showNotification} from '../utils'
+import {showNotification} from '../Utils'
 import DateRoom from "./DateRoom";
 import {
   createTpiRooms,
   getTpiRooms,
-} from "./../tpiControllers/tpiRoomsController";
+} from "../tpiControllers/TpiRoomsController";
 
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [newRooms, setNewRooms] = useState([]);

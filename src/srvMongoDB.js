@@ -167,7 +167,6 @@ app.delete('/delete-tpi-room/:id', async (req, res) => {
 
 
 /**#region: tpiUsers */
-
 // Route pour la création d'un nouvel utilisateur
 app.post('/inscription', async (req, res) => {
   try {

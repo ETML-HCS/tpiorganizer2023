@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { showNotification } from "../utils";
+import { showNotification } from "../Utils";
 
 const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
   const [date, setDate] = useState("");

@@ -1,21 +1,30 @@
 const mongoose = require('mongoose');
 
-const userSchema = new mongoose.Schema(
-  {
-    firstName: String,
-    lastName: String,
-    email: String,
-    phone: String,
-    role: String,
-    quota: [
-      {
-        expertise: Number,
-        boss: Number,
-      }
-    ]
+const userSchema = new mongoose.Schema({
+  firstName: String,
+  lastName: String,
+  login:{
+    type:String,
+    unique:true,
+    require:true
   },
-  { collection: "tpiUsers" }
-);
+  email: {
+    type: String,
+    unique: true,
+  },
+  phone: String,
+  password: {
+    type: String,
+    required: true,
+  },
+  role: String,
+  quota: [
+    {
+      expertise: Number,
+      boss: Number,
+    },
+  ],
+}, { collection: "tpiUsers" });
 
 const User = mongoose.model("User", userSchema);
 
