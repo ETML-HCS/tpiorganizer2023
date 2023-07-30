@@ -53,9 +53,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           setNewRooms(savedRooms);
           console.log("Données chargées depuis le stockage local:", savedRooms);
           if (!setIsDbDataLoaded) {
-            alert(
+            showNotification(
               "Les données actuellement chargées proviennent d'une sauvegarde locale. " +
-                "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données. (58)"
+                "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",4000
             );
           }
          
@@ -63,6 +63,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           // Si dbData n'est pas vide, procéder comme précédemment
           if (savedData) {
             const savedRooms = JSON.parse(savedData);
+
+            if (!Array.isArray(savedRooms) && Array.isArray(dbData)) {
+              setNewRooms(dbData);
+              return;
+            }
+            
             const lastSaveDate = new Date(
               savedRooms[savedRooms.length - 1].lastUpdate
             );
@@ -71,9 +77,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
             if (dbDataDate > lastSaveDate) {
               setNewRooms(dbData);
               localStorage.setItem("organizerData", JSON.stringify(dbData));
-              alert(
+              showNotification(
                 "Les données actuellement chargées proviennent d'une sauvegarde locale. " +
-                  "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.(74)"
+                  "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",4000
               );
             } else {
               setNewRooms(savedRooms);

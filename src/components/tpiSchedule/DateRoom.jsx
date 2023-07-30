@@ -3,8 +3,14 @@ import TpiSlot from "./TpiSlot";
 import BreakLine from "./BreakLine";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 
 import "../../css/tpiShedule/tpiSheduleStyle.css";
+
+function capitalizeFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
 
 const DateRoom = ({
   roomData,
@@ -26,13 +32,23 @@ const DateRoom = ({
   const tpiDurationMinutes = roomData.configSite.tpiTime * 60; // Durée du TPI en minutes
   const firstTpiStartHour = roomData.configSite.firstTpiStart; // Heure de début du premier TPI en heures décimales
 
+  const formattedDate = format(
+    new Date(roomData.date),
+    "'" +
+      capitalizeFirstLetter(
+        format(new Date(roomData.date), "EEEE", { locale: fr })
+      ) +
+      "' dd-MM-yyyy",
+    { locale: fr }
+  );
+
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="room">
         <div className={`date-room site_${roomData.site.toLowerCase()}`}>
-          <div className="date">{roomData.date}</div>
+          <div className="date">{formattedDate}</div>
           <div className="nameRoom">Room: {roomData.name}</div>
-          
+
           {slots.map((_, iSlot) => {
             // Appeler la fonction generateUniqueID pour générer l'ID TPI
             const tpiID = generateUniqueID(
@@ -69,7 +85,7 @@ const DateRoom = ({
             return (
               <React.Fragment key={iSlot}>
                 <TpiSlot
-                  timeValues={ [ startTime, endTime]}
+                  timeValues={[startTime, endTime]}
                   tpiData={tpi}
                   onUpdateTpi={(updatedTpi) => onUpdateTpi(iSlot, updatedTpi)}
                   isEditTPICard={isEditOfRoom}
