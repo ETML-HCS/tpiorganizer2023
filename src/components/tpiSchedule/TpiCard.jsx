@@ -1,36 +1,122 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useDrag } from "react-dnd";
-import { ItemTypes } from "./Constants"; // You'll define this later
+import { ItemTypes } from "./Constants";
+import { getTpiModels } from "../tpiControllers/TpiController";
 
 const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
-  // État local pour stocker les modifications en cours de la carte
   const [editedTpi, setEditedTpi] = useState(tpi);
+  const [tpiList, setTpiList] = useState([]);
+  const [selectedCandidate, setSelectedCandidate] = useState("");
+  const [assignedRefTpis, setAssignedRefTpis] = useState([]);
+  const [location, setLocation] = useState(null);
+  const selectRef = useRef(null);
+  const refTpiContainerRef = useRef(null);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
 
-  // Effet pour mettre à jour l'état editedTpi lorsque la prop tpi change
+  const handleToggleSelect = () => {
+    setIsSelectOpen((prevState) => !prevState);
+  };
+
+  const findParentWithClass = (element, className) => {
+    if (!element) return null;
+    let currentElement = element;
+    while (currentElement !== null) {
+      if (
+        currentElement.classList &&
+        currentElement.classList.contains(className)
+      ) {
+        return currentElement;
+      }
+      currentElement = currentElement.parentElement;
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    const fetchTpiModels = async () => {
+      const tpiData = await getTpiModels();
+      const refTpiElements = document.getElementsByClassName("refTpi");
+      const assignedRefTpis = Array.from(refTpiElements).map((element) =>
+        element.textContent.trim()
+      );
+
+      setTpiList(tpiData);
+      setAssignedRefTpis(assignedRefTpis);
+
+      // Recherche le parent avec la classe "date-room site_cfpv" ou "date-room site_etml"
+      if (findParentWithClass(selectRef.current, "site_etml")) {
+        setLocation("ETML-Sébeillon");
+      } else if (findParentWithClass(selectRef.current, "site_cfpv")) {
+        setLocation("ETML-Vennes");
+      }
+    };
+    fetchTpiModels();
+  }, [isSelectOpen]);
+
+  useEffect(() => {
+    // Filtrer les options déjà attribuées
+    const filteredTpiList = tpiList.filter(
+      (tpiItem) => !assignedRefTpis.includes(tpiItem.refTpi)
+    );
+
+    setTpiList(filteredTpiList);
+  }, [assignedRefTpis]);
+
+  useEffect(() => {
+    if (selectedCandidate && tpiList && tpiList.length > 0) {
+      const selectedTpi = tpiList.find(
+        (item) => item.refTpi === selectedCandidate
+      );
+
+      if (selectedTpi) {
+        setEditedTpi((prevEditedTpi) => ({
+          ...prevEditedTpi,
+          refTpi: selectedTpi.refTpi,
+          candidat: selectedTpi.candidat,
+          expert1: selectedTpi.expert1,
+          expert2: selectedTpi.expert2,
+          boss: selectedTpi.boss,
+        }));
+      }
+    }
+  }, [selectedCandidate, tpiList]);
+
   useEffect(() => {
     setEditedTpi(tpi);
   }, [tpi]);
 
-  // Effet pour mettre à jour le TPI sur l'action d'édition lorsque isEditingTpiCard est vrai
   useEffect(() => {
     if (isEditingTpiCard) {
       onUpdateTpi(editedTpi);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditingTpiCard]);
 
+  // Utilisez useEffect pour gérer la fermeture de la liste lorsque l'utilisateur clique à l'extérieur du composant
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) {
+        setIsSelectOpen(false);
+      }
+    };
 
-  // Gestionnaire de changement pour les champs de saisie lors de l'édition de la carte
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleChange = (e, field) => {
     const updatedTpi = {
       ...editedTpi,
       [field]: e.target.value,
     };
     setEditedTpi(updatedTpi);
-    onUpdateTpi(updatedTpi); // Mettre à jour le TPI dans la carte TpiCard immédiatement
+    onUpdateTpi(updatedTpi);
   };
-  
-  // Utilisation du hook useDrag pour permettre à la carte d'être draggable
+
+  const handleSelectChange = (e) => {
+    setSelectedCandidate(e.target.value);
+  };
+
   const [{ isDragging }, dragRef] = useDrag({
     type: ItemTypes.TPI_CARD,
     item: { tpi },
@@ -42,14 +128,48 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   return (
     <div ref={dragRef} className={`tpiCard ${isDragging ? "dragging" : ""}`}>
       {isEditingTpiCard ? (
-        // Mode édition : affichage des champs de saisie pour modifier les données
         <>
-          <input
-            type="text"
-            className="edit"
-            value={editedTpi.candidat || ""}
-            onChange={(e) => handleChange(e, "candidat")}
-          />
+          <div className="eidtCandidat">
+            <input
+              type="text"
+              className="edit"
+              value={editedTpi.candidat || ""}
+              onChange={(e) => handleChange(e, "candidat")}
+            />
+            <div
+              ref={refTpiContainerRef}
+              style={{ display: "none" }}
+              className="refTpi"
+            >
+              {editedTpi.refTpi}{" "}
+            </div>
+
+            <div className="btTpiListSite" onClick={handleToggleSelect}>
+              ▼
+            </div>
+            {isSelectOpen && tpiList.length > 0 && (
+              <select
+                ref={selectRef}
+                className="edit"
+                value={selectedCandidate}
+                onChange={handleSelectChange}
+              >
+                {tpiList.map((item) => {
+                  const isMatchingLocation = item.lieu === location;
+                  const isAssigned = assignedRefTpis.includes(item.refTpi);
+
+                  if (!isAssigned && isMatchingLocation) {
+                    return (
+                      <option key={item.refTpi} value={item.refTpi}>
+                        {item.refTpi + " " + item.candidat + " " + item.lieu}
+                      </option>
+                    );
+                  }
+                  return null;
+                })}
+              </select>
+            )}
+          </div>
           <input
             type="text"
             className="edit"
@@ -70,7 +190,6 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
           />
         </>
       ) : (
-        // Mode non édition : affichage des données de la carte
         <>
           <div className="debug">{editedTpi.id}</div>
           <div className="candidat">
@@ -80,7 +199,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             {editedTpi.candidat}
           </div>
           <div className="expert">
-            <span role="img" aria-label="checkmark" className=" boss-icon ">
+            <span role="img" aria-label="checkmark" className="boss-icon">
               ✔️
             </span>
             {editedTpi.expert1}

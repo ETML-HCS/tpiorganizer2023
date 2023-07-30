@@ -364,4 +364,33 @@
   transition-delay: 0.5s;
 }
 
+/* bouton edit dans candidat */
 
+.editCandidat {
+  display: flex;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.btTpiListSite {
+  width: 10px;
+  position:relative;
+  top: -30px;
+  left: 92%;
+  color: #333;
+  padding: 2px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background-color 0.2s, color 0.2s, transform 0.2s;
+  margin-bottom: -15px;
+}
+
+.btTpiListSite:hover {
+  background-color: #e0e0e0;
+  color: #222;
+}
+
+.btTpiListSite:active {
+  transform: scale(0.95);
+}

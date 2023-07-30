@@ -18,6 +18,10 @@ const tpiRoomSchema = new mongoose.Schema({
   },
   tpiDatas: [
     {
+      refTpi:{
+        type:String,
+        unique:true
+      },
       id: {
         type: String,
         unique: true, // L'ID doit être unique pour chaque document

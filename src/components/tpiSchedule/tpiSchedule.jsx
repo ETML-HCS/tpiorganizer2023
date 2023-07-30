@@ -118,6 +118,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
     // Créer une nouvelle salle avec les informations fournies et un tableau de TPIs vides
     const newRoom = {
+      refTpi:"",
       idRoom: getSecondsSinceEpoch(),
       // Ajouter la date et l'heure de sauvegarde au moment de la création ou de la mise à jour
       lastUpdate: " ",
@@ -164,9 +165,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         ...newRooms[roomIndex],
         lastUpdate: Date.now(),
       };
-      console.log("Mise à jour de la salle dans newRooms :", updatedRoom);
       await saveDataToLocalStorage(updatedRoom);
-      console.log("Salle mise à jour dans la base de données :", updatedRoom);
     } catch (error) {
       console.error(
         "Erreur lors de la mise à jour de la salle de TPI dans la base de données :",
@@ -183,7 +182,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   // Fonction pour sauvegarder les données dans localStorage
   const saveDataToLocalStorage = (data) => {
     data.lastUpdate = Date.now();
-    console.log(data.lastUpdate);
     return new Promise((resolve) => {
       const jsonData = JSON.stringify(data);
       localStorage.setItem("organizerData", jsonData);

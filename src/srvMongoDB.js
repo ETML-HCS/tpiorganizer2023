@@ -164,8 +164,6 @@ app.delete('/delete-tpi-room/:id', async (req, res) => {
 });
 /**#endregion */
 
-
-
 /**#region: tpiUsers */
 // Route pour la création d'un nouvel utilisateur
 app.post('/inscription', async (req, res) => {
@@ -226,7 +224,6 @@ app.delete('/suivi-etudiants/:id', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la suppression de l\'utilisateur' });
   }
 });
-
 
 
 /**#endregion */
