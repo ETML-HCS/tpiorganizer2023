@@ -1,10 +1,11 @@
 import React, { Fragment, useState, useEffect } from "react";
 import TpiScheduleButtons from "./TpiScheduleButtons";
-import {showNotification} from '../Utils'
+import { showNotification } from "../Utils";
 import DateRoom from "./DateRoom";
 import {
   createTpiRooms,
   getTpiRooms,
+  deleteTpiRoom,
 } from "../tpiControllers/TpiRoomsController";
 
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
@@ -55,10 +56,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           if (!setIsDbDataLoaded) {
             showNotification(
               "Les données actuellement chargées proviennent d'une sauvegarde locale. " +
-                "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",4000
+                "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",
+              4000
             );
           }
-         
         } else {
           // Si dbData n'est pas vide, procéder comme précédemment
           if (savedData) {
@@ -68,7 +69,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
               setNewRooms(dbData);
               return;
             }
-            
+
             const lastSaveDate = new Date(
               savedRooms[savedRooms.length - 1].lastUpdate
             );
@@ -79,7 +80,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
               localStorage.setItem("organizerData", JSON.stringify(dbData));
               showNotification(
                 "Les données actuellement chargées proviennent d'une sauvegarde locale. " +
-                  "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",4000
+                  "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",
+                4000
               );
             } else {
               setNewRooms(savedRooms);
@@ -118,7 +120,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
     // Créer une nouvelle salle avec les informations fournies et un tableau de TPIs vides
     const newRoom = {
-      refTpi:"",
+      refTpi: "",
       idRoom: getSecondsSinceEpoch(),
       // Ajouter la date et l'heure de sauvegarde au moment de la création ou de la mise à jour
       lastUpdate: " ",
@@ -149,6 +151,51 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     saveDataToLocalStorage([...newRooms, newRoom]);
     // Afficher un message dans la console pour indiquer que la salle a été ajoutée
     console.log("Salle ajoutée :", newRoom);
+  };
+
+  const handleDelete = async (index) => {
+    try {
+      const roomIdToDelete = newRooms[index].idRoom;
+      
+      // Supprimer l'objet spécifique du localStorage
+       const existingDataJSON = localStorage.getItem("organizerData");
+       const existingData = JSON.parse(existingDataJSON);
+
+       // Filtrer pour créer un nouveau tableau sans la TpiRoom à supprimer
+       const updatedData = existingData.filter(
+         (item) => item.idRoom !== roomIdToDelete
+       );
+
+       // Mettre à jour le localStorage avec le nouveau tableau
+       localStorage.setItem("organizerData", JSON.stringify(updatedData));
+
+       // Mettre à jour l'état pour retirer la salle supprimée de newRooms
+       setNewRooms((prevRooms) => {
+         const updatedRooms = [...prevRooms];
+         updatedRooms.splice(index, 1);
+         return updatedRooms;
+       });
+       
+      // Appeler la fonction pour supprimer la TpiRoom côté serveur (en supposant que c'est une opération asynchrone)
+      const deleteResult = await deleteTpiRoom(roomIdToDelete);
+      
+      // Vérifier si la suppression côté serveur a réussi (selon la valeur renvoyée par la fonction deleteTpiRoom)
+      if (deleteResult.success) {
+
+       showNotification(
+          "suppresion de l'objet "+newRooms[index].nameRoom,3000
+        );
+      } else {
+        showNotification(
+          "La suppression côté serveur a échoué ou la donnée n'existe plus.",3000
+        );
+        // Vous pouvez afficher un message d'erreur convivial à l'utilisateur ici si nécessaire
+        // Ou gérer d'autres actions en fonction du résultat de la suppression côté serveur
+      }
+    } catch (error) {
+      console.error("Erreur lors de la suppression de la salle :", error);
+      // Vous pouvez également afficher un message d'erreur convivial à l'utilisateur ici si nécessaire
+    }
   };
 
   const handleUpdateTpi = async (roomIndex, tpiIndex, updatedTpi) => {
@@ -198,20 +245,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       ...room,
       lastUpdate: new Date().getTime(), // Mettre à jour avec la nouvelle date
     }));
-  
+
     // Mettre à jour l'état newRooms avec la liste des salles mises à jour
     setNewRooms(updatedRooms);
-  
+
     // Sauvegarder les données dans localStorage avec la nouvelle date
     saveDataToLocalStorage(updatedRooms);
-  
+
     // Étape 2: Mettre à jour les données dans la base de données en parallèle
     await Promise.all(updatedRooms.map((room) => createTpiRooms(room)));
-  
-    // Une fois que toutes les mises à jour sont terminées, cette ligne sera exécutée
-    console.log(
-      "Données sauvegardées dans localStorage et dans la base de données."
-    );
+
     // Afficher le message de sauvegarde avec une durée de 3 secondes
     showNotification("Données sauvegardées avec succès !", 3000);
   };
@@ -334,8 +377,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     // Mettre à jour l'état avec le nouvel objet newRooms
     setNewRooms(updatedNewRooms);
     saveDataToLocalStorage(updatedNewRooms);
-
-    console.log(updatedNewRooms);
   };
 
   return (
@@ -369,14 +410,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
             onSwapTpiCards={(draggedTpi, targetTpi) =>
               handleSwapTpiCards(draggedTpi, targetTpi)
             }
-            onDelete={() => {
-              console.log("Suppression de la salle :", room);
-              setNewRooms((prevRooms) => {
-                const updatedRooms = [...prevRooms];
-                updatedRooms.splice(index, 1);
-                return updatedRooms;
-              });
-            }}
+            // attention il faut obligatoirement passer par une fonction sion elle est toujours appelée
+            onDelete={() => handleDelete(index)}
           />
         ))
       )}

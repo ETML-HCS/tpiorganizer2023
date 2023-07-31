@@ -49,6 +49,7 @@ export const updateTpiRoom = async (roomId, roomData) => {
 };
 
 export const deleteTpiRoom = async (roomId) => {
+  console.log(roomId);
   try {
     const response = await axios.delete(`${apiUrl}/delete-tpi-room/${roomId}`);
     return response.data;
