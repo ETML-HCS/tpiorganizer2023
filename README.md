@@ -86,8 +86,9 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 - Mise en place des tpilists dans tpiRoom pour accélérer la planification des soutenances.
 
 **10.11.2023 :**
-Ajout d'un fichier .env pour la sécurisation des variables d'environnement, y compris les identifiants de base de données. 
-Bien que l'utilisation de MongoDB Atlas ait été envisagée pour optimiser la gestion des données et la scalabilité, cette idée a été finalement écartée au profit de solutions plus adaptées à nos besoins actuels.
+
+- Ajout d'un fichier .env pour la sécurisation des variables d'environnement, y compris les identifiants de base de données. 
+- Bien que l'utilisation de MongoDB Atlas ait été envisagée pour optimiser la gestion des données et la scalabilité, cette idée a été finalement écartée au profit de solutions plus adaptées à nos besoins actuels.
 Consulter les tâches confiées à Azur
     
 ## Mise à jour pour Azur
