@@ -85,6 +85,12 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 - Travaux en cours pour l'implémentation du login avec le mot de passe hash.
 - Mise en place des tpilists dans tpiRoom pour accélérer la planification des soutenances.
 
+10.11.2023 :
+
+    Ajout d'un fichier .env pour la gestion sécurisée des variables d'environnement, y compris les informations de connexion à la base de données.
+    Mise à jour de la configuration de la base de données pour utiliser MongoDB Atlas, un service de base de données cloud, afin d'améliorer la gestion des données et la scalabilité de l'application.
+
+
 ## Prochaines étapes
 
 1. Envoi de mails : Je vais implémenter la fonctionnalité d'envoi de mails en utilisant une liste prédéfinie au format JSON. Les utilisateurs pourront facilement envoyer des notifications par e-mail aux participants des soutenances, ce qui améliorera la communication et la coordination des événements.
