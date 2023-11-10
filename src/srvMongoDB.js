@@ -20,28 +20,48 @@ app.get('/', (req, res) => {
 
 // Route pour enregistrer un nouveau modèle de TPI
 // amélioration avec update si existant :-)
+
 app.post('/save-tpi', async (req, res) => {
   try {
     const modelData = req.body;
-    const existingModel = await TpiModels.findOne({ refTpi: modelData.refTpi });
-
-    if (existingModel) {
-      // Si un modèle avec la même référence existe déjà, mettez à jour les données de ce modèle
-      const updatedModel = await TpiModels.findByIdAndUpdate(existingModel._id, modelData, { new: true });
-      console.log('Modèle de TPI mis à jour avec succès:', updatedModel);
-      res.json(updatedModel);
-    } else {
-      // Sinon, enregistrez un nouveau modèle de TPI
-      const newModel = new TpiModels(modelData);
-      const savedModel = await newModel.save();
-      console.log('Nouveau modèle de TPI enregistré avec succès:', savedModel);
-      res.json(savedModel);
-    }
+    // Utilisez findOneAndUpdate avec upsert pour simplifier la logique
+    const savedModel = await TpiModels.findOneAndUpdate(
+      { refTpi: modelData.refTpi },
+      modelData,
+      { upsert: true, new: true }
+    );
+    
+    console.log('Modèle de TPI traité avec succès:', savedModel);
+    res.json(savedModel);
   } catch (error) {
     console.error('Erreur lors de l\'enregistrement du modèle de TPI:', error);
     res.status(500).json({ error: 'Erreur lors de l\'enregistrement du modèle de TPI' });
   }
 });
+
+
+// app.post('/save-tpi', async (req, res) => {
+//   try {
+//     const modelData = req.body;
+//     const existingModel = await TpiModels.findOne({ refTpi: modelData.refTpi });
+
+//     if (existingModel) {
+//       // Si un modèle avec la même référence existe déjà, mettez à jour les données de ce modèle
+//       const updatedModel = await TpiModels.findByIdAndUpdate(existingModel._id, modelData, { new: true });
+//       console.log('Modèle de TPI mis à jour avec succès:', updatedModel);
+//       res.json(updatedModel);
+//     } else {
+//       // Sinon, enregistrez un nouveau modèle de TPI
+//       const newModel = new TpiModels(modelData);
+//       const savedModel = await newModel.save();
+//       console.log('Nouveau modèle de TPI enregistré avec succès:', savedModel);
+//       res.json(savedModel);
+//     }
+//   } catch (error) {
+//     console.error('Erreur lors de l\'enregistrement du modèle de TPI:', error);
+//     res.status(500).json({ error: 'Erreur lors de l\'enregistrement du modèle de TPI' });
+//   }
+// });
 
 
 // Route pour récupérer tous les modèles de TPI
@@ -56,6 +76,7 @@ app.get('/get-tpi', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la récupération des modèles de TPI' });
   }
 });
+
 
 // Route pour mettre à jour un modèle de TPI par son ID
 app.put('/update-tpi/:id', async (req, res) => {

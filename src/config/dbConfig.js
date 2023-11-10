@@ -1,17 +1,22 @@
+require('dotenv').config();
 const mongoose = require('mongoose');
-const dbName = 'dbOrganizer';
 
-// localhost ou 127.0.0.1 ne foncitonne plus :-( 
-// https://stackoverflow.com/questions/46523321/mongoerror-connect-econnrefused-127-0-0-127017
+const dbName = process.env.DB_NAME;
+const username = encodeURIComponent(process.env.DB_USERNAME);
+const password = encodeURIComponent(process.env.DB_PASSWORD);
+const cluster = process.env.DB_CLUSTER;
 
-mongoose.connect(`mongodb://0.0.0.0:27017/${dbName}`, {
+const uri = `mongodb+srv://${username}:${password}@${cluster}/${dbName}`;
+
+mongoose.connect(uri, {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
+  useUnifiedTopology: true
+}).then(() => {
+  console.log('Connexion à la base de données réussie !');
+}).catch(err => {
+  console.error('Erreur de connexion à MongoDB :', err);
 });
 
 const db = mongoose.connection;
-
-db.on('error', (err) => console.error('Erreur de connexion à MongoDB :', err));
-db.once('open', () => console.log('Connexion à la base de données réussie !'));
 
 module.exports = db;

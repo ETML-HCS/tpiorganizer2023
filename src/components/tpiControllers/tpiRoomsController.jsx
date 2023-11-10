@@ -32,7 +32,9 @@ export const getTpiRooms = async () => {
   try {
     const response = await axios.get(getTpiRoomsUrl);
     return response.data;
+
   } catch (error) {
+    
     console.error(`Erreur lors de la récupération des salles de TPI: ${error.message}`);
     throw error;
   }

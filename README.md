@@ -1,4 +1,4 @@
-# TPIorganizer version 2023 - Mise à jour du [28.07.2023] | V 0.11 (Prototype, logiciel non fonctionnelle)
+****# TPIorganizer version 2023 - Mise à jour du [28.07.2023] | V 0.11 (Prototype, logiciel non fonctionnelle)
 
 TPIorganizer version 2023 est une application React permettant d'organiser et de gérer les soutenances de TPI (Travaux de fin d'études) selon différentes dates et salles.
 
@@ -11,7 +11,7 @@ TPIorganizer version 2023 est une application React permettant d'organiser et de
 - Implémentation d'un système de Routes (URL) permettant d'offrir plusieurs programmes :
   - Gestion des TPI
   - Suivi de l'élève (candidat)
-  - Inscription en tant qu'expert, chef de projet, doyen ou candidat
+  - **Inscription** en tant qu'expert, chef de projet, doyen ou candidat
   - Module de planification pour créer et gérer les salles ainsi que poser les TPI selon l'horaire organisé en slot
   - Fonction pour le cliquer et déposer des TPI
   - Possibilité future pour les abonnés de s'inscrire sur une liste d'attente pour les TPI, attribuée par un responsable selon des critères spécifiques
