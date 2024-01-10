@@ -137,21 +137,22 @@
   font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
   font-size: large;
   text-align: left;
-  display: grid;
-  grid-template-rows: 50% auto;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 50px;
+  align-items: center;
   border-right: 2px solid var(--tpi-timeSlot-textColor);
-  margin-left: 9px;
 }
 
 .top {
-  align-self: flex-start;
-  margin-top: 6px;
+  align-self: center;
+  margin-top: 10px;
 }
 
 .bottom {
-  align-self: flex-end;
-  margin-bottom: 6px;
+  align-self: center;
+  margin-bottom: 10px;
 }
 
 /* Styles pour les champs éditables */

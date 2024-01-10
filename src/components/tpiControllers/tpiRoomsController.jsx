@@ -1,22 +1,39 @@
-import axios from 'axios';
+import axios from 'axios'
 
-const apiUrl = 'http://localhost:5000';
-const saveTpiRoomUrl = `${apiUrl}/save-tpi-rooms`;
-const getTpiRoomsUrl = `${apiUrl}/get-tpi-rooms`;
+const apiUrl = 'http://localhost:5000'
+const saveTpiRoomUrl = `${apiUrl}/save-tpi-rooms`
+const getTpiRoomsUrl = `${apiUrl}/get-tpi-rooms`
 
+export const checkRoomExistenceById = async idRoom => {
+  // Validation de l'ID de la salle
+  if (!idRoom) {
+    throw new Error("L'ID de la salle est requis pour la vérification.");
+  }
 
-export const createTpiRooms = async (roomData) => {
   try {
-    // Récupérer les salles de TPI existantes depuis la base de données
-    const existingRooms = await getTpiRooms();
+    const response = await axios.get(`${apiUrl}/api/check-room-existence/${idRoom}`);
 
-    // Vérifier si une salle avec le même idRoom existe déjà
-    const existingRoom = existingRooms.find((room) => room.idRoom === roomData.idRoom);
+    console.log("Réponse reçue de l'API pour l'existence de la salle:", response.data);
 
-    if (existingRoom) {
-      console.log("idRoom: ", existingRoom.idRoom);
+    // Vérifier si la réponse est valide et contient les champs nécessaires
+    if (response.data && 'exists' in response.data && '_id' in response.data) {
+      return response.data; // { exists: true/false, _id: roomId }
+    } else {
+      throw new Error("Réponse de l'API invalide ou incomplète.");
+    }
+  } catch (error) {
+    console.error(`Erreur lors de la vérification de l'existence de la salle: ${error.message}`);
+    throw error; // Propager l'erreur pour une gestion externe
+  }
+}
+
+export const createTpiRooms = async roomData => {
+  try {
+    const existingRoom = await checkRoomExistenceById(roomData.idRoom);
+    if (existingRoom && existingRoom.exists) {
       // Si la salle existe déjà, la mettre à jour
-      return await updateTpiRoom(existingRoom._id, roomData);
+      const updatedRoom = await updateTpiRoom(existingRoom._id, roomData);
+      return updatedRoom;
     } else {
       // Si la salle n'existe pas, en créer une nouvelle
       const response = await axios.post(saveTpiRoomUrl, roomData);
@@ -28,35 +45,71 @@ export const createTpiRooms = async (roomData) => {
   }
 };
 
+
+export const createTpiCollectionForYear = async (year, roomData) => {
+  try {
+    const response = await axios.post(`${apiUrl}/create-tpi-collection/${year}`, roomData);
+    if (response.status === 200) {
+      console.log(`Collection TPI pour l'année ${year} créée avec succès.`);
+      return response.data;
+    } else {
+      console.error(`Erreur lors de la création de la collection TPI pour l'année ${year}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`Erreur réseau lors de la création de la collection TPI pour l'année ${year}: ${error.message}`);
+    throw error;
+  }
+};
+
 export const getTpiRooms = async () => {
   try {
-    const response = await axios.get(getTpiRoomsUrl);
-    return response.data;
-
+    const response = await axios.get(getTpiRoomsUrl)
+    return response.data
   } catch (error) {
-    
-    console.error(`Erreur lors de la récupération des salles de TPI: ${error.message}`);
-    throw error;
+    console.error(
+      `Erreur lors de la récupération des salles de TPI: ${error.message}`
+    )
+    throw error
   }
-};
+}
 
+// Fonction pour mettre à jour une salle de TPI
 export const updateTpiRoom = async (roomId, roomData) => {
-  try {
-    const response = await axios.put(`${apiUrl}/update-tpi-room/${roomId}`, roomData);
-    return response.data;
-  } catch (error) {
-    console.error(`Erreur lors de la mise à jour de la salle de TPI: ${error.message}`);
-    throw error;
+  // Validation de base des entrées
+  if (!roomId || !roomData) {
+    throw new Error("L'ID de la salle et les données sont requis pour la mise à jour.");
   }
-};
 
-export const deleteTpiRoom = async (roomId) => {
-  console.log(roomId);
   try {
-    const response = await axios.delete(`${apiUrl}/delete-tpi-room/${roomId}`);
-    return response.data;
+    // Utilisez l'URL complète pour l'endpoint de mise à jour
+    console.log("updateTpiRoom: ", roomId, " ici data: ", roomData)
+
+    const response = await axios.put(`${apiUrl}/update-tpi-room/${roomId}`, roomData);
+
+    // Vérification de la réponse de l'API
+    if (!response || response.status !== 200) {
+      throw new Error('La réponse de la mise à jour de la salle de TPI est invalide.');
+    }
+
+    // Renvoyez les données mises à jour ou un message de succès
+    return response.data || { message: 'Mise à jour réussie sans données retournées.' };
   } catch (error) {
-    console.error(`Erreur lors de la suppression de la salle de TPI: ${error.message}`);
-    throw error;
+    // Gestion des erreurs avec plus de détails
+    console.error(`Erreur lors de la mise à jour de la salle de TPI (ID: ${roomId}): ${error.message}`);
+    throw new Error(`Erreur de mise à jour: ${error.message}`);
   }
-};
+}
+
+export const deleteTpiRoom = async roomId => {
+  console.log(roomId)
+  try {
+    const response = await axios.delete(`${apiUrl}/delete-tpi-room/${roomId}`)
+    return response.data
+  } catch (error) {
+    console.error(
+      `Erreur lors de la suppression de la salle de TPI: ${error.message}`
+    )
+    throw error
+  }
+}

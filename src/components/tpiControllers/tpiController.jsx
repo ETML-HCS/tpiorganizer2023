@@ -19,11 +19,10 @@ export const getTpiModels = async () => {
   try {
     const response = await axios.get(`${apiUrl}/get-tpi`);
     return response.data;
+    
   } catch (error) {
     console.error("Erreur lors de la récupération des modèles de TPI:", error);
-    throw new Error(
-      "Une erreur est survenue lors de la récupération des modèles de TPI. Veuillez réessayer plus tard."
-    );
+    throw new Error("Une erreur est survenue lors de la récupération des modèles de TPI. Veuillez réessayer plus tard.");
   }
 };
 

@@ -6,6 +6,7 @@ const TpiScheduleButtons = ({
   onToggleEditing,
   onSave,
   onExport,
+  onPublish,
   configData,
   onLoadConfig,
   toggleArrow,
@@ -18,7 +19,7 @@ const TpiScheduleButtons = ({
     setShowForm(true);
   };
 
-  const handleSend = () => {};
+  const handleSend = () => { };
 
   const handleEdition = () => {
     setIsEditing((prevState) => !prevState);
@@ -35,6 +36,10 @@ const TpiScheduleButtons = ({
     onSave();
   };
 
+  const handlePublish = ()=>{
+    onPublish();
+  }
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -47,13 +52,7 @@ const TpiScheduleButtons = ({
       fileReader.readAsText(file);
     }
   };
-
-  const handlePublish = () => {
-    // Implement the logic for publishing here
-    // You can call the onPublish prop if needed
-   
-  };
-
+  
   return (
     <div id="tools">
       {showForm ? (
@@ -82,7 +81,7 @@ const TpiScheduleButtons = ({
             Enregistrer &#x1F4BE;
           </button>
           <label htmlFor="configFile"
-          style={{padding: "1px 6px", height:"24px"}} id="btLoadFile"> Charger Fichier &#x1F4C2;
+            style={{ padding: "1px 6px", height: "24px" }} id="btLoadFile"> Charger Fichier &#x1F4C2;
           </label>
           <input
             type="file"

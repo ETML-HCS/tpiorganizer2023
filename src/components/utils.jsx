@@ -1,5 +1,5 @@
-import {useEffect} from "react";
-import { updateMany } from "../models/userModels";
+// import {useEffect} from "react";
+// import { updateMany } from "../models/userModels";
 
 export const showNotification = (message, duration) => {
   const notification = document.createElement("div");

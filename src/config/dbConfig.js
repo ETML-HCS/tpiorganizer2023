@@ -6,7 +6,15 @@ const username = encodeURIComponent(process.env.DB_USERNAME);
 const password = encodeURIComponent(process.env.DB_PASSWORD);
 const cluster = process.env.DB_CLUSTER;
 
-const uri = `mongodb+srv://${username}:${password}@${cluster}/${dbName}`;
+// Choix de l'URI en fonction de l'environnement
+let uri;
+if (cluster.includes('localhost')) {
+    // URI pour une base de données locale
+    uri = `mongodb://${cluster}/${dbName}`;
+} else {
+    // URI pour une base de données cloud
+    uri = `mongodb+srv://${username}:${password}@${cluster}/${dbName}`;
+}
 
 mongoose.connect(uri, {
   useNewUrlParser: true,
@@ -18,5 +26,4 @@ mongoose.connect(uri, {
 });
 
 const db = mongoose.connection;
-
 module.exports = db;

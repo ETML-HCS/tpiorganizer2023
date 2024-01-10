@@ -1,0 +1,318 @@
+:root {
+  --bg-color-etml: #e7f2f8;
+  --border-color-etml: #a3d2e2;
+  --bg-color-cfpv: #f8e7e7;
+  --border-color-cfpv: #e2a3a3;
+  --text-color: #333;
+  --grid-gap: 10px;
+}
+
+h1,
+h3,
+h4 {
+  text-align: center;
+  font-size: 20px;
+  margin: 10px 0;
+}
+
+h1 {
+  margin-bottom: 10px;
+}
+
+p {
+  margin: 0;
+  padding: 0;
+}
+
+.soutenance {
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: var(--grid-gap);
+}
+
+.dataGrid {
+  display: grid;
+  grid-template-columns: 90px auto;
+}
+
+.horairesBox {
+  display: grid;
+  grid-template-rows: repeat(8, 140px);
+  /* Creates 9 time slots */
+  gap: var(--grid-gap);
+}
+
+[class^="horaire_"] {
+  margin-top: 90px;
+  display: flex;
+  flex-direction: column;
+  /* justify-content: space-between; */
+  height: 150px;
+  width: 100%;
+  text-align: right;
+}
+
+.startTime {
+  margin-top: 15px;
+  margin-right: 10px;
+}
+
+.endTime {
+  margin-bottom: 15px;
+  margin-right: 10px;
+}
+
+.salles-container {
+  grid-column: 2;
+  display: inline-flex;
+  gap: var(--grid-gap);
+}
+
+[class^="salle "] {
+  width: 340px;
+  border: 3px solid black;
+  display: grid;
+  grid-template-rows: 80px repeat(8, 150px);
+  /* First row for header */
+  padding-bottom: 10px;
+}
+
+.ETML {
+  background-color: var(--bg-color-etml);
+}
+
+.CFPV {
+  background-color: var(--bg-color-cfpv);
+}
+
+[class^="header_"] {
+  height: 80px;
+  background-color: #333;
+  color: white;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.tpi-data {
+  margin: 10px auto;
+  width: 95%;
+  height: 96%;
+  border-radius: 3%;
+  box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.2);
+  /* Ajoutez un padding vertical pour équilibrer le contenu à l'intérieur */
+  box-sizing: content-box;
+  /* Assurez-vous que le padding et la bordure sont inclus dans la largeur et la hauteur */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* Cette propriété répartit équitablement l'espace vertical entre les éléments enfants */
+}
+
+.truncated-text {
+  display: inline;
+  /* ou 'inline-block' selon le besoin */
+  /* Autres propriétés si nécessaire */
+}
+
+.tpi-data .tpi-entry:last-child {
+  margin-bottom: 5px;
+  /* Réinitialise la marge en bas pour le dernier paragraphe */
+}
+
+.tpi-data:hover {
+  transform: translateX(10px);
+  transition: transform 0.5s;
+}
+
+.tpi-entry {
+  display: flex;
+  justify-content: space-between;
+  /* Alignement à gauche */
+  align-items: center;
+  padding: 4px 0;
+}
+
+.tpi-container {
+  margin-left: 5px;
+}
+
+.tpi-entry.no-buttons {
+  justify-content: flex-start;
+  /* Alignement à gauche pour le texte */
+}
+
+/* Conteneur pour les boutons d'action */
+.action-buttons {
+  display: inline-flex;
+  gap: var(--grid-gap);
+  margin-left: auto;
+  /* Pousse les boutons vers la droite */
+  margin-right: 10px;
+  /* 10px du bord droit */
+}
+
+
+/* Style commun pour les boutons */
+.action-buttons button {
+
+  border: 1px solid #ccc;
+  /* Bordure subtile pour les boutons */
+  border-radius: 4px;
+  /* Arrondit les coins pour une apparence plus moderne */
+  cursor: pointer;
+  width: 25px;
+  height: 25spx;
+  background-color: #fff;
+  /* Fond blanc pour les boutons */
+  padding: 3px 6px;
+  /* Ajustez le padding pour un meilleur rendu */
+  font-size: 14px;
+  /* Taille de la police adaptée */
+  transition: all 0.3s ease;
+  /* Transition douce pour les effets hover et focus */
+}
+
+/* Styles spécifiques pour les boutons validés et non validés */
+.button-validated {
+  color: green;
+  border-color: green;
+  /* Bordure verte pour les boutons validés */
+}
+
+.button-not-validated {
+  color: #333;
+  /* Couleur grise pour les boutons non validés */
+  border-color: #333;
+  /* Bordure grise */
+}
+
+/* Effet au survol pour les boutons */
+.action-buttons button:hover {
+  opacity: 0.8;
+  background-color: transparent;
+  /* Légère couleur de fond au survol */
+}
+
+/* Effet au focus pour les boutons */
+.action-buttons button:focus {
+  outline: none;
+  /* Retire le contour par défaut */
+  box-shadow: 0 0 0 2px rgba(137, 68, 233, 0.5);
+  /* Ombre externe pour indiquer le focus */
+}
+
+/* popup :-)  */
+.popup-container {
+  position: fixed;
+  /* Positionne le popup de façon fixe sur la page */
+  top: 50%;
+  /* Centre verticalement */
+  left: 50%;
+  /* Centre horizontalement */
+  transform: translate(-50%, -50%);
+  /* Ajuste le positionnement pour être centré */
+  width: 450px;
+  /* Largeur du popup */
+  max-width: 600px;
+  /* Largeur maximale pour les grands écrans */
+  background-color: white;
+  /* Couleur de fond */
+  padding: 20px;
+  /* Padding interne */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  /* Ombre pour un effet élévé */
+  z-index: 1000;
+  /* S'assure que le popup est au-dessus des autres éléments */
+  border-radius: 10px;
+  /* Bords arrondis */
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+  /* Disposition en colonne pour les éléments internes */
+}
+
+.popup span {
+  margin: 0 auto;
+}
+
+.popup h3 {
+  margin-bottom: 15px;
+  /* Marge en dessous du titre */
+}
+
+.popup input[type="date"],
+.popup select {
+  box-sizing: border-box;
+  /* Inclut le padding et la bordure dans la largeur/hauteur totales */
+  padding: 12px;
+  margin-bottom: 10px;
+  /* Marge en dessous des inputs */
+  border: 1px solid #ccc;
+  /* Bordure subtile */
+  border-radius: 4px;
+  /* Bords légèrement arrondis */
+  width: 100%;
+  /* Assure que les inputs prennent toute la largeur disponible */
+}
+
+.popup button {
+  width: 180px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: #007bff;
+  /* Couleur de fond */
+  color: white;
+  /* Couleur du texte */
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  /* Transition pour l'interaction */
+}
+
+.popup button:hover {
+  background-color: #0056b3;
+  /* Changement de couleur au survol */
+}
+
+.popup button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.popup h4 {
+  margin-bottom: 1em;
+  font-size: 18px;
+  color: #333;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.popup ul {
+  list-style-type: circle;
+  /* Enlève les puces de liste */
+  padding: 0;
+}
+
+.popup ul li {
+  margin-bottom: 0.5em;
+  /* Espace entre les éléments de liste */
+  margin-left: 50px;
+}
+
+#btnAddDate {
+  box-sizing: content-box;
+  align-self: flex-end;
+}
+
+#btnSave {
+  background-color: green;
+  margin-right: 20px;
+}
+
+#btnClose {
+  background-color: red;
+}

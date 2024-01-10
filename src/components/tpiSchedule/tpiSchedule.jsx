@@ -1,12 +1,8 @@
 import React, { Fragment, useState, useEffect } from "react";
 import TpiScheduleButtons from "./TpiScheduleButtons";
 import { showNotification } from "../Utils";
+import { createTpiCollectionForYear } from "../tpiControllers/TpiRoomsController";
 import DateRoom from "./DateRoom";
-import {
-  createTpiRooms,
-  getTpiRooms,
-  deleteTpiRoom,
-} from "../tpiControllers/TpiRoomsController";
 
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [newRooms, setNewRooms] = useState([]);
@@ -32,71 +28,19 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }
 
   const fetchData = async () => {
-    try {
-      // Charger les données depuis la base de données uniquement si elles n'ont pas encore été chargées
-      if (!isDbDataLoaded) {
-        const dbData = await getTpiRooms();
 
-        // Vérifier si des données sont sauvegardées dans localStorage
-        const savedData = localStorage.getItem("organizerData");
+    // Récupérer les données sauvegardées dans localStorage
+    const savedData = localStorage.getItem("organizerData");
 
-        // Vérifier si localStorage et la base de données sont vides
-        const isLocalStorageEmpty = !savedData;
-        const isDbDataEmpty = !Array.isArray(dbData) || dbData.length === 0;
-
-        if (isLocalStorageEmpty && isDbDataEmpty) {
-          console.log("Il n'y a pas de données à charger.");
-          // Si à la fois localStorage et la base de données sont vides, il n'y a pas de données à charger
-          // Vous pouvez éventuellement initialiser un état vide ici si nécessaire
-        } else if (isDbDataEmpty && savedData) {
-          // Si la base de données est vide mais qu'il y a des données sauvegardées dans localStorage
-          const savedRooms = JSON.parse(savedData);
-          setNewRooms(savedRooms);
-          console.log("Données chargées depuis le stockage local:", savedRooms);
-          if (!setIsDbDataLoaded) {
-            showNotification(
-              "Les données actuellement chargées proviennent d'une sauvegarde locale. " +
-                "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",
-              4000
-            );
-          }
-        } else {
-          // Si dbData n'est pas vide, procéder comme précédemment
-          if (savedData) {
-            const savedRooms = JSON.parse(savedData);
-
-            if (!Array.isArray(savedRooms) && Array.isArray(dbData)) {
-              setNewRooms(dbData);
-              return;
-            }
-
-            const lastSaveDate = new Date(
-              savedRooms[savedRooms.length - 1].lastUpdate
-            );
-            const dbDataDate = new Date(dbData[dbData.length - 1].lastUpdate);
-
-            if (dbDataDate > lastSaveDate) {
-              setNewRooms(dbData);
-              localStorage.setItem("organizerData", JSON.stringify(dbData));
-              showNotification(
-                "Les données actuellement chargées proviennent d'une sauvegarde locale. " +
-                  "Nous vous recommandons de faire une sauvegarde pour éviter toute perte de données.",
-                4000
-              );
-            } else {
-              setNewRooms(savedRooms);
-            }
-          } else {
-            setNewRooms(dbData);
-          }
-        }
-        setIsDbDataLoaded(true);
-      }
-    } catch (error) {
-      console.error(
-        "Erreur lors du chargement des données depuis la base de données :",
-        error
-      );
+    // Vérifier si des données sont sauvegardées
+    if (savedData) {
+      // Charger les données dans l'état du composant
+      const savedRooms = JSON.parse(savedData);
+      setNewRooms(savedRooms);
+      console.log("Données chargées depuis le stockage local:", savedRooms);
+    } else {
+      console.log("Aucune donnée sauvegardée trouvée dans le stockage local.");
+      // Vous pouvez initialiser un état vide ici si nécessaire
     }
   };
 
@@ -104,8 +48,32 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     fetchData();
   }, []);
 
-  // Fonction pour générer le lien de publication
-  const handlePublish = () => {};
+  const handlePublish = async () => {
+    const currentYear = new Date().getFullYear();
+    const soutenancePageUrl = `/soutenance/${currentYear}`;
+  
+    try {
+      for (const room of newRooms) {
+        try {
+          console.log("Données de la salle de TPI : ", room);
+          await createTpiCollectionForYear(currentYear, room);
+        } catch (error) {
+          console.error("Erreur lors de la création de la salle de TPI : ", error);
+       
+          return;
+        }
+      }  
+      // Navigation vers la page de soutenance
+      window.location.href = soutenancePageUrl;
+  
+      // Afficher un message de succès
+      console.log(`Les soutenances ont été publiées. Voir: ${soutenancePageUrl}`);
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde des soutenances :", error);
+      // Afficher une notification d'erreur à l'utilisateur
+    }
+  };
+  
 
   const handleNewRoom = (roomInfo) => {
     // Récupérer la configuration du site à partir de la configuration générale
@@ -120,7 +88,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
     // Créer une nouvelle salle avec les informations fournies et un tableau de TPIs vides
     const newRoom = {
-      refTpi: "",
       idRoom: getSecondsSinceEpoch(),
       // Ajouter la date et l'heure de sauvegarde au moment de la création ou de la mise à jour
       lastUpdate: " ",
@@ -149,6 +116,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     // sauvegarde
     saveDataToLocalStorage([...newRooms, newRoom]);
+
     // Afficher un message dans la console pour indiquer que la salle a été ajoutée
     console.log("Salle ajoutée :", newRoom);
   };
@@ -156,42 +124,26 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleDelete = async (index) => {
     try {
       const roomIdToDelete = newRooms[index].idRoom;
-      
+
       // Supprimer l'objet spécifique du localStorage
-       const existingDataJSON = localStorage.getItem("organizerData");
-       const existingData = JSON.parse(existingDataJSON);
+      const existingDataJSON = localStorage.getItem("organizerData");
+      const existingData = JSON.parse(existingDataJSON);
 
-       // Filtrer pour créer un nouveau tableau sans la TpiRoom à supprimer
-       const updatedData = existingData.filter(
-         (item) => item.idRoom !== roomIdToDelete
-       );
+      // Filtrer pour créer un nouveau tableau sans la TpiRoom à supprimer
+      const updatedData = existingData.filter(
+        (item) => item.idRoom !== roomIdToDelete
+      );
 
-       // Mettre à jour le localStorage avec le nouveau tableau
-       localStorage.setItem("organizerData", JSON.stringify(updatedData));
+      // Mettre à jour le localStorage avec le nouveau tableau
+      localStorage.setItem("organizerData", JSON.stringify(updatedData));
 
-       // Mettre à jour l'état pour retirer la salle supprimée de newRooms
-       setNewRooms((prevRooms) => {
-         const updatedRooms = [...prevRooms];
-         updatedRooms.splice(index, 1);
-         return updatedRooms;
-       });
-       
-      // Appeler la fonction pour supprimer la TpiRoom côté serveur (en supposant que c'est une opération asynchrone)
-      const deleteResult = await deleteTpiRoom(roomIdToDelete);
-      
-      // Vérifier si la suppression côté serveur a réussi (selon la valeur renvoyée par la fonction deleteTpiRoom)
-      if (deleteResult.success) {
+      // Mettre à jour l'état pour retirer la salle supprimée de newRooms
+      setNewRooms((prevRooms) => {
+        const updatedRooms = [...prevRooms];
+        updatedRooms.splice(index, 1);
+        return updatedRooms;
+      });
 
-       showNotification(
-          "suppresion de l'objet "+newRooms[index].nameRoom,3000
-        );
-      } else {
-        showNotification(
-          "La suppression côté serveur a échoué ou la donnée n'existe plus.",3000
-        );
-        // Vous pouvez afficher un message d'erreur convivial à l'utilisateur ici si nécessaire
-        // Ou gérer d'autres actions en fonction du résultat de la suppression côté serveur
-      }
     } catch (error) {
       console.error("Erreur lors de la suppression de la salle :", error);
       // Vous pouvez également afficher un message d'erreur convivial à l'utilisateur ici si nécessaire
@@ -243,7 +195,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     // Étape 1: Mettre à jour la propriété lastUpdate pour chaque salle avec la nouvelle date
     const updatedRooms = newRooms.map((room) => ({
       ...room,
-      lastUpdate: new Date().getTime(), // Mettre à jour avec la nouvelle date
+      // Mettre à jour avec la nouvelle date
+      lastUpdate: new Date().getTime(),
     }));
 
     // Mettre à jour l'état newRooms avec la liste des salles mises à jour
@@ -251,9 +204,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     // Sauvegarder les données dans localStorage avec la nouvelle date
     saveDataToLocalStorage(updatedRooms);
-
-    // Étape 2: Mettre à jour les données dans la base de données en parallèle
-    await Promise.all(updatedRooms.map((room) => createTpiRooms(room)));
 
     // Afficher le message de sauvegarde avec une durée de 3 secondes
     showNotification("Données sauvegardées avec succès !", 3000);
