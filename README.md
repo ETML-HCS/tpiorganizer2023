@@ -1,6 +1,19 @@
-****# TPIorganizer version 2023 - Mise à jour du [28.07.2023] | V 0.11 (Prototype, logiciel non fonctionnelle)
+# TPIorganizer version 2023 - Mise à jour du [10.11.2023] | V 0.11.1 (Prototype, logiciel non fonctionnelle)
 
 TPIorganizer version 2023 est une application React permettant d'organiser et de gérer les soutenances de TPI (Travaux de fin d'études) selon différentes dates et salles.
+
+
+## Screenshot
+![HomeO](/captures/HomeO.png)
+![ListOfTpis](/captures/ListOfTpis.png)
+![NewSubscriber](/captures/NewSubscriber.png)
+![NewTpi](/captures//NewTpi.png)
+![RoomsEmpty](/captures//RoomsEmpty.png)
+![RoomsWithData](/captures//RoomsWithData.png)
+![SelectTpiCandidat](/captures//SelectTpiCandidat.png)
+
+
+
 
 ## Fonctionnalités
 
@@ -85,22 +98,11 @@ Ce projet est sous licence MIT. Pour plus d'informations, consultez le fichier L
 - Travaux en cours pour l'implémentation du login avec le mot de passe hash.
 - Mise en place des tpilists dans tpiRoom pour accélérer la planification des soutenances.
 
-**10.11.2023 :**
+10.11.2023 :
 
     Ajout d'un fichier .env pour la gestion sécurisée des variables d'environnement, y compris les informations de connexion à la base de données.
     Mise à jour de la configuration de la base de données pour utiliser MongoDB Atlas, un service de base de données cloud, afin d'améliorer la gestion des données et la scalabilité de l'application.
-    
-## Mise à jour pour Azur
 
-### Transition vers MariaDB
-
-- Nous remplaçons MongoDB par MariaDB pour une gestion de données améliorée.
-- Les sauvegardes de LocalStorage seront intégrées à MariaDB.
-
-### Nouvelles Fonctionnalités
-
-- **Validation des Rendez-vous** : Les experts et chefs de projet pourront confirmer leur présence, signalée par un changement de couleur d'un indicateur.
-- **Contrôle de Planification** : Un système de couleurs identifiera les conflits d'horaires et les défis logistiques pour les déplacements entre sites.
 
 ## Prochaines étapes
 
