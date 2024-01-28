@@ -6,22 +6,22 @@ const tpiSchema = new mongoose.Schema({
       unique:true,
     },
     candidat:String,      
-    expert1: String, // Non obligatoire
-    expert2: String, // Non obligatoire
+    expert1: String, 
+    expert2: String, 
     boss: String,
     lieu:String,
     sujet: String,   
-    description: String, // Non obligatoire
+    description: String, 
     tags: [String], // Tableau de chaînes (non obligatoire)
-    dateSoutenance: Date, // Non obligatoire
-    dateDepart: Date, // Non obligatoire
-    dateFin: Date, // Non obligatoire
-    date1ereVisite: Date, // Non obligatoire
-    date2emeVisite: Date, // Non obligatoire
-    dateRenduFinal: Date, // Non obligatoire
-    lienDepot: String, // Non obligatoire
-    noteEvaluation: Number, // Non obligatoire
-    lienEvaluation: String, // Non obligatoire
+    dateSoutenance: Date, 
+    dateDepart: Date, 
+    dateFin: Date, 
+    date1ereVisite: Date, 
+    date2emeVisite: Date, 
+    dateRenduFinal: Date, 
+    lienDepot: String, 
+    noteEvaluation: Number, 
+    lienEvaluation: String, 
   },{
     collection: 'tpiList'
   });

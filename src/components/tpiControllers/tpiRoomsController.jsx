@@ -4,6 +4,26 @@ const apiUrl = 'http://localhost:5000'
 const saveTpiRoomUrl = `${apiUrl}/save-tpi-rooms`
 const getTpiRoomsUrl = `${apiUrl}/get-tpi-rooms`
 
+
+// Fonction pour transmettre les données à la base de données
+export const transmitToDatabase = async (data) => {
+  // Obtenir l'année courante
+  const currentYear = new Date().getFullYear(); 
+  const url = `${saveTpiRoomUrl}/${currentYear}`;
+
+  try {
+    const response = await axios.post(url, data);
+
+    if (response.status === 200) {
+      return true
+    } else {
+      return false
+    }
+  } catch (error) {
+    console.error('Erreur lors de la transmission des données à la base de données :', error);
+  }
+}
+
 export const checkRoomExistenceById = async idRoom => {
   // Validation de l'ID de la salle
   if (!idRoom) {

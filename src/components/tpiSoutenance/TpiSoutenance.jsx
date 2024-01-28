@@ -1,42 +1,79 @@
 import React, { useState, useEffect, Fragment } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
+import CreneauPropositionPopup from './CreneauPropositionPopup'
 
 import { showNotification } from '../Utils'
 
-import CreneauPropositionPopup from './CreneauPropositionPopup'
 import '../../css/tpiSoutenance/tpiSoutenance.css'
 
 const fetchSoutenanceData = async year => {
   const apiUrl = 'http://localhost:5000'
   try {
-    console.log('API tpiyear  ', year)
     const response = await fetch(`${apiUrl}/api/tpiyear/${year}`)
+
     if (response.ok) {
       return await response.json()
     } else {
-      console.error('Erreur lors de la récupération des données')
+      showNotification('Erreur lors de la récupération des données', 'error')
       return null
     }
   } catch (error) {
-    console.error('Erreur réseau:', error)
+    showNotification(`Erreur réseau: {error}`, 'error')
     return null
   }
 }
 
+const fetchTpiListExperts = async () => {
+  const apiUrl = 'http://localhost:5000';
+  try {
+    const listOfExpertsOrBoss = await fetch(`${apiUrl}/api/experts/listExpertsOrBoss`);
+
+    if (listOfExpertsOrBoss.ok) {
+      return await listOfExpertsOrBoss.json();
+    } else {
+      showNotification('Erreur lors de la récupération de la liste des experts', 'error');
+      return null;
+    }
+  } catch (error) {
+    showNotification(`Erreur réseau: ${error}`, 'error'); // Correction ici
+    return null;
+  }
+};
+
+
+const updateSoutenanceData = async (year, propositions, tpi, expertOrBoss) => {
+  const apiUrl = 'http://localhost:5000';
+  try {
+    const response = await fetch(`${apiUrl}/api/tpiyear/${year}/${tpi._id}/${tpi.id}/${expertOrBoss}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(propositions),
+    });
+
+    if (response.ok) {
+      showNotification(`Données de soutenance mises à jour avec succès pour l'année ${year}`);
+    } else {
+      showNotification(`Erreur lors de la mise à jour des données de soutenance pour l'année ${year}`, 'error');
+    }
+  } catch (error) {
+    showNotification('Erreur réseau lors de la mise à jour des données de soutenance:', error);
+  }
+};
+
+
 function TruncatedText({ text, maxLength }) {
-  const isTruncated = text.length > maxLength;
+  const isTruncated = text.length > maxLength
   return (
     <span
       title={isTruncated ? text : ''}
-      className={isTruncated ? 'truncated-text' : ''}
+      className={isTruncated ? 'truncated-text' : 'nameTpi'}
     >
       {isTruncated ? `${text.substring(0, maxLength - 3)}...` : text}
     </span>
-  );
+  )
 }
-
-
-
 
 // Fonction pour formater la date
 const formatDate = dateString => {
@@ -47,8 +84,8 @@ const formatDate = dateString => {
 function renderSchedule(schedule) {
   return (
     <div className='horairesBox'>
-      {schedule.map((slot, index) => (
-        <div key={index} className={`horaire_${index}`}>
+      {schedule.map((slot, i) => (
+        <div key={i} className={`horaire_${i}-${slot.startTime}`}>
           <p className='startTime'>{slot.startTime}</p>
           <p className='endTime'>{slot.endTime}</p>
         </div>
@@ -57,7 +94,7 @@ function renderSchedule(schedule) {
   )
 }
 
-const RenderRooms = ({ filteredData, schedule }) => {
+const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson }) => {
   const [showPopup, setShowPopup] = useState(false)
   const [currentTpiData, setCurrentTpiData] = useState(null)
   const [scheduleSuggester, setScheduleSuggester] = useState(null)
@@ -65,41 +102,95 @@ const RenderRooms = ({ filteredData, schedule }) => {
   const location = useLocation()
   const queryParams = new URLSearchParams(location.search)
   // const userRole = queryParams.get('role'); // ? role=le role
-  const userName = queryParams.get('name') // ? &name=nom
+  const paramsToken = queryParams.get('token') // ? &token
 
-  const handleAcceptClick = tpiData => {
-    // Logique pour gérer l'acceptation du créneau
-  }
+  const handleAcceptClick = async (sendYear, tpiData, expertOrBoss) => {
+    try {
+      const propositions = {
+        offres: {
+          isValidated: true,
+          submit: []
+        }
+      };
 
-  const handlePropositionClick = (tpiData, how) => {
+      // Mettez à jour la base de données avec les données mises à jour
+      await updateSoutenanceData(sendYear, propositions, tpiData, expertOrBoss);
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour des données :", error);
+    }
+  };
+
+  const handlePropositionClick = (tpiData, expertOrBoss) => {
     // Afficher le popup pour modifier le créneau
-    console.log('tpiData: ', tpiData, ' schedule: ', schedule)
-    setCurrentTpiData(tpiData)
-    setScheduleSuggester(how)
-    setShowPopup(true)
+    setCurrentTpiData(tpiData);
+
+    if (tpiData[expertOrBoss]?.offres.submit.length > 0) {
+      // Si le tableau n'est pas vide, afficher un message d'avertissement
+      alert("Attention : En continuant, vous écraserez les demandes précédentes !");
+    }
+    setScheduleSuggester(expertOrBoss);
+    setShowPopup(true);
   }
 
   // Fonction pour rendre les boutons d'actions
-  const renderActionButtons = (tpiData, how) => {
+  const renderActionButtons = (tpiData, how, expertOrBoss) => {
+    const isExpertValidated = tpiData[expertOrBoss]?.offres?.isValidated;
+    const isSubmitButtonActive = tpiData[expertOrBoss]?.offres?.submit;
+
+
+
+    // Classe pour indiquer l'invitation à valider (isValidated est null)
+    const invitationClass = isExpertValidated === null ? 'invitation' : '';
+
+    // Classe pour indiquer true ou false pour isValidated
+    const isValidatedClass = isExpertValidated === true ? 'true' : isExpertValidated === false ? 'false' : 'null';
+
+    // Classe pour submit (soit vide, soit un tableau)
+    const submitClass =
+      Array.isArray(isSubmitButtonActive) && isSubmitButtonActive.length === 0 ? 'empty' :
+        Array.isArray(isSubmitButtonActive) ? 'has-values' : '';
+
+    // Texte par défaut pour le bouton d'acceptation
+    const acceptButtonText = '✔';
+
+    // Emoji par défaut pour le bouton de proposition
+    const submitButtonEmoji = '?';
+
+    const expertPropositions = (tpiData[expertOrBoss]?.offres && tpiData[expertOrBoss].offres.submit) || null;
+    
+    let proposedSlot = '';
+    if (expertPropositions) {
+      for (const proposition of expertPropositions) {
+        const date = new Date(proposition.date).toLocaleDateString();
+        const creneau = proposition.creneau;
+        proposedSlot += `${date}/${creneau}\n`;
+      }
+    } else {
+      // Gérez le cas où expertPropositions est null ici
+      // Par exemple, si le client n'a pas encore fait d'offre, vous pouvez afficher un message ou une valeur par défaut
+      proposedSlot = "Aucune offre faite par le client.";
+    }
+    const person = listOfPerson.find(person => person.name === how);
+    let token = null; // Initialisez token à null par défaut
+    if (person) {
+      token = person.token; // Si person est défini, récupérez le token
+    }
+
     return (
-      <span className='action-buttons'>
+      <span className={`action-buttons ${invitationClass}`}>
         <button
-          className={
-            tpiData.isValidated ? 'button-validated' : 'button-not-validated'
-          }
-          onClick={() => how === userName && handleAcceptClick(tpiData, how)}
+          title={`✔\tEn attente de validation\nOK\tCréneau validé\nX\tCréneau refusé`}
+          className={`button-${isValidatedClass}`}
+          onClick={() => token === paramsToken && handleAcceptClick(year, tpiData, expertOrBoss)}
         >
-          &#x2713;
+          {isValidatedClass === 'true' ? 'OK' : isValidatedClass === 'false' ? 'X' : acceptButtonText}
+
         </button>
         <button
-          className={
-            tpiData.isProposition ? 'button-validated' : 'button-not-validated'
-          }
-          onClick={() =>
-            how === userName && handlePropositionClick(tpiData, how)
-          }
-        >
-          &#x003F;
+          title={`${proposedSlot}`}
+          className={`button-${submitClass}`}
+          onClick={() => token === paramsToken && handlePropositionClick(tpiData, expertOrBoss)}>
+          {submitClass === 'has-values' ? '-' : submitClass === 'empty' ? submitButtonEmoji : ''}
         </button>
       </span>
     )
@@ -107,7 +198,7 @@ const RenderRooms = ({ filteredData, schedule }) => {
 
   return (
     <div className='salles-container'>
-      {filteredData.map((salle, indexSalle) => (
+      {tpiDatas.map((salle, indexSalle) => (
         <div className={`salle ${salle.site}`}>
           <div className={`header_${indexSalle}`}>
             <h3>{formatDate(salle.date)}</h3>
@@ -117,25 +208,39 @@ const RenderRooms = ({ filteredData, schedule }) => {
           {schedule.map((slot, index) => {
             const tpiData = salle.tpiDatas && salle.tpiDatas[index]
             return (
-              <Fragment key={`${tpiData?.id}`}>
+              <Fragment key={`${indexSalle}-${slot.startTime}-${slot.endTime}`}>
+
                 <div className='tpi-data' id={tpiData?.id}>
                   <div className='tpi-container'>
                     <div className='tpi-entry no-buttons'>
-                      Candidat: <TruncatedText text={tpiData?.candidat} maxLength={30} />
+                      Candidat:{' '}
+                      <TruncatedText text={tpiData?.candidat} maxLength={30} />
+                    </div>
 
-                    </div>
                     <div className='tpi-entry'>
-                      Exp1: <TruncatedText text={tpiData?.expert1} maxLength={24} />
-                      {renderActionButtons(tpiData, tpiData?.expert1)}
+                      <div className='tpi-expert1'>
+                        Expert1 :{' '}
+                        <TruncatedText text={tpiData?.expert1.name} maxLength={24} />
+                      </div>
+                      {renderActionButtons(tpiData, tpiData?.expert1.name, 'expert1')}
                     </div>
+
                     <div className='tpi-entry'>
-                      Exp2: <TruncatedText text={tpiData?.expert2} maxLength={24} />
-                      {renderActionButtons(tpiData, tpiData?.expert2)}
+                      <div className='tpi-expert2'>
+                        Expert2 :{' '}
+                        <TruncatedText text={tpiData?.expert2.name} maxLength={24} />
+                      </div>
+                      {renderActionButtons(tpiData, tpiData?.expert2.name, 'expert2')}
                     </div>
+
                     <div className='tpi-entry'>
-                      Lead: <TruncatedText text={tpiData?.boss} maxLength={24} />
-                      {renderActionButtons(tpiData, tpiData?.boss)}
+                      <div className='tpi-boss'>
+                        Mentor  :{' '}
+                        <TruncatedText text={tpiData?.boss.name} maxLength={24} />
+                      </div>
+                      {renderActionButtons(tpiData, tpiData?.boss.name, 'boss')}
                     </div>
+
                   </div>
                 </div>
               </Fragment>
@@ -146,10 +251,10 @@ const RenderRooms = ({ filteredData, schedule }) => {
       {showPopup && (
         // Composant Popup pour saisir les nouvelles propositions
         <CreneauPropositionPopup
-          how={scheduleSuggester}
+          expertOrBoss={scheduleSuggester}
           tpiData={currentTpiData}
           schedule={schedule}
-          fermerPopup={() => setShowPopup(false)}
+          fermerPopup={() => setShowPopup(false)} 
         />
       )}
     </div>
@@ -159,53 +264,49 @@ const RenderRooms = ({ filteredData, schedule }) => {
 const TpiSoutenance = () => {
   const { year } = useParams()
   const [soutenanceData, setSoutenanceData] = useState([])
+  const [listOfExpertsOrBoss, setListOfExpertsOrBoss] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // États pour les critères de filtrage
-  const [filterSite, setFilterSite] = useState('')
-  const [filterSalle, setFilterSalle] = useState('')
-  const [filterExpert1, setFilterExpert1] = useState('')
-  const [filterExpert2, setFilterExpert2] = useState('')
-  const [filterBoss, setFilterBoss] = useState('')
-  const [filterCandidat, setFilterCandidat] = useState('')
-
   useEffect(() => {
-    setIsLoading(true)
-    fetchSoutenanceData(year).then(data => {
-      if (data) {
-        setSoutenanceData(data)
-      } else {
-        setError('Impossible de charger les données')
-      }
-      setIsLoading(false)
-    })
-  }, [year])
+    console.log(`Début de l'appel useEffect, année : ${year}`);
+    setIsLoading(true);
 
-  const filteredData = soutenanceData.filter(
-    salle =>
-      (filterSite === '' ||
-        salle.site.toLowerCase().includes(filterSite.toLowerCase())) &&
-      (filterSalle === '' ||
-        salle.name.toLowerCase().includes(filterSalle.toLowerCase())) &&
-      salle.tpiDatas.some(
-        tpiData =>
-          (filterExpert1 === '' ||
-            tpiData.expert1
-              .toLowerCase()
-              .includes(filterExpert1.toLowerCase())) &&
-          (filterExpert2 === '' ||
-            tpiData.expert2
-              .toLowerCase()
-              .includes(filterExpert2.toLowerCase())) &&
-          (filterBoss === '' ||
-            tpiData.boss.toLowerCase().includes(filterBoss.toLowerCase())) &&
-          (filterCandidat === '' ||
-            tpiData.candidat
-              .toLowerCase()
-              .includes(filterCandidat.toLowerCase()))
-      )
-  )
+    fetchSoutenanceData(year).then(data => {
+      console.log('Données de soutenance reçues:', data);
+      if (data) {
+        setSoutenanceData(data);
+      } else {
+        setError('Impossible de charger les données de soutenance');
+        console.error('Erreur lors du chargement des données de soutenance');
+      }
+      setIsLoading(false);
+    });
+
+    fetchTpiListExperts().then(list => {
+      console.log('Liste des experts ou responsables reçue:', list);
+      if (list) {
+        setListOfExpertsOrBoss(list);
+      } else {
+        setError('Impossible de charger la liste des experts ou responsables');
+        console.error('Erreur lors du chargement de la liste des experts ou responsables');
+      }
+      setIsLoading(false);
+    });
+
+    console.log('Appels useEffect terminés');
+  }, [year]);
+
+
+  /**
+   * Crée un tableau d'horaires pour les soutenances basé sur les paramètres fournis.
+   * Pour chaque créneau, elle calcule l'heure de début et de fin en fonction du temps alloué pour chaque TPI
+   * et des pauses, puis formate ces horaires avant de les ajouter au tableau.
+   * 
+   * @param {Object} soutenanceData - Contient les paramètres de configuration comme le temps par TPI,
+   *                                  l'heure de début du premier TPI, et le nombre total de créneaux.
+   * @returns {Array} - Un tableau contenant les horaires de début et de fin pour chaque créneau de soutenance.
+   */
 
   function createSchedule(soutenanceData) {
     const schedule = []
@@ -255,52 +356,20 @@ const TpiSoutenance = () => {
     return <div>Erreur : {error}</div>
   }
 
-  function createFilterInput(placeholder, value, setValue) {
-    return (
-      <input
-        type='text'
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder={placeholder}
-      />
-    )
-  }
 
   // Ajout de champs d'entrée pour les filtres restants
   return (
-    <div className='soutenance'>
-      <h1>Soutenances de {year}</h1>
+    <Fragment>
 
-      <div className='filters'>
-        {createFilterInput('Filtrer par site', filterSite, setFilterSite)}
-        {createFilterInput('Filtrer par salle', filterSalle, setFilterSalle)}
-        {createFilterInput(
-          'Filtrer par expert 1',
-          filterExpert1,
-          setFilterExpert1
-        )}
-        {createFilterInput(
-          'Filtrer par expert 2',
-          filterExpert2,
-          setFilterExpert2
-        )}
-        {createFilterInput(
-          'Filtrer par responsable',
-          filterBoss,
-          setFilterBoss
-        )}
-        {createFilterInput(
-          'Filtrer par candidat',
-          filterCandidat,
-          setFilterCandidat
-        )}
-      </div>
+      <span className='title'> Soutenances de {year}</span>
 
-      <div className='dataGrid'>
-        {renderSchedule(schedule)}
-        <RenderRooms filteredData={filteredData} schedule={schedule} />
+      <div id='soutenances'>
+        <div className='dataGrid'>
+          {renderSchedule(schedule)}
+          <RenderRooms year={year} tpiDatas={soutenanceData} schedule={schedule} listOfPerson={listOfExpertsOrBoss} />
+        </div>
       </div>
-    </div>
+    </Fragment>
   )
 }
 export default TpiSoutenance

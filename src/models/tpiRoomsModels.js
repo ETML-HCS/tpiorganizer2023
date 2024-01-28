@@ -1,42 +1,81 @@
 const mongoose = require('mongoose')
 
-// Définition du schéma pour les salles de TPI
-const tpiRoomSchema = new mongoose.Schema(
-  {
-    idRoom: {
-      type: Number,
-      unique: true,
-      required: true,
-      alias: '_id'
-    },
-    lastUpdate: Date,
-    site: String,
-    date: Date,
-    name: String,
-    configSite: {
-      breakline: Number,
-      tpiTime: Number,
-      firstTpiStart: Number,
-      numSlots: Number
-    },
-    tpiDatas: [
-      {
-        id: {
-          type: String,
-          unique: true // L'ID doit être unique pour chaque document
-        },
-        candidat: String,
-        expert1: String,
-        expert2: String,
-        boss: String
-      }
-    ]
+const propositionSchema = new mongoose.Schema({
+  date: Date,
+  creneau: String
+})
+
+const offreDataSchema = new mongoose.Schema({
+  isValidated: Boolean,
+  submit: [propositionSchema],
+})
+
+const tpiDataSchema = new mongoose.Schema({
+  refTpi: {
+    type: Number
   },
-  { collection: 'tpiRooms' }
-) // Nom de la collection dans la base de données
+  id: { type: String },
+  candidat: 
+  { 
+    type:String 
+  },
+ expert1: { 
+    name: String,
+    offres: offreDataSchema
+  },
+  expert2: { 
+    name: String,
+    offres: offreDataSchema
+  },
+  boss: { 
+    name: String,
+    offres: offreDataSchema 
+  },
+})
 
-// Création du modèle TpiRooms basé sur le schéma tpiRoomSchema
-const TpiRooms = mongoose.model('TpiRooms', tpiRoomSchema)
+const tpiRoomSchema = new mongoose.Schema({
+  idRoom: {
+    type: Number,
+    unique: true,
+    required: true
+  },
+  lastUpdate: {
+    type: Number
+  },
+  site: {
+    type: String
+  },
+  date: {
+    type: Date
+  },
+  name: {
+    type: String
+  },
+  configSite: {
+    breakline: Number,
+    tpiTime: Number,
+    firstTpiStart: Number,
+    numSlots: Number
+  },
+  tpiDatas: [tpiDataSchema]
+})
 
-// Exportation du modèle TpiRooms pour pouvoir l'utiliser ailleurs
-module.exports = TpiRooms
+// Exporte une fonction pour créer un modèle avec un nom de collection personnalisé
+const createTpiRoomModel = year => {
+  const collectionName = `tpiRooms_${year}`
+  return mongoose.model(collectionName, tpiRoomSchema, collectionName)
+}
+
+const createCustomTpiRoomModel = collectionName => {
+  return mongoose.model(collectionName, tpiRoomSchema, collectionName)
+}
+
+// Exportez les schémas ainsi que les fonctions de création de modèles
+module.exports = {
+  createTpiRoomModel,
+  createCustomTpiRoomModel,
+  tpiDataSchema,
+  tpiRoomSchema,
+  offreDataSchema,
+  propositionSchema
+}

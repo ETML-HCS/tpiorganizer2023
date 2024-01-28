@@ -1,0 +1,522 @@
+[{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dc4"
+  },
+  "id": 1,
+  "name": "Cyril Sokoloff",
+  "site": "ETML",
+  "email": "cyril.sokoloff@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dc5"
+  },
+  "id": 2,
+  "name": "Vincent Emery",
+  "site": "externe",
+  "email": "vincent.emery@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dc6"
+  },
+  "id": 3,
+  "name": "Sheyla Oliveira Kobi",
+  "site": "ETML",
+  "email": "sheyla.oliveira.kobi@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dc7"
+  },
+  "id": 4,
+  "name": "Alain-Philippe Garraux",
+  "site": "ETML",
+  "email": "alain-philippe.garraux@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dc8"
+  },
+  "id": 5,
+  "name": "Isabelle Stucki",
+  "site": "ETML",
+  "email": "isabelle.stucki@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dc9"
+  },
+  "id": 6,
+  "name": "Livio Nagy",
+  "site": "externe",
+  "email": "livio.nagy@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dca"
+  },
+  "id": 7,
+  "name": "Loïc Schmid",
+  "site": "externe",
+  "email": "loïc.schmid@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dcb"
+  },
+  "id": 8,
+  "name": "Marc-Olivier Domenjoz",
+  "site": "externe",
+  "email": "marc-olivier.domenjoz@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dcc"
+  },
+  "id": 9,
+  "name": "Romain Gehrig",
+  "site": "ETML",
+  "email": "romain.gehrig@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dcd"
+  },
+  "id": 10,
+  "name": "Karim Bourahla",
+  "site": "externe",
+  "email": "karim.bourahla@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dce"
+  },
+  "id": 11,
+  "name": "Laurent Duding",
+  "site": "ETML",
+  "email": "laurent.duding@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dcf"
+  },
+  "id": 12,
+  "name": "Fryderyk Dachowski",
+  "site": "externe",
+  "email": "fryderyk.dachowski@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd0"
+  },
+  "id": 13,
+  "name": "Dimitrios Lymberis",
+  "site": "CFPV",
+  "email": "dimitrios.lymberis@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd1"
+  },
+  "id": 14,
+  "name": "Cédric Schaffter",
+  "site": "CFPV",
+  "email": "cédric.schaffter@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd2"
+  },
+  "id": 15,
+  "name": "Xavier Carrel",
+  "site": "externe",
+  "email": "xavier.carrel@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd3"
+  },
+  "id": 16,
+  "name": "Gaël Sonney",
+  "site": "CFPV",
+  "email": "gaël.sonney@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd4"
+  },
+  "id": 17,
+  "name": "Helder Manuel Costa Lopes",
+  "site": "externe",
+  "email": "helder.manuel.costa.lopes@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd5"
+  },
+  "id": 18,
+  "name": "Yvan Cochet",
+  "site": "externe",
+  "email": "yvan.cochet@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd6"
+  },
+  "id": 19,
+  "name": "Roberto Ferrari",
+  "site": "CFPV",
+  "email": "roberto.ferrari@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd7"
+  },
+  "id": 20,
+  "name": "Patrick Chenaux",
+  "site": "externe",
+  "email": "patrick.chenaux@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd8"
+  },
+  "id": 21,
+  "name": "Aurélie Curchod",
+  "site": "externe",
+  "email": "aurélie.curchod@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dd9"
+  },
+  "id": 22,
+  "name": "Jonathan Melly",
+  "site": "externe",
+  "email": "jonathan.melly@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dda"
+  },
+  "id": 23,
+  "name": "Stéphane Gerber",
+  "site": "Gerber Systems",
+  "email": "stéphane.gerber@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315ddb"
+  },
+  "id": 24,
+  "name": "Laurent Deschamps",
+  "site": "externe",
+  "email": "laurent.deschamps@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315ddc"
+  },
+  "id": 25,
+  "name": "Michel Delgado",
+  "site": "ETML",
+  "email": "michel.delgado@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315ddd"
+  },
+  "id": 26,
+  "name": "Bertrand Sahli",
+  "site": "CFPV",
+  "email": "bertrand.sahli@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dde"
+  },
+  "id": 27,
+  "name": "Antoine Mveng",
+  "site": "externe",
+  "email": "antoine.mveng@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315ddf"
+  },
+  "id": 28,
+  "name": "Alain Girardet",
+  "site": "externe",
+  "email": "alain.girardet@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de0"
+  },
+  "id": 29,
+  "name": "Grégory Charmier",
+  "site": "externe",
+  "email": "grégory.charmier@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de1"
+  },
+  "id": 30,
+  "name": "Albert Richard",
+  "site": "externe",
+  "email": "albert.richard@etml-es.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de2"
+  },
+  "id": 31,
+  "name": "Alexandre Graf",
+  "site": "externe",
+  "email": "alg@web-services.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de3"
+  },
+  "id": 32,
+  "name": "Aurelie Curchod",
+  "site": "externe",
+  "email": "aurelie.curchod@eduvaud.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de4"
+  },
+  "id": 33,
+  "name": "Baptiste Masson",
+  "site": "externe",
+  "email": "baptiste.masson@elca.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de5"
+  },
+  "id": 34,
+  "name": "Benjamin Wolf",
+  "site": "externe",
+  "email": "bw-tpi@hotmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de6"
+  },
+  "id": 35,
+  "name": "Claude Albert Muller Theurillat",
+  "site": "externe",
+  "email": "claude-albert.muller-theurillat@vd.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de7"
+  },
+  "id": 36,
+  "name": "Daniel Berney",
+  "site": "externe",
+  "email": "daniel.berney@heig-vd.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de8"
+  },
+  "id": 37,
+  "name": "Jean-Luc Roduit",
+  "site": "externe",
+  "email": "dedecop2@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315de9"
+  },
+  "id": 38,
+  "name": "Ernesto Montemayor",
+  "site": "externe",
+  "email": "ernesto@bati-technologie.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dea"
+  },
+  "id": 39,
+  "name": "Flavio Pacifico",
+  "site": "externe",
+  "email": "flavio.i.pacifico@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315deb"
+  },
+  "id": 40,
+  "name": "Frederic Boy",
+  "site": "externe",
+  "email": "frederic.boy@jobinsa.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dec"
+  },
+  "id": 41,
+  "name": "Frédérique Andolfatto",
+  "site": "externe",
+  "email": "frederique.andolfatto@cpnv.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315ded"
+  },
+  "id": 42,
+  "name": "Gabriel Maret",
+  "site": "externe",
+  "email": "gab.maret@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dee"
+  },
+  "id": 43,
+  "name": "Jonathan Tonelli",
+  "site": "externe",
+  "email": "Jonathan@tonelli.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315def"
+  },
+  "id": 44,
+  "name": "Junior Mbuyi",
+  "site": "externe",
+  "email": "junior.mbuyi@epfl.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df0"
+  },
+  "id": 45,
+  "name": "Luc Venries",
+  "site": "externe",
+  "email": "luc.venries@epfl.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df1"
+  },
+  "id": 46,
+  "name": "Matthieu Gressly",
+  "site": "externe",
+  "email": "matthieu.gressly@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df2"
+  },
+  "id": 47,
+  "name": "Olivier Mellina",
+  "site": "externe",
+  "email": "mellina.olivier@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df3"
+  },
+  "id": 48,
+  "name": "Michael Wyssa",
+  "site": "externe",
+  "email": "Michael.WYSSA@cpnv.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df4"
+  },
+  "id": 49,
+  "name": "Nemanja Pantic",
+  "site": "externe",
+  "email": "nemo.pantic@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df5"
+  },
+  "id": 50,
+  "name": "Nicolas Borboën",
+  "site": "externe",
+  "email": "nicolas.borboen@epfl.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df6"
+  },
+  "id": 51,
+  "name": "Bernard Oberson",
+  "site": "externe",
+  "email": "oberson.bernard@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df7"
+  },
+  "id": 52,
+  "name": "Patrick Pretre",
+  "site": "externe",
+  "email": "patrick.pretre@bluewin.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df8"
+  },
+  "id": 53,
+  "name": "Roger Malherbe",
+  "site": "externe",
+  "email": "r.malherbe@rmsoft.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315df9"
+  },
+  "id": 54,
+  "name": "Raphael Rhyn",
+  "site": "externe",
+  "email": "raphael.rhyn@arches.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dfa"
+  },
+  "id": 55,
+  "name": "Serge Wenger",
+  "site": "externe",
+  "email": "serge.wenger@matisa.ch"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dfb"
+  },
+  "id": 56,
+  "name": "Suleyman Ceran",
+  "site": "externe",
+  "email": "sueleyman.ceran@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dfc"
+  },
+  "id": 57,
+  "name": "Yannis Ansermoz",
+  "site": "externe",
+  "email": "yannis.ansermoz@protonmail.com"
+},
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dfd"
+  },
+  "id": 58,
+  "name": "Yves Bertino",
+  "site": "externe",
+  "email": "yves@bertino.ch"
+}]

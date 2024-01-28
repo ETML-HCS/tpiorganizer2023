@@ -1,96 +1,131 @@
-import React, { Fragment, useState, useEffect } from "react";
-import TpiScheduleButtons from "./TpiScheduleButtons";
-import { showNotification } from "../Utils";
-import { createTpiCollectionForYear } from "../tpiControllers/TpiRoomsController";
-import DateRoom from "./DateRoom";
+import React, { Fragment, useState, useEffect } from 'react'
+import TpiScheduleButtons from './TpiScheduleButtons'
+import { showNotification } from '../Utils'
+import {
+  createTpiCollectionForYear,
+  transmitToDatabase
+} from '../tpiControllers/TpiRoomsController'
+import DateRoom from './DateRoom'
+
+function updateTpiDatas(room) {
+  // Parcours de chaque tpiData dans room.tpiDatas
+  for (let tpiDatas of room.tpiDatas) {
+    // Mise à jour
+    tpiDatas.expert1.offres = updateSchema();
+    tpiDatas.expert2.offres = updateSchema();
+    tpiDatas.boss.offres = updateSchema();
+  }
+
+  return room;
+}
+
+function updateSchema() {
+  return {
+    offres: { isValidated: false, submit: [] }
+  };
+}
 
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
-  const [newRooms, setNewRooms] = useState([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isDbDataLoaded, setIsDbDataLoaded] = useState(false); // Créer un état pour garder une trace du chargement des données depuis la base de données
+  const [newRooms, setNewRooms] = useState([])
+  const [isEditing, setIsEditing] = useState(false)
 
   function getSecondsSinceEpoch() {
     // Convertir la chaîne de caractères en objet Date
-    const date = new Date("2023-07-27");
+    const date = new Date('2023-07-27')
 
     // Vérifier si la date est valide
     if (isNaN(date.getTime())) {
-      throw new Error("La date fournie est invalide.");
+      throw new Error('La date fournie est invalide.')
     }
-    const millisecondsSinceEpoch = Date.now() - date.getTime();
-    const secondsSinceEpoch = Math.floor(millisecondsSinceEpoch / 1000);
-    return secondsSinceEpoch;
+    const millisecondsSinceEpoch = Date.now() - date.getTime()
+    const secondsSinceEpoch = Math.floor(millisecondsSinceEpoch / 1000)
+    return secondsSinceEpoch
   }
 
-  const configO2023 = require("../../config/configO2023.json");
+  const configO2023 = require('../../config/configO2023.json')
+
   if (!configO2023) {
-    console.error("Erreur lors du chargement du fichier de configuration.");
+    showNotification(
+      'Erreur lors du chargement du fichier de configuration.',
+      'error'
+    )
   }
 
   const fetchData = async () => {
-
-    // Récupérer les données sauvegardées dans localStorage
-    const savedData = localStorage.getItem("organizerData");
-
-    // Vérifier si des données sont sauvegardées
+    const savedData = localStorage.getItem('organizerData')
     if (savedData) {
-      // Charger les données dans l'état du composant
-      const savedRooms = JSON.parse(savedData);
-      setNewRooms(savedRooms);
-      console.log("Données chargées depuis le stockage local:", savedRooms);
+      const savedRooms = JSON.parse(savedData)
+
+      if (Array.isArray(savedRooms)) {
+        setNewRooms(savedRooms)
+      } else {
+        // Si savedRooms n'est pas un tableau,
+        // définis-le comme un nouveau tableau contenant uniquement cet objet
+        setNewRooms([savedRooms])
+      }
+      showNotification(`Données chargées (localstorage)`, 3000)
+      console.log('TpiSchedule FetchData:', savedRooms)
     } else {
-      console.log("Aucune donnée sauvegardée trouvée dans le stockage local.");
-      // Vous pouvez initialiser un état vide ici si nécessaire
+      showNotification(
+        'Aucune donnée sauvegardée trouvée dans le stockage local.',
+        3000
+      )
     }
-  };
+  }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchData()
+  }, [])
 
   const handlePublish = async () => {
-    const currentYear = new Date().getFullYear();
-    const soutenancePageUrl = `/soutenance/${currentYear}`;
-  
+    const currentYear = new Date().getFullYear()
+    const soutenancePageUrl = `/soutenance/${currentYear}`
+
     try {
       for (const room of newRooms) {
         try {
-          console.log("Données de la salle de TPI : ", room);
-          await createTpiCollectionForYear(currentYear, room);
+
+          console.log('Données de la salle de TPI : ', updateTpiDatas(room))
+          await createTpiCollectionForYear(currentYear, updateTpiDatas(room))
         } catch (error) {
-          console.error("Erreur lors de la création de la salle de TPI : ", error);
-       
-          return;
+          console.error(
+            'Erreur lors de la création de la salle de TPI : ',
+            error
+          )
+          return
         }
-      }  
+      }
       // Navigation vers la page de soutenance
-      window.location.href = soutenancePageUrl;
-  
+      window.location.href = soutenancePageUrl
+
       // Afficher un message de succès
-      console.log(`Les soutenances ont été publiées. Voir: ${soutenancePageUrl}`);
+      showNotification(
+        `Les soutenances ont été publiées. Voir: ${soutenancePageUrl}`,
+        3000
+      )
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde des soutenances :", error);
+      console.error('Erreur lors de la sauvegarde des soutenances :', error)
       // Afficher une notification d'erreur à l'utilisateur
     }
-  };
-  
+  }
 
-  const handleNewRoom = (roomInfo) => {
+  const handleNewRoom = roomInfo => {
     // Récupérer la configuration du site à partir de la configuration générale
-    const configSite = configO2023[roomInfo.site.toLowerCase()];
+    const configSite = configO2023[roomInfo.site.toLowerCase()]
 
     // Vérifier si le site existe dans la configuration
     if (!configSite) {
-      console.error(
-        `Site "${roomInfo.site}" non trouvé dans la configuration.`
-      );
-      return;
+      showNotification(
+        `Site "${roomInfo.site}" non trouvé dans la configuration.`,
+        3000
+      )
+      return
     }
     // Créer une nouvelle salle avec les informations fournies et un tableau de TPIs vides
     const newRoom = {
       idRoom: getSecondsSinceEpoch(),
       // Ajouter la date et l'heure de sauvegarde au moment de la création ou de la mise à jour
-      lastUpdate: " ",
+      lastUpdate: ' ',
       site: roomInfo.site,
       date: roomInfo.date,
       name: roomInfo.nameRoom,
@@ -99,234 +134,333 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         breakline: configSite.breakline,
         tpiTime: configSite.tpiTime,
         firstTpiStart: configSite.firstTpiStart,
-        numSlots: configSite.numSlots,
+        numSlots: configSite.numSlots
       },
       // Créer un tableau rempli d'objets TPI vides en fonction du nombre de slots
       tpiDatas: Array.from({ length: configSite.numSlots }, () => ({
-        id: "",
-        candidat: " ",
-        expert1: " ",
-        expert2: " ",
-        boss: " ",
-      })),
-    };
+        refTpi: null,
+        id: '',
+        candidat: '',
+        // null n'est pas accepté alors afin de construire l'arbre offres 
+        // initialisation à false 
+        expert1: { name: '', offres: { isValidated: false, submit: [] } },
+        expert2: { name: '', offres: { isValidated: false, submit: [] } },
+        boss: { name: '', offres: { isValidated: false, submit: [] } }
+      }))
+      
+    }
 
     // Mettre à jour l'état newRooms en utilisant la fonction setNewRooms pour ajouter la nouvelle salle
-    setNewRooms((prevRooms) => [...prevRooms, newRoom]);
+    setNewRooms(prevRooms => [...prevRooms, newRoom])
 
     // sauvegarde
-    saveDataToLocalStorage([...newRooms, newRoom]);
+    saveDataToLocalStorage([...newRooms, newRoom])
 
     // Afficher un message dans la console pour indiquer que la salle a été ajoutée
-    console.log("Salle ajoutée :", newRoom);
-  };
+    console.log('Salle ajoutée :', newRoom)
+  }
 
-  const handleDelete = async (index) => {
+  const handleDelete = async idRoomToDelete => {
     try {
-      const roomIdToDelete = newRooms[index].idRoom;
+      const existingDataJSON = localStorage.getItem('organizerData')
 
-      // Supprimer l'objet spécifique du localStorage
-      const existingDataJSON = localStorage.getItem("organizerData");
-      const existingData = JSON.parse(existingDataJSON);
+      if (!existingDataJSON) {
+        console.error('Aucune donnée trouvée dans localStorage')
+        showNotification(
+          'Erreur lors de la suppression de la salle: aucune donnée trouvée',
+          3000,
+          'error'
+        )
+        return
+      }
 
-      // Filtrer pour créer un nouveau tableau sans la TpiRoom à supprimer
-      const updatedData = existingData.filter(
-        (item) => item.idRoom !== roomIdToDelete
-      );
+      let existingData
+      try {
+        existingData = JSON.parse(existingDataJSON)
+      } catch (error) {
+        console.error('Erreur de formatage JSON dans localStorage', error)
+        showNotification(
+          'Erreur de formatage des données sauvegardées',
+          3000,
+          'error'
+        )
+        return
+      }
 
-      // Mettre à jour le localStorage avec le nouveau tableau
-      localStorage.setItem("organizerData", JSON.stringify(updatedData));
+      let updatedData
+      if (Array.isArray(existingData)) {
+        // Cas où existingData est un tableau
+        updatedData = existingData.filter(
+          item => item.idRoom !== idRoomToDelete
+        )
+      } else if (
+        existingData.idRoom &&
+        existingData.idRoom === idRoomToDelete
+      ) {
+        // Cas où existingData est un objet unique correspondant à la salle à supprimer
+        updatedData = []
+      } else {
+        // Cas où existingData est un objet unique mais pas la salle à supprimer
+        updatedData = [existingData]
+      }
 
-      // Mettre à jour l'état pour retirer la salle supprimée de newRooms
-      setNewRooms((prevRooms) => {
-        const updatedRooms = [...prevRooms];
-        updatedRooms.splice(index, 1);
-        return updatedRooms;
-      });
+      localStorage.setItem('organizerData', JSON.stringify(updatedData))
+      setNewRooms(prevRooms =>
+        prevRooms.filter(room => room.idRoom !== idRoomToDelete)
+      )
 
+      showNotification(`Salle ${idRoomToDelete} supprimée`, 3000, 'success')
     } catch (error) {
-      console.error("Erreur lors de la suppression de la salle :", error);
-      // Vous pouvez également afficher un message d'erreur convivial à l'utilisateur ici si nécessaire
+      console.error('Erreur lors de la suppression de la salle :', error)
+      showNotification(
+        `Erreur lors de la suppression de la salle : ${error.message}`,
+        3000,
+        'error'
+      )
     }
-  };
+  }
+
 
   const handleUpdateTpi = async (roomIndex, tpiIndex, updatedTpi) => {
     // Mettre à jour la salle de TPI dans newRooms
-    setNewRooms((prevRooms) => {
-      const updatedRooms = [...prevRooms];
-      updatedRooms[roomIndex].tpiDatas[tpiIndex] = updatedTpi;
-      return updatedRooms;
-    });
+    setNewRooms(prevRooms => {
+      const updatedRooms = [...prevRooms]
+      updatedRooms[roomIndex].tpiDatas[tpiIndex] = updatedTpi
+      return updatedRooms
+    })
 
     try {
       // Mettre à jour les données dans la BD immédiatement
       const updatedRoom = {
-        ...newRooms[roomIndex],
-        lastUpdate: Date.now(),
-      };
-      await saveDataToLocalStorage(updatedRoom);
+        ...newRooms[roomIndex]
+      }
+      await saveDataToLocalStorage(updatedRoom)
     } catch (error) {
-      console.error(
-        "Erreur lors de la mise à jour de la salle de TPI dans la base de données :",
-        error
-      );
-      // Gérer l'erreur ici si nécessaire
+      showNotification(
+        `Erreur lors de la mise à jour de la salle de TPI dans la base de données : ${error}`,
+        'error'
+      )
     }
-  };
+  }
 
   const toggleEditing = () => {
-    setIsEditing((prevIsEditing) => !prevIsEditing);
-  };
+    setIsEditing(prevIsEditing => !prevIsEditing)
+  }
 
   // Fonction pour sauvegarder les données dans localStorage
-  const saveDataToLocalStorage = (data) => {
-    data.lastUpdate = Date.now();
-    return new Promise((resolve) => {
-      const jsonData = JSON.stringify(data);
-      localStorage.setItem("organizerData", jsonData);
-      resolve();
-    });
-  };
+  const saveDataToLocalStorage = data => {
+    data.lastUpdate = Date.now()
+    return new Promise(resolve => {
+      const jsonData = JSON.stringify(data)
+      localStorage.setItem('organizerData', jsonData)
+      resolve()
+    })
+  }
 
   // Fonction pour gérer le processus de sauvegarde des données
   const handleSave = async () => {
-    console.log("App.js, newRooms: ", newRooms);
+
+    console.log('handleSave newRooms: ', newRooms)
 
     // Étape 1: Mettre à jour la propriété lastUpdate pour chaque salle avec la nouvelle date
-    const updatedRooms = newRooms.map((room) => ({
+    const updatedRooms = newRooms.map(room => ({
       ...room,
       // Mettre à jour avec la nouvelle date
-      lastUpdate: new Date().getTime(),
-    }));
+      lastUpdate: new Date().getTime()
+    }))
 
     // Mettre à jour l'état newRooms avec la liste des salles mises à jour
-    setNewRooms(updatedRooms);
+    setNewRooms(updatedRooms)
 
     // Sauvegarder les données dans localStorage avec la nouvelle date
-    saveDataToLocalStorage(updatedRooms);
+    saveDataToLocalStorage(updatedRooms)
 
     // Afficher le message de sauvegarde avec une durée de 3 secondes
-    showNotification("Données sauvegardées avec succès !", 3000);
-  };
+    showNotification('Données sauvegardées avec succès !', 3000)
+  }
 
-  const handleExport = () => {
-    console.log("App.js, newRooms: ", newRooms);
-
+  const handleExport = async () => {
     if (newRooms.length === 0) {
-      console.log("Aucune salle à sauvegarder.");
-      return;
+      showNotification('Aucune salle à sauvegarder.', 3000)
+      return
     }
 
-    // Créer une copie de la liste des salles (newRooms)
-    const updatedRooms = [...newRooms];
+    try {
+      // Mise à jour de chaque TPI dans chaque salle
+      for (const room of newRooms) {
+        for (const tpi of room.tpiDatas) {
+          // Supposons que handleUpdateTpi est une fonction qui retourne une promesse
+          await handleUpdateTpi(room.idRoom, tpi.id, tpi)
+        }
+      }
 
-    // Créer un tableau de promesses pour les mises à jour de chaque salle et de chaque TPI dans chaque salle
-    const updatePromises = updatedRooms.map((room, roomIndex) =>
-      Promise.all(
-        room.tpiDatas.map((tpi, tpiIndex) =>
-          handleUpdateTpi(roomIndex, tpiIndex, tpi)
-        )
-      )
-    );
-    // Attendre que toutes les promesses soient résolues (mise à jour de chaque TPI)
-    Promise.all(updatePromises)
-      .then(() => {
-        // Convertir les salles mises à jour en format JSON
-        const jsonRooms = JSON.stringify(updatedRooms);
+      // Conversion des salles mises à jour en format JSON
+      const jsonRooms = JSON.stringify(newRooms)
 
-        // Créer un objet Blob à partir du JSON
-        const blob = new Blob([jsonRooms], { type: "application/json" });
+      // Création de l'objet Blob et du lien de téléchargement
+      const blob = new Blob([jsonRooms], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'backupRooms.json'
+      link.click()
+      URL.revokeObjectURL(url)
 
-        // Créer une URL pour le Blob
-        const url = URL.createObjectURL(blob);
-
-        // Créer un élément d'ancre (lien) pour le téléchargement du fichier JSON
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "backupRooms.json";
-        link.click();
-
-        // Révoquer l'URL pour libérer les ressources
-        URL.revokeObjectURL(url);
-      })
-      .catch((error) => {
-        console.error("Erreur lors de l'enregistrement des données :", error);
-      });
-  };
+      showNotification('Exportation réussie.')
+    } catch (error) {
+      console.error("Erreur lors de l'exportation des données :", error)
+      showNotification("Erreur lors de l'exportation.")
+    }
+  }
 
   // Fonction pour charger les données depuis le fichier JSON
-  const handleLoadConfig = (jsonData) => {
+  const handleLoadConfig = jsonData => {
     try {
-      const parsedData = JSON.parse(jsonData);
+      const parsedData = JSON.parse(jsonData)
       // Vérifier que les données chargées sont un tableau
       if (Array.isArray(parsedData)) {
         // Mettre à jour les salles avec les nouvelles données
-        setNewRooms(parsedData);
-        console.log("Données chargées avec succès !");
+        setNewRooms(parsedData)
+        showNotification('Données chargées avec succès !', 3000)
       } else {
-        console.error("Le fichier JSON ne contient pas un tableau valide.");
+        showNotification(
+          'Le fichier JSON ne contient pas un tableau valide.',
+          3000
+        )
       }
     } catch (error) {
-      console.error("Erreur lors du traitement du fichier JSON :", error);
+      console.error('Erreur lors du traitement du fichier JSON :', error)
     }
-  };
+  }
 
   const handleSwapTpiCards = (draggedTpiID, targetTpiID) => {
-    console.log("Nombre de salles: ", newRooms.length);
+    console.log('Nombre de salles: ', newRooms.length)
 
     // Recherche des salles qui contiennent les TPI correspondants
-    const draggedTpiRoomIndex = newRooms.findIndex((room) =>
-      room.tpiDatas.some((tpi) => tpi.id === draggedTpiID)
-    );
+    const draggedTpiRoomIndex = newRooms.findIndex(room =>
+      room.tpiDatas.some(tpi => tpi.id === draggedTpiID)
+    )
 
-    const targetTpiRoomIndex = newRooms.findIndex((room) =>
-      room.tpiDatas.some((tpi) => tpi.id === targetTpiID)
-    );
+    const targetTpiRoomIndex = newRooms.findIndex(room =>
+      room.tpiDatas.some(tpi => tpi.id === targetTpiID)
+    )
 
     // Vérifier si les TPI et les salles correspondantes ont été trouvés
     if (draggedTpiRoomIndex === -1 || targetTpiRoomIndex === -1) {
-      console.error("TPI ou salle invalide.");
-      return;
+      showNotification('TPI ou salle invalide.', 3000)
+      return
     }
 
     // Trouver l'index du tpiDatas correspondant au draggedTpiID et au targetTpiID dans leurs salles respectives
-    const draggedTpiRoom = newRooms[draggedTpiRoomIndex];
-    const targetTpiRoom = newRooms[targetTpiRoomIndex];
+    const draggedTpiRoom = newRooms[draggedTpiRoomIndex]
+    const targetTpiRoom = newRooms[targetTpiRoomIndex]
 
     const draggedTpiIndex = draggedTpiRoom.tpiDatas.findIndex(
-      (tpi) => tpi.id === draggedTpiID
-    );
+      tpi => tpi.id === draggedTpiID
+    )
     const targetTpiIndex = targetTpiRoom.tpiDatas.findIndex(
-      (tpi) => tpi.id === targetTpiID
-    );
+      tpi => tpi.id === targetTpiID
+    )
 
     // Vérifier si les tpi correspondants ont été trouvés
     if (draggedTpiIndex === -1 || targetTpiIndex === -1) {
-      console.error("ID de tpi invalide.");
-      return;
+      showNotification('ID de tpi invalide.', 3000)
+      return
     }
 
     // Effectuer le swap en utilisant une variable temporaire
-    const tempTpi = { ...draggedTpiRoom.tpiDatas[draggedTpiIndex] };
+    const tempTpi = { ...draggedTpiRoom.tpiDatas[draggedTpiIndex] }
     draggedTpiRoom.tpiDatas[draggedTpiIndex] = {
-      ...targetTpiRoom.tpiDatas[targetTpiIndex],
-    };
-    targetTpiRoom.tpiDatas[targetTpiIndex] = tempTpi;
+      ...targetTpiRoom.tpiDatas[targetTpiIndex]
+    }
+    targetTpiRoom.tpiDatas[targetTpiIndex] = tempTpi
 
     // Créer un nouvel objet newRooms avec les modifications effectuées
     const updatedNewRooms = newRooms.map((room, index) => {
       if (index === draggedTpiRoomIndex) {
-        return draggedTpiRoom;
+        return draggedTpiRoom
       } else if (index === targetTpiRoomIndex) {
-        return targetTpiRoom;
+        return targetTpiRoom
       } else {
-        return room;
+        return room
       }
-    });
+    })
 
     // Mettre à jour l'état avec le nouvel objet newRooms
-    setNewRooms(updatedNewRooms);
-    saveDataToLocalStorage(updatedNewRooms);
+    setNewRooms(updatedNewRooms)
+    saveDataToLocalStorage(updatedNewRooms)
+  }
+
+  const handleonFetchConfig = async () => {
+    // Prévoir une amélioration de ce système
+    const currentYear = new Date().getFullYear()
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/tpiyear/${currentYear}`
+      )
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la récupération de la configuration.')
+      }
+
+      const configData = await response.json() // Convertir la réponse en JSON
+
+      // Effacer les données existantes dans localStorage
+      localStorage.removeItem('organizerData')
+
+      // Enregistrer les nouvelles données dans localStorage
+      localStorage.setItem('organizerData', JSON.stringify(configData))
+
+      console.log(
+        "Configuration chargée pour l'année",
+        currentYear,
+        ':',
+        configData
+      )
+    } catch (error) {
+      console.error('Erreur lors du chargement de la configuration:', error)
+      // Gérer l'erreur ici (par exemple, afficher une notification)
+    }
+  }
+
+  const handleTransmitToDatabase = async () => {
+    let roomsData;
+
+    try {
+      // Sauvegarde de l'état actuel des salles
+      if (handleSave && typeof handleSave === 'function') {
+        // Pour rappel, cette fonction modifie la date de dernière mise à jour...
+        handleSave();
+      }
+
+      const newRoomsData = localStorage.getItem('organizerData');
+      if (!newRoomsData) {
+        throw new Error('Aucune donnée trouvée dans localStorage');
+      }
+      roomsData = JSON.parse(newRoomsData);
+
+      if (!Array.isArray(roomsData) || roomsData.length === 0) {
+        throw new Error('Le contenu de "organizerData" n\'est pas un tableau ou est vide.');
+      }
+
+      // Parcours des données des salles
+      for (const room of roomsData) {
+        // Transformation du schéma   const updatedRoom = updateTpiDatas(room);
+        const isDataTransmitted = await transmitToDatabase(room);
+
+        if (isDataTransmitted) {
+          showNotification('Données transmises avec succès', 3000, 'success');
+          console.log('Données transmises avec succès');
+        } else {
+          showNotification('Erreur lors de la transmission', 3000, 'error');
+          throw new Error('Données non transmises');
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors de la transmission des données :', error);
+      showNotification(error.message, 3000, 'error');
+    }
   };
 
   return (
@@ -341,31 +475,25 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         onPublish={handlePublish}
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
+        onFetchConfig={handleonFetchConfig}
+        OnSendBD={handleTransmitToDatabase}
       />
-
-      {newRooms === null ? (
-        // Si newRooms est null, afficher un message de chargement ou un composant vide
-        <div>Chargement en cours...</div>
-      ) : (
-        // Sinon, effectuer le rendu des salles normalement
-        newRooms.map((room, index) => (
-          <DateRoom
-            key={index}
-            roomIndex={index}
-            roomData={room}
-            isEditOfRoom={isEditing}
-            onUpdateTpi={(tpiIndex, updatedTpi) =>
-              handleUpdateTpi(index, tpiIndex, updatedTpi)
-            }
-            onSwapTpiCards={(draggedTpi, targetTpi) =>
-              handleSwapTpiCards(draggedTpi, targetTpi)
-            }
-            // attention il faut obligatoirement passer par une fonction sion elle est toujours appelée
-            onDelete={() => handleDelete(index)}
-          />
-        ))
-      )}
+      {newRooms.map((room, indexRoom) => (
+        <DateRoom
+          key={indexRoom}
+          roomIndex={indexRoom}
+          roomData={room}
+          isEditOfRoom={isEditing}
+          onUpdateTpi={(tpiIndex, updatedTpi) =>
+            handleUpdateTpi(indexRoom /*room.idRoom*/, tpiIndex, updatedTpi)
+          }
+          onSwapTpiCards={(draggedTpi, targetTpi) =>
+            handleSwapTpiCards(draggedTpi, targetTpi)
+          }
+          onDelete={() => handleDelete(room.idRoom)}
+        />
+      ))}
     </>
-  );
-};
-export default TpiSchedule;
+  )
+}
+export default TpiSchedule

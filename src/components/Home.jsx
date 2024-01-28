@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from 'react';
 import { Link } from "react-router-dom";
+import { useNavigate  } from 'react-router-dom';
+
 import "../css/home.css"; // Fichier CSS pour les styles spécifiques à la page Home
 
 const colors = [
@@ -13,7 +15,38 @@ const colors = [
   "#6f42c1",
 ];
 
+
+const SoutenanceMenu = ({ onClose }) => {
+  const navigate = useNavigate();
+  const years = [2024]; // Exemple d'années
+
+  const handleYearSelect = (year) => {
+    onClose();
+    navigate(`/soutenance/${year}`);
+  };
+
+  return (
+    <div className="soutenance-menu">
+      <h2>Sélectionnez une année</h2>
+      <select onChange={(e) => handleYearSelect(e.target.value)} defaultValue="">
+        <option value="" disabled>Choisissez une année</option>
+        {years.map(year => (
+          <option key={year} value={year}>{year}</option>
+        ))}
+      </select>
+      <button onClick={onClose}>Fermer</button>
+    </div>
+  );
+};
+
 const Home = () => {
+
+  const [showSoutenanceMenu, setShowSoutenanceMenu] = useState(false);
+
+  const handleSoutenanceClick = () => {
+    setShowSoutenanceMenu(true);
+  };
+
   // Tableau d'objets pour définir les boutons avec leurs noms et liens associés
   const buttons = [
     {
@@ -52,6 +85,15 @@ const Home = () => {
       name: "Importer/Exporter des données",
       link: "/importer-exporter-donnees",
     },
+    {
+      name: "Génération des tokens",
+      link: "/gen-tokens",
+    },
+    {
+      name: "Soutenances",
+      link: "/soutenance",
+    },
+
   ];
 
   return (
@@ -66,7 +108,20 @@ const Home = () => {
 
       {/* Générer les boutons à partir du tableau d'objets */}
       <div className="button-container">
-        {buttons.map((button, index) => (
+      {buttons.map((button, index) => {
+        if (button.name === "Soutenances") {
+          return (
+            <div
+              key={index}
+              className="custom-button"
+              style={{ backgroundColor: colors[index % colors.length] }}
+              onClick={handleSoutenanceClick}
+            >
+              {button.name}
+            </div>
+          );
+        }
+        return (
           <Link to={button.link} key={index}>
             <div
               className="custom-button"
@@ -75,9 +130,11 @@ const Home = () => {
               {button.name}
             </div>
           </Link>
-        ))}
-      </div>
+        );
+      })}
     </div>
+    {showSoutenanceMenu && <SoutenanceMenu onClose={() => setShowSoutenanceMenu(false)} />}
+  </div>
   );
 };
 

@@ -28,11 +28,21 @@ const TpiSlot = ({
     }),
   });
 
+  const isExpert1Validated = tpiData.expert1.offres && tpiData.expert1.offres.isValidated;
+  const isExpert2Validated = tpiData.expert2.offres && tpiData.expert2.offres.isValidated;
+  const isBossValidated = tpiData.boss.offres && tpiData.boss.offres.isValidated;
+
+  console.log("istestvalidated : ", tpiData);
+  
+  // Vérifier que toutes les propriétés isValidated existent et sont true
+  const tpiIsValidatedForAll = isExpert1Validated && isExpert2Validated && isBossValidated;
+  
   return (
-    <div ref={dropRef} className={`tpiSlot ${isOver ? "dragOver" : ""}`}>
+    <div ref={dropRef} className={`tpiSlot ${isOver ? "dragOver" : ""}`} id={`green-${tpiIsValidatedForAll}`}>
       <div className="timeSlot">
         <p className="top">{timeValues[0]}</p>
         <p className="bottom">{timeValues[1]}</p>
+        <span>{ }</span>
       </div>
       <TpiCard
         tpi={tpiData}

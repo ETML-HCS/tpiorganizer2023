@@ -6,6 +6,8 @@ import TpiSchedule from "./components/tpiSchedule/TpiSchedule";
 import TpiManagement from "./components/tpiManagement/TpiManagement";
 import TpiTracker from "./components/tpiTracker/TpiTracker";
 import TpiSoutenance from './components/tpiSoutenance/TpiSoutenance';
+import TokenGenerator from "./components/genToken/genToken";
+
 
 import "./css/globalStyles.css";
 
@@ -15,12 +17,10 @@ const Layout = () => {
   const dateFormatted = dateAujourdhui.toLocaleDateString();
   const [isArrowUp, setIsArrowUp] = useState(false);
 
-
   // Fonction pour vérifier si l'entête doit être affiché
   const shouldShowHeader = () => {
     return !location.pathname.startsWith('/soutenance/');
   };
-
 
   useEffect(() => {
     const updateRoomPaddingTop = () => {
@@ -118,6 +118,13 @@ const Layout = () => {
           element={
             <TpiTracker toggleArrow={toggleArrow} isArrowUp={isArrowUp} />
           }></Route>
+
+        <Route
+          path="/gen-tokens"
+          element={
+            <TokenGenerator toggleArrow={toggleArrow} isArrowUp={isArrowUp} />
+          }></Route>
+
 
         <Route path="/soutenance/:year" element={<TpiSoutenance />} ></Route>
       </Routes>

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom'
-import { showNotification } from "../Utils"
+import { useParams } from 'react-router-dom';
+import { showNotification } from "../Utils";
+import config from '../../config/configO2023.json';
 
 
-const CreneauPropositionPopup = ({ how, fermerPopup, tpiData, schedule }) => {
+const CreneauPropositionPopup = ({ expertOrBoss, fermerPopup, tpiData, schedule }) => {
   const [propositions, setPropositions] = useState([]);
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState("");
+  // const [selectedDate, setSelectedDate] = useState('');
   const [selectedCreneau, setSelectedCreneau] = useState('');
 
   const { year } = useParams(); // Extrait l'année des paramètres d'URL
@@ -35,21 +37,22 @@ const CreneauPropositionPopup = ({ how, fermerPopup, tpiData, schedule }) => {
     }
   };
 
+  const handleDateChange = (e) => {
+    setSelectedDate(e.target.value);
+  };
+
   const sauvegarderPropositions = async () => {
     const apiUrl = 'http://localhost:5000';
-    const url = `${apiUrl}/api/save-propositions/${year}`;
+    const url = `${apiUrl}/api/save-propositions/${year}/${expertOrBoss}/${tpiData.id}`;
 
     const propositionsData = {
-      userNameAsk: how, // Utilisez la propriété correcte ici
-      tpi_id: tpiData.candidat,
-      propositions: propositions // Envoyez le tableau de propositions directement
+      isValidated: false,
+      submit: propositions
     };
-
-    console.log("propositions: ", propositionsData);
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'PUT', // Changement ici de POST à PUT
         headers: {
           'Content-Type': 'application/json'
         },
@@ -57,34 +60,42 @@ const CreneauPropositionPopup = ({ how, fermerPopup, tpiData, schedule }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Erreur lors de la sauvegarde des propositions');
+        throw new Error('Erreur lors de la mise à jour des propositions');
       }
 
       const responseData = await response.json();
-      console.log('Propositions sauvegardées avec succès', responseData);
-      fermerPopup();
+      if (responseData && responseData.success) {
+        showNotification('Propositions mises à jour avec succès', 'success');
+        fermerPopup(); // Appel direct à la fonction fermerPopup sans utiliser this
+      } else {
+        showNotification('Propositions non acceptées', 'error');
+
+      }
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde des propositions:', error);
+      console.error('Erreur :', error);
+      showNotification('Erreur système lors de la mise à jour de la proposition', 'error');
     }
   };
 
+  // Conversion des créneaux en  pair de périodes 
+  const p = ["01", "03", "05", "07", "09", "11", "13", "15", "17"]
 
   return (
     <div className='popup-container'>
       <div className='popup'>
         <h3>Propositions de créneau pour {tpiData?.candidat}</h3>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-        />
-        <select
-          value={selectedCreneau}
-          onChange={(e) => setSelectedCreneau(e.target.value)}
-        >
+
+        <select value={selectedDate} onChange={handleDateChange}>
+          <option value="">Sélectionnez une date</option>
+          {config.soutenanceDates.map((date) => (
+            <option key={date} value={date}>{date}</option>
+          ))}
+        </select>
+
+        <select value={selectedCreneau} onChange={(e) => setSelectedCreneau(e.target.value)}>
           {schedule.map((creneau, index) => (
-            <option key={`select_${index}`} value={`${creneau.startTime} - ${creneau.endTime}`}>
-              {`${creneau.startTime} - ${creneau.endTime}`}
+            <option key={`select_${index}-${creneau}`} value={`${creneau.startTime} - ${creneau.endTime}`}>
+              {`P${p[index]} \u00A0\u00A0 ${creneau.startTime} - ${creneau.endTime}`}
             </option>
           ))}
         </select>
@@ -100,8 +111,13 @@ const CreneauPropositionPopup = ({ how, fermerPopup, tpiData, schedule }) => {
           ))}
         </ul>
         <span>
-          <button id='btnSave' onClick={sauvegarderPropositions}>Sauvegarder</button>
-          <button id='btnClose' onClick={fermerPopup}>Fermer</button>
+          <button id='btnSave'
+            onClick={sauvegarderPropositions}>Sauvegarder
+          </button>
+
+          <button id='btnClose'
+            onClick={fermerPopup}>Fermer
+          </button>
         </span>
 
       </div>

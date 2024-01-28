@@ -19,10 +19,11 @@
   --dateRoom-bgColor: #252525;
 
   --breakLine-TextColor: #333;
-  --breakLine-bgColor: #e7e2d8; /* Gris clair */
+  --breakLine-bgColor: #e7e2d8;
+  /* Gris clair */
 
   --deleteButton-textColor: #252525;
-  --deleteButton-bgColor:  #66bb6a;
+  --deleteButton-bgColor: #66bb6a;
   /* Vert par défaut */
 
   /* TPI Styles */
@@ -47,14 +48,13 @@
 
 /* Styles spécifiques pour le site CFPV avec des couleurs terreuses */
 .site_cfpv {
-  --tpi-card-candidat-bgColor: #D2B48C;
+  --tpi-card-candidat-bgColor: #d2b48c;
   /* Beige par défaut */
-  --tpi-card-experts-bgColor: #A0522D;
+  --tpi-card-experts-bgColor: #a0522d;
   /* Brun clair par défaut */
-  --tpi-card-boss-bgColor: #C68642;
+  --tpi-card-boss-bgColor: #c68642;
   /* Brun foncé par défaut */
 }
-
 
 /* Styles généraux pour la date room */
 #root {
@@ -64,7 +64,7 @@
 }
 
 .room {
-  padding-top: calc( var(--room-padding-top) + 40px);
+  padding-top: calc(var(--room-padding-top) + 40px);
   flex: 1 0 200px;
   transition: flex-basis 0.3s ease;
   line-height: 1em;
@@ -250,11 +250,11 @@
 }
 
 .buttonDelete:hover::after {
-  content: "Attention: Tout sera supprimé !";
+  content: 'Attention: Tout sera supprimé !';
   position: relative;
-  display:block;
+  display: block;
   text-align: center;
-  top:-80px;
+  top: -80px;
   left: 200px;
   width: 200px;
   background-color: #ff0000;
@@ -304,7 +304,8 @@
   border: 3px dashed #eb3c3c;
   transform: scale(1.05);
   box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
-  transition: opacity 0.2s ease, border 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  transition: opacity 0.2s ease, border 0.2s ease, transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 /* Style when an element is being dragged over */
@@ -315,58 +316,7 @@
   transition: background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* SaveMessage.css */
-
-/* Style du message de sauvegarde */
-
-.errorMessage,
-.saveMessage {
-  z-index: 9999;
-  position: fixed;
-  bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #007bff;
-  color: #fff;
-  padding: 10px 20px;
-  border-radius: 5px;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
-}
-
-.errorMessage {
-  background-color: #eb3c3c;
-}
-
-/* Animation d'apparition */
-.errorMessage.show {
-  opacity: 1;
-  visibility: visible;
-  transition-delay: 0s;
-}
-
-/* Animation d'apparition */
-.saveMessage.show {
-  opacity: 1;
-  visibility: visible;
-  transition-delay: 0s;
-}
-
-/* Animation de disparition */
-.saveMessage.hide {
-  opacity: 0;
-  visibility: hidden;
-  transition-delay: 0.5s;
-}
-
 /* bouton edit dans candidat */
-
 .editCandidat {
   display: flex;
   margin-bottom: 0;
@@ -375,7 +325,7 @@
 
 .btTpiListSite {
   width: 10px;
-  position:relative;
+  position: relative;
   top: -30px;
   left: 92%;
   color: #333;
