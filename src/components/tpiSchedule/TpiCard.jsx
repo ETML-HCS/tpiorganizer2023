@@ -234,7 +234,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             {editedTpi.candidat}
           </div>
 
-          <div className='expert' title={expert1Title}>
+          <div className='expert custom-popup' data-popup-text={expert1Title}>
             <span role='img' aria-label='checkmark' className='boss-icon'>
               🛠️
             </span>
@@ -242,7 +242,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             <span className='icon-proposal'>{isExpert1Proposal}</span>
           </div>
 
-          <div className='expert' title={expert2Title}>
+          <div className='expert custom-popup' data-popup-text={expert2Title}>
             <span role='img' aria-label='checkmark'>
               🛠️
             </span>
@@ -250,7 +250,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             <span className='icon-proposal'>{isExpert2Proposal}</span>
           </div>
 
-          <div className='boss' title={bossTitle}>
+          <div className='boss custom-popup' data-popup-text={bossTitle} >
             <span role='img' aria-label='boss'>
               💼
             </span>
