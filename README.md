@@ -46,11 +46,3 @@ Sous licence MIT, détails dans le fichier LICENSE.
 - **Publication de planning** : Création d'un bouton "Publier" pour partager facilement le planning des soutenances.
 
 L'engagement envers l'amélioration continue de TPIorganizer 2023 reste fort, avec un accent sur la fourniture d'outils pratiques et efficaces pour la gestion des soutenances TPI.
-
-
-
-------------------------------
-
-# TPIorganizer version 2023 - Mise à jour du [10.11.2023] | V 0.11.1 (Prototype, logiciel non fonctionnelle)
-
-TPIorganizer version 2023 est une application React permettant d'organiser et de gérer les soutenances de TPI (Travaux de fin d'études) selon différentes dates et salles.
