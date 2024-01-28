@@ -206,12 +206,14 @@
 
 /* Styles pour le fond des experts */
 .tpiCard .expert {
+  position: relative;
   background-color: var(--tpi-card-experts-bgColor);
   padding: 5px;
 }
 
 /* Styles pour le fond du chef de projet */
 .tpiCard .boss {
+  position: relative;
   background-color: var(--tpi-card-boss-bgColor);
   border-top: 2px solid var(--tpi-card-textColor);
   padding: 5px;
@@ -344,4 +346,16 @@
 
 .btTpiListSite:active {
   transform: scale(0.95);
+}
+
+#green-true{
+  border: 3px solid #4caf50;
+
+}
+
+
+.icon-proposal {
+  position: absolute;
+  right: 0.5%; /* Placez l'icône à l'extrémité droite du parent */
+  top: 25% /* Placez l'icône à l'extrémité supérieure du parent si nécessaire */
 }

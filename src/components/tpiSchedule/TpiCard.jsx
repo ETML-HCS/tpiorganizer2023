@@ -129,6 +129,34 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     })
   })
 
+  const isExpert1Proposal =
+    tpi.expert1.offres.submit && tpi.expert1.offres.submit.length > 0 ? "🗓️" : '';
+
+  const isExpert2Proposal =
+    tpi.expert2.offres.submit && tpi.expert2.offres.submit.length > 0 ? "🗓️" : '';
+
+  const isBossProposal =
+    tpi.boss.offres.submit && tpi.boss.offres.submit.length > 0 ? "🗓️" : '';
+
+
+  const formatDate = (date) => {
+    const options = { year: '2-digit', month: '2-digit', day: '2-digit' };
+    return new Date(date).toLocaleDateString(undefined, options);
+  };
+
+  const expert1Title = tpi.expert1.offres.submit.map((item) =>
+    `${formatDate(item.date)}/${item.creneau}`
+  ).join('\n');
+
+  const expert2Title = tpi.expert2.offres.submit.map((item) =>
+    `${formatDate(item.date)}/${item.creneau}`
+  ).join('\n');
+
+  const bossTitle = tpi.boss.offres.submit.map((item) =>
+    `${formatDate(item.date)}/${item.creneau}`
+  ).join('\n');
+
+
   return (
     <div ref={dragRef} className={`tpiCard ${isDragging ? 'dragging' : ''}`}>
       {isEditingTpiCard ? (
@@ -206,27 +234,30 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             {editedTpi.candidat}
           </div>
 
-          <div className='expert'>
+          <div className='expert' title={expert1Title}>
             <span role='img' aria-label='checkmark' className='boss-icon'>
               🛠️
             </span>
             {editedTpi.expert1.name}
+            <span className='icon-proposal'>{isExpert1Proposal}</span>
           </div>
 
-          <div className='expert'>
+          <div className='expert' title={expert2Title}>
             <span role='img' aria-label='checkmark'>
               🛠️
             </span>
             {editedTpi.expert2.name}
+            <span className='icon-proposal'>{isExpert2Proposal}</span>
           </div>
 
-          <div className='boss'>
+          <div className='boss' title={bossTitle}>
             <span role='img' aria-label='boss'>
               💼
             </span>
             {editedTpi.boss.name}
+            <span className='icon-proposal'>{isBossProposal}</span>
           </div>
-          
+
         </>
       )}
     </div>
