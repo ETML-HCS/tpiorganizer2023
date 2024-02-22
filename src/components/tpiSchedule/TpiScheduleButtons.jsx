@@ -1,12 +1,9 @@
 import React, { useState } from 'react'
 
 import NewRoomForm from './NewRoomForm'
-
 import axios from 'axios';
 
-
 const urlApi = 'http://localhost:5000'; // ou 'https://localhost:5000' si vous utilisez HTTPS
-
 
 const TpiScheduleButtons = ({
   onNewRoom,
@@ -26,7 +23,6 @@ const TpiScheduleButtons = ({
   const [selectedYear, setSelectedYear] = useState(null);
 
   const years = [2024, 2025, 2026];
-
 
 
   // Appelle la fonction fournie par le composant parent

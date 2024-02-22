@@ -8,7 +8,6 @@ import TpiTracker from "./components/tpiTracker/TpiTracker";
 import TpiSoutenance from './components/tpiSoutenance/TpiSoutenance';
 import TokenGenerator from "./components/genToken/genToken";
 
-
 import "./css/globalStyles.css";
 
 const Layout = () => {
@@ -128,6 +127,10 @@ const Layout = () => {
 
         <Route path="/soutenance/:year" element={<TpiSoutenance />} ></Route>
       </Routes>
+
+
+
+
     </Fragment >
   );
 };

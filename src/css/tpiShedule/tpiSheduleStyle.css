@@ -17,7 +17,7 @@
 .site_cfpv {
   /* DateRoom */
   --dateRoom-textColor: #ffffff;
-  --dateRoom-bgColor: #252525;
+ 
 
   --breakLine-TextColor: #333;
   --breakLine-bgColor: #e7e2d8;
@@ -33,34 +33,36 @@
   --tpi-timeSlot-bgColor: #ffffff;
   /* Blanc */
 
-
   transition: background-color 0.3s ease-in-out;
 }
 
+
+
 /* Styles spécifiques pour le site ETML - En ville (Dégradé 3 - Couleurs naturelles) */
 .site_etml {
-  --site-textColor: with;
+  --site-textColor: #333;
   /* Texte noir pour une lisibilité maximale */
-  --tpi-card-candidat-bgColor: #d2b48c;
+  --tpi-card-candidat-bgColor: #6600e300;
   /* Beige (évoque la nature) */
-  --tpi-card-experts-bgColor: #a0522d;
+  --tpi-card-experts-bgColor: #6600e360;
   /* Brun (évoque la terre) */
-  --tpi-card-boss-bgColor: #228b22;
-  /* Vert foncé (évoque la nature) */
-  background: linear-gradient(135deg, var(--tpi-card-candidat-bgColor), var(--tpi-card-experts-bgColor), var(--tpi-card-boss-bgColor));
+  --tpi-card-boss-bgColor: #e5d8f6;
+  --dateRoom-bgColor: #6700E3;
+
 }
 
 /* Styles spécifiques pour le site CFPV - Campagne près de l'eau */
 .site_cfpv {
   --site-textColor: #333;
   /* Texte plus sombre pour la visibilité */
-  --tpi-card-candidat-bgColor: #c2e0c6;
+  --tpi-card-candidat-bgColor: #de209200;
   /* Vert clair (évoque la verdure) */
-  --tpi-card-experts-bgColor: #add8e6;
+  --tpi-card-experts-bgColor: #d4248d85;
   /* Bleu clair (évoque l'eau) */
-  --tpi-card-boss-bgColor: #deb887;
+  --tpi-card-boss-bgColor: #fcdff1;
   /* Brun clair (évoque la terre) */
-  background: linear-gradient(135deg, var(--tpi-card-candidat-bgColor), var(--tpi-card-experts-bgColor), var(--tpi-card-boss-bgColor));
+  --dateRoom-bgColor: #de2092;
+
 }
 
 /* Styles généraux pour la date room */

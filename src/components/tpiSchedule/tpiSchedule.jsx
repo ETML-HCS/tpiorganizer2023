@@ -397,7 +397,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/tpiyear/${currentYear}`
+        `http://localhost:5000/api/tpiRoomYear/${currentYear}`
       )
 
       if (!response.ok) {

@@ -145,6 +145,41 @@ app.get('/api/tpiyear/:year', async (req, res) => {
   }
 })
 
+
+// Create a collection from 'planification' during publication
+// for display purposes and validation by concerned parties
+app.get('/api/tpiRoomYear/:year', async (req, res) => {
+  const year = req.params.year
+  const collectionName = `tpiRooms_${year}`
+
+  console.log(`Request received to fetch rooms for the year: ${year}`)
+
+  try {
+    console.log(
+      `Attempting to connect to MongoDB collection: ${collectionName}`
+    )
+
+    // Utilisez la fonction de création de modèle personnalisé
+    const DataRooms = createCustomTpiRoomModel(collectionName)
+
+    console.log(`Fetching all rooms in the collection: ${collectionName}`)
+    const rooms = await DataRooms.find()
+
+    console.log(`Number of rooms found for the year ${year}: ${rooms.length}`)
+    res.json(rooms)
+  } catch (error) {
+    console.error(`Error fetching rooms for the year ${year}:`, error)
+    res
+      .status(500)
+      .json({ error: `Internal server error for the year ${year}` })
+  }
+})
+
+
+
+
+
+
 function extraireIndexes (chaine) {
   // Utilisation d'une expression régulière pour extraire les nombres
   const nombres = chaine.match(/\d+/g)

@@ -8,7 +8,7 @@ import { fr } from 'date-fns/locale'
 
 import '../../css/tpiShedule/tpiSheduleStyle.css'
 
-function capitalizeFirstLetter (string) {
+function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
 }
 
@@ -35,10 +35,10 @@ const DateRoom = ({
   const formattedDate = format(
     new Date(roomData.date),
     "'" +
-      capitalizeFirstLetter(
-        format(new Date(roomData.date), 'EEEE', { locale: fr })
-      ) +
-      "' dd-MM-yyyy",
+    capitalizeFirstLetter(
+      format(new Date(roomData.date), 'EEEE', { locale: fr })
+    ) +
+    "' dd-MM-yyyy",
     { locale: fr }
   )
 
@@ -62,7 +62,7 @@ const DateRoom = ({
 
             const startTimeMinutes = Math.floor(
               iSlot * (tpiDurationMinutes + breakDurationMinutes) +
-                firstTpiStartHour * 60
+              firstTpiStartHour * 60
             )
             const endTimeMinutes = startTimeMinutes + tpiDurationMinutes
 

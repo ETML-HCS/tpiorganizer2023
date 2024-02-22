@@ -1,9 +1,8 @@
 import React from "react";
 import { useDrop } from "react-dnd";
+
 import TpiCard from "./TpiCard";
 import { ItemTypes } from "./Constants";
-
-
 
 const TpiSlot = ({
   tpiData,
@@ -12,10 +11,11 @@ const TpiSlot = ({
   onUpdateTpi,
   onSwapTpiCardsProp,
 }) => {
-  // Utiliser l'ID TPI généré pour le TpiSlot
   const handleUpdateTpiCard = (updatedTpi) => {
-    onUpdateTpi(updatedTpi);
+    // Mettre à jour l'état local si nécessaire
+    onUpdateTpi(updatedTpi); // Propager l'update à DateRoom
   };
+
 
   const [{ isOver }, dropRef] = useDrop({
     accept: ItemTypes.TPI_CARD,
@@ -38,7 +38,7 @@ const TpiSlot = ({
   // Vérifier que toutes les propriétés isValidated existent et sont true
   const tpiIsValidatedForAll = isExpert1Validated && isExpert2Validated && isBossValidated;
 
-    
+
   return (
     <div ref={dropRef} className={`tpiSlot ${isOver ? "dragOver" : ""}`} id={`green-${tpiIsValidatedForAll}`}>
       <div className={`timeSlot`}>

@@ -129,33 +129,26 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     })
   })
 
-  const isExpert1Proposal =
-    tpi.expert1.offres.submit && tpi.expert1.offres.submit.length > 0 ? "🗓️" : '';
-
-  const isExpert2Proposal =
-    tpi.expert2.offres.submit && tpi.expert2.offres.submit.length > 0 ? "🗓️" : '';
-
-  const isBossProposal =
-    tpi.boss.offres.submit && tpi.boss.offres.submit.length > 0 ? "🗓️" : '';
-
-
   const formatDate = (date) => {
     const options = { year: '2-digit', month: '2-digit', day: '2-digit' };
-    return new Date(date).toLocaleDateString(undefined, options);
+    return new Date(date).toLocaleDateString('fr-CH', options);
   };
 
-  const expert1Title = tpi.expert1.offres.submit.map((item) =>
-    `${formatDate(item.date)}/${item.creneau}`
-  ).join('\n');
+  const isExpert1Proposal = (tpi.expert1.offres?.submit?.length ?? 0) > 0 ? "🗓️" : '';
+  const isExpert2Proposal = (tpi.expert2.offres?.submit?.length ?? 0) > 0 ? "🗓️" : '';
+  const isBossProposal = (tpi.boss.offres?.submit?.length ?? 0) > 0 ? "🗓️" : '';
 
-  const expert2Title = tpi.expert2.offres.submit.map((item) =>
+  const expert1Title = tpi.expert1.offres?.submit?.map((item) =>
     `${formatDate(item.date)}/${item.creneau}`
-  ).join('\n');
+  ).join('\n') ?? '';
 
-  const bossTitle = tpi.boss.offres.submit.map((item) =>
+  const expert2Title = tpi.expert2.offres?.submit?.map((item) =>
     `${formatDate(item.date)}/${item.creneau}`
-  ).join('\n');
+  ).join('\n') ?? '';
 
+  const bossTitle = tpi.boss.offres?.submit?.map((item) =>
+    `${formatDate(item.date)}/${item.creneau}`
+  ).join('\n') ?? '';
 
   return (
     <div ref={dragRef} className={`tpiCard ${isDragging ? 'dragging' : ''}`}>
