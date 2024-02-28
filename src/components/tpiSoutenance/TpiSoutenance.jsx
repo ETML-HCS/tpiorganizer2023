@@ -67,12 +67,11 @@ const updateSoutenanceData = async (year, propositions, tpi, expertOrBoss) => {
 function TruncatedText({ text, maxLength }) {
   const isTruncated = text.length > maxLength
   return (
-    <span
+    <div
       title={isTruncated ? text : ''}
-      className={isTruncated ? 'truncated-text' : 'nameTpi'}
-    >
+      className={isTruncated ? 'truncated-text' : 'nameTpi'}>
       {isTruncated ? `${text.substring(0, maxLength - 3)}...` : text}
-    </span>
+    </div>
   )
 }
 
@@ -96,10 +95,12 @@ function renderSchedule(schedule) {
   )
 }
 
-const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
+const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters, loadData }) => {
   const [showPopup, setShowPopup] = useState(false)
   const [currentTpiData, setCurrentTpiData] = useState(null)
   const [scheduleSuggester, setScheduleSuggester] = useState(null)
+  const [forceRender, setForceRender] = useState(false);
+
 
   const location = useLocation()
   const queryParams = new URLSearchParams(location.search)
@@ -115,8 +116,13 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
         }
       };
 
-      // Mettez à jour la base de données avec les données mises à jour
+      // Attendre la résolution de updateSoutenanceData  const response
       await updateSoutenanceData(sendYear, propositions, tpiData, expertOrBoss);
+      // Rafraîchir les données après la mise à jour réussie
+      loadData();
+      // Mettre à jour l'état pour forcer un re-render
+      setForceRender(prevState => !prevState);
+
     } catch (error) {
       console.error("Erreur lors de la mise à jour des données :", error);
     }
@@ -132,6 +138,7 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
     }
     setScheduleSuggester(expertOrBoss);
     setShowPopup(true);
+
   }
 
   // Fonction pour rendre les boutons d'actions
@@ -239,7 +246,7 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
     }
 
     return (
-      <span className={`action-buttons ${invitationClass}`}>
+      <div className={`action-buttons${invitationClass}`}>
         <button
           title={`✔\tEn attente de validation\nOK\tCréneau validé\nX\tCréneau refusé`}
           className={`button-${isValidatedClass}`}
@@ -254,31 +261,49 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
           onClick={() => token === paramsToken && handlePropositionClick(tpiData, expertOrBoss)}>
           {submitClass === 'has-values' ? '-' : submitClass === 'empty' ? submitButtonSvg : ''}
         </button>
-      </span>
+      </div>
     )
   }
 
   const isAnyFilterApplied = filters.expert !== "" || filters.candidate !== "" || filters.projectManager !== "";
+
+  const logAndClosePopup = () => {
+    console.log("Fermeture de la popup...");
+    setShowPopup(false); // Assurez-vous que setShowPopup est défini dans le scope de cette fonction
+    loadData();
+  };
 
   return (
     <div className='salles-container'>
       {tpiDatas.map((salle, indexSalle) => (
 
         <div key={indexSalle} className={`salle ${salle.site}`}>
+          <span className='site'>{salle.site}</span>
           <div className={`header_${indexSalle}`}>
             <h3>{formatDate(salle.date)}</h3>
             <h4>{salle.name}</h4>
-            <div class="header-row">
-              <div class="header-cell">Nom du Candidat</div>
-              <div class="header-cell">Expert 1</div>
-              <div class="header-cell">Expert 2</div>
-              <div class="header-cell">Chef de Projet</div>
+            <div className="header-row">
+              <div className="header-cell">Nom du Candidat</div>
+              <div className="header-cell">Expert 1</div>
+              <div className="header-cell">Expert 2</div>
+              <div className="header-cell">Chef de Projet</div>
             </div>
           </div>
 
           {schedule.map((slot, index) => {
             // Assurez-vous que tpiData est défini avant de l'utiliser
             const tpiData = salle.tpiDatas ? salle.tpiDatas[index] : null;
+
+            const { candidat, expert1, expert2, boss } = tpiData || {};
+
+            // fonction pour simplifier 
+            const findPersonTokenByName = (name) => listOfPerson.find(person => person.name === name)?.token;
+
+            // const candidatToken = findPersonTokenByName(candidat);
+            const expert1Token = findPersonTokenByName(expert1?.name);
+            const expert2Token = findPersonTokenByName(expert2?.name);
+            const bossToken = findPersonTokenByName(boss?.name);
+
 
             // Continuez uniquement si tpiData est défini
             if (!tpiData) return null;
@@ -295,36 +320,47 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
                   </div>
 
                   <div className='tpi-container'>
-                    <div className='tpi-entry no-buttons'>
-                      {/* Candidat:{' '} */}
-                      <TruncatedText text={tpiData?.candidat} maxLength={30} />
+                    <div className='tpi-entry tpi-candidat'>
+                      <div className='tpi-entry'>
+                        <TruncatedText text={tpiData?.candidat} maxLength={30} />
+                      </div>
                     </div>
 
-                    <div className='tpi-entry'>
+                    <div className={`tpi-entry ${paramsToken && expert1Token !== paramsToken ? 'gris' : ''}`}>
                       <div className='tpi-expert1'>
-                        Expert1 :{' '}
+                        Expert1 {': '}
+                      </div>
+
+                      <div className={`tpi-entry ${paramsToken === expert1Token ? 'stabilo' : ''}`}>
                         <TruncatedText text={tpiData?.expert1.name} maxLength={25} />
                       </div>
                       {renderActionButtons(tpiData, tpiData?.expert1.name, 'expert1')}
                     </div>
 
-                    <div className='tpi-entry'>
+                    <div className={`tpi-entry ${paramsToken && expert2Token !== paramsToken ? 'gris' : ''}`}>
+
                       <div className='tpi-expert2'>
-                        Expert2 :{' '}
+                        Expert2 {': '}
+                      </div>
+
+                      <div className={`tpi-entry ${paramsToken === expert2Token ? 'stabilo' : ''}`}>
                         <TruncatedText text={tpiData?.expert2.name} maxLength={25} />
                       </div>
+
                       {renderActionButtons(tpiData, tpiData?.expert2.name, 'expert2')}
                     </div>
 
-                    <div className='tpi-entry'>
+                    <div className={`tpi-entry ${paramsToken && bossToken !== paramsToken ? 'gris' : ''}`}>
                       <div className='tpi-boss'>
-                        CDP&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {' '}
+                        CDP {' >> '}
+                      </div>
+                      <div className={`tpi-entry ${paramsToken === bossToken ? 'stabilo' : ''}`}>
                         <TruncatedText text={tpiData?.boss.name} maxLength={25} />
                       </div>
                       {renderActionButtons(tpiData, tpiData?.boss.name, 'boss')}
                     </div>
-
                   </div>
+
                 </div>
               </Fragment>
             )
@@ -337,7 +373,7 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters }) => {
           expertOrBoss={scheduleSuggester}
           tpiData={currentTpiData}
           schedule={schedule}
-          fermerPopup={() => setShowPopup(false)}
+          fermerPopup={logAndClosePopup} // Utilisation directe de false pour fermer la popup
         />
       )}
     </div>
@@ -352,7 +388,6 @@ const TpiSoutenance = () => {
   const [error, setError] = useState(null)
 
   // filtres 
-
   const [filters, setFilters] = useState({
     site: '',
     date: '',
@@ -380,7 +415,6 @@ const TpiSoutenance = () => {
       }
     });
   }, [soutenanceData, filters]); // Dépendances : `soutenanceData` et `filters`
-
 
   const uniqueDates = useMemo(() => {
     const dates = soutenanceData.map(tpi => formatDate(tpi.date));
@@ -412,33 +446,30 @@ const TpiSoutenance = () => {
     setFilters(prevFilters => ({ ...prevFilters, [filterName]: value }));
   };
 
-  useEffect(() => {
-    console.log(`Début de l'appel useEffect, année : ${year}`);
+  // Fonction pour récupérer les données
+  const loadData = async () => {
     setIsLoading(true);
-
-    fetchSoutenanceData(year).then(data => {
-      console.log('Données de soutenance reçues:', data);
+    try {
+      const data = await fetchSoutenanceData(year);
       if (data) {
         setSoutenanceData(data);
+        const expertsList = await fetchTpiListExperts();
+        if (expertsList) {
+          setListOfExpertsOrBoss(expertsList);
+        }
       } else {
-        setError('Impossible de charger les données de soutenance');
-        console.error('Erreur lors du chargement des données de soutenance');
+        setError('Impossible de charger les données');
       }
+    } catch (err) {
+      setError('Erreur lors du chargement des données');
+      console.error(err);
+    } finally {
       setIsLoading(false);
-    });
+    }
+  };
 
-    fetchTpiListExperts().then(list => {
-      console.log('Liste des experts ou responsables reçue:', list);
-      if (list) {
-        setListOfExpertsOrBoss(list);
-      } else {
-        setError('Impossible de charger la liste des experts ou responsables');
-        console.error('Erreur lors du chargement de la liste des experts ou responsables');
-      }
-      setIsLoading(false);
-    });
-
-    console.log('Appels useEffect terminés');
+  useEffect(() => {
+    loadData();
   }, [year]);
 
 
@@ -502,9 +533,6 @@ const TpiSoutenance = () => {
 
   const isFilterApplied = filters.expert !== "" || filters.candidate !== "" || filters.projectManager !== "";
 
-
-
-
   // Ajout de champs d'entrée pour les filtres restants
   return (
     <Fragment>
@@ -557,16 +585,11 @@ const TpiSoutenance = () => {
             tpiDatas={filteredData} // normalement ici c'est soutenancedata 
             schedule={schedule}
             listOfPerson={listOfExpertsOrBoss}
-            filters={filters} />
+            filters={filters}
+            loadData={loadData}
+          />
         </div>
       </div>
-
-
-
-
-
-
-
     </Fragment >
   )
 }

@@ -3,12 +3,13 @@ import { useParams } from 'react-router-dom';
 import { showNotification } from "../Utils";
 import config from '../../config/configO2023.json';
 
-
-const CreneauPropositionPopup = ({ expertOrBoss, fermerPopup, tpiData, schedule }) => {
+const CreneauPropositionPopup = ({ expertOrBoss, tpiData, schedule, fermerPopup }) => {
   const [propositions, setPropositions] = useState([]);
   const [selectedDate, setSelectedDate] = useState("");
   // const [selectedDate, setSelectedDate] = useState('');
   const [selectedCreneau, setSelectedCreneau] = useState('');
+  const [forceRender, setForceRender] = useState(false);
+
 
   const { year } = useParams(); // Extrait l'année des paramètres d'URL
 
@@ -37,9 +38,7 @@ const CreneauPropositionPopup = ({ expertOrBoss, fermerPopup, tpiData, schedule 
     }
   };
 
-  const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
-  };
+  const handleDateChange = (e) => { setSelectedDate(e.target.value); };
 
   const sauvegarderPropositions = async () => {
     const apiUrl = 'http://localhost:5000';
@@ -51,30 +50,41 @@ const CreneauPropositionPopup = ({ expertOrBoss, fermerPopup, tpiData, schedule 
     };
 
     try {
-      const response = await fetch(url, {
-        method: 'PUT', // Changement ici de POST à PUT
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(propositionsData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de la mise à jour des propositions');
-      }
-
-      const responseData = await response.json();
-      if (responseData && responseData.success) {
-        showNotification('Propositions mises à jour avec succès', 'success');
-        fermerPopup(); // Appel direct à la fonction fermerPopup sans utiliser this
-      } else {
-        showNotification('Propositions non acceptées', 'error');
-
-      }
+      const response = await envoyerRequete(url, 'PUT', propositionsData);
+      traiterReponse(response);
     } catch (error) {
       console.error('Erreur :', error);
-      showNotification('Erreur système lors de la mise à jour de la proposition', 'error');
+      afficherNotificationErreur();
+    } finally {
+      // Mettre à jour l'état pour forcer un re-render
+      setForceRender(prevState => !prevState);
+      fermerPopup();
+
     }
+  };
+
+  const envoyerRequete = async (url, method, body) => {
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new Error('Erreur lors de la mise à jour des propositions acceptées');
+    }
+
+    return response;
+  };
+
+  const traiterReponse = (response) => {
+    showNotification('Propositions mises à jour avec succès', 'success');
+  };
+
+  const afficherNotificationErreur = () => {
+    showNotification('Erreur lors de la mise à jour de la proposition', 'error');
   };
 
   // Conversion des créneaux en  pair de périodes 

@@ -7,18 +7,15 @@ const urlApi = 'http://localhost:5000';
 
 const TokenGenerator = () => {
   const [secretKey, setSecretKey] = useState('');
-  const [emails, setEmails] = useState([]);
+  const [experts, setExperts] = useState([]); // Renommé pour refléter qu'il contient plus que des emails
   const [generatedUrls, setGeneratedUrls] = useState([]);
-
   useEffect(() => {
-    // Chargement des emails depuis MongoDB
     const loadEmails = async () => {
       try {
         const response = await axios.get(`${urlApi}/api/experts/emails`);
-        console.log(response.data);
-        setEmails(response.data);
+        setExperts(response.data); // Ajusté pour utiliser setExperts
       } catch (error) {
-        console.error('Erreur lors du chargement des emails:', error);
+        console.error('Erreur lors du chargement des données:', error);
       }
     };
 
@@ -30,16 +27,15 @@ const TokenGenerator = () => {
     const urls = [];
     const update = [];
 
-    for (const email of emails) {
-      console.log(`Traitement de l'email : ${email}`);
+    console.log(experts)
+
+    for (const { email, name } of experts) { // Déstructuration pour obtenir email et name
       const token = CryptoJS.SHA256(email + secretKey).toString();
-      const url = `localhost/soutenance/2024?token=${token}`;
-      console.log(`Token généré pour ${email} : ${token}`);
+      const url = `/soutenance/2024?token=${token}`;
 
-      update.push({ token, email })
-      urls.push({ email, url });
+      update.push({ token, email, name });
+      urls.push({ email, name, url });
     }
-
     try {
       const response = await axios.put(`${urlApi}/api/experts/putTokens`, update);
 
@@ -51,7 +47,6 @@ const TokenGenerator = () => {
     setGeneratedUrls(urls);
   };
 
-
   return (
     <div style={{ marginTop: '2vh' }}>
       <h2>Générateur de Tokens</h2>
@@ -62,12 +57,13 @@ const TokenGenerator = () => {
         onChange={e => setSecretKey(e.target.value)}
       />
       <button onClick={handleGenerateTokens}>Générer Tokens</button>
-      {/* Clé secrète _soutenances_2024_ */}
-      <div>
-        {generatedUrls.map(({ email, url }, index) => (
-          <div key={index}>{`${email}: ${url}`}</div>
+      <ul style={{ listStyleType: 'none', paddingLeft: 0 }}>
+        {generatedUrls.map(({ email, name, url }, index) => (
+          <li key={index} style={{ margin: '10px 0', backgroundColor: '#f0f0f0', padding: '10px', borderRadius: '5px' }}>
+            <strong>{name} ({email}):</strong> <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 };

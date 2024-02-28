@@ -1,10 +1,13 @@
 :root {
   /* Couleurs */
+
+  /* --bg-color-etml:var(--accent-color-etml);  */
   --bg-color-etml: #6600e300;
   --accent-color-etml: #6700E3;
   --shadow-color-etml: #6600e360;
 
-  --bg-color-cfpv: #de209200;
+  /* --bg-color-cfpv : var(--accent-color-cfpv); */
+  --bg-color-cfpv: #de209300;
   --accent-color-cfpv: #de2092;
   --shadow-color-cfpv: #de209360;
 
@@ -13,7 +16,9 @@
   --element-margin: 5px;
 
   --element-padding: 5px;
-  --height-tpi: 160px;
+/* 
+  --height-tpi: 150px; */
+
   --height-header: 105px;
   --width-room: 325px;
 
@@ -86,7 +91,8 @@ p {
 
 .horairesBox {
   display: grid;
-  grid-template-rows: var(--height-tpi);
+  /*  var(--height-tpi) */
+  grid-template-rows:auto;
   font-size: var(--font-size);
   margin-top: calc(var(--height-header) + var(--element-padding));
   margin-left: 5px;
@@ -106,7 +112,6 @@ p {
   margin-top: var(--element-margin-top);
 }
 
-
 .salles-container {
   grid-column: 2;
   display: inline-flex;
@@ -114,25 +119,27 @@ p {
 }
 
 [class^="salle ETML"] {
-
+  position: relative;
+  /*Nécessaire pour l'identification du site */
   border: 1px solid var(--accent-color-etml);
   border-radius: 8px;
   display: grid;
-  grid-template-rows: var(--height-header) var(--height-tpi);
+  /* var(--height-tpi); */
+  grid-template-rows: var(--height-header) auto; 
   padding-bottom: var(--element-padding);
 }
 
 [class^="salle CFPV"] {
-
+  position: relative;
   border: 1px solid var(--accent-color-cfpv);
   border-radius: 8px;
   display: grid;
-  grid-template-rows: var(--height-header) var(--height-tpi);
+  /* var(--height-tpi); */
+  grid-template-rows: var(--height-header) auto;
   padding-bottom: var(--element-padding);
 }
 
-.ETML,
-.CFPV {
+.ETML {
   background-color: var(--bg-color-etml);
 }
 
@@ -166,6 +173,9 @@ p {
   position: relative;
   margin: var(--element-margin) auto;
   width: 95%;
+  height: auto;
+  background-color: white;
+  /*Dans le cas ou le fond possède une couleur */
   border-radius: 5px;
   box-shadow: 0 1px 3px 0 var(--shadow-color-etml);
   box-sizing: content-box;
@@ -175,10 +185,14 @@ p {
   position: relative;
   margin: var(--element-margin) auto;
   width: 95%;
+  height: auto;
+  background-color: white;
   border-radius: 5px;
   box-shadow: 0 1px 3px 0 var(--shadow-color-cfpv);
   box-sizing: content-box;
 }
+
+
 
 .tpi-container {
   margin-left: var(--element-margin);
@@ -201,41 +215,46 @@ p {
 
 .tpi-entry {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 8ch 26ch 70px;
   align-items: center;
   white-space: nowrap;
   gap: 5px;
   font-size: 1.1em;
+  z-index: 0;
 }
 
 .tpi-expert1,
 .tpi-expert2,
 .tpi-boss {
-  grid-column: span 2;
   line-height: 2;
   white-space: nowrap;
   /* Occuper 2 colonnes */
 }
 
-.tpi-entry.no-buttons {
+.tpi-entry.tpi-candidat {
   display: block;
   /* Soustraire la marge gauche */
   font-weight: bolder;
   line-height: 2.1;
   margin-bottom: 5px;
   white-space: nowrap;
+  margin-bottom: 0;
+}
+
+.site {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  ;
+  color: #eee;
 }
 
 /* Styles pour les boutons d'actions */
 .action-buttons {
-  grid-column: 3;
-  display: flex;
-  justify-content: flex-end;
-  /* Justification à droite */
-  margin-right: 4px;
-  gap: 5px;
   white-space: nowrap;
   /* Espacement entre les boutons */
+  position: relative;
+  right: 10px;
 }
 
 .action-buttons button {
@@ -437,7 +456,53 @@ p {
   display: none;
 }
 
-/* Styles appliqués uniquement lors de l'impression */
+.no-filter {
+  display: none;
+}
+
+.gris {
+  color: #969595;
+  /* Couleur du texte grisé */
+  background-color: #e5e3e528;
+  /* Couleur de fond grisé */
+  pointer-events: none;
+  /* Désactiver les événements de pointer */
+  opacity: 0.6;
+  /* Opacité pour donner un effet de gris */
+}
+
+.stabilo {
+  position: relative;
+}
+
+[class^="salle CFPV"] .stabilo::after {
+  content: "";
+  display: block;
+  width: 90%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: -5px;
+  background-color: var(--shadow-color-cfpv); 
+  z-index: -1;
+  border-radius: 5px;
+} 
+
+[class^="salle ETML"] .stabilo::after {
+  content: "";
+  display: block;
+  width: 90%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: -5px;
+  background-color:var(--shadow-color-etml); 
+  z-index: -1;
+  border-radius: 5px;
+} 
+
+
+/*  #region PRINT  Styles appliqués uniquement lors de l'impression */
 @media print {
 
   @page {
@@ -456,6 +521,8 @@ p {
     /* Largeur maximale du contenu pour s'adapter à la largeur de la page A4 */
     box-sizing: border-box;
     /* Assure que la largeur inclut le padding et la bordure */
+
+    color: black;
   }
 
   h1 {
@@ -555,8 +622,7 @@ p {
     /* Alignement vertical du contenu */
     padding: 5px;
     /* Espace autour du contenu */
-    height: 35px;
-    white-space: nowrap;
+    height: 40px;
     /* Empêche le texte de passer à la ligne */
     overflow: hidden;
     /* Cache le débordement de contenu */
@@ -575,11 +641,14 @@ p {
 
   .no-filter {
     display: block;
+    margin-top: 5px;
+    margin-left: 5px;
   }
 
-  .nameTpi {
+  .site {
     display: block;
-    /* Le span s'affiche comme un bloc */
+    z-index: 99;
+    font-weight: 700;
   }
 
   .tpi-expert1,
@@ -618,19 +687,6 @@ p {
     /* Couleur de fond pour les lignes impaires */
   }
 
-  /* Assure que le texte des experts et du CDP est visible et supprime le texte 'Expert1', 'Expert2', 'CDP' */
-  .tpi-entry>div {
-    visibility: hidden;
-    /* Rend le contenu de la div invisible */
-  }
-
-  .tpi-entry>div span {
-    visibility: visible;
-    /* Rend le contenu du span visible */
-    display: inline;
-    /* Annule le display:block précédent pour span */
-  }
-
   /* Pour aligner les noms des candidats */
   .tpi-entry.no-buttons span.nameTpi {
     padding: 5px 0;
@@ -638,3 +694,5 @@ p {
   }
 
 }
+
+/* #endregion */

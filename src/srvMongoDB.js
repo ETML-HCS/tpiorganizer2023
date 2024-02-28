@@ -68,15 +68,20 @@ app.get('/makeToken/:bossName', (req, res) => {
 
 app.get('/api/experts/emails', async (req, res) => {
   try {
-    console.log('Début de la récupération des emails depuis la base de données')
-    const experts = await TpiExperts.find({}, 'email')
-    console.log(`Emails récupérés : ${experts.length}`)
-    res.json(experts.map(expert => expert.email))
+    console.log('Début de la récupération des données des experts depuis la base de données');
+    const experts = await TpiExperts.find({}, 'email name'); // Inclure 'name'
+    console.log(`Données des experts récupérées : ${experts.length}`);
+    
+    res.json(experts.map(expert => ({
+      email: expert.email,
+      name: expert.name // Inclure 'name'
+    })));
   } catch (error) {
-    console.error('Erreur lors de la récupération des emails :', error)
-    res.status(500).send('Erreur lors de la récupération des emails')
+    console.error('Erreur lors de la récupération des données des experts :', error);
+    res.status(500).send('Erreur lors de la récupération des données des experts');
   }
-})
+});
+
 
 app.get('/api/experts/listExpertsOrBoss', async (req, res) => {
   try {
@@ -275,56 +280,53 @@ app.put('/api/tpiyear/:year/:id/:tpiRef/:expertOrBoss', async (req, res) => {
   }
 })
 
-// fonction qui met à jour l'élément submit de offres
 app.put(
   '/api/save-propositions/:year/:expertOrBoss/:tpi_id',
   async (req, res) => {
-    const { year, expertOrBoss } = req.params
-    const indexes = extraireIndexes(req.params.tpi_id) // { salle: x, tpi: y }
-    const propositionsData = req.body
-    const collectionName = `tpiSoutenance_${year}`
+    const { year, expertOrBoss } = req.params;
+    const indexes = extraireIndexes(req.params.tpi_id); // { salle: x, tpi: y }
+    const propositionsData = req.body;
+    const collectionName = `tpiSoutenance_${year}`;
 
     const DataRooms = mongoose.model(
       collectionName,
       tpiRoomSchema,
       collectionName
-    )
+    );
 
     try {
-      // Identifier le document spécifique à mettre à jour
-      const rooms = await DataRooms.find()
-      const salleId = rooms[indexes.salle]._id
+      const updateQuery = {
+        $set: {
+          [`tpiDatas.${indexes.tpi}.${expertOrBoss}.offres`]: propositionsData
+        }
+      };
 
-      console.log('salle id :', salleId)
+      const options = {
+        new: true // Renvoie le document mis à jour après la mise à jour
+      };
 
-      let updateQuery = {}
-      updateQuery[`tpiDatas.${indexes.tpi}.${expertOrBoss}.offres`] =
-        propositionsData
-
-      console.log(propositionsData)
-
-      const result = await DataRooms.updateOne(
+      const updatedDocument = await DataRooms.findOneAndUpdate(
         {
-          _id: salleId,
           [`tpiDatas.${indexes.tpi}.${expertOrBoss}`]: { $exists: true }
         },
-        { $set: updateQuery }
-      )
+        updateQuery,
+        options
+      );
 
-      // Vérifier si un document a été effectivement mis à jour
-      if (result.matchedCount === 0) {
-        console.log('Aucun document correspondant trouvé pour la mise à jour.')
-      } else if (result.modifiedCount === 0) {
-        console.log('Document trouvé mais pas de modifications apportées.')
-      } else {
-        console.log('Document mis à jour avec succès.')
+      if (!updatedDocument) {
+        console.log('Aucun document correspondant trouvé pour la mise à jour.');
+        return res.status(404).json({ error: 'Document non trouvé' });
       }
+
+      console.log('Document mis à jour avec succès :', updatedDocument);
+      res.status(200).json({ message: 'Document mis à jour avec succès', updatedDocument });
     } catch (error) {
-      console.error('Erreur lors de la mise à jour:', error)
-      res.status(500).json({ error: 'Erreur lors de la mise à jour' })
+      console.error('Erreur lors de la mise à jour :', error);
+      res.status(500).json({ error: 'Erreur lors de la mise à jour' });
     }
   }
-)
+);
+
 
 app.post('/save-tpi-rooms/:year', async (req, res) => {
   const year = req.params.year
