@@ -432,7 +432,7 @@ const RenderRooms = ({
                       >
                         <TruncatedText
                           text={tpiData?.expert1.name}
-                          maxLength={25}
+                          maxLength={20}
                         />
                       </div>
                       {renderActionButtons(
@@ -456,7 +456,7 @@ const RenderRooms = ({
                       >
                         <TruncatedText
                           text={tpiData?.expert2.name}
-                          maxLength={25}
+                          maxLength={20}
                         />
                       </div>
 
@@ -480,7 +480,7 @@ const RenderRooms = ({
                       >
                         <TruncatedText
                           text={tpiData?.boss.name}
-                          maxLength={25}
+                          maxLength={20}
                         />
                       </div>
                       {renderActionButtons(tpiData, tpiData?.boss.name, 'boss')}

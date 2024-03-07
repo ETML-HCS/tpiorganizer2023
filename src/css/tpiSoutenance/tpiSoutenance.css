@@ -11,22 +11,22 @@
   --accent-color-cfpv: #de2092;
   --shadow-color-cfpv: #de209360;
 
-  --font-size: 1.3em;
+  --font-size: 1.5em;
   --paragraph-margin: 10px;
   --element-margin: 5px;
 
   --element-padding: 5px;
 
-  --height-tpi: 150px;
-  --height-header: 105px;
-  --width-room: 325px;
+  --height-tpi: 145px;
+  --height-header: 90px;
 
-  --grid-gap: 20px;
+  --grid-gap: 30px;
 }
 
 body {
   position: relative;
   font-family: Arial, Helvetica, sans-serif;
+  padding: 5px;
 }
 
 /* Styles de base pour les éléments HTML */
@@ -227,7 +227,7 @@ p {
   justify-content: space-evenly;
   height: 100%;
   width: 100%;
-  margin-left: 5px;
+  margin-left: 15px;
   /*var(--element-margin);*/
 }
 
@@ -248,7 +248,7 @@ p {
 
 .tpi-entry {
   display: grid;
-  grid-template-columns: 65px 235px 60px;
+  grid-template-columns: 65px 195px 75px;
   align-items: center;
   white-space: nowrap;
   gap: 5px;
