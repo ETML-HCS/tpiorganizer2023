@@ -1,35 +1,42 @@
-import React, { Fragment, useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
+
 import TpiScheduleButtons from './TpiScheduleButtons'
 import { showNotification } from '../Utils'
+
 import {
   createTpiCollectionForYear,
   transmitToDatabase
 } from '../tpiControllers/TpiRoomsController'
+
 import DateRoom from './DateRoom'
 
-function updateTpiDatas(room) {
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
+
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = process.env.REACT_APP_API_URL
+
+function updateTpiDatas (room) {
   // Parcours de chaque tpiData dans room.tpiDatas
   for (let tpiDatas of room.tpiDatas) {
-    // Mise à jour
-    tpiDatas.expert1.offres = updateSchema();
-    tpiDatas.expert2.offres = updateSchema();
-    tpiDatas.boss.offres = updateSchema();
+    tpiDatas.expert1.offres = updateSchema()
+    tpiDatas.expert2.offres = updateSchema()
+    tpiDatas.boss.offres = updateSchema()
   }
-
-  return room;
+  return room
 }
 
-function updateSchema() {
+function updateSchema () {
   return {
     offres: { isValidated: false, submit: [] }
-  };
+  }
 }
 
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [newRooms, setNewRooms] = useState([])
   const [isEditing, setIsEditing] = useState(false)
 
-  function getSecondsSinceEpoch() {
+  function getSecondsSinceEpoch () {
     // Convertir la chaîne de caractères en objet Date
     const date = new Date('2023-07-27')
 
@@ -77,16 +84,13 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     fetchData()
   }, [])
 
-  const handlePublish = async () => {
-    const currentYear = new Date().getFullYear()
-    const soutenancePageUrl = `/soutenance/${currentYear}`
+  const handlePublish = async year => {
+    const soutenancePageUrl = `/soutenance/${year}`
 
     try {
       for (const room of newRooms) {
         try {
-
-          console.log('Données de la salle de TPI : ', updateTpiDatas(room))
-          await createTpiCollectionForYear(currentYear, updateTpiDatas(room))
+          await createTpiCollectionForYear(year, updateTpiDatas(room))
         } catch (error) {
           console.error(
             'Erreur lors de la création de la salle de TPI : ',
@@ -141,13 +145,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         refTpi: null,
         id: '',
         candidat: '',
-        // null n'est pas accepté alors afin de construire l'arbre offres 
-        // initialisation à false 
+        // null n'est pas accepté alors afin de construire l'arbre offres
+        // initialisation à false
         expert1: { name: '', offres: { isValidated: false, submit: [] } },
         expert2: { name: '', offres: { isValidated: false, submit: [] } },
         boss: { name: '', offres: { isValidated: false, submit: [] } }
       }))
-      
     }
 
     // Mettre à jour l'état newRooms en utilisant la fonction setNewRooms pour ajouter la nouvelle salle
@@ -220,7 +223,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }
 
-
   const handleUpdateTpi = async (roomIndex, tpiIndex, updatedTpi) => {
     // Mettre à jour la salle de TPI dans newRooms
     setNewRooms(prevRooms => {
@@ -259,7 +261,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   // Fonction pour gérer le processus de sauvegarde des données
   const handleSave = async () => {
-
     console.log('handleSave newRooms: ', newRooms)
 
     // Étape 1: Mettre à jour la propriété lastUpdate pour chaque salle avec la nouvelle date
@@ -396,9 +397,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const currentYear = new Date().getFullYear()
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/tpiRoomYear/${currentYear}`
-      )
+      const response = await fetch(`${apiUrl}/api/tpiRoomYear/${currentYear}`)
 
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération de la configuration.')
@@ -425,43 +424,45 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }
 
   const handleTransmitToDatabase = async () => {
-    let roomsData;
+    let roomsData
 
     try {
       // Sauvegarde de l'état actuel des salles
       if (handleSave && typeof handleSave === 'function') {
         // Pour rappel, cette fonction modifie la date de dernière mise à jour...
-        handleSave();
+        handleSave()
       }
 
-      const newRoomsData = localStorage.getItem('organizerData');
+      const newRoomsData = localStorage.getItem('organizerData')
       if (!newRoomsData) {
-        throw new Error('Aucune donnée trouvée dans localStorage');
+        throw new Error('Aucune donnée trouvée dans localStorage')
       }
-      roomsData = JSON.parse(newRoomsData);
+      roomsData = JSON.parse(newRoomsData)
 
       if (!Array.isArray(roomsData) || roomsData.length === 0) {
-        throw new Error('Le contenu de "organizerData" n\'est pas un tableau ou est vide.');
+        throw new Error(
+          'Le contenu de "organizerData" n\'est pas un tableau ou est vide.'
+        )
       }
 
       // Parcours des données des salles
       for (const room of roomsData) {
         // Transformation du schéma   const updatedRoom = updateTpiDatas(room);
-        const isDataTransmitted = await transmitToDatabase(room);
+        const isDataTransmitted = await transmitToDatabase(room)
 
         if (isDataTransmitted) {
-          showNotification('Données transmises avec succès', 3000, 'success');
-          console.log('Données transmises avec succès');
+          showNotification('Données transmises avec succès', 3000, 'success')
+          console.log('Données transmises avec succès')
         } else {
-          showNotification('Erreur lors de la transmission', 3000, 'error');
-          throw new Error('Données non transmises');
+          showNotification('Erreur lors de la transmission', 3000, 'error')
+          throw new Error('Données non transmises')
         }
       }
     } catch (error) {
-      console.error('Erreur lors de la transmission des données :', error);
-      showNotification(error.message, 3000, 'error');
+      console.error('Erreur lors de la transmission des données :', error)
+      showNotification(error.message, 3000, 'error')
     }
-  };
+  }
 
   return (
     <>
@@ -472,27 +473,38 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         onExport={handleExport}
         onSave={handleSave}
         onLoadConfig={handleLoadConfig}
-        onPublish={handlePublish}
+        onPublish={() => {
+          const uniqueDate =
+            newRooms.length > 0 ? newRooms[0].date.substring(0, 4) : null
+          if (uniqueDate) {
+            handlePublish(uniqueDate)
+          } else {
+            console.error('Aucune date disponible dans la liste des salles')
+          }
+        }}
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
         onFetchConfig={handleonFetchConfig}
         OnSendBD={handleTransmitToDatabase}
       />
-      {newRooms.map((room, indexRoom) => (
-        <DateRoom
-          key={indexRoom}
-          roomIndex={indexRoom}
-          roomData={room}
-          isEditOfRoom={isEditing}
-          onUpdateTpi={(tpiIndex, updatedTpi) =>
-            handleUpdateTpi(indexRoom /*room.idRoom*/, tpiIndex, updatedTpi)
-          }
-          onSwapTpiCards={(draggedTpi, targetTpi) =>
-            handleSwapTpiCards(draggedTpi, targetTpi)
-          }
-          onDelete={() => handleDelete(room.idRoom)}
-        />
-      ))}
+
+      <div id='rooms'>
+        {newRooms.map((room, indexRoom) => (
+          <DateRoom
+            key={indexRoom}
+            roomIndex={indexRoom}
+            roomData={room}
+            isEditOfRoom={isEditing}
+            onUpdateTpi={(tpiIndex, updatedTpi) =>
+              handleUpdateTpi(indexRoom /*room.idRoom*/, tpiIndex, updatedTpi)
+            }
+            onSwapTpiCards={(draggedTpi, targetTpi) =>
+              handleSwapTpiCards(draggedTpi, targetTpi)
+            }
+            onDelete={() => handleDelete(room.idRoom)}
+          />
+        ))}
+      </div>
     </>
   )
 }

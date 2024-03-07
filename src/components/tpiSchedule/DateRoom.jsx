@@ -47,7 +47,7 @@ const DateRoom = ({
       <div className='room'>
         <div className={`date-room site_${roomData.site.toLowerCase()}`}>
           <div className='date'>{formattedDate}</div>
-          <div className='nameRoom'>Room: {roomData.name}</div>
+          <div className='nameRoom'>{roomData.name}</div>
 
           {slots.map((_, iSlot) => {
             // Appeler la fonction generateUniqueID pour générer l'ID TPI
@@ -56,7 +56,7 @@ const DateRoom = ({
               roomIndex,
               iSlot
             )
-
+            
             roomData.tpiDatas[iSlot].id = tpiID
             const tpi = roomData.tpiDatas[iSlot]
 

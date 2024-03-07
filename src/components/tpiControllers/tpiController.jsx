@@ -1,7 +1,9 @@
 import axios from "axios";
 
-// Remplacez l'URL par celle de votre serveur (si déplacé chez un opérateur)
-const apiUrl = "http://localhost:5000";
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true'; // Convertir en booléen si nécessaire
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = process.env.REACT_APP_API_URL;
 
 export const createTpiModel = async (modelData) => {
   try {

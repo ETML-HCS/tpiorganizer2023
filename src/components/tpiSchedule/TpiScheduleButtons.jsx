@@ -1,9 +1,13 @@
 import React, { useState } from 'react'
 
 import NewRoomForm from './NewRoomForm'
-import axios from 'axios';
+import axios from 'axios'
 
-const urlApi = 'http://localhost:5000'; // ou 'https://localhost:5000' si vous utilisez HTTPS
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
+
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = process.env.REACT_APP_API_URL
 
 const TpiScheduleButtons = ({
   onNewRoom,
@@ -20,10 +24,9 @@ const TpiScheduleButtons = ({
 }) => {
   const [showForm, setShowForm] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [selectedYear, setSelectedYear] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(null)
 
-  const years = [2024, 2025, 2026];
-
+  const years = [2023, 2024, 2025, 2026]
 
   // Appelle la fonction fournie par le composant parent
   const handleFetchConfig = () => {
@@ -70,34 +73,33 @@ const TpiScheduleButtons = ({
     }
   }
 
-
-  const handleRapatrierClick = async (year) => {
+  const handleRapatrierClick = async year => {
     try {
-      // Télécharger la collection (a) tpiSoutenance_2024 (représentant les salles) : 
+      // Télécharger la collection (a) tpiSoutenance_2024 (représentant les salles) :
       // Cette collection reflète la vue des experts et du responsable.
       // Télécharger la collection (b) tpiRooms_2024 (représentant également les salles) :
       // Cette collection est la vue de l'organisateur.
       // Pour chaque salle de la collection (a) :
       // Extraire les parties tpiDatas (objets tpi) des experts1, experts2 et du responsable, contenant les offres.
-      // Écraser les parties correspondantes dans la salle de la collection (b) : 
+      // Écraser les parties correspondantes dans la salle de la collection (b) :
       // tpiDatas (objets tpi) des experts1, experts2 et du responsable.
-      // Comme les indexes sont identiques entre les deux collections, 
+      // Comme les indexes sont identiques entre les deux collections,
       // envisager simplement de reprendre toute la collection (a) pour écraser la collection (b) pourrait être une option ?
 
       try {
-        const response = await axios.post(`${urlApi}/overwrite-tpi-rooms/${year}`);
-        console.log(response.data.message); // Print the response message
+        const response = await axios.post(
+          `${apiUrl}/overwrite-tpi-rooms/${year}`
+        )
+        console.log(response.data.message) // Print the response message
       } catch (error) {
-        console.error('Error overwriting TPI rooms:', error);
+        console.error('Error overwriting TPI rooms:', error)
       }
 
-
-      console.log('Mise à jour des offres terminée avec succès.');
+      console.log('Mise à jour des offres terminée avec succès.')
     } catch (error) {
-      console.error('Erreur lors de la mise à jour des offres :', error);
+      console.error('Erreur lors de la mise à jour des offres :', error)
     }
-  };
-
+  }
 
   return (
     <div id='tools'>
@@ -188,20 +190,22 @@ const TpiScheduleButtons = ({
             <h1>List of Years</h1>
             <label>Select a year:</label>
             <select
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              onChange={e => setSelectedYear(parseInt(e.target.value))}
               value={selectedYear || ''}
             >
-              <option value="">Select Year</option>
-              {years.map((year) => (
+              <option value=''>Select Year</option>
+              {years.map(year => (
                 <option key={year} value={year}>
                   {year}
                 </option>
               ))}
             </select>
             <button
-              className="publish-button"
+              className='publish-button'
               onClick={() => handleRapatrierClick(selectedYear)}
-              title={`Rapatrier les informations pour l'année ${selectedYear || '??'} ↩️`}
+              title={`Rapatrier les informations pour l'année ${
+                selectedYear || '??'
+              } ↩️`}
               disabled={!selectedYear}
             >
               Rapatrier ↩️
@@ -209,9 +213,9 @@ const TpiScheduleButtons = ({
           </div>
 
           <div
-            onClick={toggleArrow}
+            onClick={() => toggleArrow(!toggleArrow)} // Utilisez une fonction pour mettre à jour l'état
             id='upArrowButton'
-            className={!isArrowUp ? '' : 'active'}
+            className={!toggleArrow ? '' : 'active'} // Assurez-vous que la logique conditionnelle correspond à l'état désiré
           >
             ▲ ▲ ▲{' '}
           </div>

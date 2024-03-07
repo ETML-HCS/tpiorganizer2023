@@ -28,12 +28,14 @@
   justify-content: center;
 }
 
+
+
 /* Style des boutons personnalisés */
 .custom-button {
   text-align: center;
-  padding: 15px 30px;
+  padding: 12px 20px;
   color: #fff;
-  border-radius: 15px;
+  border-radius: 5px;
   cursor: pointer;
   font-size: 16px;
   margin: 10px;
@@ -41,13 +43,10 @@
   height: 100px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-transform: uppercase;
+  justify-content: space-around;
+  text-transform: capitalize;
   font-weight: bold;
-  text-decoration: none;
-  /* Désactiver le soulignement des liens */
   transition: background-color 0.3s ease, transform 0.2s ease;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .custom-button:hover {

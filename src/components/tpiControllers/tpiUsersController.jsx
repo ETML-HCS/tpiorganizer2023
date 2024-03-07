@@ -1,8 +1,12 @@
 import axios from 'axios';
 
-const apiUrl = 'http://localhost:5000';
-const createUserUrl = `${apiUrl}/inscription`;
-const getUsersUrl = `${apiUrl}/suivi-etudiants`;
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true'; // Convertir en booléen si nécessaire
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = process.env.REACT_APP_API_URL;
+
+const createUserUrl = `${apiUrl}/api/inscription`;
+const getUsersUrl = `${apiUrl}/api/suivi-etudiants`;
 
 export const createUser = async (userData) => {
   try {

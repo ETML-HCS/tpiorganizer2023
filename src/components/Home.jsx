@@ -1,28 +1,28 @@
 import React, { useState } from 'react';
 import { Link } from "react-router-dom";
-import { useNavigate  } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import "../css/home.css"; // Fichier CSS pour les styles spécifiques à la page Home
 
 const colors = [
   "#007bff",
   "#28a745",
-  "#ffc107",
-  "#dc3545",
-  "#6610f2",
-  "#fd7e14",
-  "#17a2b8",
   "#6f42c1",
 ];
 
+const pastelColors = [
+  "#87CEEB", // Bleu ciel pastel
+  "#FFA07A", // Saumon clair
+  "#17a2b8",
+];
 
 const SoutenanceMenu = ({ onClose }) => {
   const navigate = useNavigate();
-  const years = [2024]; // Exemple d'années
+  const years = [2020,2023,2024,2025,2026];
 
   const handleYearSelect = (year) => {
     onClose();
-    navigate(`/soutenance/${year}`);
+    navigate(`/calendrierDefenses/${year}`);
   };
 
   return (
@@ -55,45 +55,40 @@ const Home = () => {
     },
     {
       name: "Gestion des TPI",
-      link: "/gestion-tpi",
+      link: "/gestionTPI",
     },
     {
       name: "Calendrier des défenses",
-      link: "/calendrier-defenses",
+      link: "/calendrierDefenses",
     },
     {
       name: "Suivi des étudiants",
-      link: "/suivi-etudiants",
+      link: "/suiviEtudiants",
     },
     {
       name: "Évaluation du TPI",
-      link: "/evaluation-tpi",
+      link: "/evaluationTPI",
     },
     {
       name: "Rapports et statistiques",
-      link: "/rapports-statistiques",
+      link: "/rapportStatistiques",
     },
     {
       name: "Archiver TPI",
-      link: "/archiver-tpi",
+      link: "/archiverTPI",
     },
     {
       name: "Alertes et notifications",
-      link: "/alertes-notifications",
+      link: "/alertesNotifications",
     },
     {
       name: "Importer/Exporter des données",
-      link: "/importer-exporter-donnees",
+      link: "/importerExporterDonnees",
     },
     {
       name: "Génération des tokens",
-      link: "/gen-tokens",
-    },
-    {
-      name: "Soutenances",
-      link: "/soutenance",
-    },
-
+      link: "/genTokens",
+    }
   ];
 
   return (
@@ -108,33 +103,33 @@ const Home = () => {
 
       {/* Générer les boutons à partir du tableau d'objets */}
       <div className="button-container">
-      {buttons.map((button, index) => {
-        if (button.name === "Soutenances") {
+        {buttons.map((button, index) => {
+          if (button.name === "Calendrier des défenses") {
+            return (
+              <div
+                key={index}
+                className="custom-button"
+                style={{ backgroundColor: pastelColors[index % colors.length] }}
+                onClick={handleSoutenanceClick}
+              >
+                {button.name}
+              </div>
+            );
+          }
           return (
-            <div
-              key={index}
-              className="custom-button"
-              style={{ backgroundColor: colors[index % colors.length] }}
-              onClick={handleSoutenanceClick}
-            >
-              {button.name}
-            </div>
+            <Link to={button.link} key={index} style={{ textDecoration: 'none' }}>
+              <div
+                className="custom-button"
+                style={{ backgroundColor: colors[index % colors.length] }}
+              >
+                {button.name}
+              </div>
+            </Link>
           );
-        }
-        return (
-          <Link to={button.link} key={index}>
-            <div
-              className="custom-button"
-              style={{ backgroundColor: colors[index % colors.length] }}
-            >
-              {button.name}
-            </div>
-          </Link>
-        );
-      })}
+        })}
+      </div>
+      {showSoutenanceMenu && <SoutenanceMenu onClose={() => setShowSoutenanceMenu(false)} />}
     </div>
-    {showSoutenanceMenu && <SoutenanceMenu onClose={() => setShowSoutenanceMenu(false)} />}
-  </div>
   );
 };
 

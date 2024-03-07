@@ -1,29 +1,28 @@
-
 .login-container {
     margin: 15vh auto;
     padding: 20px;
-    background-color: var(--bg-color-etml);
+    background-color: #f5f4f5ca;
     border-radius: 5px;
+    min-width: 40vh;
 }
 
-form {
+.loginPage {
     box-sizing: border-box;
     border: none;
     border-radius: 5px;
     margin-bottom: 10px;
-    padding: 5px;
-    background-color: var(--bg-color-cfpv);
+    padding: 8px;
 }
 
 .form-group {
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     box-sizing: border-box;
     padding: 2px;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     box-sizing: border-box;
 }
 
@@ -31,7 +30,7 @@ form {
     width: 100%;
     box-sizing: border-box;
     padding: 8px;
-    border: 1px solid var(--bg-color-etml);
+    border: 1px solid var(--accent-color-etml);
     border-radius: 4px;
 }
 
@@ -46,5 +45,5 @@ form {
 }
 
 .button-login:hover {
-    filter: brightness(180%);
+    filter: brightness(120%);
 }

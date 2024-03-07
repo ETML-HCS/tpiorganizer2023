@@ -11,6 +11,7 @@ const tpiExpertsSchema = new Schema({
   name: String,
   site: String,
   email: String,
+  role:String,
   token: { type: String, required: false },
   date: {
     type: Date,

@@ -39,7 +39,20 @@
   /* tes animations */
 }
 
-.etml { font-family: "ETML L"; color: blue; }
+/* .etml { font-family: "ETML L"; color: blue; } */
+.etml 
+{
+  font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  color: blue;
+  margin: 5px;
+}
+
+.cfpv{
+
+  font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  color: red;
+  margin: 5px;
+}
 
 #tools {
   z-index: 999;
@@ -52,6 +65,7 @@
   width: 100%;
   text-align: center;
 }
+
 
 #tools button, #btLoadFile {
   color: white;
@@ -88,8 +102,6 @@
   transform: translateY(0);
 }
 
-
-
 /*  permet d'afficher des informations sur le @media utilisés */
 .media-indicator {
   display: none;
@@ -101,4 +113,28 @@
   padding: 5px;
   font-size: 20px;
   z-index: 1000;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.list-group-item {
+  margin-bottom: 10px;
+  background-color: #f0f0f0;
+  padding: 10px;
+  border-radius: 5px;
 }

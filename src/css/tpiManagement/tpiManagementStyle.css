@@ -1,6 +1,6 @@
 /* Centrer le formulaire */
 .container {
-  width: 96%;
+  width: 100%;
   justify-content: center;
   align-items: center;
   margin-right: auto;
@@ -21,18 +21,22 @@ li .containerForm {
   z-index: 999;
 }
 
-form {
-  display: grid;
+.addRoom {
+  display: flex;
   position: relative;
+  justify-content: space-between;
   gap: 5px;
   width: 100%;
   min-width: 400px;
   max-width: 700px;
-  padding: 15px;
-  border: 1px solid #ccc;
+  padding-top: 20px;
+  padding-left: 18px;
+  padding-right: 18px;
+  padding-bottom: 18px;
+  border: 1px solid #dfdddd;
   border-radius: 5px;
   background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 0 auto;
 }
 
 /* Alignement des étiquettes et des champs de saisie */

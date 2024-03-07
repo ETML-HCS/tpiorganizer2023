@@ -1,14 +1,18 @@
 import axios from 'axios'
 
-const apiUrl = 'http://localhost:5000'
-const saveTpiRoomUrl = `${apiUrl}/save-tpi-rooms`
-const getTpiRoomsUrl = `${apiUrl}/get-tpi-rooms`
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true'; // Convertir en booléen si nécessaire
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = process.env.REACT_APP_API_URL;
 
+const saveTpiRoomUrl = `${apiUrl}/api/save-tpi-rooms`
+const getTpiRoomsUrl = `${apiUrl}/api/get-tpi-rooms`
 
 // Fonction pour transmettre les données à la base de données
 export const transmitToDatabase = async (data) => {
   // Obtenir l'année courante
-  const currentYear = new Date().getFullYear(); 
+
+  const currentYear = data.date.substring(0,4); 
   const url = `${saveTpiRoomUrl}/${currentYear}`;
 
   try {

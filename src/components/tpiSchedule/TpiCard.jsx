@@ -108,7 +108,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleChange = (e, field) => {
+  const handleChangeCandidat = (e, field) => {
     const updatedTpi = {
       ...editedTpi,
       [field]: e.target.value
@@ -116,6 +116,19 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     setEditedTpi(updatedTpi)
     onUpdateTpi(updatedTpi)
   }
+
+  const handleChange = (e, field) => {
+    const updatedTpi = {
+      ...editedTpi,
+      [field]: {
+        ...editedTpi[field], // Copie des propriétés actuelles de l'objet imbriqué
+        name: e.target.value // Mise à jour de la propriété 'name' de l'objet imbriqué
+      }
+    };
+    setEditedTpi(updatedTpi);
+    onUpdateTpi(updatedTpi);
+  };
+  
 
   const handleSelectChange = e => {
     setSelectedCandidate(e.target.value)
@@ -159,7 +172,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
               type='text'
               className='edit'
               value={editedTpi.candidat || ''}
-              onChange={e => handleChange(e, 'candidat')}
+              onChange={e => handleChangeCandidat(e, 'candidat')}
             />
             <div
               ref={refTpiContainerRef}
@@ -197,6 +210,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
               </select>
             )}
           </div>
+
           <input
             type='text'
             className='edit'

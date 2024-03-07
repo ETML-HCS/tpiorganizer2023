@@ -16,13 +16,12 @@
   --element-margin: 5px;
 
   --element-padding: 5px;
-/* 
-  --height-tpi: 150px; */
 
+  --height-tpi: 150px;
   --height-header: 105px;
   --width-room: 325px;
 
-  --grid-gap: 10px;
+  --grid-gap: 20px;
 }
 
 body {
@@ -30,46 +29,44 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-
 /* Styles de base pour les éléments HTML */
 h1 {
-  width: 100vw;
   font-size: 2.5em;
   margin-bottom: 0px;
+  margin-top: 5px;
   text-transform: capitalize;
   font-weight: bold;
-  text-align: center;
   background-image: linear-gradient(to left, var(--accent-color-etml), var(--accent-color-cfpv));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  display: inline-block;
   /* Pour s'assurer que le dégradé s'applique correctement au texte */
 }
 
 h1::before {
-  content: "Version de Démonstration ";
-  display: block;
+  content: "Version de Démonstration";
   /* Cela va forcer le contenu à apparaître sur une nouvelle ligne */
   position: absolute;
+  top: 0;
+  right: 5px;
   font-size: 0.7rem;
   color: white;
   background: #777;
   padding: 8px;
   border-radius: 5px;
   font-weight: bold;
-  top: 0;
-  left: 0;
 }
 
 h3 {
   text-align: center;
-  font-size: 1.6em;
+  font-size: 2em;
+  font-weight: bolder;
+  margin-top: 10px;
 }
 
 h4 {
   text-align: center;
-  font-size: 1.5em;
+  font-size: 1.7em;
   margin-top: -1.5vh;
 }
 
@@ -78,21 +75,48 @@ p {
   padding: 0;
 }
 
+.welcom{
+  position: absolute;
+  left: 20px;
+  top: 8px;  
+  font-size: 1.6em;
+}
+
+.btnFiltre {
+  height: 30px;
+  background-color: #f2f2f2; /* Couleur de fond blanc */
+  border: none;
+  border-radius: 5px;
+  padding: 3px 8px; /* Remplissage interne */
+  font-size: 1.2em; /* Taille de police */
+  font-weight: bold;
+  cursor: pointer; /* Curseur de la souris en forme de main */
+  transition: background-color 0.3s, color 0.3s; /* Transition fluide */
+}
+
+.btnFiltre.active {
+  background-color: #777; /* Couleur de fond bleue */
+  color: #ffffff; /* Couleur du texte blanc */
+}
+
+.btnFiltre:hover {
+ filter:opacity(70%);
+}
+
 /* Styles spécifiques des classes et sélecteurs */
 #soutenances {
-  margin-top: 20px;
-  gap: var(--grid-gap);
+  margin-top: 10px;
 }
 
 .dataGrid {
   display: grid;
-  /* grid-template-columns: var(--dataGrid-column-width) auto; */
+  grid-template-columns: auto auto;  
 }
 
 .horairesBox {
   display: grid;
   /*  var(--height-tpi) */
-  grid-template-rows:auto;
+  grid-template-rows: auto;
   font-size: var(--font-size);
   margin-top: calc(var(--height-header) + var(--element-padding));
   margin-left: 5px;
@@ -101,7 +125,16 @@ p {
 
 [class^="horaire_"] {
   display: flex;
-  flex-direction: row;
+  /*start - end */
+  /*flex-direction: row;*/
+  /*
+  start
+  - 
+  end
+  */
+  flex-direction: column;
+  text-align: center;
+
   margin-left: 2px;
   margin-top: 5px;
   gap: 5px;
@@ -125,7 +158,7 @@ p {
   border-radius: 8px;
   display: grid;
   /* var(--height-tpi); */
-  grid-template-rows: var(--height-header) auto; 
+  grid-template-rows: var(--height-header) auto;
   padding-bottom: var(--element-padding);
 }
 
@@ -169,33 +202,33 @@ p {
   display: inline;
 }
 
-.ETML .tpi-data {
+.tpi-data {
   position: relative;
-  margin: var(--element-margin) auto;
+  margin: 5px auto;
+  height: var(--height-tpi);
+  vertical-align: middle;
   width: 95%;
-  height: auto;
   background-color: white;
-  /*Dans le cas ou le fond possède une couleur */
   border-radius: 5px;
-  box-shadow: 0 1px 3px 0 var(--shadow-color-etml);
   box-sizing: content-box;
+}
+
+.ETML .tpi-data {
+  box-shadow: 0 1px 3px 0 var(--shadow-color-etml);
 }
 
 .CFPV .tpi-data {
-  position: relative;
-  margin: var(--element-margin) auto;
-  width: 95%;
-  height: auto;
-  background-color: white;
-  border-radius: 5px;
   box-shadow: 0 1px 3px 0 var(--shadow-color-cfpv);
-  box-sizing: content-box;
 }
 
-
-
 .tpi-container {
-  margin-left: var(--element-margin);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  height: 100%;
+  width: 100%;
+  margin-left: 5px;
+  /*var(--element-margin);*/
 }
 
 .ETML .tpi-data:hover {
@@ -215,11 +248,11 @@ p {
 
 .tpi-entry {
   display: grid;
-  grid-template-columns: 8ch 26ch 70px;
+  grid-template-columns: 65px 235px 60px;
   align-items: center;
   white-space: nowrap;
   gap: 5px;
-  font-size: 1.1em;
+  font-size: 1.2em;
   z-index: 0;
 }
 
@@ -245,7 +278,6 @@ p {
   position: absolute;
   top: 5px;
   right: 5px;
-  ;
   color: #eee;
 }
 
@@ -422,10 +454,21 @@ p {
 .filters {
   display: flex;
   position: relative;
-  justify-content: flex-end;
-  margin-right: 20px;
-  gap: var(--grid-gap);
   width: 100%;
+  justify-content: flex-end;
+  gap: var(--grid-gap);
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-right: 5px;
+}
+
+.filters select{
+  height: 30px;
+  text-align: center;
+  border: none;
+  border-radius: 5px;
+  padding: 3px;
+  background-color: transparent;
 }
 
 .ETML .time-label {
@@ -483,10 +526,10 @@ p {
   position: absolute;
   top: 0;
   left: -5px;
-  background-color: var(--shadow-color-cfpv); 
+  background-color: var(--shadow-color-cfpv);
   z-index: -1;
   border-radius: 5px;
-} 
+}
 
 [class^="salle ETML"] .stabilo::after {
   content: "";
@@ -496,11 +539,10 @@ p {
   position: absolute;
   top: 0;
   left: -5px;
-  background-color:var(--shadow-color-etml); 
+  background-color: var(--shadow-color-etml);
   z-index: -1;
   border-radius: 5px;
-} 
-
+}
 
 /*  #region PRINT  Styles appliqués uniquement lors de l'impression */
 @media print {

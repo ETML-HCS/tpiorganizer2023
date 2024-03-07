@@ -8,7 +8,6 @@ import { updateMarginTopPage } from "../Utils";
 
 import "../../css/tpiManagement/tpiManagementStyle.css";
 
-
 const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   const [newTpi, setNewTpi] = useState(false);
   const [tpiList, setTpiList] = useState([]);
@@ -16,7 +15,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     // Utilisez useEffect pour charger les données de TPI lors du montage du composant
     async function fetchData() {
-      updateMarginTopPage(60);
+      updateMarginTopPage(5);
       try {
         const data = await getTpiFromServer();
         setTpiList(data);

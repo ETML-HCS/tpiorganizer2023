@@ -51,7 +51,7 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
   };
 
   return (
-    <form onSubmit={handleFormSubmit}>
+    <form className="addRoom" onSubmit={handleFormSubmit}>
       <label htmlFor="date">Date :</label>
       <input
         type="date"
@@ -90,8 +90,9 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
           fontWeight: "bolder",
           backgroundColor: "#0074D9",
           color: "white",
-          padding: "3px",
+          padding: "5px",
           textAlign: "center",
+          borderRadius: "5px"
         }}
       >
         Valider
@@ -99,11 +100,12 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
       <div
         style={{
           position: "absolute",
-          top: "4px",
-          right: "15px",
+          top: "0px",
+          right: "5px",
           cursor: "pointer",
-          fontSize: "20px",
+          fontSize: "18px",
           fontWeight: "bold",
+          color:"red",
         }}
         onClick={handleCancel}
       >

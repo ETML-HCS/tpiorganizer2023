@@ -12,7 +12,6 @@ export const saveTpiToServer = async (tpiDetails) => {
     // Sortir de la fonction sans sauvegarder les données s'il manque des champs obligatoires
     return;
   }
-
   try {
     // Appeler la fonction du client pour créer ou mettre à jour le modèle de TPI dans la base de données via le serveur
     const savedModel = await createTpiModel(tpiDetails);

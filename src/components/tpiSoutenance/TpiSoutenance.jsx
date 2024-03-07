@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Fragment, useMemo } from 'react';
+import React, { useState, useEffect, Fragment, useMemo } from 'react'
 
 import { useLocation, useParams } from 'react-router-dom'
 import CreneauPropositionPopup from './CreneauPropositionPopup'
@@ -7,10 +7,19 @@ import { showNotification } from '../Utils'
 
 import '../../css/tpiSoutenance/tpiSoutenance.css'
 
-const isDemo = true; // affiche version démonstration 
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const isDemo = process.env.REACT_APP_DEBUG === 'true' // affiche version démonstration
+const apiUrl = isDemo
+  ? process.env.REACT_APP_API_URL_TRUE
+  : process.env.REACT_APP_API_URL_FALSE
+
+const useToken = () => {
+  const location = useLocation()
+  const queryParams = new URLSearchParams(location.search)
+  return queryParams.get('token')
+}
 
 const fetchSoutenanceData = async year => {
-  const apiUrl = 'http://localhost:5000'
   try {
     const response = await fetch(`${apiUrl}/api/tpiyear/${year}`)
 
@@ -27,49 +36,64 @@ const fetchSoutenanceData = async year => {
 }
 
 const fetchTpiListExperts = async () => {
-  const apiUrl = 'http://localhost:5000';
   try {
-    const listOfExpertsOrBoss = await fetch(`${apiUrl}/api/experts/listExpertsOrBoss`);
+    const listOfExpertsOrBoss = await fetch(
+      `${apiUrl}/api/experts/listExpertsOrBoss`
+    )
 
     if (listOfExpertsOrBoss.ok) {
-      return await listOfExpertsOrBoss.json();
+      return await listOfExpertsOrBoss.json()
     } else {
-      showNotification('Erreur lors de la récupération de la liste des experts', 'error');
-      return null;
+      showNotification(
+        'Erreur lors de la récupération de la liste des experts',
+        'error'
+      )
+      return null
     }
   } catch (error) {
-    showNotification(`Erreur réseau: ${error}`, 'error'); // Correction ici
-    return null;
+    showNotification(`Erreur réseau: ${error}`, 'error') // Correction ici
+    return null
   }
-};
+}
 
 const updateSoutenanceData = async (year, propositions, tpi, expertOrBoss) => {
-  const apiUrl = 'http://localhost:5000';
   try {
-    const response = await fetch(`${apiUrl}/api/tpiyear/${year}/${tpi._id}/${tpi.id}/${expertOrBoss}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(propositions),
-    });
+    const response = await fetch(
+      `${apiUrl}/api/tpiyear/${year}/${tpi._id}/${tpi.id}/${expertOrBoss}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(propositions)
+      }
+    )
 
     if (response.ok) {
-      showNotification(`Données de soutenance mises à jour avec succès pour l'année ${year}`);
+      showNotification(
+        `Données de soutenance mises à jour avec succès pour l'année ${year}`
+      )
     } else {
-      showNotification(`Erreur lors de la mise à jour des données de soutenance pour l'année ${year}`, 'error');
+      showNotification(
+        `Erreur lors de la mise à jour des données de soutenance pour l'année ${year}`,
+        'error'
+      )
     }
   } catch (error) {
-    showNotification('Erreur réseau lors de la mise à jour des données de soutenance:', error);
+    showNotification(
+      'Erreur réseau lors de la mise à jour des données de soutenance:',
+      error
+    )
   }
-};
+}
 
 function TruncatedText({ text, maxLength }) {
   const isTruncated = text.length > maxLength
   return (
     <div
       title={isTruncated ? text : ''}
-      className={isTruncated ? 'truncated-text' : 'nameTpi'}>
+      className={isTruncated ? 'truncated-text' : 'nameTpi'}
+    >
       {isTruncated ? `${text.substring(0, maxLength - 3)}...` : text}
     </div>
   )
@@ -95,17 +119,20 @@ function renderSchedule(schedule) {
   )
 }
 
-const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters, loadData }) => {
+const RenderRooms = ({
+  year,
+  tpiDatas,
+  schedule,
+  listOfPerson,
+  filters,
+  loadData,
+  token,
+  isOn
+}) => {
   const [showPopup, setShowPopup] = useState(false)
   const [currentTpiData, setCurrentTpiData] = useState(null)
   const [scheduleSuggester, setScheduleSuggester] = useState(null)
-  const [forceRender, setForceRender] = useState(false);
-
-
-  const location = useLocation()
-  const queryParams = new URLSearchParams(location.search)
-  // const userRole = queryParams.get('role'); // ? role=le role
-  const paramsToken = queryParams.get('token') // ? &token
+  const [forceRender, setForceRender] = useState(false)
 
   const handleAcceptClick = async (sendYear, tpiData, expertOrBoss) => {
     try {
@@ -114,135 +141,174 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters, loadData
           isValidated: true,
           submit: []
         }
-      };
+      }
 
       // Attendre la résolution de updateSoutenanceData  const response
-      await updateSoutenanceData(sendYear, propositions, tpiData, expertOrBoss);
+      await updateSoutenanceData(sendYear, propositions, tpiData, expertOrBoss)
       // Rafraîchir les données après la mise à jour réussie
-      loadData();
+      loadData()
       // Mettre à jour l'état pour forcer un re-render
-      setForceRender(prevState => !prevState);
-
+      setForceRender(prevState => !prevState)
     } catch (error) {
-      console.error("Erreur lors de la mise à jour des données :", error);
+      console.error('Erreur lors de la mise à jour des données :', error)
     }
-  };
+  }
 
   const handlePropositionClick = (tpiData, expertOrBoss) => {
     // Afficher le popup pour modifier le créneau
-    setCurrentTpiData(tpiData);
+    setCurrentTpiData(tpiData)
 
     if (tpiData[expertOrBoss]?.offres.submit.length > 0) {
       // Si le tableau n'est pas vide, afficher un message d'avertissement
-      alert("Attention : En continuant, vous écraserez les demandes précédentes !");
+      alert(
+        'Attention : En continuant, vous écraserez les demandes précédentes !'
+      )
     }
-    setScheduleSuggester(expertOrBoss);
-    setShowPopup(true);
-
+    setScheduleSuggester(expertOrBoss)
+    setShowPopup(true)
   }
 
   // Fonction pour rendre les boutons d'actions
   const renderActionButtons = (tpiData, how, expertOrBoss) => {
-    const isExpertValidated = tpiData[expertOrBoss]?.offres?.isValidated;
-    const isSubmitButtonActive = tpiData[expertOrBoss]?.offres?.submit;
+    const isExpertValidated = tpiData[expertOrBoss]?.offres?.isValidated
+    const isSubmitButtonActive = tpiData[expertOrBoss]?.offres?.submit
 
     // Classe pour indiquer l'invitation à valider (isValidated est null)
-    const invitationClass = isExpertValidated === null ? 'invitation' : '';
+    const invitationClass = isExpertValidated === null ? 'invitation' : ''
 
     // Classe pour indiquer true ou false pour isValidated
-    const isValidatedClass = isExpertValidated === true ? 'true' : isExpertValidated === false ? 'false' : 'null';
+    const isValidatedClass =
+      isExpertValidated === true
+        ? 'true'
+        : isExpertValidated === false
+          ? 'false'
+          : 'null'
 
     // Classe pour submit (soit vide, soit un tableau)
     const submitClass =
-      Array.isArray(isSubmitButtonActive) && isSubmitButtonActive.length === 0 ? 'empty' :
-        Array.isArray(isSubmitButtonActive) ? 'has-values' : '';
+      Array.isArray(isSubmitButtonActive) && isSubmitButtonActive.length === 0
+        ? 'empty'
+        : Array.isArray(isSubmitButtonActive)
+          ? 'has-values'
+          : ''
 
     // Texte par défaut pour le bouton d'acceptation
     // const acceptButtonText = '✔';
 
     // Taille du bouton HTML
-    const buttonSize = 21; // Taille du bouton en pixels
+    const buttonSize = 21 // Taille du bouton en pixels
 
-    const acceptButtonColorNOT = '#1C2033'; // Couleur par défaut
+    const acceptButtonColorNOT = '#1C2033' // Couleur par défaut
 
     const acceptButtonSvgNot = (
       <svg
         width={buttonSize}
         height={buttonSize}
-        viewBox="0 0 512 512"
+        viewBox='0 0 512 512'
         style={{ color: acceptButtonColorNOT }} // Utilisation de la variable de couleur
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-full w-full"
+        xmlns='http://www.w3.org/2000/svg'
+        className='h-full w-full'
       >
         {/* Conteneur SVG */}
-        <svg width="100%" height="100%" viewBox="0 0 16 14" fill={acceptButtonColorNOT} role="img" xmlns="http://www.w3.org/2000/svg">
+        <svg
+          width='100%'
+          height='100%'
+          viewBox='0 0 16 14'
+          fill={acceptButtonColorNOT}
+          role='img'
+          xmlns='http://www.w3.org/2000/svg'
+        >
           <g fill={acceptButtonColorNOT}>
-            <path fill="currentColor" d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z" />
+            <path
+              fill='currentColor'
+              d='M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z'
+            />
           </g>
         </svg>
       </svg>
-    );
+    )
 
-    const acceptButtonColorOK = '#00ff08';
+    const acceptButtonColorOK = '#00ff08'
 
     const acceptButtonSvgOK = (
       <svg
         width={buttonSize}
         height={buttonSize}
-        viewBox="0 0 512 512"
+        viewBox='0 0 512 512'
         style={{ color: acceptButtonColorOK }} // Utilisation de la variable de couleur
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-full w-full"
+        xmlns='http://www.w3.org/2000/svg'
+        className='h-full w-full'
       >
         {/* Conteneur SVG */}
-        <svg width="100%" height="100%" viewBox="0 0 16 14" fill={acceptButtonColorOK} role="img" xmlns="http://www.w3.org/2000/svg">
+        <svg
+          width='100%'
+          height='100%'
+          viewBox='0 0 16 14'
+          fill={acceptButtonColorOK}
+          role='img'
+          xmlns='http://www.w3.org/2000/svg'
+        >
           <g fill={acceptButtonColorOK}>
-            <path fill="currentColor" d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z" />
+            <path
+              fill='currentColor'
+              d='M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z'
+            />
           </g>
         </svg>
       </svg>
-    );
+    )
 
     // Emoji par défaut pour le bouton de proposition
     // const submitButtonEmoji = '📅';
-    const submitButtonColor = '#000000'; // Couleur par défaut
+    const submitButtonColor = '#000000' // Couleur par défaut
 
     const submitButtonSvg = (
       <svg
         width={buttonSize}
         height={buttonSize}
-        viewBox="0 0 512 512"
+        viewBox='0 0 512 512'
         style={{ color: submitButtonColor }}
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-full w-full"
+        xmlns='http://www.w3.org/2000/svg'
+        className='h-full w-full'
       >
         {/* Conteneur SVG */}
-        <svg width="100%" height="100%" viewBox="0 0 24 24" fill={submitButtonColor} xmlns="http://www.w3.org/2000/svg">
+        <svg
+          width='100%'
+          height='100%'
+          viewBox='0 0 24 24'
+          fill={submitButtonColor}
+          xmlns='http://www.w3.org/2000/svg'
+        >
           <g fill={submitButtonColor}>
-            <path fill="currentColor" d="m21.7 13.35l-1 1l-2.05-2l1-1c.2-.21.54-.22.77 0l1.28 1.28c.19.2.19.52 0 .72M12 18.94V21h2.06l6.06-6.12l-2.05-2L12 18.94M5 19h5v2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h1V1h2v2h8V1h2v2h1a2 2 0 0 1 2 2v4H5v10M5 5v2h14V5H5Z" />
+            <path
+              fill='currentColor'
+              d='m21.7 13.35l-1 1l-2.05-2l1-1c.2-.21.54-.22.77 0l1.28 1.28c.19.2.19.52 0 .72M12 18.94V21h2.06l6.06-6.12l-2.05-2L12 18.94M5 19h5v2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h1V1h2v2h8V1h2v2h1a2 2 0 0 1 2 2v4H5v10M5 5v2h14V5H5Z'
+            />
           </g>
         </svg>
       </svg>
-    );
+    )
 
-    const expertPropositions = (tpiData[expertOrBoss]?.offres && tpiData[expertOrBoss].offres.submit) || null;
+    const expertPropositions =
+      (tpiData[expertOrBoss]?.offres && tpiData[expertOrBoss].offres.submit) ||
+      null
 
-    let proposedSlot = '';
+    let proposedSlot = ''
     if (expertPropositions) {
       for (const proposition of expertPropositions) {
-        const date = new Date(proposition.date).toLocaleDateString();
-        const creneau = proposition.creneau;
-        proposedSlot += `${date}/${creneau}\n`;
+        const date = new Date(proposition.date).toLocaleDateString()
+        const creneau = proposition.creneau
+        proposedSlot += `${date}/${creneau}\n`
       }
     } else {
       // Gérez le cas où expertPropositions est null ici
       // Par exemple, si le client n'a pas encore fait d'offre, vous pouvez afficher un message ou une valeur par défaut
-      proposedSlot = "Aucune offre faite par le client.";
+      proposedSlot = 'Aucune offre faite par le client.'
     }
-    const person = listOfPerson.find(person => person.name === how);
-    let token = null; // Initialisez token à null par défaut
+    const person = listOfPerson.find(person => person.name === how)
+    let isTokenThisPerson = null // Initialisez token à null par défaut
     if (person) {
-      token = person.token; // Si person est défini, récupérez le token
+      isTokenThisPerson = person.token // Si person est défini, récupérez le token
     }
 
     return (
@@ -250,117 +316,169 @@ const RenderRooms = ({ year, tpiDatas, schedule, listOfPerson, filters, loadData
         <button
           title={`✔\tEn attente de validation\nOK\tCréneau validé\nX\tCréneau refusé`}
           className={`button-${isValidatedClass}`}
-          onClick={() => token === paramsToken && handleAcceptClick(year, tpiData, expertOrBoss)}
+          onClick={() =>
+            isTokenThisPerson === token &&
+            handleAcceptClick(year, tpiData, expertOrBoss)
+          }
         >
-          {isValidatedClass === 'true' ? acceptButtonSvgOK : isValidatedClass === 'false' ? 'X' : acceptButtonSvgNot}
-
+          {isValidatedClass === 'true'
+            ? acceptButtonSvgOK
+            : isValidatedClass === 'false'
+              ? 'X'
+              : acceptButtonSvgNot}
         </button>
         <button
           title={`${proposedSlot}`}
           className={`button-${submitClass}`}
-          onClick={() => token === paramsToken && handlePropositionClick(tpiData, expertOrBoss)}>
-          {submitClass === 'has-values' ? '-' : submitClass === 'empty' ? submitButtonSvg : ''}
+          onClick={() =>
+            isTokenThisPerson === token &&
+            handlePropositionClick(tpiData, expertOrBoss)
+          }
+        >
+          {submitClass === 'has-values'
+            ? '-'
+            : submitClass === 'empty'
+              ? submitButtonSvg
+              : ''}
         </button>
       </div>
     )
   }
 
-  const isAnyFilterApplied = filters.expert !== "" || filters.candidate !== "" || filters.projectManager !== "";
+  const isAnyFilterApplied =
+    filters.experts !== '' ||
+    filters.candidate !== '' ||
+    filters.projectManager !== ''
 
   const logAndClosePopup = () => {
-    console.log("Fermeture de la popup...");
-    setShowPopup(false); // Assurez-vous que setShowPopup est défini dans le scope de cette fonction
-    loadData();
-  };
+    console.log('Fermeture de la popup...')
+    setShowPopup(false) // Assurez-vous que setShowPopup est défini dans le scope de cette fonction
+    loadData()
+  }
 
   return (
     <div className='salles-container'>
       {tpiDatas.map((salle, indexSalle) => (
-
         <div key={indexSalle} className={`salle ${salle.site}`}>
           <span className='site'>{salle.site}</span>
           <div className={`header_${indexSalle}`}>
             <h3>{formatDate(salle.date)}</h3>
             <h4>{salle.name}</h4>
-            <div className="header-row">
-              <div className="header-cell">Nom du Candidat</div>
-              <div className="header-cell">Expert 1</div>
-              <div className="header-cell">Expert 2</div>
-              <div className="header-cell">Chef de Projet</div>
+            <div className='header-row'>
+              <div className='header-cell'>Nom du Candidat</div>
+              <div className='header-cell'>Expert 1</div>
+              <div className='header-cell'>Expert 2</div>
+              <div className='header-cell'>Chef de Projet</div>
             </div>
           </div>
 
           {schedule.map((slot, index) => {
             // Assurez-vous que tpiData est défini avant de l'utiliser
-            const tpiData = salle.tpiDatas ? salle.tpiDatas[index] : null;
+            const tpiData = salle.tpiDatas ? salle.tpiDatas[index] : null
 
-            const { candidat, expert1, expert2, boss } = tpiData || {};
+            const { candidat, expert1, expert2, boss } = tpiData || {}
 
-            // fonction pour simplifier 
-            const findPersonTokenByName = (name) => listOfPerson.find(person => person.name === name)?.token;
+            // fonction pour simplifier
+            const findPersonTokenByName = name =>
+              listOfPerson.find(person => person.name === name)?.token
 
             // const candidatToken = findPersonTokenByName(candidat);
-            const expert1Token = findPersonTokenByName(expert1?.name);
-            const expert2Token = findPersonTokenByName(expert2?.name);
-            const bossToken = findPersonTokenByName(boss?.name);
-
+            const expert1Token = findPersonTokenByName(expert1?.name)
+            const expert2Token = findPersonTokenByName(expert2?.name)
+            const bossToken = findPersonTokenByName(boss?.name)
 
             // Continuez uniquement si tpiData est défini
-            if (!tpiData) return null;
+            if (!tpiData) return null
 
             // Extrait le numéro de ligne à partir de l'ID de tpiData
-            const lineNumber = tpiData.id.split('_').pop();
+            const lineNumber = tpiData.id.split('_').pop()
 
             return (
               <Fragment key={`${indexSalle}-${slot.startTime}-${slot.endTime}`}>
-
-                <div className='tpi-data' id={tpiData?.id}>
-                  <div className={`${!isAnyFilterApplied ? 'no-filter' : 'time-label'}`}>
+                <div
+                  className='tpi-data'
+                  id={tpiData?.id}
+                  title={`${schedule[lineNumber].startTime} - ${schedule[lineNumber].endTime}`}
+                >
+                  <div
+                    className={`${!isAnyFilterApplied ? 'no-filter' : 'time-label'
+                      }`}
+                  >
                     {`${schedule[lineNumber].startTime} - ${schedule[lineNumber].endTime}`}
                   </div>
 
                   <div className='tpi-container'>
                     <div className='tpi-entry tpi-candidat'>
                       <div className='tpi-entry'>
-                        <TruncatedText text={tpiData?.candidat} maxLength={30} />
+                        <TruncatedText
+                          text={tpiData?.candidat}
+                          maxLength={30}
+                        />
                       </div>
                     </div>
 
-                    <div className={`tpi-entry ${paramsToken && expert1Token !== paramsToken ? 'gris' : ''}`}>
-                      <div className='tpi-expert1'>
-                        Expert1 {': '}
-                      </div>
+                    <div
+                      className={`tpi-entry ${!isOn && token && expert1Token !== token ? 'gris' : ''
+                        }`}
+                    >
+                      <div className='tpi-expert1'>Expert1 {': '}</div>
 
-                      <div className={`tpi-entry ${paramsToken === expert1Token ? 'stabilo' : ''}`}>
-                        <TruncatedText text={tpiData?.expert1.name} maxLength={25} />
+                      <div
+                        className={`tpi-entry ${!isOn && token === expert1Token ? 'stabilo' : ''
+                          }`}
+                      >
+                        <TruncatedText
+                          text={tpiData?.expert1.name}
+                          maxLength={25}
+                        />
                       </div>
-                      {renderActionButtons(tpiData, tpiData?.expert1.name, 'expert1')}
+                      {renderActionButtons(
+                        tpiData,
+                        tpiData?.expert1.name,
+                        'expert1'
+                      )}
                     </div>
 
-                    <div className={`tpi-entry ${paramsToken && expert2Token !== paramsToken ? 'gris' : ''}`}>
+                    <div
+                      className={`tpi-entry ${!isOn && token && expert2Token !== token ? 'gris' : ''
+                        }`}
+                    >
+                      <div className='tpi-expert2'>Expert2 {': '}</div>
 
-                      <div className='tpi-expert2'>
-                        Expert2 {': '}
+                      <div
+                        className={`tpi-entry ${!isOn && token === expert2Token ? 'stabilo' : ''
+                          }`}
+                      >
+                        <TruncatedText
+                          text={tpiData?.expert2.name}
+                          maxLength={25}
+                        />
                       </div>
 
-                      <div className={`tpi-entry ${paramsToken === expert2Token ? 'stabilo' : ''}`}>
-                        <TruncatedText text={tpiData?.expert2.name} maxLength={25} />
-                      </div>
-
-                      {renderActionButtons(tpiData, tpiData?.expert2.name, 'expert2')}
+                      {renderActionButtons(
+                        tpiData,
+                        tpiData?.expert2.name,
+                        'expert2'
+                      )}
                     </div>
 
-                    <div className={`tpi-entry ${paramsToken && bossToken !== paramsToken ? 'gris' : ''}`}>
-                      <div className='tpi-boss'>
-                        CDP {' >> '}
-                      </div>
-                      <div className={`tpi-entry ${paramsToken === bossToken ? 'stabilo' : ''}`}>
-                        <TruncatedText text={tpiData?.boss.name} maxLength={25} />
+                    <div
+                      className={`tpi-entry ${!isOn && token && bossToken !== token ? 'gris' : ''
+                        }`}
+                    >
+                      <div className='tpi-boss'>CDP {' >> '}</div>
+                      <div
+                        className={`tpi-entry ${!isOn && token === bossToken ? 'stabilo' : ''
+                          }`}
+                      >
+                        <TruncatedText
+                          text={tpiData?.boss.name}
+                          maxLength={25}
+                        />
                       </div>
                       {renderActionButtons(tpiData, tpiData?.boss.name, 'boss')}
                     </div>
                   </div>
-
                 </div>
               </Fragment>
             )
@@ -386,98 +504,176 @@ const TpiSoutenance = () => {
   const [listOfExpertsOrBoss, setListOfExpertsOrBoss] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isOn, setIsOn] = useState(false)
 
-  // filtres 
+  const token = useToken()
+  // filtres
   const [filters, setFilters] = useState({
     site: '',
     date: '',
     candidate: '',
-    expert: '',
+    experts: '',
+    projectManagerButton: '',
     projectManager: ''
-  });
+  })
 
   const filteredData = useMemo(() => {
     return soutenanceData.flatMap(room => {
       // Filtre les TPIs dans chaque salle basée sur les critères de filtre
       const filteredTpis = room.tpiDatas.filter(tpi => {
-        return (!filters.site || room.site === filters.site) &&
+        return (
+          (!filters.site || room.site === filters.site) &&
           (!filters.date || formatDate(room.date) === filters.date) &&
-          (!filters.candidate || tpi.candidat.toLowerCase().includes(filters.candidate.toLowerCase())) &&
-          (!filters.expert || [tpi.expert1?.name, tpi.expert2?.name].some(name => name && name.toLowerCase().includes(filters.expert.toLowerCase()))) &&
-          (!filters.projectManager || (tpi.boss?.name && tpi.boss.name.toLowerCase().includes(filters.projectManager.toLowerCase())));
-      });
-
+          (!filters.candidate ||
+            tpi.candidat
+              .toLowerCase()
+              .includes(filters.candidate.toLowerCase())) &&
+          (!filters.experts || // Nouvelle condition pour les experts
+            tpi.expert1?.name
+              .toLowerCase()
+              .includes(filters.experts.toLowerCase()) ||
+            tpi.expert2?.name
+              .toLowerCase()
+              .includes(filters.experts.toLowerCase())) &&
+          (!filters.projectManagerButton || // bouton Mes TPI
+            tpi.expert1?.name
+              .toLowerCase()
+              .includes(filters.projectManagerButton.toLowerCase()) ||
+            tpi.expert2?.name
+              .toLowerCase()
+              .includes(filters.projectManagerButton.toLowerCase()) ||
+            tpi.boss?.name
+              .toLowerCase()
+              .includes(filters.projectManagerButton.toLowerCase())) &&
+          (!filters.projectManager ||
+            (tpi.boss?.name &&
+              tpi.boss.name
+                .toLowerCase()
+                .includes(filters.projectManager.toLowerCase())))
+        )
+      })
       // Retourne une copie de l'objet salle avec les TPIs filtrés si des TPIs correspondent aux filtres
       if (filteredTpis.length > 0) {
-        return { ...room, tpiDatas: filteredTpis };
+        return { ...room, tpiDatas: filteredTpis }
       } else {
-        return [];  // Retourne un tableau vide si aucun TPI ne correspond aux filtres dans cette salle
+        return [] // Retourne un tableau vide si aucun TPI ne correspond aux filtres dans cette salle
       }
-    });
-  }, [soutenanceData, filters]); // Dépendances : `soutenanceData` et `filters`
+    })
+  }, [soutenanceData, filters]) // Dépendances : `soutenanceData` et `filters`
+
+  // const filteredData = useMemo(() => {
+  //   return soutenanceData.flatMap(room => {
+  //     // Filtre les TPIs dans chaque salle basée sur les critères de filtre
+  //     const filteredTpis = room.tpiDatas.filter(tpi => {
+  //       return (
+  //         (!filters.site || room.site === filters.site) &&
+  //         (!filters.date || formatDate(room.date) === filters.date) &&
+  //         (!filters.candidate ||
+  //           tpi.candidat
+  //             .toLowerCase()
+  //             .includes(filters.candidate.toLowerCase())) &&
+  //         (!filters.expert1 ||
+  //           (tpi.expert1?.name &&
+  //             tpi.expert1.name.toLowerCase().includes(filters.expert1))) &&
+  //         (!filters.expert2 ||
+  //           (tpi.expert2?.name &&
+  //             tpi.expert2.name.toLowerCase().includes(filters.expert2))) &&
+  //         (!filters.projectManager ||
+  //           (tpi.boss?.name &&
+  //             tpi.boss.name
+  //               .toLowerCase()
+  //               .includes(filters.projectManager.toLowerCase())))
+  //       )
+  //     })
+  //     // Retourne une copie de l'objet salle avec les TPIs filtrés si des TPIs correspondent aux filtres
+  //     if (filteredTpis.length > 0) {
+  //       return { ...room, tpiDatas: filteredTpis }
+  //     } else {
+  //       return [] // Retourne un tableau vide si aucun TPI ne correspond aux filtres dans cette salle
+  //     }
+  //   })
+  // }, [soutenanceData, filters]) // Dépendances : `soutenanceData` et `filters`
+
+  // Construction des selects
 
   const uniqueDates = useMemo(() => {
-    const dates = soutenanceData.map(tpi => formatDate(tpi.date));
-    return [...new Set(dates)].sort();
-  }, [soutenanceData]);
+    const dates = soutenanceData.map(tpi => formatDate(tpi.date))
+    return [...new Set(dates)].sort()
+  }, [soutenanceData])
 
   const uniqueSites = useMemo(() => {
-    const sites = soutenanceData.map(tpi => tpi.site);
-    return [...new Set(sites)].sort();
-  }, [soutenanceData]);
+    const sites = soutenanceData.map(tpi => tpi.site)
+    return [...new Set(sites)].sort()
+  }, [soutenanceData])
 
   const uniqueCandidates = useMemo(() => {
-    const candidates = new Set(soutenanceData.flatMap(room => room.tpiDatas.map(tpi => tpi.candidat)));
-    return Array.from(candidates).sort();
-  }, [soutenanceData]);
+    const candidates = new Set(
+      soutenanceData.flatMap(room => room.tpiDatas.map(tpi => tpi.candidat))
+    )
+    return Array.from(candidates).sort()
+  }, [soutenanceData])
 
   const uniqueExperts = useMemo(() => {
-    const experts = new Set(soutenanceData.flatMap(room => room.tpiDatas.flatMap(tpi => [tpi.expert1?.name, tpi.expert2?.name].filter(name => name))));
-    return Array.from(experts).sort();
-  }, [soutenanceData]);
+    const experts = new Set(
+      soutenanceData.flatMap(room =>
+        room.tpiDatas.flatMap(tpi =>
+          [tpi.expert1?.name, tpi.expert2?.name].filter(name => name)
+        )
+      )
+    )
+    return Array.from(experts).sort()
+  }, [soutenanceData])
 
   const uniqueProjectManagers = useMemo(() => {
-    const managers = new Set(soutenanceData.flatMap(room => room.tpiDatas.map(tpi => tpi.boss?.name).filter(name => name)));
-    return Array.from(managers).sort();
-  }, [soutenanceData]);
-
+    const managers = new Set(
+      soutenanceData.flatMap(room =>
+        room.tpiDatas.map(tpi => tpi.boss?.name).filter(name => name)
+      )
+    )
+    return Array.from(managers).sort()
+  }, [soutenanceData])
 
   const updateFilter = (filterName, value) => {
-    setFilters(prevFilters => ({ ...prevFilters, [filterName]: value }));
-  };
+    // Pour les autres filtres, met simplement à jour le filtre correspondant
+
+    console.log('etat des filtres : ', filterName,' value :' ,value)
+    setFilters(prevFilters => ({
+      ...prevFilters,
+      [filterName]: value
+    }))
+  }
 
   // Fonction pour récupérer les données
   const loadData = async () => {
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const data = await fetchSoutenanceData(year);
+      const data = await fetchSoutenanceData(year)
       if (data) {
-        setSoutenanceData(data);
-        const expertsList = await fetchTpiListExperts();
+        setSoutenanceData(data)
+        const expertsList = await fetchTpiListExperts()
         if (expertsList) {
-          setListOfExpertsOrBoss(expertsList);
+          setListOfExpertsOrBoss(expertsList)
         }
       } else {
-        setError('Impossible de charger les données');
+        setError('Impossible de charger les données')
       }
     } catch (err) {
-      setError('Erreur lors du chargement des données');
-      console.error(err);
+      setError('Erreur lors du chargement des données')
+      console.error(err)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    loadData();
-  }, [year]);
-
+    loadData()
+  }, []) // peut-être nécessaire d'ajouter year...
 
   /**
    * Crée un tableau d'horaires pour les soutenances basé sur les paramètres fournis.
    * Pour chaque créneau, elle calcule l'heure de début et de fin en fonction du temps alloué pour chaque TPI
    * et des pauses, puis formate ces horaires avant de les ajouter au tableau.
-   * 
+   *
    * @param {Object} soutenanceData - Contient les paramètres de configuration comme le temps par TPI,
    *                                  l'heure de début du premier TPI, et le nombre total de créneaux.
    * @returns {Array} - Un tableau contenant les horaires de début et de fin pour chaque créneau de soutenance.
@@ -526,52 +722,155 @@ const TpiSoutenance = () => {
   if (isLoading) {
     return <div>Chargement...</div>
   }
-
   if (error) {
     return <div>Erreur : {error}</div>
   }
 
-  const isFilterApplied = filters.expert !== "" || filters.candidate !== "" || filters.projectManager !== "";
+  /**
+   * Composant pour filtrer à l'aide d'un bouton selon les experts donnés en paramètre.
+   *
+   * @param {Object} props - Les propriétés du composant.
+   * @param {boolean} props.isOn - Indique si le filtre est activé ou non.
+   * @param {function} props.setIsOn - Fonction pour mettre à jour l'état du filtre.
+   * @param {function} props.updateFilter - Fonction pour mettre à jour le filtre.
+   * @param {Object} props.expertOrBoss - Informations sur l'expert ou le chef de projet.
+   * @returns {JSX.Element} - Élément JSX représentant le bouton de filtre.
+   */
+  const ToggleFilterButton = ({
+    isOn,
+    setIsOn,
+    updateFilter,
+    expertOrBoss
+  }) => {
+    let role = expertOrBoss.role === "projectManager" ? "projectManagerButton" : expertOrBoss.role;
+    const handleClick = () => {
+      if (isOn) {
+        updateFilter(role,expertOrBoss.name)
+      } else {
+        updateFilter(role,'')
+      }
+      setIsOn(!isOn) // Inverse l'état du filtre
+    }
+
+    return (
+      <button
+        className={`btnFiltre ${isOn ? 'active' : 'inactive'}`}
+        onClick={handleClick}
+      >
+        {`Mes TPI`}
+      </button>
+    )
+  }
+
+  // faire fonction pour supprimer les espaces ...
+
+  const isFilterApplied =
+    filters.experts !== '' ||
+    filters.candidate !== '' ||
+    filters.projectManager !== '' ||
+    filters.projectManagerButton !== '' 
+
+  let userName = null
+  const expertOrBoss = listOfExpertsOrBoss.find(item => item.token === token)
+  if (expertOrBoss) {
+    userName = expertOrBoss.name
+  } else {
+    userName = 'visiteur'
+  }
 
   // Ajout de champs d'entrée pour les filtres restants
   return (
     <Fragment>
-
       <h1 className={isDemo ? 'demo' : 'title'}> Soutenances de {year}</h1>
-
       <div className='filters'>
-        <select value={filters.date} onChange={e => updateFilter('date', e.target.value)}>
-          <option value="">Toutes les dates</option>
+        <div className='welcom'>
+          <p>Bonjour {userName}</p>
+        </div>
+        {/* Afficher des boutons de filtrage direct pour les experts ou les chefs de projet */}
+        {userName !== 'visiteur' && (
+          <>
+            <div>
+              {/* Vérifier si l'utilisateur est un chef de projet et afficher le bouton de filtrage correspondant */}
+              {expertOrBoss && expertOrBoss.role !== 'candidate' && (
+                <ToggleFilterButton
+                  isOn={isOn}
+                  setIsOn={setIsOn}
+                  updateFilter={updateFilter}
+                  expertOrBoss={expertOrBoss}
+                />
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Afficher les options de filtre spécifiques aux experts */}
+        {userName === 'visiteur' && (
+          <>
+            <select
+              value={filters.experts}
+              onChange={e => updateFilter('experts', e.target.value)}
+            >
+              <option value=''>Tous les experts</option>
+              {uniqueExperts.map(expert => (
+                <option key={expert} value={expert}>
+                  {expert}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filters.projectManager}
+              onChange={e => updateFilter('projectManager', e.target.value)}
+            >
+              <option value=''>Tous les chefs de projet</option>
+              {uniqueProjectManagers.map(manager => (
+                <option key={manager} value={manager}>
+                  {manager}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filters.candidate}
+              onChange={e => updateFilter('candidate', e.target.value)}
+            >
+              <option value=''>Tous les candidats</option>
+              {uniqueCandidates.map(candidate => {
+                if (candidate.trim() !== '') {
+                  return (
+                    <option key={candidate} value={candidate}>
+                      {candidate}
+                    </option>
+                  )
+                }
+                // Assurez-vous de retourner une valeur par défaut si la condition n'est pas remplie
+                return null
+              })}
+            </select>
+          </>
+        )}
+
+        <select
+          value={filters.date}
+          onChange={e => updateFilter('date', e.target.value)}
+        >
+          <option value=''>Toutes les dates</option>
           {uniqueDates.map(date => (
-            <option key={date} value={date}>{date}</option>
+            <option key={date} value={date}>
+              {date}
+            </option>
           ))}
         </select>
 
-        <select value={filters.site} onChange={e => updateFilter('site', e.target.value)}>
-          <option value="">Tous les sites</option>
+        <select
+          value={filters.site}
+          onChange={e => updateFilter('site', e.target.value)}
+        >
+          <option value=''>Tous les sites</option>
           {uniqueSites.map(site => (
-            <option key={site} value={site}>{site}</option>
-          ))}
-        </select>
-
-        <select value={filters.expert} onChange={e => updateFilter('expert', e.target.value)}>
-          <option value="">Tous les experts</option>
-          {uniqueExperts.map(expert => (
-            <option key={expert} value={expert}>{expert}</option>
-          ))}
-        </select>
-
-        <select value={filters.candidate} onChange={e => updateFilter('candidate', e.target.value)}>
-          <option value="">Tous les candidats</option>
-          {uniqueCandidates.map(candidate => (
-            <option key={candidate} value={candidate}>{candidate}</option>
-          ))}
-        </select>
-
-        <select value={filters.projectManager} onChange={e => updateFilter('projectManager', e.target.value)}>
-          <option value="">Tous les chefs de projet</option>
-          {uniqueProjectManagers.map(manager => (
-            <option key={manager} value={manager}>{manager}</option>
+            <option key={site} value={site}>
+              {site}
+            </option>
           ))}
         </select>
       </div>
@@ -582,15 +881,17 @@ const TpiSoutenance = () => {
           {!isFilterApplied && renderSchedule(schedule)}
           <RenderRooms
             year={year}
-            tpiDatas={filteredData} // normalement ici c'est soutenancedata 
+            tpiDatas={filteredData} // normalement ici c'est soutenancedata
             schedule={schedule}
             listOfPerson={listOfExpertsOrBoss}
             filters={filters}
             loadData={loadData}
+            token={token}
+            isOn={isOn}
           />
         </div>
       </div>
-    </Fragment >
+    </Fragment>
   )
 }
 export default TpiSoutenance
