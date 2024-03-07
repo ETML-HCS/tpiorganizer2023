@@ -351,10 +351,7 @@ const RenderRooms = ({
     filters.projectManager !== '' ||
     filters.projectManagerButton != ''
 
-  console.log('ligne_354: ', isAnyFilterApplied)
-
   const logAndClosePopup = () => {
-    console.log('Fermeture de la popup...')
     setShowPopup(false) // Assurez-vous que setShowPopup est défini dans le scope de cette fonction
     loadData()
   }
@@ -518,7 +515,7 @@ const TpiSoutenance = () => {
   const [isOn, setIsOn] = useState(false)
 
   const token = useToken()
-  
+
   // filtres
   const [filters, setFilters] = useState({
     site: '',
@@ -614,8 +611,6 @@ const TpiSoutenance = () => {
 
   const updateFilter = (filterName, value) => {
     // Pour les autres filtres, met simplement à jour le filtre correspondant
-
-    console.log('etat des filtres : ', filterName, ' value :', value)
     setFilters(prevFilters => ({
       ...prevFilters,
       [filterName]: value
