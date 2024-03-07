@@ -87,7 +87,7 @@ const updateSoutenanceData = async (year, propositions, tpi, expertOrBoss) => {
   }
 }
 
-function TruncatedText({ text, maxLength }) {
+function TruncatedText ({ text, maxLength }) {
   const isTruncated = text.length > maxLength
   return (
     <div
@@ -105,7 +105,7 @@ const formatDate = dateString => {
   return new Intl.DateTimeFormat('fr-FR', options).format(new Date(dateString))
 }
 
-function renderSchedule(schedule) {
+function renderSchedule (schedule) {
   return (
     <div className='horairesBox'>
       {schedule.map((slot, i) => (
@@ -181,16 +181,16 @@ const RenderRooms = ({
       isExpertValidated === true
         ? 'true'
         : isExpertValidated === false
-          ? 'false'
-          : 'null'
+        ? 'false'
+        : 'null'
 
     // Classe pour submit (soit vide, soit un tableau)
     const submitClass =
       Array.isArray(isSubmitButtonActive) && isSubmitButtonActive.length === 0
         ? 'empty'
         : Array.isArray(isSubmitButtonActive)
-          ? 'has-values'
-          : ''
+        ? 'has-values'
+        : ''
 
     // Texte par défaut pour le bouton d'acceptation
     // const acceptButtonText = '✔';
@@ -324,8 +324,8 @@ const RenderRooms = ({
           {isValidatedClass === 'true'
             ? acceptButtonSvgOK
             : isValidatedClass === 'false'
-              ? 'X'
-              : acceptButtonSvgNot}
+            ? 'X'
+            : acceptButtonSvgNot}
         </button>
         <button
           title={`${proposedSlot}`}
@@ -338,8 +338,8 @@ const RenderRooms = ({
           {submitClass === 'has-values'
             ? '-'
             : submitClass === 'empty'
-              ? submitButtonSvg
-              : ''}
+            ? submitButtonSvg
+            : ''}
         </button>
       </div>
     )
@@ -348,7 +348,10 @@ const RenderRooms = ({
   const isAnyFilterApplied =
     filters.experts !== '' ||
     filters.candidate !== '' ||
-    filters.projectManager !== ''
+    filters.projectManager !== '' ||
+    filters.projectManagerButton != ''
+
+  console.log('ligne_354: ', isAnyFilterApplied)
 
   const logAndClosePopup = () => {
     console.log('Fermeture de la popup...')
@@ -401,8 +404,9 @@ const RenderRooms = ({
                   title={`${schedule[lineNumber].startTime} - ${schedule[lineNumber].endTime}`}
                 >
                   <div
-                    className={`${!isAnyFilterApplied ? 'no-filter' : 'time-label'
-                      }`}
+                    className={`${
+                      !isAnyFilterApplied ? 'no-filter' : 'time-label'
+                    }`}
                   >
                     {`${schedule[lineNumber].startTime} - ${schedule[lineNumber].endTime}`}
                   </div>
@@ -418,14 +422,16 @@ const RenderRooms = ({
                     </div>
 
                     <div
-                      className={`tpi-entry ${!isOn && token && expert1Token !== token ? 'gris' : ''
-                        }`}
+                      className={`tpi-entry ${
+                        !isOn && token && expert1Token !== token ? 'gris' : ''
+                      }`}
                     >
                       <div className='tpi-expert1'>Expert1 {': '}</div>
 
                       <div
-                        className={`tpi-entry ${!isOn && token === expert1Token ? 'stabilo' : ''
-                          }`}
+                        className={`tpi-entry ${
+                          !isOn && token === expert1Token ? 'stabilo' : ''
+                        }`}
                       >
                         <TruncatedText
                           text={tpiData?.expert1.name}
@@ -440,14 +446,16 @@ const RenderRooms = ({
                     </div>
 
                     <div
-                      className={`tpi-entry ${!isOn && token && expert2Token !== token ? 'gris' : ''
-                        }`}
+                      className={`tpi-entry ${
+                        !isOn && token && expert2Token !== token ? 'gris' : ''
+                      }`}
                     >
                       <div className='tpi-expert2'>Expert2 {': '}</div>
 
                       <div
-                        className={`tpi-entry ${!isOn && token === expert2Token ? 'stabilo' : ''
-                          }`}
+                        className={`tpi-entry ${
+                          !isOn && token === expert2Token ? 'stabilo' : ''
+                        }`}
                       >
                         <TruncatedText
                           text={tpiData?.expert2.name}
@@ -463,13 +471,15 @@ const RenderRooms = ({
                     </div>
 
                     <div
-                      className={`tpi-entry ${!isOn && token && bossToken !== token ? 'gris' : ''
-                        }`}
+                      className={`tpi-entry ${
+                        !isOn && token && bossToken !== token ? 'gris' : ''
+                      }`}
                     >
                       <div className='tpi-boss'>CDP {' >> '}</div>
                       <div
-                        className={`tpi-entry ${!isOn && token === bossToken ? 'stabilo' : ''
-                          }`}
+                        className={`tpi-entry ${
+                          !isOn && token === bossToken ? 'stabilo' : ''
+                        }`}
                       >
                         <TruncatedText
                           text={tpiData?.boss.name}
@@ -501,12 +511,14 @@ const RenderRooms = ({
 const TpiSoutenance = () => {
   const { year } = useParams()
   const [soutenanceData, setSoutenanceData] = useState([])
+  const [expertOrBoss, setExpertOrBoss] = useState(null);
   const [listOfExpertsOrBoss, setListOfExpertsOrBoss] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOn, setIsOn] = useState(false)
 
   const token = useToken()
+  
   // filtres
   const [filters, setFilters] = useState({
     site: '',
@@ -561,39 +573,6 @@ const TpiSoutenance = () => {
     })
   }, [soutenanceData, filters]) // Dépendances : `soutenanceData` et `filters`
 
-  // const filteredData = useMemo(() => {
-  //   return soutenanceData.flatMap(room => {
-  //     // Filtre les TPIs dans chaque salle basée sur les critères de filtre
-  //     const filteredTpis = room.tpiDatas.filter(tpi => {
-  //       return (
-  //         (!filters.site || room.site === filters.site) &&
-  //         (!filters.date || formatDate(room.date) === filters.date) &&
-  //         (!filters.candidate ||
-  //           tpi.candidat
-  //             .toLowerCase()
-  //             .includes(filters.candidate.toLowerCase())) &&
-  //         (!filters.expert1 ||
-  //           (tpi.expert1?.name &&
-  //             tpi.expert1.name.toLowerCase().includes(filters.expert1))) &&
-  //         (!filters.expert2 ||
-  //           (tpi.expert2?.name &&
-  //             tpi.expert2.name.toLowerCase().includes(filters.expert2))) &&
-  //         (!filters.projectManager ||
-  //           (tpi.boss?.name &&
-  //             tpi.boss.name
-  //               .toLowerCase()
-  //               .includes(filters.projectManager.toLowerCase())))
-  //       )
-  //     })
-  //     // Retourne une copie de l'objet salle avec les TPIs filtrés si des TPIs correspondent aux filtres
-  //     if (filteredTpis.length > 0) {
-  //       return { ...room, tpiDatas: filteredTpis }
-  //     } else {
-  //       return [] // Retourne un tableau vide si aucun TPI ne correspond aux filtres dans cette salle
-  //     }
-  //   })
-  // }, [soutenanceData, filters]) // Dépendances : `soutenanceData` et `filters`
-
   // Construction des selects
 
   const uniqueDates = useMemo(() => {
@@ -636,14 +615,13 @@ const TpiSoutenance = () => {
   const updateFilter = (filterName, value) => {
     // Pour les autres filtres, met simplement à jour le filtre correspondant
 
-    console.log('etat des filtres : ', filterName,' value :' ,value)
+    console.log('etat des filtres : ', filterName, ' value :', value)
     setFilters(prevFilters => ({
       ...prevFilters,
       [filterName]: value
     }))
   }
 
-  // Fonction pour récupérer les données
   const loadData = async () => {
     setIsLoading(true)
     try {
@@ -667,7 +645,21 @@ const TpiSoutenance = () => {
 
   useEffect(() => {
     loadData()
-  }, []) // peut-être nécessaire d'ajouter year...
+  }, [])
+
+useEffect(() => {
+  if (listOfExpertsOrBoss && listOfExpertsOrBoss.length > 0) {
+    const foundExpertOrBoss = listOfExpertsOrBoss.find(item => item.token === token);
+    // Mettez à jour la variable d'état avec la valeur trouvée
+    setExpertOrBoss(foundExpertOrBoss);
+    if (foundExpertOrBoss && foundExpertOrBoss.name !== null) {
+      // Assurez-vous que expertOrBoss est défini avant de l'utiliser
+      updateFilter('projectManagerButton', foundExpertOrBoss.name);
+    }
+  }
+}, [listOfExpertsOrBoss, token]);
+
+// Utilisez expertOrBoss dans votre code où vous en avez besoin
 
   /**
    * Crée un tableau d'horaires pour les soutenances basé sur les paramètres fournis.
@@ -678,8 +670,7 @@ const TpiSoutenance = () => {
    *                                  l'heure de début du premier TPI, et le nombre total de créneaux.
    * @returns {Array} - Un tableau contenant les horaires de début et de fin pour chaque créneau de soutenance.
    */
-
-  function createSchedule(soutenanceData) {
+  function createSchedule (soutenanceData) {
     const schedule = []
     const { breakline, tpiTime, firstTpiStart, numSlots } =
       soutenanceData.configSite
@@ -694,10 +685,12 @@ const TpiSoutenance = () => {
       let endHours = Math.floor(endTime)
       let endMinutes = Math.floor((endTime % 1) * 60)
 
-      let startTimeFormatted = `${startHours < 10 ? '0' + startHours : startHours
-        }:${startMinutes < 10 ? '0' + startMinutes : startMinutes}`
-      let endTimeFormatted = `${endHours < 10 ? '0' + endHours : endHours}:${endMinutes < 10 ? '0' + endMinutes : endMinutes
-        }`
+      let startTimeFormatted = `${
+        startHours < 10 ? '0' + startHours : startHours
+      }:${startMinutes < 10 ? '0' + startMinutes : startMinutes}`
+      let endTimeFormatted = `${endHours < 10 ? '0' + endHours : endHours}:${
+        endMinutes < 10 ? '0' + endMinutes : endMinutes
+      }`
 
       if (i !== 7) {
         endTime += breakline
@@ -742,12 +735,15 @@ const TpiSoutenance = () => {
     updateFilter,
     expertOrBoss
   }) => {
-    let role = expertOrBoss.role === "projectManager" ? "projectManagerButton" : expertOrBoss.role;
+    let role =
+      expertOrBoss.role === 'projectManager'
+        ? 'projectManagerButton'
+        : expertOrBoss.role
     const handleClick = () => {
       if (isOn) {
-        updateFilter(role,expertOrBoss.name)
+        updateFilter(role, expertOrBoss.name)
       } else {
-        updateFilter(role,'')
+        updateFilter(role, '')
       }
       setIsOn(!isOn) // Inverse l'état du filtre
     }
@@ -762,36 +758,34 @@ const TpiSoutenance = () => {
     )
   }
 
-  // faire fonction pour supprimer les espaces ...
-
   const isFilterApplied =
     filters.experts !== '' ||
     filters.candidate !== '' ||
     filters.projectManager !== '' ||
-    filters.projectManagerButton !== '' 
+    filters.projectManagerButton !== ''
 
-  let userName = null
-  const expertOrBoss = listOfExpertsOrBoss.find(item => item.token === token)
-  if (expertOrBoss) {
-    userName = expertOrBoss.name
-  } else {
-    userName = 'visiteur'
-  }
-
-  // Ajout de champs d'entrée pour les filtres restants
   return (
     <Fragment>
       <h1 className={isDemo ? 'demo' : 'title'}> Soutenances de {year}</h1>
       <div className='filters'>
-        <div className='welcom'>
-          <p>Bonjour {userName}</p>
-        </div>
+        {expertOrBoss && expertOrBoss.name !== null && (
+          <div className='welcom'>
+            <p>Bonjour {expertOrBoss.name}</p>
+          </div>
+        )}
+
+        {!expertOrBoss && (
+          <div className='welcom'>
+            <p>Bonjour Visiteur</p>
+          </div>
+        )}
+
         {/* Afficher des boutons de filtrage direct pour les experts ou les chefs de projet */}
-        {userName !== 'visiteur' && (
+        {expertOrBoss && expertOrBoss.name !== null && (
           <>
             <div>
               {/* Vérifier si l'utilisateur est un chef de projet et afficher le bouton de filtrage correspondant */}
-              {expertOrBoss && expertOrBoss.role !== 'candidate' && (
+              {expertOrBoss.role !== 'candidate' && (
                 <ToggleFilterButton
                   isOn={isOn}
                   setIsOn={setIsOn}
@@ -804,7 +798,7 @@ const TpiSoutenance = () => {
         )}
 
         {/* Afficher les options de filtre spécifiques aux experts */}
-        {userName === 'visiteur' && (
+        {expertOrBoss && expertOrBoss.name === null && (
           <>
             <select
               value={filters.experts}
@@ -843,7 +837,6 @@ const TpiSoutenance = () => {
                     </option>
                   )
                 }
-                // Assurez-vous de retourner une valeur par défaut si la condition n'est pas remplie
                 return null
               })}
             </select>
@@ -881,7 +874,7 @@ const TpiSoutenance = () => {
           {!isFilterApplied && renderSchedule(schedule)}
           <RenderRooms
             year={year}
-            tpiDatas={filteredData} // normalement ici c'est soutenancedata
+            tpiDatas={filteredData}
             schedule={schedule}
             listOfPerson={listOfExpertsOrBoss}
             filters={filters}
