@@ -14,7 +14,11 @@ import DateRoom from './DateRoom'
 const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
 
 // Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = process.env.REACT_APP_API_URL
+const apiUrl = debugMode
+  ? process.env.REACT_APP_API_URL_TRUE
+  : process.env.REACT_APP_API_URL_FALSE
+
+console.log(apiUrl)
 
 function updateTpiDatas (room) {
   // Parcours de chaque tpiData dans room.tpiDatas
@@ -392,12 +396,11 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     saveDataToLocalStorage(updatedNewRooms)
   }
 
-  const handleonFetchConfig = async () => {
-    // Prévoir une amélioration de ce système
-    const currentYear = new Date().getFullYear()
-
+  const handleonFetchConfig = async selectedYear => {
+    showNotification("Chargement depuis la BDD")
     try {
-      const response = await fetch(`${apiUrl}/api/tpiRoomYear/${currentYear}`)
+      console.log(`${apiUrl}/api/tpiRoomYear/${selectedYear}`)
+      const response = await fetch(`${apiUrl}/api/tpiRoomYear/${selectedYear}`)
 
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération de la configuration.')
@@ -410,16 +413,15 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
       // Enregistrer les nouvelles données dans localStorage
       localStorage.setItem('organizerData', JSON.stringify(configData))
-
       console.log(
         "Configuration chargée pour l'année",
-        currentYear,
+        selectedYear,
         ':',
         configData
       )
+      showNotification(`Configuration chargée pour l'année ${selectedYear}`)
     } catch (error) {
       console.error('Erreur lors du chargement de la configuration:', error)
-      // Gérer l'erreur ici (par exemple, afficher une notification)
     }
   }
 

@@ -1,13 +1,15 @@
 import axios from "axios";
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === 'true'; // Convertir en booléen si nécessaire
+const debugMode = process.env.REACT_APP_DEBUG === 'true'; 
+
 // Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = process.env.REACT_APP_API_URL;
+const apiUrl = debugMode ? process.env.REACT_APP_API_URL_TRUE : process.env.REACT_APP_API_URL_FALSE
 
 export const createTpiModel = async (modelData) => {
   try {
-    const response = await axios.post(`${apiUrl}/save-tpi`, modelData);
+    console.log(`${apiUrl}/save-tpi`, modelData)
+    const response = await axios.post(`${apiUrl}/api/save-tpi`, modelData);
     return response.data;
   } catch (error) {
     console.error("Erreur lors de la création du modèle de TPI:", error);
@@ -19,7 +21,8 @@ export const createTpiModel = async (modelData) => {
 
 export const getTpiModels = async () => {
   try {
-    const response = await axios.get(`${apiUrl}/get-tpi`);
+    console.log(`${apiUrl}/api/get-tpi`)
+    const response = await axios.get(`${apiUrl}/api/get-tpi`);
     return response.data;
     
   } catch (error) {
