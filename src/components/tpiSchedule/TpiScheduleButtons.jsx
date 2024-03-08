@@ -5,9 +5,10 @@ import axios from 'axios'
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
 const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
-
 // Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = process.env.REACT_APP_API_URL
+const apiUrl = debugMode
+  ? process.env.REACT_APP_API_URL_TRUE
+  : process.env.REACT_APP_API_URL_FALSE
 
 const TpiScheduleButtons = ({
   onNewRoom,
@@ -19,7 +20,6 @@ const TpiScheduleButtons = ({
   configData,
   onLoadConfig,
   toggleArrow,
-  isArrowUp,
   onFetchConfig
 }) => {
   const [showForm, setShowForm] = useState(false)
@@ -29,8 +29,9 @@ const TpiScheduleButtons = ({
   const years = [2023, 2024, 2025, 2026]
 
   // Appelle la fonction fournie par le composant parent
-  const handleFetchConfig = () => {
-    onFetchConfig()
+  const handleFetchConfig = selectedYear => {
+    console.log(selectedYear)
+    onFetchConfig(selectedYear)
   }
 
   const handleAddRoom = () => {
@@ -171,11 +172,11 @@ const TpiScheduleButtons = ({
           />
 
           <button
-            onClick={handleFetchConfig}
+            onClick={() => handleFetchConfig(selectedYear)}
             id='btFetchConfig'
             title='Charger les salles depuis la base de données'
           >
-            Salles{'<-'}BDD 🧬
+            Salles{'<-'}BDD🧬
           </button>
 
           <button

@@ -27,8 +27,8 @@ app.use(cors())
 app.use(express.json())
 
 app.get('/', (req, res) => {
-  res.send('App is Working')
-})
+  res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`);
+});
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 
@@ -434,7 +434,7 @@ app.get('/api/check-room-existence/:idRoom', async (req, res) => {
 })
 
 // Route to get all TPI models
-app.get('/get-tpi', async (req, res) => {
+app.get('/api/get-tpi', async (req, res) => {
   console.log('get-tpi')
   try {
     const models = await TpiModels.find()

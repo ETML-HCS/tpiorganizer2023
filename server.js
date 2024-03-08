@@ -1,32 +1,34 @@
 const express = require('express')
 const cors = require('cors')
-const bodyParser = require('body-parser')
 
-const db = require('./src/config/dbConfig')
+const db = require('./config/dbConfig')
+
+const bodyParser = require('body-parser')
+const nodemailer = require('nodemailer')
 const mongoose = require('mongoose')
 
-const nodemailer = require('nodemailer')
-
-const PropositionSchema = require('./src/models/propositionModel')
-const TpiModels = require('./src/models/tpiModels')
-const User = require('./src/models/userModels')
+const TpiModels = require('./models/tpiModels')
+const User = require('./models/userModels')
 const {
   createTpiRoomModel,
   createCustomTpiRoomModel,
   tpiRoomSchema
-} = require('./src/models/tpiRoomsModels')
+} = require('./models/tpiRoomsModels')
 
-const TpiExperts = require('./src/models/tpiExpertsModel')
+const TpiExperts = require('./models/tpiExpertsModel')
+const { is } = require('date-fns/locale')
 
 const app = express()
-const port = 5000
+
+const isDemo = process.env.REACT_APP_DEBUG === 'true' 
+const port = isDemo ?  5000: 6000;
 
 app.use(cors())
 app.use(express.json())
 
 app.get('/', (req, res) => {
-  res.send('App is Working')
-})
+  res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`);
+});
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 
@@ -43,13 +45,11 @@ app.post('/api/send-email', async (req, res) => {
  * @returns {Promise} - Une promesse qui se résout avec le document trouvé ou null si aucun n'a été trouvé.
  */
 function findResponsableByName (bossName) {
-  return tpiExperts.findOne({ boss: bossName }).exec()
+  return TpiExperts.findOne({ boss: bossName }).exec()
 }
 
-// ... (la fonction findResponsableByName définie précédemment)
-
 // Route GET pour chercher un responsable par son nom
-app.get('/makeToken/:bossName', (req, res) => {
+app.get('/api/makeToken/:bossName', (req, res) => {
   const bossName = req.params.bossName
 
   findResponsableByName(bossName)
@@ -338,7 +338,7 @@ app.put(
   }
 )
 
-app.post('/save-tpi-rooms/:year', async (req, res) => {
+app.post('/api/save-tpi-rooms/:year', async (req, res) => {
   const year = req.params.year
   const roomData = req.body
 
@@ -389,7 +389,7 @@ app.post('/save-tpi-rooms/:year', async (req, res) => {
 
 // TPI MODEL
 
-app.post('/save-tpi', async (req, res) => {
+app.post('/api/save-tpi', async (req, res) => {
   try {
     const modelData = req.body
     const savedModel = await TpiModels.findOneAndUpdate(
@@ -434,7 +434,7 @@ app.get('/api/check-room-existence/:idRoom', async (req, res) => {
 })
 
 // Route to get all TPI models
-app.get('/get-tpi', async (req, res) => {
+app.get('/api/get-tpi', async (req, res) => {
   console.log('get-tpi')
   try {
     const models = await TpiModels.find()
@@ -446,7 +446,7 @@ app.get('/get-tpi', async (req, res) => {
   }
 })
 
-app.put('/update-tpi/:id', async (req, res) => {
+app.put('/api/update-tpi/:id', async (req, res) => {
   const tpiId = req.params.id
   const updateData = req.body
 
@@ -478,7 +478,7 @@ app.put('/update-tpi/:id', async (req, res) => {
   }
 })
 
-app.get('/get-tpi/:id', async (req, res) => {
+app.get('/api/get-tpi/:id', async (req, res) => {
   const tpiId = req.params.id
 
   try {
@@ -497,7 +497,7 @@ app.get('/get-tpi/:id', async (req, res) => {
 })
 
 // TPI ROOMS
-app.post('/create-tpi-collection/:year', async (req, res) => {
+app.post('/api/create-tpi-collection/:year', async (req, res) => {
   const year = req.params.year
   const roomData = req.body
 
@@ -520,7 +520,7 @@ app.post('/create-tpi-collection/:year', async (req, res) => {
   }
 })
 
-app.get('/get-tpi-rooms', async (req, res) => {
+app.get('/api/get-tpi-rooms', async (req, res) => {
   try {
     const rooms = await TpiRooms.find()
     console.log('TPI rooms retrieved:', rooms)
@@ -531,7 +531,7 @@ app.get('/get-tpi-rooms', async (req, res) => {
   }
 })
 
-app.get('/get-tpi-room/:id', async (req, res) => {
+app.get('/api/get-tpi-room/:id', async (req, res) => {
   try {
     const roomId = req.params.id
     const room = await TpiRooms.findById(roomId)
@@ -543,7 +543,7 @@ app.get('/get-tpi-room/:id', async (req, res) => {
   }
 })
 
-app.put('/update-tpi-room/:id', async (req, res) => {
+app.put('/api/update-tpi-room/:id', async (req, res) => {
   try {
     const roomId = req.params.id
     const roomData = req.body
@@ -568,7 +568,7 @@ app.put('/update-tpi-room/:id', async (req, res) => {
   }
 })
 
-app.delete('/delete-tpi-room/:id', async (req, res) => {
+app.delete('/api/delete-tpi-room/:id', async (req, res) => {
   try {
     const roomId = req.params.id
     await TpiRooms.findByIdAndDelete(roomId)
@@ -582,7 +582,7 @@ app.delete('/delete-tpi-room/:id', async (req, res) => {
 
 // TPI USERS
 
-app.post('/inscription', async (req, res) => {
+app.post('/api/inscription', async (req, res) => {
   try {
     const userData = req.body
     const user = new User(userData)
@@ -597,7 +597,7 @@ app.post('/inscription', async (req, res) => {
   }
 })
 
-app.get('/suivi-etudiants', async (req, res) => {
+app.get('/api/suivi-etudiants', async (req, res) => {
   try {
     const users = await User.find()
     res.json(users)
@@ -607,7 +607,7 @@ app.get('/suivi-etudiants', async (req, res) => {
   }
 })
 
-app.put('/suivi-etudiants/:id', async (req, res) => {
+app.put('/api/suivi-etudiants/:id', async (req, res) => {
   const userId = req.params.id
   const updateData = req.body
 
@@ -624,7 +624,7 @@ app.put('/suivi-etudiants/:id', async (req, res) => {
 })
 
 // Route to overwrite data in tpiRooms_2024 with tpiSoutenance_2024
-app.post('/overwrite-tpi-rooms/:year', async (req, res) => {
+app.post('/api/overwrite-tpi-rooms/:year', async (req, res) => {
   const year = req.params.year
   const collectionNameSoutenance = `tpiSoutenance_${year}`
   const collectionNameRooms = `tpiRooms_${year}`
