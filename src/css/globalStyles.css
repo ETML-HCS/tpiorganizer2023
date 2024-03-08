@@ -138,3 +138,30 @@
   padding: 10px;
   border-radius: 5px;
 }
+
+
+/* Footer.css */
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  color: black; /* Couleur de texte par défaut */
+  padding: 10px 20px;
+  font-size: 12px;
+  text-align: right;
+  transition: color 0.3s; /* Ajout d'une transition sur la couleur */
+}
+
+.footer:hover {
+  color: #ff6f61; /* Couleur du texte au survol */
+}
+
+.footer-content p {
+  margin: 0;
+}
+
+.footer-content p:first-child,
+.footer-content p:last-child {
+  margin-right: 40px;
+}

@@ -84,7 +84,6 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 
     setIsArrowUp(prevIsArrowUp => !prevIsArrowUp)
   }
-
   return (
     <Fragment>
       {/* Entête */}
@@ -140,6 +139,16 @@ const Layout = ({ isAuthenticated, login, logout }) => {
         {/* Routes toujours accessibles, authentifié ou non */}
         <Route path='/calendrierDefenses/:year' element={<TpiSoutenance />} />
       </Routes>
+
+      {/* pied de page */}
+      <footer className='footer'>
+        <div className='footer-content'>
+          <p>
+            Réalisé par Helder Costa Lopes pour l'ETML/CFPV | © 2023 Tpi
+            Organizer - Tous droits réservés
+          </p>
+        </div>
+      </footer>
     </Fragment>
   )
 }

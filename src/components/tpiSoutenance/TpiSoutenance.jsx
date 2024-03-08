@@ -15,7 +15,6 @@ const apiUrl = isDemo
   ? process.env.REACT_APP_API_URL_TRUE
   : process.env.REACT_APP_API_URL_FALSE
 
-
 const useToken = () => {
   const location = useLocation()
   const queryParams = new URLSearchParams(location.search)
@@ -511,11 +510,11 @@ const RenderRooms = ({
 const TpiSoutenance = () => {
   const { year } = useParams()
   const [soutenanceData, setSoutenanceData] = useState([])
-  const [expertOrBoss, setExpertOrBoss] = useState(null);
+  const [expertOrBoss, setExpertOrBoss] = useState(null)
   const [listOfExpertsOrBoss, setListOfExpertsOrBoss] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [isOn, setIsOn] = useState(false)
+  const [isOn, setIsOn] = useState(true)
 
   const token = useToken()
 
@@ -645,19 +644,21 @@ const TpiSoutenance = () => {
     loadData()
   }, [])
 
-useEffect(() => {
-  if (listOfExpertsOrBoss && listOfExpertsOrBoss.length > 0) {
-    const foundExpertOrBoss = listOfExpertsOrBoss.find(item => item.token === token);
-    // Mettez à jour la variable d'état avec la valeur trouvée
-    setExpertOrBoss(foundExpertOrBoss);
-    if (foundExpertOrBoss && foundExpertOrBoss.name !== null) {
-      // Assurez-vous que expertOrBoss est défini avant de l'utiliser
-      updateFilter('projectManagerButton', foundExpertOrBoss.name);
+  useEffect(() => {
+    if (listOfExpertsOrBoss && listOfExpertsOrBoss.length > 0) {
+      const foundExpertOrBoss = listOfExpertsOrBoss.find(
+        item => item.token === token
+      )
+      // Mettez à jour la variable d'état avec la valeur trouvée
+      setExpertOrBoss(foundExpertOrBoss)
+      if (foundExpertOrBoss && foundExpertOrBoss.name !== null) {
+        // Assurez-vous que expertOrBoss est défini avant de l'utiliser
+        updateFilter('projectManagerButton', foundExpertOrBoss.name)
+      }
     }
-  }
-}, [listOfExpertsOrBoss, token]);
+  }, [listOfExpertsOrBoss, token])
 
-// Utilisez expertOrBoss dans votre code où vous en avez besoin
+  // Utilisez expertOrBoss dans votre code où vous en avez besoin
 
   /**
    * Crée un tableau d'horaires pour les soutenances basé sur les paramètres fournis.
@@ -737,18 +738,25 @@ useEffect(() => {
       expertOrBoss.role === 'projectManager'
         ? 'projectManagerButton'
         : expertOrBoss.role
+
     const handleClick = () => {
-      if (isOn) {
-        updateFilter(role, expertOrBoss.name)
-      } else {
-        updateFilter(role, '')
-      }
-      setIsOn(!isOn) // Inverse l'état du filtre
+      // Utilisez une fonction de rappel pour garantir que vous utilisez la valeur la plus récente de isOn
+      setIsOn(prevIsOn => {
+        // Inverse l'état du filtre
+        const newIsOn = !prevIsOn
+        if (newIsOn) {
+          updateFilter(role, expertOrBoss.name)
+        } else {
+          updateFilter(role, '')
+        }
+        // Retourne la nouvelle valeur de isOn
+        return newIsOn
+      })
     }
 
     return (
       <button
-        className={`btnFiltre ${isOn ? 'active' : 'inactive'}`}
+        className={`btnFilters ${isOn ? 'active' : 'inactive'}`}
         onClick={handleClick}
       >
         {`Mes TPI`}
@@ -765,6 +773,7 @@ useEffect(() => {
   return (
     <Fragment>
       <h1 className={isDemo ? 'demo' : 'title'}> Soutenances de {year}</h1>
+
       <div className='filters'>
         {expertOrBoss && expertOrBoss.name !== null && (
           <div className='welcom'>
@@ -796,7 +805,7 @@ useEffect(() => {
         )}
 
         {/* Afficher les options de filtre spécifiques aux experts */}
-        {expertOrBoss && expertOrBoss.name === null && (
+        {!expertOrBoss && (
           <>
             <select
               value={filters.experts}
@@ -866,7 +875,10 @@ useEffect(() => {
         </select>
       </div>
 
-      <div id='soutenances'>
+      <div
+        id='soutenances'
+        className={`soutenances ${isOn ? 'filterActive' : 'filterInactive'}`}
+      >
         <div className='dataGrid'>
           {/* Affichez renderSchedule(schedule) seulement si aucun filtre spécifique n'est appliqué */}
           {!isFilterApplied && renderSchedule(schedule)}

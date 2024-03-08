@@ -29,11 +29,16 @@ body {
   padding: 5px;
 }
 
-/* Styles de base pour les éléments HTML */
+.demo{
+  position: fixed;
+}
+
 h1 {
+  width: 100%;
   font-size: 2.5em;
   margin-bottom: 0px;
   margin-top: 5px;
+  margin-left: 15px;
   text-transform: capitalize;
   font-weight: bold;
   background-image: linear-gradient(to left, var(--accent-color-etml), var(--accent-color-cfpv));
@@ -48,13 +53,14 @@ h1::before {
   /* Cela va forcer le contenu à apparaître sur une nouvelle ligne */
   position: absolute;
   top: 0;
-  right: 5px;
+  right: 40px;
   font-size: 0.7rem;
   color: white;
   background: #777;
   padding: 8px;
   border-radius: 5px;
   font-weight: bold;
+  z-index: 100;
 }
 
 h3 {
@@ -75,14 +81,39 @@ p {
   padding: 0;
 }
 
-.welcom{
-  position: absolute;
-  left: 20px;
-  top: 8px;  
-  font-size: 1.6em;
+.filters {
+  display: flex;
+  justify-content: flex-end;
+ 
+  position: fixed;
+  top: 60px; /* Position fixe en haut de la fenêtre */
+  left: 0; /* Position fixe à gauche de la fenêtre */
+  
+  height: 40px;
+  width: 100%;
+  
+  background-color: white; /* Fond blanc pour l'exemple */
+  margin-top: 20px;
+  gap: var(--grid-gap);
+  z-index: 99; /* Assure que la barre est au-dessus du contenu */
 }
 
-.btnFiltre {
+.filters select{
+  height: 30px;
+  text-align: center;
+  border: none;
+  font-size: 1.2em;
+  padding: 3px;
+  background-color: transparent;
+}
+
+.welcom{
+  position: absolute;
+  left: 30px;
+  font-size: 2em;
+}
+
+.btnFilters {
   height: 30px;
   background-color: #f2f2f2; /* Couleur de fond blanc */
   border: none;
@@ -94,18 +125,26 @@ p {
   transition: background-color 0.3s, color 0.3s; /* Transition fluide */
 }
 
-.btnFiltre.active {
+.btnFilters.active {
   background-color: #777; /* Couleur de fond bleue */
-  color: #ffffff; /* Couleur du texte blanc */
+  color: white; /* Couleur du texte blanc */
 }
 
-.btnFiltre:hover {
+.btnFilters:hover {
  filter:opacity(70%);
 }
 
 /* Styles spécifiques des classes et sélecteurs */
-#soutenances {
-  margin-top: 10px;
+.soutenances {
+  width: 100%;
+  margin-top: 120px;
+  z-index: 1000;
+  background-color: white;
+  margin-bottom: 50px;
+}
+
+.soutenances.filterActive {
+  margin-left: 65px;
 }
 
 .dataGrid {
@@ -146,9 +185,11 @@ p {
 }
 
 .salles-container {
-  grid-column: 2;
-  display: inline-flex;
+  display: flex;
+  flex-direction: row;
+
   gap: var(--grid-gap);
+  
 }
 
 [class^="salle ETML"] {
@@ -451,25 +492,6 @@ p {
   background-color: var(--accent-color-etml);
 }
 
-.filters {
-  display: flex;
-  position: relative;
-  width: 100%;
-  justify-content: flex-end;
-  gap: var(--grid-gap);
-  margin-top: 0;
-  margin-bottom: 0;
-  margin-right: 5px;
-}
-
-.filters select{
-  height: 30px;
-  text-align: center;
-  border: none;
-  border-radius: 5px;
-  padding: 3px;
-  background-color: transparent;
-}
 
 .ETML .time-label {
   font-size: 0.8rem;
@@ -568,7 +590,7 @@ p {
   }
 
   h1 {
-    font-size: 20pt;
+    font-size: 16pt;
     text-align: center;
     margin-top: 0;
     margin-bottom: 1px;
@@ -615,15 +637,7 @@ p {
     /* Cache les éléments non nécessaires à l'impression */
   }
 
-  .salles-container {
-    display: flex;
-    /* Utilise flexbox pour le conteneur des salles */
-    flex-direction: column;
-    /* Les salles sont affichées en colonne */
-    align-items: center;
-    /* Centre les salles horizontalement */
-    margin: 0;
-  }
+
 
   [class^="salle"] {
     display: table;
@@ -689,7 +703,7 @@ p {
 
   .site {
     display: block;
-    z-index: 99;
+    z-index: 100;
     font-weight: 700;
   }
 
