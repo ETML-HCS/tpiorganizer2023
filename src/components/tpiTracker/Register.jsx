@@ -4,7 +4,7 @@ import {
   createUser,
   getUsers,
   updateUser,
-} from "../tpiControllers/TpiUsersController";
+} from "../tpiControllers/tpiUsersController";
 
 const InputField = ({ type, placeholder, value, onChange }) => {
   return (

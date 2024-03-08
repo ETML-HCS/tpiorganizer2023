@@ -1,11 +1,11 @@
 import React, { useState } from 'react'
 import Papa from 'papaparse'
-import { updateMarginTopPage } from '../Utils'
+import { updateMarginTopPage } from '../tools.jsx'
 import {
   createTpiModel,
   getTpiModels,
   updateTpiModel
-} from '../tpiControllers/TpiController'
+} from '../tpiControllers/tpiController.jsx'
 
 const TpiManagementButtons = ({ onNewTpi, newTpi, toggleArrow, isArrowUp }) => {
   // État pour gérer l'affichage du formulaire d'importation

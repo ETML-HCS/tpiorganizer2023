@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react'
 
-import TpiScheduleButtons from './TpiScheduleButtons'
-import { showNotification } from '../Utils'
+import TpiScheduleButtons from './tpiScheduleButtons'
+import { showNotification } from '../tools.jsx'
 
 import {
   createTpiCollectionForYear,
   transmitToDatabase
-} from '../tpiControllers/TpiRoomsController'
+} from '../tpiControllers/tpiRoomsController.jsx'
 
-import DateRoom from './DateRoom'
+import DateRoom from './dateRoom'
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
 const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire

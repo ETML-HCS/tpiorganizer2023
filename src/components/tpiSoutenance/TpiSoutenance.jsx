@@ -1,17 +1,20 @@
 import React, { useState, useEffect, Fragment, useMemo } from 'react'
 
 import { useLocation, useParams } from 'react-router-dom'
-import CreneauPropositionPopup from './CreneauPropositionPopup'
+import CreneauPropositionPopup from './creneauPropositionPopup'
 
-import { showNotification } from '../Utils'
+import { showNotification } from '../tools.jsx'
 
 import '../../css/tpiSoutenance/tpiSoutenance.css'
 
 // Pour accéder à la variable d'environnement REACT_APP_API_URL
 const isDemo = process.env.REACT_APP_DEBUG === 'true' // affiche version démonstration
+
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
 const apiUrl = isDemo
   ? process.env.REACT_APP_API_URL_TRUE
   : process.env.REACT_APP_API_URL_FALSE
+
 
 const useToken = () => {
   const location = useLocation()

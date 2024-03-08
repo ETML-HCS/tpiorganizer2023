@@ -1,6 +1,6 @@
 import React from 'react'
-import TpiSlot from './TpiSlot'
-import BreakLine from './BreakLine'
+import TpiSlot from './tpiSlot'
+import BreakLine from './breakLine'
 import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 import { format } from 'date-fns'

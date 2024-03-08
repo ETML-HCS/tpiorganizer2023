@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useDrag } from 'react-dnd'
-import { ItemTypes } from './Constants'
-import { getTpiModels } from '../tpiControllers/TpiController'
+import { ItemTypes } from './constants'
+import { getTpiModels } from '../tpiControllers/tpiController'
 
 const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   const [editedTpi, setEditedTpi] = useState(tpi)

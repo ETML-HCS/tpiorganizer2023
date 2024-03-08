@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { showNotification } from '../Utils'
+import { showNotification } from '../tools.jsx'
 import config from '../../config/configO2023.json'
 
 const CreneauPropositionPopup = ({
@@ -18,11 +18,12 @@ const CreneauPropositionPopup = ({
   const { year } = useParams() // Extrait l'année des paramètres d'URL
 
   // Pour accéder à la variable d'environnement REACT_APP_DEBUG
-  const debugMode = process.env.REACT_APP_DEBUG === 'true'; // Convertir en booléen si nécessaire
+  const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
 
   // Pour accéder à la variable d'environnement REACT_APP_API_URL
-  const apiUrl = process.env.REACT_APP_API_URL;
-
+  const apiUrl = debugMode
+    ? process.env.REACT_APP_API_URL_TRUE
+    : process.env.REACT_APP_API_URL_FALSE
 
   useEffect(() => {
     if (schedule.length > 0) {

@@ -1,9 +1,12 @@
 import axios from 'axios';
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === 'true'; // Convertir en booléen si nécessaire
+const debugMode = process.env.REACT_APP_DEBUG === 'true'
+
 // Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = process.env.REACT_APP_API_URL;
+const apiUrl = debugMode
+  ? process.env.REACT_APP_API_URL_TRUE
+  : process.env.REACT_APP_API_URL_FALSE
 
 const createUserUrl = `${apiUrl}/api/inscription`;
 const getUsersUrl = `${apiUrl}/api/suivi-etudiants`;
