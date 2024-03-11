@@ -29,6 +29,16 @@ body {
   padding: 5px;
 }
 
+.hidden {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  pointer-events: none; /* Pour empêcher les clics sur l'en-tête masqué */
+  position: fixed; /* Assurez-vous que l'en-tête masqué reste en place */
+  top: -100px; /* Déplacez l'en-tête masqué hors de l'écran */
+  left: 0;
+  right: 0;
+}
+
 .demo{
   position: fixed;
 }
@@ -84,7 +94,6 @@ p {
 .filters {
   display: flex;
   justify-content: flex-end;
- 
   position: fixed;
   top: 60px; /* Position fixe en haut de la fenêtre */
   left: 0; /* Position fixe à gauche de la fenêtre */
@@ -95,11 +104,11 @@ p {
   background-color: white; /* Fond blanc pour l'exemple */
   margin-top: 20px;
   gap: var(--grid-gap);
-  z-index: 99; /* Assure que la barre est au-dessus du contenu */
 }
 
 .filters select{
   height: 30px;
+  margin-right: 20px;
   text-align: center;
   border: none;
   font-size: 1.2em;
@@ -149,7 +158,7 @@ p {
 
 .dataGrid {
   display: grid;
-  grid-template-columns: auto auto;  
+  grid-template-columns: auto auto; 
 }
 
 .horairesBox {
@@ -158,8 +167,10 @@ p {
   grid-template-rows: auto;
   font-size: var(--font-size);
   margin-top: calc(var(--height-header) + var(--element-padding));
-  margin-left: 5px;
-  margin-right: 10px;
+  margin-left: -60px;
+  margin-right: 20px;
+  background-color: white;
+  width: 60px;
 }
 
 [class^="horaire_"] {

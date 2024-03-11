@@ -7,6 +7,7 @@ const bodyParser = require('body-parser')
 const nodemailer = require('nodemailer')
 const mongoose = require('mongoose')
 
+const TpiExperts = require('./models/tpiExpertsModel')
 const TpiModels = require('./models/tpiModels')
 const User = require('./models/userModels')
 const {
@@ -15,14 +16,11 @@ const {
   tpiRoomSchema
 } = require('./models/tpiRoomsModels')
 
-const TpiExperts = require('./models/tpiExpertsModel')
-const { is } = require('date-fns/locale')
-
-const app = express()
 
 const isDemo = process.env.REACT_APP_DEBUG === 'true' 
 const port = isDemo ?  5000: 6000;
 
+const app = express()
 app.use(cors())
 app.use(express.json())
 

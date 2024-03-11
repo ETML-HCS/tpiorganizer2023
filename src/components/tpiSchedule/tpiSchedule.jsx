@@ -11,7 +11,7 @@ import {
 import DateRoom from './dateRoom'
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
+const debugMode = (process.env.REACT_APP_DEBUG === 'true') // Convertir en booléen si nécessaire
 
 // Pour accéder à la variable d'environnement REACT_APP_API_URL
 const apiUrl = debugMode

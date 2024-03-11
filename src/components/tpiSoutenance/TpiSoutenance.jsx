@@ -351,7 +351,7 @@ const RenderRooms = ({
     filters.experts !== '' ||
     filters.candidate !== '' ||
     filters.projectManager !== '' ||
-    filters.projectManagerButton != ''
+    filters.projectManagerButton !==''
 
   const logAndClosePopup = () => {
     setShowPopup(false) // Assurez-vous que setShowPopup est défini dans le scope de cette fonction
@@ -515,6 +515,7 @@ const TpiSoutenance = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOn, setIsOn] = useState(true)
+  const [isScrolled, setIsScrolled] = useState(false)
 
   const token = useToken()
 
@@ -641,8 +642,20 @@ const TpiSoutenance = () => {
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      setIsScrolled(scrollPosition > 50);
+    };
+  
+    window.addEventListener('scroll', handleScroll);
+  
+    loadData(); // Appel à loadData() à l'intérieur de useEffect
+  
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+  
 
   useEffect(() => {
     if (listOfExpertsOrBoss && listOfExpertsOrBoss.length > 0) {
@@ -772,107 +785,109 @@ const TpiSoutenance = () => {
 
   return (
     <Fragment>
-      <h1 className={isDemo ? 'demo' : 'title'}> Soutenances de {year}</h1>
+      <div className={`header-soutenance ${isScrolled ? 'hidden' : ''}`}>
+        <h1 className={isDemo ? 'demo' : 'title'}> Soutenances de {year}</h1>
 
-      <div className='filters'>
-        {expertOrBoss && expertOrBoss.name !== null && (
-          <div className='welcom'>
-            <p>Bonjour {expertOrBoss.name}</p>
-          </div>
-        )}
-
-        {!expertOrBoss && (
-          <div className='welcom'>
-            <p>Bonjour Visiteur</p>
-          </div>
-        )}
-
-        {/* Afficher des boutons de filtrage direct pour les experts ou les chefs de projet */}
-        {expertOrBoss && expertOrBoss.name !== null && (
-          <>
-            <div>
-              {/* Vérifier si l'utilisateur est un chef de projet et afficher le bouton de filtrage correspondant */}
-              {expertOrBoss.role !== 'candidate' && (
-                <ToggleFilterButton
-                  isOn={isOn}
-                  setIsOn={setIsOn}
-                  updateFilter={updateFilter}
-                  expertOrBoss={expertOrBoss}
-                />
-              )}
+        <div className='filters'>
+          {expertOrBoss && expertOrBoss.name !== null && (
+            <div className='welcom'>
+              <p>Bonjour {expertOrBoss.name}</p>
             </div>
-          </>
-        )}
+          )}
 
-        {/* Afficher les options de filtre spécifiques aux experts */}
-        {!expertOrBoss && (
-          <>
-            <select
-              value={filters.experts}
-              onChange={e => updateFilter('experts', e.target.value)}
-            >
-              <option value=''>Tous les experts</option>
-              {uniqueExperts.map(expert => (
-                <option key={expert} value={expert}>
-                  {expert}
-                </option>
-              ))}
-            </select>
+          {!expertOrBoss && (
+            <div className='welcom'>
+              <p>Bonjour Visiteur</p>
+            </div>
+          )}
 
-            <select
-              value={filters.projectManager}
-              onChange={e => updateFilter('projectManager', e.target.value)}
-            >
-              <option value=''>Tous les chefs de projet</option>
-              {uniqueProjectManagers.map(manager => (
-                <option key={manager} value={manager}>
-                  {manager}
-                </option>
-              ))}
-            </select>
+          {/* Afficher des boutons de filtrage direct pour les experts ou les chefs de projet */}
+          {expertOrBoss && expertOrBoss.name !== null && (
+            <>
+              <div>
+                {/* Vérifier si l'utilisateur est un chef de projet et afficher le bouton de filtrage correspondant */}
+                {expertOrBoss.role !== 'candidate' && (
+                  <ToggleFilterButton
+                    isOn={isOn}
+                    setIsOn={setIsOn}
+                    updateFilter={updateFilter}
+                    expertOrBoss={expertOrBoss}
+                  />
+                )}
+              </div>
+            </>
+          )}
 
-            <select
-              value={filters.candidate}
-              onChange={e => updateFilter('candidate', e.target.value)}
-            >
-              <option value=''>Tous les candidats</option>
-              {uniqueCandidates.map(candidate => {
-                if (candidate.trim() !== '') {
-                  return (
-                    <option key={candidate} value={candidate}>
-                      {candidate}
-                    </option>
-                  )
-                }
-                return null
-              })}
-            </select>
-          </>
-        )}
+          {/* Afficher les options de filtre spécifiques aux experts */}
+          {!expertOrBoss && (
+            <>
+              <select
+                value={filters.experts}
+                onChange={e => updateFilter('experts', e.target.value)}
+              >
+                <option value=''>Tous les experts</option>
+                {uniqueExperts.map(expert => (
+                  <option key={expert} value={expert}>
+                    {expert}
+                  </option>
+                ))}
+              </select>
 
-        <select
-          value={filters.date}
-          onChange={e => updateFilter('date', e.target.value)}
-        >
-          <option value=''>Toutes les dates</option>
-          {uniqueDates.map(date => (
-            <option key={date} value={date}>
-              {date}
-            </option>
-          ))}
-        </select>
+              <select
+                value={filters.projectManager}
+                onChange={e => updateFilter('projectManager', e.target.value)}
+              >
+                <option value=''>Tous les chefs de projet</option>
+                {uniqueProjectManagers.map(manager => (
+                  <option key={manager} value={manager}>
+                    {manager}
+                  </option>
+                ))}
+              </select>
 
-        <select
-          value={filters.site}
-          onChange={e => updateFilter('site', e.target.value)}
-        >
-          <option value=''>Tous les sites</option>
-          {uniqueSites.map(site => (
-            <option key={site} value={site}>
-              {site}
-            </option>
-          ))}
-        </select>
+              <select
+                value={filters.candidate}
+                onChange={e => updateFilter('candidate', e.target.value)}
+              >
+                <option value=''>Tous les candidats</option>
+                {uniqueCandidates.map(candidate => {
+                  if (candidate.trim() !== '') {
+                    return (
+                      <option key={candidate} value={candidate}>
+                        {candidate}
+                      </option>
+                    )
+                  }
+                  return null
+                })}
+              </select>
+            </>
+          )}
+
+          <select
+            value={filters.date}
+            onChange={e => updateFilter('date', e.target.value)}
+          >
+            <option value=''>Toutes les dates</option>
+            {uniqueDates.map(date => (
+              <option key={date} value={date}>
+                {date}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.site}
+            onChange={e => updateFilter('site', e.target.value)}
+          >
+            <option value=''>Tous les sites</option>
+            {uniqueSites.map(site => (
+              <option key={site} value={site}>
+                {site}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div
