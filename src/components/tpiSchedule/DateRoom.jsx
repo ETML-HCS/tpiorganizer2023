@@ -1,12 +1,15 @@
 import React from 'react'
-import TpiSlot from './tpiSlot'
-import BreakLine from './breakLine'
+
 import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
+import TpiSlot from './TpiSlot'
+import BreakLine from './BreakLine'
+
 import '../../css/tpiShedule/tpiSheduleStyle.css'
+
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)

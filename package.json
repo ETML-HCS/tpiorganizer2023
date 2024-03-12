@@ -28,17 +28,19 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run serve\"",
-    "server": "node server.js", 
-    "serve":"serve -s build",
+    "start": "cross-env REACT_APP_DEBUG=true react-scripts start",
+    "build": "cross-env REACT_APP_DEBUG=false react-scripts build",
+    "server": "node server.js",
+    "serve": "serve -s build",
     "client": "react-scripts start",
-    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
-    "extends": ["react-app",
-      "react-app/jest"]
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
     "production": [
@@ -53,6 +55,7 @@
     ]
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
   }
 }

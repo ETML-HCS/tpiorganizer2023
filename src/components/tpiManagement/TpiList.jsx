@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import TpiForm from "./tpiForm";
+import TpiForm from "./TpiForm";
 
 const MAX_DISPLAY_TAGS = 1;
 

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { AES, enc } from "crypto-js";
 
-import Register from "./register.jsx";
-import RegisterToProjects from "./registerToProjets.jsx";
-import TpiTrackerButtons from "./tpiTrackerButtons.jsx";
+import Register from "./Register";
+import RegisterToProjects from "./RegisterToProjets";
+import TpiTrackerButtons from "./TpiTrackerButtons";
 
-import { getUsers } from "../tpiControllers/tpiUsersController.jsx";
+import { getUsers } from "../tpiControllers/TpiUsersController.jsx";
 
-import { showNotification } from "../tools.jsx";
+import { showNotification } from "../Tools.jsx";
 
 import "../../css/tpiTracker/tpiTrackerStyle.css";
 

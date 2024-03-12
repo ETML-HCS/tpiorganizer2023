@@ -8,15 +8,15 @@ import {
 
 import { Navigate, useNavigate } from 'react-router-dom'
 
-import Home from './components/home'
-import TpiSchedule from './components/tpiSchedule/tpiSchedule'
-import TpiManagement from './components/tpiManagement/tpiManagement'
-import TpiTracker from './components/tpiTracker/tpiTracker'
-import TpiSoutenance from './components/tpiSoutenance/tpiSoutenance'
-import TokenGenerator from './components/genToken/genToken'
-import LoginPage from './components/loginPage'
+import Home from './components/Home'
+import TpiSchedule from './components/tpiSchedule/TpiSchedule'
+import TpiManagement from './components/tpiManagement/TpiManagement'
+import TpiTracker from './components/tpiTracker/TpiTracker'
+import TpiSoutenance from './components/tpiSoutenance/TpiSoutenance'
+import TokenGenerator from './components/genToken/GenToken'
+import LoginPage from './components/LoginPage'
 
-import { showNotification } from './components/tools'
+import { showNotification } from './components/Tools'
 import './css/globalStyles.css'
 
 const bcrypt = require('bcryptjs')

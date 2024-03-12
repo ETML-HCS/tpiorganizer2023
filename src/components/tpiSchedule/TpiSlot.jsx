@@ -1,8 +1,8 @@
 import React from 'react'
 import { useDrop } from 'react-dnd'
 
-import TpiCard from './tpiCard'
-import { ItemTypes } from './constants'
+import TpiCard from './TpiCard'
+import { ItemTypes } from './Constants'
 
 const TpiSlot = ({
   tpiData,

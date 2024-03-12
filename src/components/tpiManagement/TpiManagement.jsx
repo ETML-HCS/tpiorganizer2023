@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 
-import { saveTpiToServer, getTpiFromServer } from "./tpiData";
-import TpiForm from "./tpiForm";
-import TpiList from "./tpiList";
-import TpiManagementButtons from "./tpiManagementButtons";
-import { updateMarginTopPage } from "../tools.jsx";
+import { saveTpiToServer, getTpiFromServer } from "./TpiData.jsx";
+import TpiForm from "./TpiForm.jsx";
+import TpiList from "./TpiList.jsx";
+import TpiManagementButtons from "./TpiManagementButtons.jsx";
+import { updateMarginTopPage } from "../Tools.jsx";
 
 import "../../css/tpiManagement/tpiManagementStyle.css";
 

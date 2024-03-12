@@ -1,9 +1,9 @@
 import React, { useState, useEffect, Fragment, useMemo } from 'react'
 
 import { useLocation, useParams } from 'react-router-dom'
-import CreneauPropositionPopup from './creneauPropositionPopup'
+import CreneauPropositionPopup from './CreneauPropositionPopup'
 
-import { showNotification } from '../tools.jsx'
+import { showNotification } from '../Tools'
 
 import '../../css/tpiSoutenance/tpiSoutenance.css'
 
@@ -351,7 +351,7 @@ const RenderRooms = ({
     filters.experts !== '' ||
     filters.candidate !== '' ||
     filters.projectManager !== '' ||
-    filters.projectManagerButton !==''
+    filters.projectManagerButton !== ''
 
   const logAndClosePopup = () => {
     setShowPopup(false) // Assurez-vous que setShowPopup est défini dans le scope de cette fonction
@@ -618,6 +618,8 @@ const TpiSoutenance = () => {
       ...prevFilters,
       [filterName]: value
     }))
+
+    console.log(filters)
   }
 
   const loadData = async () => {
@@ -643,19 +645,18 @@ const TpiSoutenance = () => {
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollPosition = window.scrollY;
-      setIsScrolled(scrollPosition > 50);
-    };
-  
-    window.addEventListener('scroll', handleScroll);
-  
-    loadData(); // Appel à loadData() à l'intérieur de useEffect
-  
+      const scrollPosition = window.scrollY
+      setIsScrolled(scrollPosition > 50)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+
+    loadData() // Appel à loadData() à l'intérieur de useEffect
+
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-  
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   useEffect(() => {
     if (listOfExpertsOrBoss && listOfExpertsOrBoss.length > 0) {
@@ -666,7 +667,9 @@ const TpiSoutenance = () => {
       setExpertOrBoss(foundExpertOrBoss)
       if (foundExpertOrBoss && foundExpertOrBoss.name !== null) {
         // Assurez-vous que expertOrBoss est défini avant de l'utiliser
-        updateFilter('projectManagerButton', foundExpertOrBoss.name)
+        foundExpertOrBoss.role === 'projectManager'
+          ? updateFilter('projectManagerButton', foundExpertOrBoss.name)
+          : updateFilter('experts', foundExpertOrBoss.name)
       }
     }
   }, [listOfExpertsOrBoss, token])
@@ -750,7 +753,7 @@ const TpiSoutenance = () => {
     let role =
       expertOrBoss.role === 'projectManager'
         ? 'projectManagerButton'
-        : expertOrBoss.role
+        : 'experts'
 
     const handleClick = () => {
       // Utilisez une fonction de rappel pour garantir que vous utilisez la valeur la plus récente de isOn

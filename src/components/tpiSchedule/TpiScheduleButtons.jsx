@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-import NewRoomForm from './newRoomForm'
+import NewRoomForm from './NewRoomForm'
 import axios from 'axios'
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG

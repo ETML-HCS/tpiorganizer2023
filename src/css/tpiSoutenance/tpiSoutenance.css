@@ -3,7 +3,7 @@
 
   /* --bg-color-etml:var(--accent-color-etml);  */
   --bg-color-etml: #6600e300;
-  --accent-color-etml: #6700E3;
+  --accent-color-etml: #6700e3;
   --shadow-color-etml: #6600e360;
 
   /* --bg-color-cfpv : var(--accent-color-cfpv); */
@@ -39,7 +39,7 @@ body {
   right: 0;
 }
 
-.demo{
+.demo {
   position: fixed;
 }
 
@@ -51,7 +51,11 @@ h1 {
   margin-left: 15px;
   text-transform: capitalize;
   font-weight: bold;
-  background-image: linear-gradient(to left, var(--accent-color-etml), var(--accent-color-cfpv));
+  background-image: linear-gradient(
+    to left,
+    var(--accent-color-etml),
+    var(--accent-color-cfpv)
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -59,7 +63,7 @@ h1 {
 }
 
 h1::before {
-  content: "Version de Démonstration";
+  content: 'Version de Démonstration';
   /* Cela va forcer le contenu à apparaître sur une nouvelle ligne */
   position: absolute;
   top: 0;
@@ -77,13 +81,14 @@ h3 {
   text-align: center;
   font-size: 2em;
   font-weight: bolder;
-  margin-top: 10px;
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 
 h4 {
   text-align: center;
   font-size: 1.7em;
-  margin-top: -1.5vh;
+  margin-top: 2px;
 }
 
 p {
@@ -97,16 +102,16 @@ p {
   position: fixed;
   top: 60px; /* Position fixe en haut de la fenêtre */
   left: 0; /* Position fixe à gauche de la fenêtre */
-  
+
   height: 40px;
   width: 100%;
-  
+
   background-color: white; /* Fond blanc pour l'exemple */
   margin-top: 20px;
   gap: var(--grid-gap);
 }
 
-.filters select{
+.filters select {
   height: 30px;
   margin-right: 20px;
   text-align: center;
@@ -116,7 +121,7 @@ p {
   background-color: transparent;
 }
 
-.welcom{
+.welcom {
   position: absolute;
   left: 30px;
   font-size: 2em;
@@ -140,7 +145,7 @@ p {
 }
 
 .btnFilters:hover {
- filter:opacity(70%);
+  filter: opacity(70%);
 }
 
 /* Styles spécifiques des classes et sélecteurs */
@@ -158,7 +163,8 @@ p {
 
 .dataGrid {
   display: grid;
-  grid-template-columns: auto auto; 
+  grid-template-columns: auto auto;
+  justify-content: start;
 }
 
 .horairesBox {
@@ -167,13 +173,12 @@ p {
   grid-template-rows: auto;
   font-size: var(--font-size);
   margin-top: calc(var(--height-header) + var(--element-padding));
-  margin-left: -60px;
   margin-right: 20px;
   background-color: white;
-  width: 60px;
+  width: 80px;
 }
 
-[class^="horaire_"] {
+[class^='horaire_'] {
   display: flex;
   /*start - end */
   /*flex-direction: row;*/
@@ -198,29 +203,28 @@ p {
 .salles-container {
   display: flex;
   flex-direction: row;
-
   gap: var(--grid-gap);
-  
 }
 
-[class^="salle ETML"] {
+[class^='salle ETML'] {
   position: relative;
-  /*Nécessaire pour l'identification du site */
-  border: 1px solid var(--accent-color-etml);
+  border: 2px solid var(--accent-color-etml);
   border-radius: 8px;
   display: grid;
-  /* var(--height-tpi); */
-  grid-template-rows: var(--height-header) auto;
+
+  grid-template-rows: var(--height-header) 155px; /* Taille fixe pour la première et la deuxième ligne */
+  grid-auto-rows: min-content; /* Les lignes suivantes s'adaptent au contenu si celui-ci dépasse la taille spécifiée */
+
   padding-bottom: var(--element-padding);
 }
 
-[class^="salle CFPV"] {
+[class^='salle CFPV'] {
   position: relative;
-  border: 1px solid var(--accent-color-cfpv);
+  border: 2px solid var(--accent-color-cfpv);
   border-radius: 8px;
   display: grid;
-  /* var(--height-tpi); */
-  grid-template-rows: var(--height-header) auto;
+  grid-template-rows: var(--height-header) 155px;
+  grid-auto-rows: min-content; /* Les lignes suivantes s'adaptent au contenu si celui-ci dépasse la taille spécifiée */
   padding-bottom: var(--element-padding);
 }
 
@@ -232,22 +236,24 @@ p {
   background-color: var(--bg-color-cfpv);
 }
 
-.ETML [class^="header_"] {
-  height: var(--height-header);
+.ETML [class^='header_'] {
   width: 100%;
   border-radius: 5px 5px 0 0;
   background-color: var(--accent-color-etml);
   color: white;
   margin: 0 auto;
+  grid-row-start: 1;
+  grid-row-end: 2;
 }
 
-.CFPV [class^="header_"] {
-  height: var(--height-header);
+.CFPV [class^='header_'] {
   width: 100%;
   border-radius: 5px 5px 0 0;
   background-color: var(--accent-color-cfpv);
   color: white;
   margin: 0 auto;
+  grid-row-start: 1;
+  grid-row-end: 2;
 }
 
 .truncated-text {
@@ -263,6 +269,7 @@ p {
   background-color: white;
   border-radius: 5px;
   box-sizing: content-box;
+  border: 1px solid transparent;
 }
 
 .ETML .tpi-data {
@@ -284,18 +291,11 @@ p {
 }
 
 .ETML .tpi-data:hover {
-  border: 0.1vw solid var(--accent-color-etml);
-  border-radius: var(--paragraph-margin);
+  border: 1px solid var(--accent-color-etml);
 }
 
 .CFPV .tpi-data:hover {
-  border: 0.1vw solid var(--accent-color-cfpv);
-  border-radius: var(--paragraph-margin);
-}
-
-.CFPV .tpi-data:hover {
-  border: 0.1vw solid var(--accent-color-cfpv);
-  border-radius: var(--paragraph-margin);
+  border: 1px solid var(--accent-color-cfpv);
 }
 
 .tpi-entry {
@@ -303,8 +303,7 @@ p {
   grid-template-columns: 65px 195px 75px;
   align-items: center;
   white-space: nowrap;
-  gap: 5px;
-  font-size: 1.2em;
+  font-size: 16px;
   z-index: 0;
 }
 
@@ -313,12 +312,10 @@ p {
 .tpi-boss {
   line-height: 2;
   white-space: nowrap;
-  /* Occuper 2 colonnes */
 }
 
 .tpi-entry.tpi-candidat {
   display: block;
-  /* Soustraire la marge gauche */
   font-weight: bolder;
   line-height: 2.1;
   margin-bottom: 5px;
@@ -327,6 +324,7 @@ p {
 }
 
 .site {
+  display: none;
   position: absolute;
   top: 5px;
   right: 5px;
@@ -421,10 +419,10 @@ p {
   width: 45vw;
   max-width: 60vw;
   background-color: white;
-  padding: 2vh;
+  padding: 20px;
   box-shadow: 0 0.5vh 1.5vw rgba(0, 0, 0, 0.3);
   z-index: 9;
-  border-radius: 2vh;
+  border-radius: 5px;
 }
 
 .popup {
@@ -437,27 +435,27 @@ p {
 }
 
 .popup h3 {
-  margin-bottom: 1.5vh;
+  margin-bottom: 15px;
 }
 
-.popup input[type="date"],
+.popup input[type='date'],
 .popup select {
   box-sizing: border-box;
   padding: 1.2vh;
-  margin-bottom: 1vh;
+  margin-bottom: 10px;
   border: 0.1vh solid #ccc;
-  border-radius: 0.4vh;
+  border-radius: 5px;
   width: 100%;
 }
 
 .popup button {
   width: 18vw;
-  padding: 1vh;
-  margin-bottom: 1vh;
+  padding: 10px;
+  margin-bottom: 10px;
   background-color: var(--accent-color-etml);
   color: white;
   border: none;
-  border-radius: 0.5vh;
+  border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
@@ -485,7 +483,7 @@ p {
 }
 
 .popup ul li {
-  margin-bottom: 0.5em;
+  margin-bottom: 5px;
   margin-left: 5vw;
 }
 
@@ -496,13 +494,12 @@ p {
 
 #btnSave {
   background-color: var(--accent-color-cfpv);
-  margin-right: 2vw;
+  margin-right: 20px;
 }
 
 #btnClose {
   background-color: var(--accent-color-etml);
 }
-
 
 .ETML .time-label {
   font-size: 0.8rem;
@@ -551,8 +548,8 @@ p {
   position: relative;
 }
 
-[class^="salle CFPV"] .stabilo::after {
-  content: "";
+[class^='salle CFPV'] .stabilo::after {
+  content: '';
   display: block;
   width: 90%;
   height: 100%;
@@ -564,8 +561,8 @@ p {
   border-radius: 5px;
 }
 
-[class^="salle ETML"] .stabilo::after {
-  content: "";
+[class^='salle ETML'] .stabilo::after {
+  content: '';
   display: block;
   width: 90%;
   height: 100%;
@@ -577,9 +574,12 @@ p {
   border-radius: 5px;
 }
 
+
+
+
+
 /*  #region PRINT  Styles appliqués uniquement lors de l'impression */
 @media print {
-
   @page {
     size: A4 portrait;
     /* Force le mode portrait pour l'impression */
@@ -648,9 +648,7 @@ p {
     /* Cache les éléments non nécessaires à l'impression */
   }
 
-
-
-  [class^="salle"] {
+  [class^='salle'] {
     display: table;
     /* Chaque salle est transformée en tableau */
     width: auto;
@@ -664,7 +662,7 @@ p {
     border: none;
   }
 
-  [class^="header_"] {
+  [class^='header_'] {
     display: table-header-group;
     /* L'en-tête devient l'en-tête du tableau */
     position: relative;
@@ -759,7 +757,6 @@ p {
     padding: 5px 0;
     /* Ajoute de l'espace au-dessus et en dessous du nom */
   }
-
 }
 
 /* #endregion */

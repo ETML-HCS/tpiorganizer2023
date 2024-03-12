@@ -1,5 +1,5 @@
-import { createTpiModel, getTpiModels } from "../tpiControllers/tpiController.jsx";
-import { showNotification } from "../tools.jsx";
+import { createTpiModel, getTpiModels } from "../tpiControllers/TpiController.jsx";
+import { showNotification } from "../Tools.jsx";
 
 // Fonction pour sauvegarder un TPI dans la base de données via le serveur
 export const saveTpiToServer = async (tpiDetails) => {
