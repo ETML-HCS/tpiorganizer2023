@@ -1,3 +1,6 @@
+// Importez la fonction ObjectId de la bibliothèque MongoDB native
+const { ObjectId } = require('mongodb')
+
 const express = require('express')
 const cors = require('cors')
 
@@ -7,7 +10,7 @@ const bodyParser = require('body-parser')
 const nodemailer = require('nodemailer')
 const mongoose = require('mongoose')
 
-const TpiModels = require('./models/tpiModels')
+const TpiModelsYear = require('./models/tpiModels')
 const User = require('./models/userModels')
 const {
   createTpiRoomModel,
@@ -20,15 +23,15 @@ const { is } = require('date-fns/locale')
 
 const app = express()
 
-const isDemo = process.env.REACT_APP_DEBUG === 'true' 
-const port = isDemo ?  5000: 6000;
+const isDemo = process.env.REACT_APP_DEBUG === 'true'
+const port = isDemo ? 5000 : 6000
 
 app.use(cors())
 app.use(express.json())
 
 app.get('/', (req, res) => {
-  res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`);
-});
+  res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`)
+})
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 
@@ -290,10 +293,9 @@ app.put('/api/tpiyear/:year/:id/:tpiRef/:expertOrBoss', async (req, res) => {
 })
 
 app.put(
-  '/api/save-propositions/:year/:expertOrBoss/:tpi_id',
+  '/api/save-propositions/:year/:expertOrBoss/:tpi_indexes/:tpi_id',
   async (req, res) => {
-    const { year, expertOrBoss } = req.params
-    const indexes = extraireIndexes(req.params.tpi_id) // { salle: x, tpi: y }
+    const { year, expertOrBoss, tpi_indexes, tpi_id } = req.params
     const propositionsData = req.body
     const collectionName = `tpiSoutenance_${year}`
 
@@ -303,37 +305,46 @@ app.put(
       collectionName
     )
 
+    console.log('Tentative de mise à jour dans la collection :', collectionName)
+    console.log('Année :', year)
+    console.log('Rôle :', expertOrBoss)
+    console.log('Indexes extraits :', tpi_indexes)
+    console.log("ID de l'objet :", tpi_id)
+    console.log('Données de propositions :', propositionsData)
+
     try {
-      const updateQuery = {
-        $set: {
-          [`tpiDatas.${indexes.tpi}.${expertOrBoss}.offres`]: propositionsData
+      // Charger le document TPI correspondant
+      const tpiDocument = await DataRooms.findOne({
+        'tpiDatas.id': tpi_indexes
+      })
+
+      if (!tpiDocument) {
+        console.log('Aucun document TPI correspondant trouvé.')
+        return res.status(404).json({ error: 'Document TPI non trouvé' })
+      }
+
+      // Ajouter la proposition au bon champ (expert ou boss)
+      tpiDocument.tpiDatas.forEach(tpiData => {
+        if (tpiData.id === tpi_indexes) {
+          tpiData[expertOrBoss].offres = propositionsData
         }
-      }
+      })
 
-      const options = {
-        new: true // Renvoie le document mis à jour après la mise à jour
-      }
+      // Mettre à jour le document TPI dans la base de données
+      const updatedDocument = await tpiDocument.save()
 
-      const updatedDocument = await DataRooms.findOneAndUpdate(
-        {
-          [`tpiDatas.${indexes.tpi}.${expertOrBoss}`]: { $exists: true }
-        },
-        updateQuery,
-        options
-      )
-
-      if (!updatedDocument) {
-        console.log('Aucun document correspondant trouvé pour la mise à jour.')
-        return res.status(404).json({ error: 'Document non trouvé' })
-      }
-
-      console.log('Document mis à jour avec succès :', updatedDocument)
+      console.log('Document TPI mis à jour avec succès :', updatedDocument)
       res
         .status(200)
-        .json({ message: 'Document mis à jour avec succès', updatedDocument })
+        .json({
+          message: 'Document TPI mis à jour avec succès',
+          updatedDocument
+        })
     } catch (error) {
-      console.error('Erreur lors de la mise à jour :', error)
-      res.status(500).json({ error: 'Erreur lors de la mise à jour' })
+      console.error('Erreur lors de la mise à jour du document TPI :', error)
+      res
+        .status(500)
+        .json({ error: 'Erreur lors de la mise à jour du document TPI' })
     }
   }
 )
@@ -435,16 +446,29 @@ app.get('/api/check-room-existence/:idRoom', async (req, res) => {
 
 // Route to get all TPI models
 app.get('/api/get-tpi', async (req, res) => {
-  console.log('get-tpi')
+  console.log('get-tpi');
   try {
-    const models = await TpiModels.find()
-    console.log('TPI models retrieved:', models)
-    res.json(models)
+    let models;
+    const year = req.query.year; // Récupère l'année depuis les paramètres de requête
+    console.log('Année spécifiée dans la requête:', year);
+
+    if (year) {
+      // Utilise la fonction TpiModelsYear pour obtenir le modèle approprié en fonction de l'année
+      const tpiModelsYear = TpiModelsYear(year);
+      // Utilise ce modèle pour récupérer les modèles de TPI pour cette année
+      models = await tpiModelsYear.find();
+      console.log('Modèles de TPI pour l\'année', year, 'récupérés:', models);
+    } else {
+      console.log('Année manquante. Impossible de récupérer les modèles de TPI.');
+    }
+
+    console.log('TPI models retrieved:', models);
+    res.json(models);
   } catch (error) {
-    console.error('Error retrieving TPI models:', error)
-    res.status(500).json({ error: 'Error retrieving TPI models' })
+    console.error('Error retrieving TPI models:', error);
+    res.status(500).json({ error: 'Error retrieving TPI models' });
   }
-})
+});
 
 app.put('/api/update-tpi/:id', async (req, res) => {
   const tpiId = req.params.id
@@ -623,27 +647,38 @@ app.put('/api/suivi-etudiants/:id', async (req, res) => {
   }
 })
 
-// Route to overwrite data in tpiRooms_2024 with tpiSoutenance_2024
+// Route to overwrite data in tpiRooms_year with tpiSoutenance_year
 app.post('/api/overwrite-tpi-rooms/:year', async (req, res) => {
   const year = req.params.year
   const collectionNameSoutenance = `tpiSoutenance_${year}`
   const collectionNameRooms = `tpiRooms_${year}`
 
   try {
+    console.log(
+      `Starting data overwrite from ${collectionNameSoutenance} to ${collectionNameRooms}`
+    )
+
     // Create models for both collections
     const TpiRoomModelSoutenance = createCustomTpiRoomModel(
       collectionNameSoutenance
     )
     const TpiRoomModelRooms = createCustomTpiRoomModel(collectionNameRooms)
 
-    // Retrieve all data from the tpiSoutenance_2024 collection
+    // Retrieve all data from the tpiSoutenance_year collection
+    console.log(`Retrieving data from ${collectionNameSoutenance}`)
     const soutenanceData = await TpiRoomModelSoutenance.find()
 
-    // Delete all data from the tpiRooms_2024 collection
+    // Delete all data from the tpiRooms_year collection
+    console.log(`Deleting all data from ${collectionNameRooms}`)
     await TpiRoomModelRooms.deleteMany({})
 
-    // Insert data from tpiSoutenance_2024 into tpiRooms_2024
+    // Insert data from tpiSoutenance_ into tpiRooms_
+    console.log(`Inserting data into ${collectionNameRooms}`)
     await TpiRoomModelRooms.insertMany(soutenanceData)
+
+    console.log(
+      `Data from collection ${collectionNameSoutenance} has been successfully overwritten into collection ${collectionNameRooms}`
+    )
 
     res.status(200).json({
       message: `Data from collection ${collectionNameSoutenance} has been overwritten into collection ${collectionNameRooms}`

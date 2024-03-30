@@ -156,6 +156,7 @@ const RenderRooms = ({
     }
   }
 
+  // Utilisateur fait une proposition (depuis le bouton agenda)
   const handlePropositionClick = (tpiData, expertOrBoss) => {
     // Afficher le popup pour modifier le créneau
     setCurrentTpiData(tpiData)
@@ -377,7 +378,6 @@ const RenderRooms = ({
           {schedule.map((slot, index) => {
             // Assurez-vous que tpiData est défini avant de l'utiliser
             const tpiData = salle.tpiDatas ? salle.tpiDatas[index] : null
-
             const { candidat, expert1, expert2, boss } = tpiData || {}
 
             // fonction pour simplifier
@@ -516,6 +516,7 @@ const TpiSoutenance = () => {
   const [error, setError] = useState(null)
   const [isOn, setIsOn] = useState(true)
   const [isScrolled, setIsScrolled] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   const token = useToken()
 
@@ -644,6 +645,7 @@ const TpiSoutenance = () => {
   }
 
   useEffect(() => {
+    // Gestion du défilement
     const handleScroll = () => {
       const scrollPosition = window.scrollY
       setIsScrolled(scrollPosition > 50)
@@ -651,10 +653,22 @@ const TpiSoutenance = () => {
 
     window.addEventListener('scroll', handleScroll)
 
-    loadData() // Appel à loadData() à l'intérieur de useEffect
+    // Gestion de la taille de l'écran
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 500)
+    }
 
+    handleResize() // Appel initial pour déterminer la taille de l'écran
+
+    window.addEventListener('resize', handleResize)
+
+    // Appel à loadData() à l'intérieur de useEffect
+    loadData()
+
+    // Nettoyage des événements lors du démontage du composant
     return () => {
       window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', handleResize)
     }
   }, [])
 
@@ -780,6 +794,38 @@ const TpiSoutenance = () => {
     )
   }
 
+  const handleClickFiltersSmartphone = () => {
+    // Afficher un message indiquant que la fonction est en cours
+    console.log('La fonction de filtrage des smartphones est en cours...')
+
+    // 1. Récupérer les filtres sélectionnés par l'utilisateur
+    // Par exemple, vous pouvez utiliser des références aux éléments HTML ou des valeurs stockées dans le state de votre application.
+
+    // 2. Utiliser les filtres pour interroger une source de données contenant des informations sur les smartphones
+    // Cela pourrait être une base de données, un service API, ou même un tableau statique dans votre code.
+
+    // 3. Filtrer les smartphones en fonction des critères sélectionnés
+    // Par exemple, vous pouvez utiliser des méthodes comme filter() pour filtrer les smartphones qui correspondent aux critères.
+
+    // 4. Afficher la liste filtrée de smartphones
+    // Vous pouvez afficher les smartphones dans votre interface utilisateur en utilisant une boucle (par exemple, map()) pour parcourir les résultats filtrés et les afficher dans une liste.
+
+    // Exemple de code pour afficher les smartphones dans la console
+    const smartphones = [
+      /* Liste des smartphones filtrés */
+    ]
+    smartphones.forEach((smartphone, index) => {
+      console.log(`${index + 1}. ${smartphone.brand} ${smartphone.model}`)
+      // Vous pouvez ajouter d'autres propriétés telles que le prix, la capacité de la batterie, etc., en fonction des informations disponibles.
+    })
+
+    // 5. Mettre à jour votre interface utilisateur pour afficher la liste de smartphones filtrée
+    // Cela dépendra de la manière dont votre application est structurée et implémentée.
+
+    // 6. Gérer les erreurs et les cas où aucun smartphone ne correspond aux critères sélectionnés
+    // Assurez-vous de gérer ces cas de manière appropriée pour offrir une expérience utilisateur fluide.
+  }
+
   const isFilterApplied =
     filters.experts !== '' ||
     filters.candidate !== '' ||
@@ -788,130 +834,184 @@ const TpiSoutenance = () => {
 
   return (
     <Fragment>
-      <div className={`header-soutenance ${isScrolled ? 'hidden' : ''}`}>
-        <h1 className={isDemo ? 'demo' : 'title'}> Soutenances de {year}</h1>
+      {isMobile && (
+        <Fragment>
+          <div className='message-smartphone'>
+            <p>
+              TpiOrganizer est en cours de développement et la fonctionnalité
+              smartphone ne fonctionne pas de manière satisfaisante. Merci de
+              vous connecter avec un ordinateur.
+            </p>
+          </div>
 
-        <div className='filters'>
-          {expertOrBoss && expertOrBoss.name !== null && (
-            <div className='welcom'>
-              <p>Bonjour {expertOrBoss.name}</p>
-            </div>
-          )}
+          {/* Render filters for smartphone */}
+          <div className='filters-smartphone'>
+            <button
+              type='button'
+              className='smartphone'
+              onClick={() => handleClickFiltersSmartphone('Mes TPI')}
+            >
+              Mes TPI
+            </button>
+            <button
+              type='button'
+              className='smartphone'
+              onClick={() => handleClickFiltersSmartphone('Candidats')}
+            >
+              Candidats
+            </button>
+            <button
+              type='button'
+              className='smartphone'
+              onClick={() => handleClickFiltersSmartphone('Experts')}
+            >
+              Experts
+            </button>
+            <button
+              type='button'
+              className='smartphone'
+              onClick={() => handleClickFiltersSmartphone('Encadrant')}
+            >
+              Encadrant
+            </button>
+          </div>
+        </Fragment>
+      )}
 
-          {!expertOrBoss && (
-            <div className='welcom'>
-              <p>Bonjour Visiteur</p>
-            </div>
-          )}
+      {!isMobile && (
+        <Fragment>
+          <div className={`header-soutenance${isScrolled ? 'hidden' : ''}`}>
+            <h1 className={isDemo ? 'demo' : 'title'}>
+              {' '}
+              Soutenances de {year}
+            </h1>
 
-          {/* Afficher des boutons de filtrage direct pour les experts ou les chefs de projet */}
-          {expertOrBoss && expertOrBoss.name !== null && (
-            <>
-              <div>
-                {/* Vérifier si l'utilisateur est un chef de projet et afficher le bouton de filtrage correspondant */}
-                {expertOrBoss.role !== 'candidate' && (
-                  <ToggleFilterButton
-                    isOn={isOn}
-                    setIsOn={setIsOn}
-                    updateFilter={updateFilter}
-                    expertOrBoss={expertOrBoss}
-                  />
-                )}
+            {expertOrBoss && expertOrBoss.name !== null && (
+              <div className='welcom'>
+                <p>Bonjour {expertOrBoss.name}</p>
               </div>
-            </>
-          )}
+            )}
+            {!expertOrBoss && (
+              <div className='welcom'>
+                <p>Bonjour Visiteur</p>
+              </div>
+            )}
 
-          {/* Afficher les options de filtre spécifiques aux experts */}
-          {!expertOrBoss && (
-            <>
-              <select
-                value={filters.experts}
-                onChange={e => updateFilter('experts', e.target.value)}
-              >
-                <option value=''>Tous les experts</option>
-                {uniqueExperts.map(expert => (
-                  <option key={expert} value={expert}>
-                    {expert}
-                  </option>
-                ))}
-              </select>
+            <div className='filters'>
+              {/* Afficher des boutons de filtrage direct pour les experts ou les chefs de projet */}
+              {expertOrBoss && expertOrBoss.name !== null && (
+                <>
+                  <div>
+                    {/* Vérifier si l'utilisateur est un chef de projet et afficher le bouton de filtrage correspondant */}
+                    {expertOrBoss.role !== 'candidate' && (
+                      <ToggleFilterButton
+                        isOn={isOn}
+                        setIsOn={setIsOn}
+                        updateFilter={updateFilter}
+                        expertOrBoss={expertOrBoss}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
 
-              <select
-                value={filters.projectManager}
-                onChange={e => updateFilter('projectManager', e.target.value)}
-              >
-                <option value=''>Tous les chefs de projet</option>
-                {uniqueProjectManagers.map(manager => (
-                  <option key={manager} value={manager}>
-                    {manager}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.candidate}
-                onChange={e => updateFilter('candidate', e.target.value)}
-              >
-                <option value=''>Tous les candidats</option>
-                {uniqueCandidates.map(candidate => {
-                  if (candidate.trim() !== '') {
-                    return (
-                      <option key={candidate} value={candidate}>
-                        {candidate}
+              {/* Afficher les options de filtre spécifiques aux experts */}
+              {!expertOrBoss && (
+                <>
+                  <select
+                    value={filters.experts}
+                    onChange={e => updateFilter('experts', e.target.value)}
+                  >
+                    <option value=''>Tous les experts</option>
+                    {uniqueExperts.map(expert => (
+                      <option key={expert} value={expert}>
+                        {expert}
                       </option>
-                    )
-                  }
-                  return null
-                })}
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.projectManager}
+                    onChange={e =>
+                      updateFilter('projectManager', e.target.value)
+                    }
+                  >
+                    <option value=''>Tous les chefs de projet</option>
+                    {uniqueProjectManagers.map(manager => (
+                      <option key={manager} value={manager}>
+                        {manager}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.candidate}
+                    onChange={e => updateFilter('candidate', e.target.value)}
+                  >
+                    <option value=''>Tous les candidats</option>
+                    {uniqueCandidates.map(candidate => {
+                      if (candidate.trim() !== '') {
+                        return (
+                          <option key={candidate} value={candidate}>
+                            {candidate}
+                          </option>
+                        )
+                      }
+                      return null
+                    })}
+                  </select>
+                </>
+              )}
+
+              <select
+                value={filters.date}
+                onChange={e => updateFilter('date', e.target.value)}
+              >
+                <option value=''>Toutes les dates</option>
+                {uniqueDates.map(date => (
+                  <option key={date} value={date}>
+                    {date}
+                  </option>
+                ))}
               </select>
-            </>
-          )}
 
-          <select
-            value={filters.date}
-            onChange={e => updateFilter('date', e.target.value)}
+              <select
+                value={filters.site}
+                onChange={e => updateFilter('site', e.target.value)}
+              >
+                <option value=''>Tous les sites</option>
+                {uniqueSites.map(site => (
+                  <option key={site} value={site}>
+                    {site}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div
+            id='soutenances'
+            className={`soutenances ${
+              isOn ? 'filterActive' : 'filterInactive'
+            }`}
           >
-            <option value=''>Toutes les dates</option>
-            {uniqueDates.map(date => (
-              <option key={date} value={date}>
-                {date}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filters.site}
-            onChange={e => updateFilter('site', e.target.value)}
-          >
-            <option value=''>Tous les sites</option>
-            {uniqueSites.map(site => (
-              <option key={site} value={site}>
-                {site}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div
-        id='soutenances'
-        className={`soutenances ${isOn ? 'filterActive' : 'filterInactive'}`}
-      >
-        <div className='dataGrid'>
-          {/* Affichez renderSchedule(schedule) seulement si aucun filtre spécifique n'est appliqué */}
-          {!isFilterApplied && renderSchedule(schedule)}
-          <RenderRooms
-            year={year}
-            tpiDatas={filteredData}
-            schedule={schedule}
-            listOfPerson={listOfExpertsOrBoss}
-            filters={filters}
-            loadData={loadData}
-            token={token}
-            isOn={isOn}
-          />
-        </div>
-      </div>
+            <div className='dataGrid'>
+              {/* Affichez renderSchedule(schedule) seulement si aucun filtre spécifique n'est appliqué */}
+              {!isFilterApplied && renderSchedule(schedule)}
+              <RenderRooms
+                year={year}
+                tpiDatas={filteredData}
+                schedule={schedule}
+                listOfPerson={listOfExpertsOrBoss}
+                filters={filters}
+                loadData={loadData}
+                token={token}
+                isOn={isOn}
+              />
+            </div>
+          </div>
+        </Fragment>
+      )}
     </Fragment>
   )
 }

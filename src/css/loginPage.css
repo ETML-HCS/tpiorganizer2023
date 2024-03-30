@@ -1,9 +1,10 @@
 .login-container {
-    margin: 15vh auto;
+    margin: 150px auto;
     padding: 20px;
-    background-color: #f5f4f5ca;
+    background-color: #f5f4f546;
     border-radius: 5px;
-    min-width: 40vh;
+    width: 400px;
+    min-width: 350px;
 }
 
 .loginPage {

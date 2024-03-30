@@ -59,21 +59,14 @@
   --dateRoom-bgColor: #de2092;
 }
 
-/* Styles généraux pour la date room */
-#root {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
 #rooms {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   /* Activer la barre de défilement horizontale en tout temps */
-  overflow-x: scroll;
   /* Permettre aux éléments enfants de la div de se répartir sur une seule ligne */
   white-space: nowrap;
+  margin-bottom: 60px;
 }
 
 .room {
@@ -95,9 +88,7 @@
 
 /* Styles pour le survol de .date-room */
 .date-room:hover {
-  filter: brightness(
-    105%
-  ); /* Augmente la luminosité de l'élément survolé de 5% */
+  filter: brightness(104%);
 }
 
 .date {
@@ -183,7 +174,8 @@
   color: white;
   text-align: left;
   font-size: 1.18em;
-  font-family:Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue',
+    sans-serif;
   min-width: 200px;
   display: flex;
   flex-direction: column;
@@ -199,9 +191,12 @@
   color: var(--site-textColor);
   text-align: center;
   font-weight: bolder;
-  overflow: hidden; /* Masquer tout le texte qui dépasse la taille du conteneur */
-  white-space: nowrap; /* Empêcher le texte de passer à la ligne */
-  text-overflow: ellipsis; /* Afficher un point de suspension (...) lorsque le texte est tronqué */
+  overflow: hidden;
+  /* Masquer tout le texte qui dépasse la taille du conteneur */
+  white-space: nowrap;
+  /* Empêcher le texte de passer à la ligne */
+  text-overflow: ellipsis;
+  /* Afficher un point de suspension (...) lorsque le texte est tronqué */
   background-color: var(--tpi-card-candidat-bgColor);
   border-bottom: 2px solid var(--tpi-card-textColor);
   padding: 5px;
@@ -215,9 +210,12 @@
 /* Styles pour le fond des experts */
 .tpiCard .expert {
   color: var(--site-textColor);
-  overflow: hidden; /* Masquer tout le texte qui dépasse la taille du conteneur */
-  white-space: nowrap; /* Empêcher le texte de passer à la ligne */
-  text-overflow: ellipsis; /* Afficher un point de suspension (...) lorsque le texte est tronqué */
+  overflow: hidden;
+  /* Masquer tout le texte qui dépasse la taille du conteneur */
+  white-space: nowrap;
+  /* Empêcher le texte de passer à la ligne */
+  text-overflow: ellipsis;
+  /* Afficher un point de suspension (...) lorsque le texte est tronqué */
   position: relative;
   background-color: var(--tpi-card-experts-bgColor);
   padding: 5px;
@@ -226,9 +224,12 @@
 /* Styles pour le fond du chef de projet */
 .tpiCard .boss {
   color: var(--site-textColor);
-  overflow: hidden; /* Masquer tout le texte qui dépasse la taille du conteneur */
-  white-space: nowrap; /* Empêcher le texte de passer à la ligne */
-  text-overflow: ellipsis; /* Afficher un point de suspension (...) lorsque le texte est tronqué */
+  overflow: hidden;
+  /* Masquer tout le texte qui dépasse la taille du conteneur */
+  white-space: nowrap;
+  /* Empêcher le texte de passer à la ligne */
+  text-overflow: ellipsis;
+  /* Afficher un point de suspension (...) lorsque le texte est tronqué */
   position: relative;
   background-color: var(--tpi-card-boss-bgColor);
   border-top: 2px solid var(--tpi-card-textColor);
@@ -364,56 +365,61 @@
 /* CSS pour l'effet de clignotement */
 @keyframes blink {
   0% {
-    border-color: transparent; /* Au départ, la bordure est transparente */
+    border-color: transparent;
+    /* Au départ, la bordure est transparente */
   }
+
   50% {
-    border-color: var(
-      --tpi-card-boss-bgColor
-    ); /* À mi-chemin, la bordure a la couleur spécifiée */
+    border-color: var(--tpi-card-boss-bgColor);
+    /* À mi-chemin, la bordure a la couleur spécifiée */
   }
+
   100% {
-    border-color: transparent; /* À la fin, la bordure redevient transparente */
+    border-color: transparent;
+    /* À la fin, la bordure redevient transparente */
   }
 }
 
 #green-true {
   padding: 3px;
-  border: 4px solid var(--tpi-card-boss-bgColor); /* Bordure initialement transparente */
+  border: 4px solid var(--tpi-card-boss-bgColor);
+  /* Bordure initialement transparente */
 }
 
+/* Positionnement de l'icône */
 .icon-proposal {
   position: absolute;
-  right: 0.5%;
-  /* Placez l'icône à l'extrémité droite du parent */
+  right: 1%;
   top: 25%;
-  /* Placez l'icône à l'extrémité supérieure du parent si nécessaire */
 }
 
-/* Classe pour les popups personnalisés */
-.custom-popup:not([data-popup-text=''])::after {
+.custom-popup {
+  position: relative;
+}
+
+.custom-popup::after {
+  content: attr(data-popup-text);
+  display: block;
   width: 20ch;
   height: 5em;
   text-align: center;
-  vertical-align: middle;
   line-height: 1.6;
-  content: attr(
-    data-popup-text
-  ); /* Affiche le contenu de l'attribut "data-popup-text" */
-  padding: 10px 15px; /* Espacement autour du texte */
-  background-color: #333; /* Fond de couleur foncée */
-  color: #fff; /* Texte en blanc pour une meilleure lisibilité */
-  border-radius: 6px; /* Coins arrondis */
-  position: absolute; /* Position absolue pour l'afficher au-dessus de l'élément */
-  right: -25ch;
-  top: -2em;
-
-  z-index: 1; /* Couche supérieure pour s'assurer qu'il soit visible */
-  opacity: 0; /* Initialement transparent */
-  transition: opacity 0.3s ease-in-out; /* Transition en douceur de l'opacité */
-  pointer-events: none; /* Évite les interactions avec le popup */
-  font-size: 1.2rem; /* Taille de police */
+  padding: 10px 15px;
+  background-color: #333;
+  color: #fff;
+  border-radius: 6px;
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
 }
 
 .custom-popup:hover::after {
-  opacity: 1; /* Affiche le popup au survol */
+  opacity: 1;
+  visibility: visible;
 }
+

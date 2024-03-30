@@ -89,7 +89,7 @@ const TpiScheduleButtons = ({
 
       try {
         const response = await axios.post(
-          `${apiUrl}/overwrite-tpi-rooms/${year}`
+          `${apiUrl}/api/overwrite-tpi-rooms/${year}`
         )
         console.log(response.data.message) // Print the response message
       } catch (error) {
@@ -101,7 +101,7 @@ const TpiScheduleButtons = ({
       console.error('Erreur lors de la mise à jour des offres :', error)
     }
   }
-
+  
   return (
     <div id='tools'>
       {showForm ? (

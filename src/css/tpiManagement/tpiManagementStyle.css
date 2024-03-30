@@ -252,3 +252,53 @@ ul.tpiList li .btEdit {
     opacity: 1;
   }
 }
+
+.tpiListYears{
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  justify-content: space-between;
+  margin: 30px 50px;
+}
+
+
+.tpiListYears button{
+  padding: 15px 30px;
+  border: none;
+  border-radius: 5px;
+}
+
+/* Liste sous forme de table*/
+
+.tpiTable {
+  width: 90vw; /* Ajuste automatiquement la largeur du tableau */
+  border-collapse: collapse;  
+}
+
+.tpiTable th,
+.tpiTable td {
+  border: 1px solid #f7f4f4;
+  padding: 5px;
+  white-space: nowrap; /* Empêche le texte de se couper */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Ajoute des points de suspension en cas de dépassement */
+  max-width: 200px;
+}
+
+.tpiTable th {
+  background-color: #007bff; /* Bleu */
+  color: white;
+}
+
+.tpiTable tr:nth-child(even) {
+  background-color: #d6f5fe;
+}
+
+.tpiTable tr:hover {
+  background-color: #eaff00;
+}
+
+.tpiTable th:first-child,
+.tpiTable td:first-child {
+  text-align: center;
+}

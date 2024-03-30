@@ -19,12 +19,18 @@
   font-size: 20px;
 }
 
-#left, #center, #right {
+#left,
+#center,
+#right {
   text-align: center; /* centré par défaut */
 }
 
-#left { text-align: left; }
-#right { text-align: right; }
+#left {
+  text-align: left;
+}
+#right {
+  text-align: right;
+}
 
 #center {
   font-size: 24px;
@@ -40,16 +46,14 @@
 }
 
 /* .etml { font-family: "ETML L"; color: blue; } */
-.etml 
-{
-  font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+.etml {
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
   color: blue;
   margin: 5px;
 }
 
-.cfpv{
-
-  font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+.cfpv {
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
   color: red;
   margin: 5px;
 }
@@ -66,8 +70,8 @@
   text-align: center;
 }
 
-
-#tools button, #btLoadFile {
+#tools button,
+#btLoadFile {
   color: white;
   font-size: medium;
   width: 150px;
@@ -79,12 +83,14 @@
   transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
 }
 
-#tools button:hover, #btLoadFile:hover {
+#tools button:hover,
+#btLoadFile:hover {
   background-color: #2196f3; /* Bleu vif au survol */
   color: #fff;
 }
 
-#upArrowButton, #downArrowButton {
+#upArrowButton,
+#downArrowButton {
   background-color: transparent;
   border: none;
   font-size: 14px;
@@ -94,10 +100,15 @@
   transition: opacity 1s, transform 1s;
 }
 
-#upArrowButton::before { content: "▲"; }
-#downArrowButton::before { content: "▼"; }
+#upArrowButton::before {
+  content: '▲';
+}
+#downArrowButton::before {
+  content: '▼';
+}
 
-#upArrowButton.active, #downArrowButton.active {
+#upArrowButton.active,
+#downArrowButton.active {
   opacity: 1;
   transform: translateY(0);
 }
@@ -139,10 +150,9 @@
   border-radius: 5px;
 }
 
-
 /* Footer.css */
 .footer {
-  position: fixed;
+  position: relative;
   bottom: 0;
   left: 0;
   width: 100%;

@@ -264,7 +264,6 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             {editedTpi.boss.name}
             <span className='icon-proposal'>{isBossProposal}</span>
           </div>
-
         </>
       )}
     </div>

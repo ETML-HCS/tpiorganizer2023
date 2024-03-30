@@ -26,29 +26,25 @@
 body {
   position: relative;
   font-family: Arial, Helvetica, sans-serif;
-  padding: 5px;
+  padding: 15px;
 }
 
 .hidden {
   opacity: 0;
   transition: opacity 0.3s ease-in-out;
-  pointer-events: none; /* Pour empêcher les clics sur l'en-tête masqué */
-  position: fixed; /* Assurez-vous que l'en-tête masqué reste en place */
-  top: -100px; /* Déplacez l'en-tête masqué hors de l'écran */
+  pointer-events: none;
+  /* Pour empêcher les clics sur l'en-tête masqué */
+  position: fixed;
+  /* Assurez-vous que l'en-tête masqué reste en place */
+  top: -100px;
+  /* Déplacez l'en-tête masqué hors de l'écran */
   left: 0;
   right: 0;
 }
 
-.demo {
-  position: fixed;
-}
-
 h1 {
-  width: 100%;
-  font-size: 2.5em;
-  margin-bottom: 0px;
-  margin-top: 5px;
-  margin-left: 15px;
+  margin: 0;
+  font-size: 30px;
   text-transform: capitalize;
   font-weight: bold;
   background-image: linear-gradient(
@@ -63,12 +59,12 @@ h1 {
 }
 
 h1::before {
-  content: 'Version de Démonstration';
+  content: 'Version de démonstration';
   /* Cela va forcer le contenu à apparaître sur une nouvelle ligne */
   position: absolute;
-  top: 0;
-  right: 40px;
-  font-size: 0.7rem;
+  top: 40px;
+  right: 70px;
+  font-size: 10px;
   color: white;
   background: #777;
   padding: 8px;
@@ -96,52 +92,69 @@ p {
   padding: 0;
 }
 
-.filters {
-  display: flex;
-  justify-content: flex-end;
+/* Contient les éléments avec les classes demo et filters, ainsi que welcom */
+.header-soutenance {
   position: fixed;
-  top: 60px; /* Position fixe en haut de la fenêtre */
-  left: 0; /* Position fixe à gauche de la fenêtre */
-
-  height: 40px;
+  top: 15px;
   width: 100%;
+  display: grid;
+  grid-template-columns: auto auto; /* Divise en deux colonnes */
+  grid-template-rows: auto auto; /* Divise en deux lignes */
+}
 
-  background-color: white; /* Fond blanc pour l'exemple */
+/* Classe pour la démonstration */
+.demo {
+  grid-column: 1; /* Prend toute la première colonne */
+  grid-row: 1; /* Se trouve dans la première ligne */
+}
+
+/* Classe pour le message de bienvenue */
+.welcom {
+  grid-column: 1 / span 2; /* Prend toute la largeur des deux colonnes */
+  grid-row: 2; /* Se trouve dans la deuxième ligne */
+  justify-content: start; /* Aligne le contenu sur le côté gauche */
+  font-size: 25px;
   margin-top: 20px;
-  gap: var(--grid-gap);
+}
+
+/* Classe pour les filtres */
+.filters {
+  grid-column: 2; /* Se trouve dans la deuxième colonne */
+  grid-row: 1; /* Se trouve dans la première ligne */
+  gap: 5px; /* Espacement entre les éléments enfants */
 }
 
 .filters select {
   height: 30px;
-  margin-right: 20px;
-  text-align: center;
+  margin-right: 15px;
   border: none;
-  font-size: 1.2em;
+  font-size: 16px;
   padding: 3px;
   background-color: transparent;
 }
 
-.welcom {
-  position: absolute;
-  left: 30px;
-  font-size: 2em;
-}
-
 .btnFilters {
   height: 30px;
-  background-color: #f2f2f2; /* Couleur de fond blanc */
+  background-color: #f2f2f2;
+  /* Couleur de fond blanc */
   border: none;
   border-radius: 5px;
-  padding: 3px 8px; /* Remplissage interne */
-  font-size: 1.2em; /* Taille de police */
+  padding: 3px 8px;
+  /* Remplissage interne */
+  font-size: 1.2em;
+  /* Taille de police */
   font-weight: bold;
-  cursor: pointer; /* Curseur de la souris en forme de main */
-  transition: background-color 0.3s, color 0.3s; /* Transition fluide */
+  cursor: pointer;
+  /* Curseur de la souris en forme de main */
+  transition: background-color 0.3s, color 0.3s;
+  /* Transition fluide */
 }
 
 .btnFilters.active {
-  background-color: #777; /* Couleur de fond bleue */
-  color: white; /* Couleur du texte blanc */
+  background-color: #777;
+  /* Couleur de fond bleue */
+  color: white;
+  /* Couleur du texte blanc */
 }
 
 .btnFilters:hover {
@@ -158,7 +171,7 @@ p {
 }
 
 .soutenances.filterActive {
-  margin-left: 65px;
+  margin-left: 77px;
 }
 
 .dataGrid {
@@ -173,9 +186,9 @@ p {
   grid-template-rows: auto;
   font-size: var(--font-size);
   margin-top: calc(var(--height-header) + var(--element-padding));
-  margin-right: 20px;
+  margin-right: 12px;
   background-color: white;
-  width: 80px;
+  width: 55px;
 }
 
 [class^='horaire_'] {
@@ -190,7 +203,7 @@ p {
   flex-direction: column;
   text-align: center;
 
-  margin-left: 2px;
+  margin-left: 0;
   margin-top: 5px;
   gap: 5px;
 }
@@ -212,8 +225,10 @@ p {
   border-radius: 8px;
   display: grid;
 
-  grid-template-rows: var(--height-header) 155px; /* Taille fixe pour la première et la deuxième ligne */
-  grid-auto-rows: min-content; /* Les lignes suivantes s'adaptent au contenu si celui-ci dépasse la taille spécifiée */
+  grid-template-rows: var(--height-header) 155px;
+  /* Taille fixe pour la première et la deuxième ligne */
+  grid-auto-rows: min-content;
+  /* Les lignes suivantes s'adaptent au contenu si celui-ci dépasse la taille spécifiée */
 
   padding-bottom: var(--element-padding);
 }
@@ -224,7 +239,8 @@ p {
   border-radius: 8px;
   display: grid;
   grid-template-rows: var(--height-header) 155px;
-  grid-auto-rows: min-content; /* Les lignes suivantes s'adaptent au contenu si celui-ci dépasse la taille spécifiée */
+  grid-auto-rows: min-content;
+  /* Les lignes suivantes s'adaptent au contenu si celui-ci dépasse la taille spécifiée */
   padding-bottom: var(--element-padding);
 }
 
@@ -285,7 +301,6 @@ p {
   flex-direction: column;
   justify-content: space-evenly;
   height: 100%;
-  width: 100%;
   margin-left: 15px;
   /*var(--element-margin);*/
 }
@@ -574,9 +589,48 @@ p {
   border-radius: 5px;
 }
 
+/* 
+  #region smartphone
+*/
+.message-smartphone {
+
+  background-color: #e71c1ce1;
+  color: white;
+  padding: 10px 15px;
+  margin-bottom: 10px;
+  text-align: center;
+  z-index: 99;
+}
+
+button.smartphone{
+  text-align: center;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  height: 50px;
+  width: 90px;
 
 
+  margin-bottom: 10px;
+  padding: 10px 15px;
 
+  border: none;
+  border-radius: 8px;
+  background-color:var(--accent-color-cfpv);
+}
+
+button.smartphone:nth-child(even) {
+  background-color:var(--accent-color-etml); /* Couleur de fond pour les boutons pairs */
+}
+
+.filters-smartphone{
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/*#endregion*/
 
 /*  #region PRINT  Styles appliqués uniquement lors de l'impression */
 @media print {
@@ -682,24 +736,15 @@ p {
 
   .tpi-entry {
     display: table-cell;
-    /* Chaque entrée est une cellule de tableau */
     vertical-align: middle;
-    /* Alignement vertical du contenu */
     padding: 5px;
-    /* Espace autour du contenu */
     height: 40px;
-    /* Empêche le texte de passer à la ligne */
     overflow: hidden;
-    /* Cache le débordement de contenu */
     text-overflow: ellipsis;
-    /* Ajoute des points de suspension si débordement */
     text-align: left;
-    /* Alignement du texte à gauche */
     max-width: 174px;
     width: 175px;
-    /* Largeur ajustée automatiquement */
     line-height: 1.1;
-    /* Ajustez selon les besoins */
     border: none;
     font-size: 10pt;
   }
@@ -758,5 +803,5 @@ p {
     /* Ajoute de l'espace au-dessus et en dessous du nom */
   }
 }
-
 /* #endregion */
+

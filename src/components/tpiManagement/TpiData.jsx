@@ -89,13 +89,13 @@ export const getTpiList = () => {
 };
 
 // Fonction pour récupérer la liste des TPI depuis le serveur
-export const getTpiFromServer = async () => {
+export const getTpiFromServer = async (year) => { // Ajoute le paramètre 'year'
   try {
-    // Appeler la fonction du client pour récupérer les modèles de TPI depuis le serveur
-    const tpiModels = await getTpiModels();
+    // Appeler la fonction du client pour récupérer les modèles de TPI depuis le serveur en fonction de l'année
+    const tpiModels = await getTpiModels(year);
 
     // Afficher le message en cas de succès
-    console.log("TPI récupérés depuis le serveur:", tpiModels);
+    console.log(`TPI récupérés depuis le serveur pour l'année ${year}:`, tpiModels);
 
     return tpiModels;
   } catch (error) {
@@ -110,3 +110,4 @@ export const getTpiFromServer = async () => {
     );
   }
 };
+

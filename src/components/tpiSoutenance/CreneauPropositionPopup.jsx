@@ -63,7 +63,7 @@ const CreneauPropositionPopup = ({
   }
 
   const sauvegarderPropositions = async () => {
-    const url = `${apiUrl}/api/save-propositions/${year}/${expertOrBoss}/${tpiData.id}`
+    const url = `${apiUrl}/api/save-propositions/${year}/${expertOrBoss}/${tpiData.id}/${tpiData._id}`
 
     const propositionsData = {
       isValidated: false,
