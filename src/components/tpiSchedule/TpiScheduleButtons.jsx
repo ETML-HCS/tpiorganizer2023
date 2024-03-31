@@ -101,7 +101,27 @@ const TpiScheduleButtons = ({
       console.error('Erreur lors de la mise à jour des offres :', error)
     }
   }
-  
+
+  function getInitialYear () {
+    const dateElement = document.querySelector('.date')
+    if (dateElement) {
+      const dateString = dateElement.textContent.trim()
+      const match = dateString.match(/(\w+) (\d{1,2})-(\d{1,2})-(\d{4})/) // Regex pour extraire le jour, le mois et l'année
+      if (match) {
+        const day = parseInt(match[2])
+        const month = parseInt(match[3]) - 1 // Soustraire 1 car les mois en JavaScript sont 0-indexés
+        const year = parseInt(match[4])
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          const date = new Date(year, month, day)
+          if (!isNaN(date.getTime())) {
+            return date.getFullYear() // Renvoie l'année si la date est valide
+          }
+        }
+      }
+    }
+    return new Date().getFullYear() // Utilisation de la date en cours comme valeur par défaut si aucune année n'est trouvée dans le DOM
+  }
+
   return (
     <div id='tools'>
       {showForm ? (
@@ -192,7 +212,8 @@ const TpiScheduleButtons = ({
             <label>Select a year:</label>
             <select
               onChange={e => setSelectedYear(parseInt(e.target.value))}
-              value={selectedYear || ''}
+              value={selectedYear || getInitialYear()}
+              // Utilisation de la fonction getInitialYear pour déterminer la valeur par défaut
             >
               <option value=''>Select Year</option>
               {years.map(year => (
@@ -201,6 +222,7 @@ const TpiScheduleButtons = ({
                 </option>
               ))}
             </select>
+
             <button
               className='publish-button'
               onClick={() => handleRapatrierClick(selectedYear)}

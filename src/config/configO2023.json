@@ -1,6 +1,5 @@
 {
   "apiUrl": "http://localhost:6000",
-  
   "soutenanceDates": [
     "2024-06-03",
     "2024-06-04",
@@ -12,38 +11,33 @@
     "2024-06-12",
     "2024-06-13",
     "2024-06-14"
-  ]
-  ,
-  
+  ],
   "etml": {
     "rooms": [
-      "Sébeillon-N501", 
-      "Sébeillon-N511", 
+      "Sébeillon-N501",
+      "Sébeillon-N511",
       "Sébeillon-N512B"
-    ]
-    ,
+    ],
     "breakline": 0.1667,
-    "tpiTime": 1.0,
-    "firstTpiStart": 8.0,
+    "tpiTime": 1,
+    "firstTpiStart": 8,
     "numSlots": 8
   },
   "cfpv": {
     "rooms": [
-      "Vennes - A01", 
-      "Vennes - A02", 
+      "Vennes - A01",
+      "Vennes - A02",
       "Vennes - A03",
       "Vennes - A11",
       "Vennes - A12",
-      "Vennes - A13", 
-      "Vennes - A21", 
-      "Vennes - A22", 
+      "Vennes - A13",
+      "Vennes - A21",
+      "Vennes - A22",
       "Vennes - A23"
     ],
     "breakline": 0.1667,
-    "tpiTime": 1.0,
-    "firstTpiStart": 8.0,
+    "tpiTime": 1,
+    "firstTpiStart": 8,
     "numSlots": 8
   }
-
-
 }
