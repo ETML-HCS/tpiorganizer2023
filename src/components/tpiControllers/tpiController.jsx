@@ -23,7 +23,7 @@ export const createTpiModel = async modelData => {
 
 export const getTpiModels = async (year) => { // Ajoute le paramètre 'year'
   try {
-    console.log( `${apiUrl}/api/get-tpi?year=${year}`); // Affiche l'URL avec l'année
+    //console.log( `${apiUrl}/api/get-tpi?year=${year}`); // Affiche l'URL avec l'année
     const response = await axios.get(`${apiUrl}/api/get-tpi?year=${year}`); // Ajoute 'year' à l'URL
     return response.data;
   } catch (error) {

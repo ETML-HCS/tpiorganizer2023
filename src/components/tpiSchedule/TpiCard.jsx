@@ -85,23 +85,27 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   }, [assignedRefTpis]) // Effectuer cette action lorsque assignedRefTpis change
 
   useEffect(() => {
+    // Vérifie si un candidat est sélectionné et si la liste des TPI (Travaux Pratiques Individuels) existe et n'est pas vide
     if (selectedCandidate && tpiList && tpiList.length > 0) {
+      // Trouve le TPI correspondant au candidat sélectionné
       const selectedTpi = tpiList.find(
         item => item.refTpi === selectedCandidate
       )
 
+      // Si un TPI correspondant est trouvé
       if (selectedTpi) {
+        // Met à jour l'état du TPI édité avec les informations du TPI sélectionné
         setEditedTpi(prevEditedTpi => ({
           ...prevEditedTpi,
-          refTpi: selectedTpi.refTpi,
-          candidat: selectedTpi.candidat,
-          expert1: { name: selectedTpi.expert1 },
-          expert2: { name: selectedTpi.expert2 },
-          boss: { name: selectedTpi.boss }
+          refTpi: selectedTpi.refTpi, // Met à jour la référence du TPI
+          candidat: selectedTpi.candidat, // Met à jour le candidat associé
+          expert1: { name: selectedTpi.expert1 }, // Met à jour le premier expert
+          expert2: { name: selectedTpi.expert2 }, // Met à jour le deuxième expert
+          boss: { name: selectedTpi.boss } // Met à jour le responsable
         }))
       }
     }
-  }, [selectedCandidate, tpiList])
+  }, [selectedCandidate, tpiList]) // Déclenche cet effet à chaque changement de candidat sélectionné ou de liste de TPI
 
   useEffect(() => {
     setEditedTpi(tpi)
@@ -116,6 +120,15 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   useEffect(() => {
     // Fonction pour gérer la fermeture de la liste lorsque l'utilisateur clique à l'extérieur du composant
     const handleClickOutside = event => {
+      // Récupération des éléments HTML avec la classe 'refTpi'
+      const refTpiElements = document.getElementsByClassName('refTpi')
+
+      // Extraction des références des TPI attribués
+      const assignedRefTpis = Array.from(refTpiElements).map(element =>
+        element.textContent.trim()
+      )
+      setAssignedRefTpis(assignedRefTpis)
+
       if (selectRef.current && !selectRef.current.contains(event.target)) {
         setIsSelectOpen(false)
       }
@@ -124,11 +137,9 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
       if (findParentWithClass(selectRef.current, 'site_etml')) {
         // Si l'élément parent a la classe "site_etml", l'emplacement est "ETML-Sébeillon"
         setLocation('ETML-Sébeillon')
-        console.log('Location ETML ajoutée')
       } else if (findParentWithClass(selectRef.current, 'site_cfpv')) {
         // Si l'élément parent a la classe "site_cfpv", l'emplacement est "ETML-Vennes"
-        setLocation('CFPV-Vennes')
-        console.log('Location CFPV ajoutée')
+        setLocation('ETML-Vennes')
       }
     }
 
@@ -140,18 +151,8 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
       try {
         // Récupération des données sur les modèles de TPI
         const tpiData = await getTpiModels(getInitialYear())
-
-        // Récupération des éléments HTML avec la classe 'refTpi'
-        const refTpiElements = document.getElementsByClassName('refTpi')
-
-        // Extraction des références des TPI attribués
-        const assignedRefTpis = Array.from(refTpiElements).map(element =>
-          element.textContent.trim()
-        )
-
         // Mise à jour de l'état des listes de TPI et de TPI attribués
         setTpiList(tpiData)
-        setAssignedRefTpis(assignedRefTpis)
       } catch (error) {
         // Gérer les erreurs de chargement
         console.error(
@@ -282,7 +283,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
                         </option>
                       )
                     }
-                    console.log("Option non rendue pour l'élément :")
+                    console.log("Option non rendue pour l'élément")
                     return null
                   })}
                 </select>
