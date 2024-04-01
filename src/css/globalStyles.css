@@ -152,15 +152,15 @@
 
 /* Footer.css */
 .footer {
-  position: relative;
-  bottom: 0;
-  left: 0;
-  width: 100%;
+  position: fixed;
+  bottom: 5px;
+  left: -20px;
+  width: calc(100% + 40px);
   color: black; /* Couleur de texte par défaut */
-  padding: 10px 20px;
   font-size: 12px;
   text-align: right;
   transition: color 0.3s; /* Ajout d'une transition sur la couleur */
+  z-index: 0;
 }
 
 .footer:hover {

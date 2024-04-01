@@ -20,8 +20,10 @@ import { showNotification } from './components/Tools'
 import './css/globalStyles.css'
 
 const bcrypt = require('bcryptjs')
+const versionO = '24.04.01'
+
 //#region Layout
-const Layout = ({ isAuthenticated, login, logout }) => {
+const Layout = ({ isAuthenticated, login }) => {
   const location = useLocation()
   const dateAujourdhui = new Date()
   const dateFormatted = dateAujourdhui.toLocaleDateString()
@@ -33,6 +35,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
   }
 
   const navigate = useNavigate()
+
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/') // Redirigez l'utilisateur après la connexion
@@ -96,7 +99,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
             </span>
             <span id='center'>&#xF3; 2023</span>
             <span id='right' className='dateToday'>
-              Aujourd'hui: {dateFormatted}{' '}
+              Aujourd'hui : {dateFormatted}{' '}
             </span>
           </div>
           <button
@@ -145,8 +148,9 @@ const Layout = ({ isAuthenticated, login, logout }) => {
         <div className='footer-content'>
           <p>
             Réalisé par Helder Costa Lopes pour l'ETML/CFPV | © 2023 Tpi
-            Organizer - Tous droits réservés
+            Organizer - Tous droits réservés 
           </p>
+          <p>Version {versionO}</p>
         </div>
       </footer>
     </Fragment>
@@ -158,25 +162,12 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
-  // Simulez une fonction de connexion. dans une application réelle, vous devriez vérifier les identifiants de l'utilisateur, par exemple via une requête à une API.
-  const login = (username, password) => {
-    if (
-      username === 'etmlAdmin' &&
-      password === 'Venir de Vennes, quelle veine !'
-    ) {
-      setIsAuthenticated(true)
-      // Pas besoin d'appeler navigate ici, useEffect s'en chargera
-    } else {
-      showNotification('Identifiants incorrects', 'info')
-    }
-  }
-
   const loginSecur = async (username, password) => {
     // Hacher le nom d'utilisateur
     const hashedUsername =
       '$2a$10$4V5rjIAkgnmnHYZB7cStxuj..WNB9AdGZIVVb8qu9JB3vLddxeob.'
 
-    // Mot de passe haché pour 'Venir de Vennes, quelle veine !'
+    // Mot de passe haché pour
     const hashedPassword =
       '$2a$10$lUc5CNhar6tpPY677cBFDugyyzQPn/JdtiOrSz0to/c6E.fWjcW22'
 
@@ -184,9 +175,6 @@ const App = () => {
     const isUsernameCorrect = await bcrypt.compare(username, hashedUsername)
     // Comparaison du mot de passe fourni avec le mot de passe haché
     const isPasswordCorrect = await bcrypt.compare(password, hashedPassword)
-
-    console.log(isUsernameCorrect)
-    console.log(isPasswordCorrect)
 
     if (isUsernameCorrect && isPasswordCorrect) {
       setIsAuthenticated(true)

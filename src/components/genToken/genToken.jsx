@@ -9,8 +9,6 @@ const apiUrl = debugMode
   ? process.env.REACT_APP_API_URL_TRUE
   : process.env.REACT_APP_API_URL_FALSE
 
-console.log('val de debugMode : ', debugMode)
-
 const TokenGenerator = () => {
   const [secretKey, setSecretKey] = useState('')
   const [experts, setExperts] = useState([]) // Renommé pour refléter qu'il contient plus que des emails

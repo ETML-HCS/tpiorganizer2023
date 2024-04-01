@@ -392,34 +392,3 @@
   right: 1%;
   top: 25%;
 }
-
-.custom-popup {
-  position: relative;
-}
-
-.custom-popup::after {
-  content: attr(data-popup-text);
-  display: block;
-  width: 20ch;
-  height: 5em;
-  text-align: center;
-  line-height: 1.6;
-  padding: 10px 15px;
-  background-color: #333;
-  color: #fff;
-  border-radius: 6px;
-  position: absolute;
-  right: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
-}
-
-.custom-popup:hover::after {
-  opacity: 1;
-  visibility: visible;
-}
-

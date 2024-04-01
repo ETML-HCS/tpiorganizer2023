@@ -5,11 +5,11 @@ import '../css/loginPage.css'
 const LoginPage = ({ login }) => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
 
   const handleSubmit = event => {
     event.preventDefault() // Empêche le comportement par défaut du formulaire
     login(username, password) // Appelle la fonction de connexion passée en props avec le nom d'utilisateur et le mot de passe
-    console.log(login)
   }
 
   return (
@@ -36,6 +36,7 @@ const LoginPage = ({ login }) => {
             required
           />
         </div>
+        {error && <div className='error-message'>{error}</div>}
         <button className='button-login' type='submit'>
           Se connecter
         </button>

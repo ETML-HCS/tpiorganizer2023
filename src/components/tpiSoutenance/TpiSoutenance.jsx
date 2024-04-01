@@ -359,6 +359,80 @@ const RenderRooms = ({
     loadData()
   }
 
+  const downloadICal = (salle, tpi) => {
+    const timeTpi = document.querySelector(`#${tpi.id}`).title;
+
+    const timeStart = timeTpi.split('-')[0].trim();
+    const timeEnd = timeTpi.split('-')[1].trim();
+    
+    
+
+    // Convertir la date de la salle au format requis pour DTSTART et DTEND
+    const formattedDate = new Date(salle.date)
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[-:]/g, '');
+
+    // Créer le contenu de l'iCal en utilisant les données de tpi
+    const icalContent = 
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//tpiOrganizer2023//iCal
+BEGIN:VTIMEZONE
+TZID:Europe/Berlin
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTAMP:20240401T131913Z
+UID:${tpi.refTpi}
+DTSTART;TZID=Europe/Berlin:${formattedDate.replace('T000000', 'T' + timeStart.replace(':','')+'00')}
+DTEND;TZID=Europe/Berlin:${formattedDate.replace('T000000', 'T' + timeEnd.replace(':','')+'00' )}
+SUMMARY:Soutenance ${tpi.refTpi} - ${tpi.candidat} ${timeStart}-${timeEnd}
+DESCRIPTION:Soutenance de TPI pour ${tpi.candidat}\\nExpert 1: ${tpi.expert1.name}\\nExpert 2: ${tpi.expert2.name}\\nEncadrant: ${tpi.boss.name}
+LOCATION:${salle.name}
+TRANSP:TRANSPARENT
+CLASS:PUBLIC
+END:VEVENT
+END:VCALENDAR\r\n
+`;
+    
+    // Créer un objet Blob avec le contenu iCal
+    const blob = new Blob([icalContent], { type: 'text/calendar' });
+
+    // Créer un URL à partir du Blob
+    const url = URL.createObjectURL(blob);
+
+    // Créer un élément <a> pour déclencher le téléchargement
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tpi.candidat}_TPI.ics`; // Nom du fichier iCal
+    a.style.display = 'none'; // Cacher le lien de téléchargement
+
+    // Ajouter l'élément <a> au corps du document
+    document.body.appendChild(a);
+
+    // Simuler un clic sur le lien pour démarrer le téléchargement
+    a.click();
+
+    // Supprimer l'élément <a> après le téléchargement
+    document.body.removeChild(a);
+
+    // Révoquer l'URL de l'objet Blob
+    URL.revokeObjectURL(url);
+};
+
+
   return (
     <div className='salles-container'>
       {tpiDatas.map((salle, indexSalle) => (
@@ -380,9 +454,20 @@ const RenderRooms = ({
             const tpiData = salle.tpiDatas ? salle.tpiDatas[index] : null
             const { candidat, expert1, expert2, boss } = tpiData || {}
 
-            // fonction pour simplifier
-            const findPersonTokenByName = name =>
-              listOfPerson.find(person => person.name === name)?.token
+            // Fonction pour trouver le token d'une personne par son nom
+            const findPersonTokenByName = name => {
+              // Utilisation de la méthode find pour trouver la personne par son nom
+              const person = listOfPerson.find(person => person.name === name)
+              // Si la personne est trouvée, retourner son token
+              if (person) {
+                return person.token
+              } else {
+                // Si la personne n'est pas trouvée, afficher un message dans la console
+                console.log(`La personne avec le nom "${name}" n'existe pas.`)
+                // Retourner undefined
+                return undefined
+              }
+            }
 
             // const candidatToken = findPersonTokenByName(candidat);
             const expert1Token = findPersonTokenByName(expert1?.name)
@@ -411,6 +496,17 @@ const RenderRooms = ({
                   </div>
 
                   <div className='tpi-container'>
+                   {tpiData.candidat && ( 
+                   
+                   <button
+                      type='button'
+                      className='btniCal'
+                      onClick={() => downloadICal(salle,tpiData)}
+                    >
+                      iCal &#x1F4E5;
+                    </button>
+                    )}
+
                     <div className='tpi-entry tpi-candidat'>
                       <div className='tpi-entry'>
                         <TruncatedText

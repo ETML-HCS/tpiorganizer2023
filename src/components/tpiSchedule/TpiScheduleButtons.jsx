@@ -208,14 +208,13 @@ const TpiScheduleButtons = ({
           </button>
 
           <div>
-            <h1>List of Years</h1>
             <label>Select a year:</label>
             <select
               onChange={e => setSelectedYear(parseInt(e.target.value))}
               value={selectedYear || getInitialYear()}
               // Utilisation de la fonction getInitialYear pour déterminer la valeur par défaut
             >
-              <option value=''>Select Year</option>
+              <option value=''>Select Year{": "}</option>
               {years.map(year => (
                 <option key={year} value={year}>
                   {year}

@@ -37,6 +37,18 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
   const selectRef = useRef(null)
   const refTpiContainerRef = useRef(null)
   const [isSelectOpen, setIsSelectOpen] = useState(false)
+  const [isPopupVisible, setIsPopupVisible] = useState(false)
+  const [popupText, setPopupText] = useState('')
+
+  // Fonction pour afficher la popup avec le texte spécifié
+  const handleMouseEnter = text => {
+    setPopupText(text) // Définissez le texte de la popup
+    setIsPopupVisible(true) // Affichez la popup
+  }
+
+  const handleMouseLeave = () => {
+    setIsPopupVisible(false)
+  }
 
   const handleToggleSelect = () => {
     setIsSelectOpen(prevState => !prevState)
@@ -211,6 +223,14 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
     return new Date(date).toLocaleDateString('fr-CH', options)
   }
 
+  const Popup = ({ text }) => {
+    return (
+      <div className='custom-popup'>
+        <div className='popup-content'>{text}</div>
+      </div>
+    )
+  }
+
   const isExpert1Proposal =
     (tpi.expert1.offres?.submit?.length ?? 0) > 0 ? '🗓️' : ''
   const isExpert2Proposal =
@@ -321,7 +341,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             {editedTpi.candidat}
           </div>
 
-          <div className='expert custom-popup' data-popup-text={expert1Title}>
+          <div className='expert' title='{expert1Title}'>
             <span role='img' aria-label='checkmark' className='boss-icon'>
               🛠️
             </span>
@@ -329,7 +349,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             <span className='icon-proposal'>{isExpert1Proposal}</span>
           </div>
 
-          <div className='expert custom-popup' data-popup-text={expert2Title}>
+          <div className='expert' title={expert2Title}>
             <span role='img' aria-label='checkmark'>
               🛠️
             </span>
@@ -337,7 +357,7 @@ const TpiCard = ({ tpi, isEditingTpiCard, onUpdateTpi }) => {
             <span className='icon-proposal'>{isExpert2Proposal}</span>
           </div>
 
-          <div className='boss custom-popup' data-popup-text={bossTitle}>
+          <div className='boss' title={bossTitle}>
             <span role='img' aria-label='boss'>
               💼
             </span>

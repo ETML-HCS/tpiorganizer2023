@@ -563,28 +563,16 @@ p {
   position: relative;
 }
 
-[class^='salle CFPV'] .stabilo::after {
+.stabilo::after {
   content: '';
   display: block;
-  width: 90%;
+  width: 95%;
   height: 100%;
   position: absolute;
-  top: 0;
+  top: -3px;
   left: -5px;
-  background-color: var(--shadow-color-cfpv);
-  z-index: -1;
-  border-radius: 5px;
-}
-
-[class^='salle ETML'] .stabilo::after {
-  content: '';
-  display: block;
-  width: 90%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: -5px;
-  background-color: var(--shadow-color-etml);
+  padding: 3px;
+  background-color: #ffee03d5;
   z-index: -1;
   border-radius: 5px;
 }
@@ -593,7 +581,6 @@ p {
   #region smartphone
 */
 .message-smartphone {
-
   background-color: #e71c1ce1;
   color: white;
   padding: 10px 15px;
@@ -602,7 +589,7 @@ p {
   z-index: 99;
 }
 
-button.smartphone{
+button.smartphone {
   text-align: center;
   color: white;
   font-size: 12px;
@@ -610,20 +597,21 @@ button.smartphone{
   height: 50px;
   width: 90px;
 
-
   margin-bottom: 10px;
   padding: 10px 15px;
 
   border: none;
   border-radius: 8px;
-  background-color:var(--accent-color-cfpv);
+  background-color: var(--accent-color-cfpv);
 }
 
 button.smartphone:nth-child(even) {
-  background-color:var(--accent-color-etml); /* Couleur de fond pour les boutons pairs */
+  background-color: var(
+    --accent-color-etml
+  ); /* Couleur de fond pour les boutons pairs */
 }
 
-.filters-smartphone{
+.filters-smartphone {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -805,3 +793,15 @@ button.smartphone:nth-child(even) {
 }
 /* #endregion */
 
+
+.btniCal {
+  width: auto;
+  padding: 5px 8px;
+  position: absolute;
+  top: 0;
+  right: 80px;
+  font-size: 12px;
+  background-color:transparent;
+  border: none;
+  z-index: 99;
+}
