@@ -33,6 +33,16 @@ app.get('/', (req, res) => {
   res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`)
 })
 
+// const pour les messages d'erreurs 
+
+const ERROR_MESSAGES = {
+  MISSING_TOKEN: 'Token manquant dans la requête.',
+  EXPERT_NOT_FOUND: 'Aucun expert trouvé avec ce token.',
+  INTERNAL_ERROR: 'Erreur interne lors de la récupération du nom de l\'expert.',
+};
+
+
+
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 
 app.post('/api/send-email', async (req, res) => {
@@ -105,6 +115,36 @@ app.get('/api/experts/listExpertsOrBoss', async (req, res) => {
     res.status(500).send('Erreur lors de la récupération des emails')
   }
 })
+
+// route pour tpiEval ---> 
+
+app.get('/api/experts/getNameByToken', async (req, res) => {
+  try {
+    // Récupérer le token de la requête
+    const token = req.query.token;
+
+    // Vérifier si le token est présent dans la requête
+    if (!token) {
+      return res.status(400).json({ error: ERROR_MESSAGES.MISSING_TOKEN });
+    }
+
+    // Rechercher l'expert dans la base de données en utilisant le token
+    const expert = await TpiExperts.findOne({ token });
+
+    // Vérifier si un expert a été trouvé
+    if (!expert) {
+      return res.status(404).json({ error: ERROR_MESSAGES.EXPERT_NOT_FOUND });
+    }
+
+    // Retourner le nom de l'expert
+    res.json({ name: expert.name });
+  } catch (error) {
+    console.error('Erreur lors de la récupération du nom de l\'expert :', error);
+    res.status(500).send(ERROR_MESSAGES.INTERNAL_ERROR);
+  }
+});
+
+
 
 app.put('/api/experts/putTokens', async (req, res) => {
   try {

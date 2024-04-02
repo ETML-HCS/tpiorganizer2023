@@ -175,3 +175,19 @@
 .footer-content p:last-child {
   margin-right: 40px;
 }
+
+
+/* Media query pour les appareils avec une largeur maximale de 767px */
+@media (max-width: 767px) {
+  /* Réduire la taille de la police pour une meilleure lisibilité sur les petits écrans */
+  body {
+    font-size: 0.78rem;
+  }
+
+  #title,#center{
+    font-size: 11px;
+    margin: 0;
+    gap: 0;
+  }
+
+}

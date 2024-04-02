@@ -66,7 +66,7 @@ const Home = () => {
     },
     {
       name: 'Évaluation du TPI',
-      link: '/evaluationTPI'
+      link: '/TpiEval'
     },
     {
       name: 'Rapports et statistiques',

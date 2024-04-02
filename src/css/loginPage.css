@@ -1,50 +1,50 @@
 .login-container {
-    margin: 150px auto;
-    padding: 20px;
-    background-color: #f5f4f546;
-    border-radius: 5px;
-    width: 400px;
-    min-width: 350px;
+  margin: 150px auto;
+  padding: 20px;
+  background-color: #f5f4f546;
+  border-radius: 5px;
+  max-width: 400px;
+  min-width: 250px;
 }
 
 .loginPage {
-    box-sizing: border-box;
-    border: none;
-    border-radius: 5px;
-    margin-bottom: 10px;
-    padding: 8px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 5px;
+  margin-bottom: 10px;
+  padding: 8px;
 }
 
 .form-group {
-    margin-bottom: 12px;
-    box-sizing: border-box;
-    padding: 2px;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+  padding: 2px;
 }
 
 .form-group label {
-    display: block;
-    margin-bottom: 10px;
-    box-sizing: border-box;
+  display: block;
+  margin-bottom: 10px;
+  box-sizing: border-box;
 }
 
 .form-group input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px;
-    border: 1px solid var(--accent-color-etml);
-    border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--accent-color-etml);
+  border-radius: 4px;
 }
 
 .button-login {
-    width: 100%;
-    padding: 10px;
-    background-color: var(--accent-color-etml);
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
+  width: 100%;
+  padding: 10px;
+  background-color: var(--accent-color-etml);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
 }
 
 .button-login:hover {
-    filter: brightness(120%);
+  filter: brightness(120%);
 }

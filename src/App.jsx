@@ -15,6 +15,7 @@ import TpiTracker from './components/tpiTracker/TpiTracker'
 import TpiSoutenance from './components/tpiSoutenance/TpiSoutenance'
 import TokenGenerator from './components/genToken/GenToken'
 import LoginPage from './components/LoginPage'
+import TpiEval from './components/tpiEval/TpiEval'
 
 import { showNotification } from './components/Tools'
 import './css/globalStyles.css'
@@ -122,7 +123,7 @@ const Layout = ({ isAuthenticated, login }) => {
         {/* Route pour la page de connexion */}
         <Route path='/login' element={<LoginPage login={login} />} />
 
-        {/* Routes accessibles une fois authentifié */}
+        {/* Routes (protégée) => authentifié */}
         {isAuthenticated && (
           <>
             <Route path='/' element={<Home />} />
@@ -135,12 +136,13 @@ const Layout = ({ isAuthenticated, login }) => {
             <Route path='/gestionTPI' element={<TpiManagement />} />
             <Route path='/suiviEtudiants' element={<TpiTracker />} />
             <Route path='/genTokens' element={<TokenGenerator />} />
-            {/* Autres routes protégées */}
+            
           </>
         )}
 
         {/* Routes toujours accessibles, authentifié ou non */}
         <Route path='/calendrierDefenses/:year' element={<TpiSoutenance />} />
+        <Route path='/TpiEval' element={<TpiEval />} />
       </Routes>
 
       {/* pied de page */}
