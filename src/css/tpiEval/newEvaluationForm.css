@@ -1,0 +1,280 @@
+/* --------------- Région : Configuration générale --------------- */
+
+
+/*Cartouche */
+
+#searchCandidat{
+  border: none;
+  padding: 4px;
+  background-color: #fdfcfc;
+  font-weight: bold;
+}
+
+#searchCandidat:hover{
+  background-color: #fbebeb;
+}
+
+
+#refCandidat input{
+  display: inline;
+  width: 120px;
+  margin: 0 5px;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px outset #333; /* Couleur et style de la ligne en bas */
+  outline: none; /* Pour supprimer la bordure par défaut du navigateur */
+}
+
+/* Styles généraux pour les tables */
+
+/*C'est la div qui contient la table*/
+.tQuestions {
+  padding: 20px;
+}
+table {
+  width: 90vw;
+  max-width: 1100px;
+  margin: 0 auto;
+  border-collapse: collapse;
+  border: 1px solid #333;
+}
+
+/* Styles généraux pour les cellules */
+th,
+td {
+  padding: 8px;
+  /* Espacement interne */
+  border: 1px solid #dddddd;
+  /* Bordure */
+}
+
+td input,
+td textarea {
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Styles pour les en-têtes de tableau */
+th {
+  text-align: center;
+  /* Alignement du texte */
+  background-color: #f2f2f2;
+  /* Couleur de fond */
+  font-size: 14px;
+  /* Taille de la police */
+}
+
+/* Styles pour les lignes de données */
+tbody tr:nth-child(even) {
+  background-color: #f2f2f2;
+  /* Couleur de fond des lignes paires */
+}
+
+/* Styles spécifiques pour la table "viewPoints" */
+#viewPoints {
+  text-align: center;
+  margin: 20px auto;
+}
+
+/* Styles pour les cellules de l'en-tête de la table "viewPoints" */
+#viewPoints th {
+  background-color: #f2f2f2;
+  /* Couleur de fond */
+  font-size: 14px;
+  /* Taille de la police */
+}
+
+/* Styles pour le texte aligné à gauche dans les cellules */
+td:not(#viewPoints td) {
+  text-align: left;
+}
+
+/* --------------- Région : Styles spécifiques --------------- */
+
+.remaque {
+  display: flex;
+  margin: 0 auto;
+  width: 80vw;
+  justify-content: center;
+}
+
+.remaque textarea {
+  background-color: #daedfcb0;
+  margin-bottom: 20px;
+}
+
+/* Styles spécifiques pour les inputs questions */
+[id^='input_A'],
+[id^='input_C'] {
+  width: 90%;
+  margin: 5px 0 auto;
+}
+
+input[type='tel'],
+input[type='email'],
+input[type='text'],
+input[type='number'],
+textarea {
+  padding: 5px;
+  text-align: center;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  outline: none;
+  -moz-appearance: textfield;
+  -webkit-appearance: textfield;
+  appearance: textfield;
+  box-sizing: border-box;
+  resize: none;
+  width: 90%;
+  font-size: 14px;
+}
+
+input[type='number']:invalid {
+  border-color: red;
+}
+
+input[type='number']:invalid::after {
+  content: 'Veuillez entrer une valeur entre 0 et 3';
+  display: block;
+  color: red;
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
+}
+
+textarea:focus,
+input[type='number']:focus {
+  border-color: #007bff;
+  /* Couleur de la bordure lorsqu'il est en focus */
+}
+
+/* --------------- Région : Styles pour la mise en page --------------- */
+
+/* Styles pour les colonnes avec différentes longueurs */
+.col-1 {
+  width: 30px;
+  /* Longueur pour contenir "A20" */
+}
+
+.col-2 {
+  width: 45%;
+  /* Longueur dynamique */
+}
+
+.btn_question {
+  display: inline-flex;
+  position: absolute;
+  transform: translateY(10px);
+}
+
+.btn_Selected,
+.btn_questionMinus,
+.btn_questionAdd {
+  height: auto;
+  border: none;
+  margin-left: 5px;
+  padding: 2px;
+  width: 20px;
+  font-weight: bold;
+  color: white;
+  font-size: 14px;
+}
+
+.btn_Selected {
+  background-color: #cba99bd7;
+  margin-right: 5px;
+}
+
+.btn_questionAdd {
+  background-color: #1ade31e1;
+}
+
+.btn_questionMinus {
+  background-color: #de1a1de1;
+}
+
+.btn_questionMinus:hover,
+.btn_questionAdd:hover,
+.btn_Selected:hover {
+  filter: brightness(120%);
+}
+
+.col-3 {
+  width: 60px;
+  /* Longueur pour contenir un nombre de 0 à 3 */
+}
+
+.col-4 {
+  width: auto;
+  /* Longueur dynamique */
+}
+
+/* Styles pour masquer le contenu visuellement */
+.hidden {
+  display: none;
+}
+
+.disabled {
+  background-color: #ccc;
+}
+
+/* Styles pour l'en-tête de page */
+.headerPage {
+  text-align: right;
+  margin-right: 20px;
+}
+
+/* Styles pour le conteneur de l'en-tête */
+.identityHeader {
+  display: flex;
+  flex-direction: row;
+  width: 900px;
+  margin: 15px auto;
+  border: 1px solid black;
+}
+
+/* Styles pour les champs de l'en-tête */
+.headerField {
+  display: flex;
+  flex-direction: column;
+  width: 50%;
+  padding: 12px;
+  margin: 3px;
+  background-color: #efeded2a; /* Gris clair */
+  border: 2px solid #98fb9857; /* Vert pâle */
+}
+
+.headerField input {
+  width: calc(100% - 20px);
+  text-align: left;
+  margin-left: 20px;
+  margin-bottom: 5px;
+}
+
+/* --------------- Région : Styles généraux --------------- */
+
+/* Styles généraux pour le corps */
+
+.btn_validation {
+  display: flex;
+  float: right;
+  margin-top: 10px;
+  margin-right: 30px;
+}
+
+.btn_validation button {
+  font-size: 14px;
+  padding: 5px 10px;
+  color: white;
+  background-color: #2982cf;
+  border: none;
+  border-radius: 5px;
+  margin-left: 5px;
+}
+
+.btn_validation button:hover {
+  filter: brightness(120%);
+}
+
+#newEvalForm {
+  margin-bottom: 45px;
+}

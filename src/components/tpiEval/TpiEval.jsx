@@ -12,10 +12,11 @@
 import axios from 'axios'
 import React, { useState, useEffect } from 'react'
 
+import NewEvaluationForm from './NewEvaluationForm'
+
 import '../../css/tpiEval/tpiEval.css'
 
 /*** Fonctions ***/
-
 /**
  * Fonction pour récupérer le nom de l'expert à partir du token.
  * @param {string} token Le token de l'expert.
@@ -109,8 +110,10 @@ function TpiEvalModule () {
         </p>
       </main>
 
-      {/* Composants pour la saisie, la lecture et la modification des évaluations */}
-      {/* Exemple : <EvaluationForm addEvaluation={addEvaluation} /> */}
+      <section id='newEvalForm'>
+        <NewEvaluationForm addEvaluation={addEvaluation} />
+      </section>
+
       {/* Exemple : <EvaluationList evaluations={evaluations} deleteEvaluation={deleteEvaluation} /> */}
       {/* Exemple : <AdminControls saveEvaluations={saveEvaluations} /> */}
     </div>

@@ -136,7 +136,6 @@ const Layout = ({ isAuthenticated, login }) => {
             <Route path='/gestionTPI' element={<TpiManagement />} />
             <Route path='/suiviEtudiants' element={<TpiTracker />} />
             <Route path='/genTokens' element={<TokenGenerator />} />
-            
           </>
         )}
 
@@ -146,18 +145,49 @@ const Layout = ({ isAuthenticated, login }) => {
       </Routes>
 
       {/* pied de page */}
-      <footer className='footer'>
-        <div className='footer-content'>
-          <p>
-            Réalisé par Helder Costa Lopes pour l'ETML/CFPV | © 2023 Tpi
-            Organizer - Tous droits réservés 
-          </p>
-          <p>Version {versionO}</p>
-        </div>
-      </footer>
+      <Footer />
     </Fragment>
   )
 }
+
+const Footer = () => {
+  // État local pour contrôler l'affichage du pied de page
+  const [showFooter, setShowFooter] = useState(false)
+
+  // Utilisation du hook useEffect pour exécuter une fonction à chaque fois que le composant est monté
+  useEffect(() => {
+    // Fonction pour gérer le défilement de la page
+    const handleScroll = () => {
+      // Vérifier si l'utilisateur a atteint le bas de la page
+      const isBottom =
+        window.innerHeight + window.scrollY >= document.body.scrollHeight
+      // Mettre à jour l'état showFooter en fonction du résultat de la vérification
+      setShowFooter(isBottom)
+    }
+
+    // Ajouter un écouteur d'événement pour le défilement de la page
+    window.addEventListener('scroll', handleScroll)
+
+    // Retirer l'écouteur d'événement lors du démontage du composant
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, []) // Le tableau vide [] en tant que deuxième argument signifie que ce code ne sera exécuté qu'une seule fois, après le montage initial du composant
+
+  // Rendu du composant Footer
+  return (
+    <footer className={showFooter ? 'footer' : 'footer hidden'}>
+      <div className='footer-content'>
+        <p>
+          Réalisé par Helder Costa Lopes pour l'ETML/CFPV | © 2023 Tpi Organizer
+          - Tous droits réservés
+        </p>
+        <p>Version {versionO}</p>
+      </div>
+    </footer>
+  )
+}
+
 //#endregion
 
 //#region APP

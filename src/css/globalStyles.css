@@ -152,6 +152,7 @@
 
 /* Footer.css */
 .footer {
+  background-color: white;
   position: fixed;
   bottom: 5px;
   left: -20px;
@@ -160,7 +161,7 @@
   font-size: 12px;
   text-align: right;
   transition: color 0.3s; /* Ajout d'une transition sur la couleur */
-  z-index: 0;
+  z-index: -1;
 }
 
 .footer:hover {
