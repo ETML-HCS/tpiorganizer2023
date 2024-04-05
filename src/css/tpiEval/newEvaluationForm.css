@@ -1,21 +1,19 @@
 /* --------------- Région : Configuration générale --------------- */
 
-
 /*Cartouche */
 
-#searchCandidat{
+#searchCandidat {
   border: none;
   padding: 4px;
   background-color: #fdfcfc;
   font-weight: bold;
 }
 
-#searchCandidat:hover{
+#searchCandidat:hover {
   background-color: #fbebeb;
 }
 
-
-#refCandidat input{
+#refPage input {
   display: inline;
   width: 120px;
   margin: 0 5px;
@@ -31,6 +29,7 @@
 .tQuestions {
   padding: 20px;
 }
+
 table {
   width: 90vw;
   max-width: 1100px;
@@ -116,7 +115,6 @@ input[type='text'],
 input[type='number'],
 textarea {
   padding: 5px;
-  text-align: center;
   border: 1px solid #ccc;
   border-radius: 5px;
   outline: none;
@@ -125,8 +123,16 @@ textarea {
   appearance: textfield;
   box-sizing: border-box;
   resize: none;
-  width: 90%;
   font-size: 14px;
+}
+
+input[id^='input'][id$='_0'] {
+  /* Styles pour les éléments <input> avec ID commençant par 'input' et se terminant par '_0' */
+  width: calc(100% - 53px);
+}
+
+input[type='number'] {
+  text-align: center;
 }
 
 input[type='number']:invalid {
@@ -161,35 +167,43 @@ input[type='number']:focus {
 }
 
 .btn_question {
+  width: 56px;
   display: inline-flex;
   position: absolute;
-  transform: translateY(10px);
+  transform: translateY(7px);
 }
 
-.btn_Selected,
 .btn_questionMinus,
 .btn_questionAdd {
-  height: auto;
   border: none;
-  margin-left: 5px;
-  padding: 2px;
-  width: 20px;
+  margin-left: 3px;
+  padding: 4px;
+  width: 25px;
   font-weight: bold;
   color: white;
   font-size: 14px;
 }
 
 .btn_Selected {
-  background-color: #cba99bd7;
-  margin-right: 5px;
+  white-space: nowrap;
+  background-color: #cba99b; /* Couleur de fond plus claire */
+  margin-right: 4px;
+  padding: 4px; /* Augmentation de la taille du rembourrage */
+  width: 25px; /* Ajustement de la largeur */
+  font-weight: bold;
+  color: white;
+  font-size: 14px; /* Légère augmentation de la taille de la police */
+  border: none;
+  border-radius: 4px; /* Ajout de coins arrondis */
+  text-align: center; /* Centrage du texte horizontalement */
 }
 
 .btn_questionAdd {
-  background-color: #1ade31e1;
+  background-color: #16e42eed;
 }
 
 .btn_questionMinus {
-  background-color: #de1a1de1;
+  background-color: #ed2125ed;
 }
 
 .btn_questionMinus:hover,
@@ -215,6 +229,7 @@ input[type='number']:focus {
 
 .disabled {
   background-color: #ccc;
+  display: none;
 }
 
 /* Styles pour l'en-tête de page */
@@ -227,7 +242,7 @@ input[type='number']:focus {
 .identityHeader {
   display: flex;
   flex-direction: row;
-  width: 900px;
+  max-width: 1100px;
   margin: 15px auto;
   border: 1px solid black;
 }
@@ -277,4 +292,50 @@ input[type='number']:focus {
 
 #newEvalForm {
   margin-bottom: 45px;
+}
+
+[id^='inputsAdd_'] {
+  width: calc(100% - 40px);
+  white-space: nowrap;
+}
+
+.input_questionAdd {
+  background-color: #45a5f914;
+}
+
+#remarque {
+  width: 90vw;
+  max-width: 1100px;
+}
+
+.critere-id {
+  display: flex;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+#popup {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #f9f9f9; /* Couleur de fond */
+  border-radius: 10px; /* Coins arrondis */
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.3); /* Ombre portée */
+  padding: 20px;
+  z-index: 9999;
+}
+
+#popup-content {
+  text-align: left; /* Alignement du texte à gauche */
+}
+
+#close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  cursor: pointer;
+  color: #888; /* Couleur du bouton de fermeture */
+  font-size: 18px; /* Taille de la police du bouton de fermeture */
 }

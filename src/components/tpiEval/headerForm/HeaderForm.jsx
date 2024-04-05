@@ -1,18 +1,142 @@
-import React, { useContext, useState } from 'react'
+import React, { useContext, useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons'
+import { getYear } from 'date-fns'
 
-const HeaderLine = ({ isVisible }) => {
-  const [searchTerm, setSearchTerm] = useState('')
+function showPopup (textHTML) {
+  return new Promise((resolve, reject) => {
+    // Récupérer l'élément popup et son contenu
+    const popup = document.getElementById('popup')
+    const popupContent = document.getElementById('popup-content')
 
+    // Mettre à jour le contenu de la popup
+    popupContent.innerHTML = textHTML
+
+    // Afficher la popup
+    popup.style.display = 'block'
+
+    // Ajouter un gestionnaire d'événement au clic sur un bouton radio
+    popupContent.addEventListener('change', event => {
+      // Vérifier si un bouton radio est sélectionné
+      if (event.target.type === 'radio' && event.target.checked) {
+        const selectedCandidat = event.target.value
+        console.log('Candidat sélectionné :', selectedCandidat)
+        popup.style.display = 'none'
+        resolve(selectedCandidat)
+      }
+    })
+
+    // Ajouter un gestionnaire d'événement pour masquer la popup lorsqu'on clique en dehors
+    popup.onclick = event => {
+      if (event.target === popup) {
+        popup.style.display = 'none'
+        reject(new Error('Popup fermée sans sélection de candidat'))
+      }
+    }
+  })
+}
+
+const insertDetails = c => {
+  if (c != null) {
+    
+    const refCandidat = document.getElementById('refCandidat')
+
+    const entrepriseNameInput = document.getElementById('txtEntreprise')
+    const entreprisePhoneInput = document.getElementById('txtEntreprisePhone')
+    const entrepriseEmailInput = document.getElementById('txtEntrepriseEmail')
+
+    const candidatNameInput = document.getElementById('txtCandidat.e')
+
+    const expert1NameInput = document.getElementById('txtExpert1')
+
+    const expert2NameInput = document.getElementById('txtExpert2')
+
+    // Insérer les détails de l'entreprise
+    refCandidat.value = c.refTpi
+    entrepriseNameInput.value = 'ETML /CFPV '
+    entreprisePhoneInput.value = '+41 21 316 77 77'
+    entrepriseEmailInput.value = '@eduvaud.ch'
+
+    // Insérer les détails du candidat
+    candidatNameInput.value = c.candidat
+
+    // Insérer les détails du premier expert
+    expert1NameInput.value = c.expert1
+
+    // Insérer les détails du deuxième expert
+    expert2NameInput.value = c.expert2
+  }
+}
+
+const HeaderLine = ({ isVisible, searchCandidat }) => {
+  const [searchThisCandidat, setSearchThisCandidat] = useState('')
+  const [tpiMatches, setTpiMatches] = useState(null)
+  const [selectedCandidat, setSelectedCandidat] = useState(null)
+
+  useEffect(() => {
+    insertDetails(selectedCandidat)
+  }, [selectedCandidat])
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Attendre que la promesse se résolve pour obtenir les données
+        const data = await tpiMatches;
+  
+        console.log('Données récupérées :', data);
+  
+        // Initialisez une variable pour stocker les noms des candidats
+        let candidats = '';
+  
+        // Parcourez chaque élément de tpiMatches et récupérez le nom du candidat
+        data.forEach(element => {
+          // Créez un bouton radio avec le nom du candidat comme label
+          candidats += `<div>
+            <input type="radio" id="${element._id}" name="candidat" value="${element.candidat}">
+            <label for="${element._id}">${element.candidat}</label>
+          </div>`;
+        });
+  
+        // Appelez la fonction showPopup avec les noms des candidats
+        showPopup(candidats)
+          .then(selectedCandidateName => {
+            // Trouvez l'objet du candidat sélectionné dans la liste tpiMatches
+            const selectedCandidate = data.find(
+              candidate => candidate.candidat === selectedCandidateName
+            );
+            if (selectedCandidate) {
+              // Stockez le candidat sélectionné
+              setSelectedCandidat(selectedCandidate);
+              console.log('selection: ', selectedCandidate);
+            } else {
+              console.error('Candidat non trouvé dans la liste des candidats');
+            }
+          })
+          .catch(error => {
+            console.error(error.message);
+            // Gérer les erreurs de la popup
+          });
+      } catch (error) {
+        console.error('Erreur lors de la récupération des données :', error);
+        // Gérer les erreurs de la promesse
+      }
+    };
+  
+    // Appel de la fonction fetchData pour récupérer les données
+    fetchData();
+  }, [tpiMatches]); // Observateur pour les changements de tpiMatches
+  
   const handleSearchClick = () => {
     // Mettez ici le code pour gérer le clic sur le bouton de recherche du candidat
-    console.log('Recherche du candidat avec le terme:', searchTerm)
+    console.log('Recherche du candidat avec le terme :', searchThisCandidat)
+    const year = 2023 //new Date().getFullYear(); // Obtenir l'année actuelle
+    const matches = searchCandidat(year, searchThisCandidat)
+    setTpiMatches(matches) // Mettre à jour l'état local avec les résultats de la recherche
   }
 
   const handleInputChange = event => {
-    setSearchTerm(event.target.value)
+    setSearchThisCandidat(event.target.value)
   }
+
   return (
     <div className='headerPage'>
       <div className={`headerQualification ${isVisible ? '' : 'hidden'}`}>
@@ -21,11 +145,12 @@ const HeaderLine = ({ isVisible }) => {
       </div>
       <div className={`headerFormulaire ${isVisible ? '' : 'hidden'}`}>
         Formulaire d’évaluation Candidat/-e:{' '}
-        <span id='refCandidat'>
+        <span  id='refPage'>
           <input
+            id='refCandidat'
             type='text'
             placeholder='Nom du candidat'
-            value={searchTerm}
+            value={searchThisCandidat}
             onChange={handleInputChange}
           />
           <button id='searchCandidat' onClick={handleSearchClick}>
@@ -96,14 +221,12 @@ const FormField = ({ id, label }) => {
   )
 }
 
-const Header = ({ label1, label2, label3, label4 }) => {
+const Header = ({ label1, label2 }) => {
   return (
     <>
       <div className='identityHeader'>
         {label1 && <FormField id={1} label={label1} />}
         {label2 && <FormField id={2} label={label2} />}
-        {label3 && <FormField id={3} label={label3} />}
-        {label4 && <FormField id={4} label={label4} />}
       </div>
     </>
   )

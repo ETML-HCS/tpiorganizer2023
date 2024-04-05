@@ -1,13 +1,37 @@
-
-h1{
-    margin: 15px 0;
+h1 {
+  margin: 15px 0;
 }
 
-p{
-    line-height: 1.5;
-    font-size: 16px;
+p {
+  line-height: 1.5;
+  font-size: 16px;
 }
 
-#tpiEval{
-    margin-bottom: 100px;
+#tpiEval {
+  margin-bottom: 100px;
+}
+
+nav {
+  background-color: #f0f0f0; /* Background color of the navigation bar */
+  padding: 10px; /* Padding around the navigation bar */
+  margin: 10px 0;
+}
+
+/* CSS for the button */
+#btnNewEval {
+  background-color: var(--accent-color-etml); /* Button background color */
+  color: white; /* Text color */
+  border: none; /* Remove button border */
+  padding: 10px 20px; /* Padding inside the button */
+  font-size: 16px; /* Font size */
+  cursor: pointer; /* Change cursor to pointer on hover */
+  transition: background-color 0.3s ease; /* Smooth transition for background color */
+}
+
+#btnNewEval:hover {
+  background-color: var(--shadow-color-etml);
+}
+
+#btnNewEval:focus {
+  outline: none; /* Remove focus outline */
 }

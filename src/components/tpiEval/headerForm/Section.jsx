@@ -91,12 +91,34 @@ const Question = ({ question, updatePts }) => {
     }
   }
 
+  const handleClickHelp = (textHTML) => {
+    // Récupérer l'élément popup et son contenu
+    const popup = document.getElementById('popup');
+    const popupContent = document.getElementById('popup-content');
+    
+    // Mettre à jour le contenu de la popup
+    popupContent.innerHTML = textHTML;
+  
+    // Afficher la popup
+    popup.style.display = 'block';
+
+    popup.onclick =hidePopup
+  }
+  
+  function hidePopup () {
+    var popup = document.getElementById('popup')
+    popup.style.display = 'none'
+  }
+
   const isNewQuestion = question.fieldText !== undefined
 
   return (
     <>
       <tr>
-        <td className='critere-id col-1'>{question.idCritere}</td>
+        <td onClick={()=>handleClickHelp(question.help)}>
+          <div className='critere-id col-1'>{question.idCritere}</div>
+        </td>
+
         <td className='question col-2'>
           {question.question}
 
@@ -134,7 +156,10 @@ const Question = ({ question, updatePts }) => {
               {/* Affichage des inputs texte supplémentaires */}
               <div id={`inputsAdd_${question.idCritere}`}>
                 {Array.from({ length: additionalInputs }).map((_, index) => (
-                  <div key={`additionalInput_${index}`}>
+                  <div
+                    key={`additionalInput_${index}`}
+                    id={`additionalInput_${index}`}
+                  >
                     <button
                       type='button'
                       onClick={() =>
@@ -445,11 +470,3 @@ const TablePoints = ({ title, results }) => {
 }
 
 export { Section, TablePoints }
-
-/**
- Contraction_Asomme: '',
-Contraction_Bsomme: '',
-Contraction_Csomme: '',
-Contraction_ABCsomme: '',
-Contraction_note: '',
-*/

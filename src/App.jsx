@@ -30,9 +30,15 @@ const Layout = ({ isAuthenticated, login }) => {
   const dateFormatted = dateAujourdhui.toLocaleDateString()
   const [isArrowUp, setIsArrowUp] = useState(false)
 
-  // Fonction pour vérifier si l'entête doit être affiché
+  // Fonction pour déterminer si l'en-tête doit être affiché
   const shouldShowHeader = () => {
-    return !location.pathname.startsWith('/calendrierDefenses/')
+    // Vérifie si le chemin d'accès actuel ne commence pas par '/calendrierDefenses/' ou '/TpiEval/'
+    const afficherEnTete = !(
+      location.pathname.startsWith('/calendrierDefenses') ||
+      location.pathname.startsWith('/TpiEval')
+    )
+
+    return afficherEnTete
   }
 
   const navigate = useNavigate()
@@ -90,6 +96,10 @@ const Layout = ({ isAuthenticated, login }) => {
   }
   return (
     <Fragment>
+      <div id='popup'>
+        <div id='popup-content'></div>
+      </div>
+
       {/* Entête */}
       {shouldShowHeader() && (
         <div id='header'>

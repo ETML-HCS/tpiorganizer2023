@@ -1,22 +1,35 @@
 /**
- * Le module TpiEval permet la saisie des informations d'évaluation lors d'une soutenance.
- * Le principe est le suivant :
- * - Simulation de la génération d'un fichier PDF.
- * - Sauvegarde automatique toutes les 2 minutes (utilisation du localstorage).
- * - Propose la lecture ou la modification de ses propres évaluations.
- * - Permet la lecture seule des évaluations des collègues.
- * - Autorise la suppression de ses évaluations uniquement si elles n'ont pas été transmises.
- * En effet, une sauvegarde en base de données empêche leur suppression ultérieure.
- * Seul l'administrateur dispose de cette permission.
+ * Le module TpiEval permet la saisie, la lecture et la modification des évaluations lors de soutenances.
+ * Fonctionnalités :
+ * - Simulation de génération de fichiers PDF.
+ * - Sauvegarde automatique toutes les 2 minutes (local storage).
+ * - Lecture ou modification des évaluations personnelles.
+ * - Lecture seule des évaluations des collègues.
+ * - Suppression autorisée pour les évaluations non transmises uniquement.
+ *    Les évaluations sauvegardées en base de données sont immuables.
+ *    Seul l'administrateur peut les supprimer.
+ *
+ * Base de données :
+ * - Stocke toutes les évaluations avec leurs détails.
+ * - Permet la recherche et la distinction entre évaluations personnelles et celles des autres.
+ *    Cela détermine les permissions de lecture ou de modification.
  */
-import axios from 'axios'
+
 import React, { useState, useEffect } from 'react'
 
 import NewEvaluationForm from './NewEvaluationForm'
 
 import '../../css/tpiEval/tpiEval.css'
 
-/*** Fonctions ***/
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true'
+
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = debugMode
+  ? process.env.REACT_APP_API_URL_TRUE
+  : process.env.REACT_APP_API_URL_FALSE
+
+//#region:fonctions
 /**
  * Fonction pour récupérer le nom de l'expert à partir du token.
  * @param {string} token Le token de l'expert.
@@ -47,10 +60,48 @@ async function getExpertNameByToken (token) {
   }
 }
 
+/**
+ * Effectue une requête pour récupérer le TPI en fonction du nom du candidat.
+ * @param {string} candidateName - Le nom du candidat pour lequel récupérer le TPI.
+ * @returns {object} Le TPI trouvé pour le candidat spécifié.
+ */
+async function getTpiByCandidate(year,candidateName) {
+  
+  try {
+    // Définir les options de la requête, y compris l'en-tête personnalisé
+    const requestOptions = {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+
+    // Effectuer une requête GET à l'API pour récupérer le TPI par nom de candidat
+    const response = await fetch(`${apiUrl}/api/tpi/${year}/byCandidate/${candidateName}`, requestOptions);
+    
+    // Vérifier si la réponse est OK (200)
+    if (!response.ok) {
+      throw new Error('Erreur lors de la récupération du TPI par candidat');
+    }
+
+    // Extraire les données JSON de la réponse
+    const tpi = await response.json();
+
+    // Retourner le TPI récupéré
+    return tpi;
+  } catch (error) {
+    console.error('Erreur lors de la récupération du TPI par candidat :', error);
+    throw error;
+  }
+}
+
+//#endregion
+
 // Composant principal
 function TpiEvalModule () {
   // État pour stocker les informations d'évaluation
   const [evaluations, setEvaluations] = useState([])
+  const [isNewEval, SetIsNewEval] = useState(false)
 
   // Appel unique lors du chargement de la page
   // Charger les évaluations depuis le localstorage
@@ -91,11 +142,20 @@ function TpiEvalModule () {
     setEvaluations(updatedEvaluations)
   }
 
-  // TODO: Ajouter d'autres fonctions et composants nécessaires
+  const handleNewEval = () => {
+    SetIsNewEval(previousState => !previousState)
+  }
 
+  // TODO: Ajouter d'autres fonctions et composants nécessaires
   return (
     <div id='tpiEval'>
       <h1>TpiEval</h1>
+      <nav>
+        <button id='btnNewEval' type='button' onClick={handleNewEval}>
+          NewEval ?
+        </button>
+      </nav>
+
       <main>
         <p>
           Pour commencer, utilisez le bouton ci-dessus afin de créer une
@@ -111,7 +171,7 @@ function TpiEvalModule () {
       </main>
 
       <section id='newEvalForm'>
-        <NewEvaluationForm addEvaluation={addEvaluation} />
+        {isNewEval && <NewEvaluationForm addEvaluation={addEvaluation} searchCandidat={getTpiByCandidate} />}
       </section>
 
       {/* Exemple : <EvaluationList evaluations={evaluations} deleteEvaluation={deleteEvaluation} /> */}

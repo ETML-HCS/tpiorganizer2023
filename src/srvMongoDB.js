@@ -33,15 +33,13 @@ app.get('/', (req, res) => {
   res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`)
 })
 
-// const pour les messages d'erreurs 
+// const pour les messages d'erreurs
 
 const ERROR_MESSAGES = {
   MISSING_TOKEN: 'Token manquant dans la requête.',
   EXPERT_NOT_FOUND: 'Aucun expert trouvé avec ce token.',
-  INTERNAL_ERROR: 'Erreur interne lors de la récupération du nom de l\'expert.',
-};
-
-
+  INTERNAL_ERROR: "Erreur interne lors de la récupération du nom de l'expert."
+}
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 
@@ -50,6 +48,52 @@ app.post('/api/send-email', async (req, res) => {
   // Logique pour envoyer l'email avec Nodemailer
   // ...
 })
+
+//#region TpiList (tpiExperts)
+
+/**
+ * Recherche des TPI dans la base de données dont le nom du candidat commence par la valeur spécifiée.
+ * @param {string} candidateName - Le début du nom du candidat pour lequel rechercher les TPI.
+ * @returns {array} Les TPI trouvés dont le nom du candidat commence par la valeur spécifiée.
+ */
+app.get('/api/tpi/:year/byCandidate/:candidateName', async (req, res) => {
+  try {
+    // Récupérer le début du nom du candidat depuis les paramètres de la requête
+    const candidateNameStart = req.params.candidateName;
+    // Récupérer l'année depuis les paramètres de la requête
+    const year = req.params.year;
+
+    // Afficher un message dans la console pour indiquer le début de la recherche
+    console.log(`Recherche des TPI de l'année ${year} dont le nom du candidat commence par "${candidateNameStart}"...`);
+
+    // Rechercher les TPI dans la base de données dont le nom du candidat commence par la valeur spécifiée
+    const tpiList = await TpiModelsYear(year).find({ candidat: { $regex: `^${candidateNameStart}`, $options: 'i' } });
+
+    // Vérifier si des TPI ont été trouvés pour le candidat
+    if (tpiList.length === 0) {
+      // Afficher un message dans la console si aucun TPI n'a été trouvé
+      console.log(`Aucun TPI trouvé pour le candidat dont le nom commence par "${candidateNameStart}"`);
+      // Retourner une réponse JSON avec un code d'erreur 404 si aucun TPI n'a été trouvé
+      return res.status(404).json({ error: 'Aucun TPI trouvé pour ce candidat' });
+    }
+
+    // Afficher les TPI trouvés dans la console
+    console.log(`TPIs trouvés pour le candidat dont le nom commence par "${candidateNameStart}":`, tpiList);
+
+    // Ajouter des en-têtes à la réponse pour fournir des informations supplémentaires sur la ressource retournée
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('X-Comment', 'Ressource TPI par nom de candidat');
+
+    // Retourner les TPI trouvés dans la réponse JSON
+    res.json(tpiList);
+  } catch (error) {
+    // Afficher un message d'erreur dans la console en cas d'erreur
+    console.error('Erreur lors de la recherche des TPI par candidat :', error);
+    // Retourner une réponse d'erreur avec un code d'erreur 500 en cas d'erreur interne du serveur
+    res.status(500).send('Erreur interne du serveur');
+  }
+});
+
 
 /**
  * Recherche un responsable par son nom dans la base de données.
@@ -116,35 +160,31 @@ app.get('/api/experts/listExpertsOrBoss', async (req, res) => {
   }
 })
 
-// route pour tpiEval ---> 
-
 app.get('/api/experts/getNameByToken', async (req, res) => {
   try {
     // Récupérer le token de la requête
-    const token = req.query.token;
+    const token = req.query.token
 
     // Vérifier si le token est présent dans la requête
     if (!token) {
-      return res.status(400).json({ error: ERROR_MESSAGES.MISSING_TOKEN });
+      return res.status(400).json({ error: ERROR_MESSAGES.MISSING_TOKEN })
     }
 
     // Rechercher l'expert dans la base de données en utilisant le token
-    const expert = await TpiExperts.findOne({ token });
+    const expert = await TpiExperts.findOne({ token })
 
     // Vérifier si un expert a été trouvé
     if (!expert) {
-      return res.status(404).json({ error: ERROR_MESSAGES.EXPERT_NOT_FOUND });
+      return res.status(404).json({ error: ERROR_MESSAGES.EXPERT_NOT_FOUND })
     }
 
     // Retourner le nom de l'expert
-    res.json({ name: expert.name });
+    res.json({ name: expert.name })
   } catch (error) {
-    console.error('Erreur lors de la récupération du nom de l\'expert :', error);
-    res.status(500).send(ERROR_MESSAGES.INTERNAL_ERROR);
+    console.error("Erreur lors de la récupération du nom de l'expert :", error)
+    res.status(500).send(ERROR_MESSAGES.INTERNAL_ERROR)
   }
-});
-
-
+})
 
 app.put('/api/experts/putTokens', async (req, res) => {
   try {
@@ -178,6 +218,8 @@ app.put('/api/experts/putTokens', async (req, res) => {
     res.status(500).send('Erreur interne du serveur')
   }
 })
+
+//#endregion
 
 // Create a collection from 'planification' during publication
 // for display purposes and validation by concerned parties
@@ -374,12 +416,10 @@ app.put(
       const updatedDocument = await tpiDocument.save()
 
       console.log('Document TPI mis à jour avec succès :', updatedDocument)
-      res
-        .status(200)
-        .json({
-          message: 'Document TPI mis à jour avec succès',
-          updatedDocument
-        })
+      res.status(200).json({
+        message: 'Document TPI mis à jour avec succès',
+        updatedDocument
+      })
     } catch (error) {
       console.error('Erreur lors de la mise à jour du document TPI :', error)
       res
@@ -486,29 +526,31 @@ app.get('/api/check-room-existence/:idRoom', async (req, res) => {
 
 // Route to get all TPI models
 app.get('/api/get-tpi', async (req, res) => {
-  console.log('get-tpi');
+  console.log('get-tpi')
   try {
-    let models;
-    const year = req.query.year; // Récupère l'année depuis les paramètres de requête
-    console.log('Année spécifiée dans la requête:', year);
+    let models
+    const year = req.query.year // Récupère l'année depuis les paramètres de requête
+    console.log('Année spécifiée dans la requête:', year)
 
     if (year) {
       // Utilise la fonction TpiModelsYear pour obtenir le modèle approprié en fonction de l'année
-      const tpiModelsYear = TpiModelsYear(year);
+      const tpiModelsYear = TpiModelsYear(year)
       // Utilise ce modèle pour récupérer les modèles de TPI pour cette année
-      models = await tpiModelsYear.find();
-      console.log('Modèles de TPI pour l\'année', year, 'récupérés:', models);
+      models = await tpiModelsYear.find()
+      console.log("Modèles de TPI pour l'année", year, 'récupérés:', models)
     } else {
-      console.log('Année manquante. Impossible de récupérer les modèles de TPI.');
+      console.log(
+        'Année manquante. Impossible de récupérer les modèles de TPI.'
+      )
     }
 
-    console.log('TPI models retrieved:', models);
-    res.json(models);
+    console.log('TPI models retrieved:', models)
+    res.json(models)
   } catch (error) {
-    console.error('Error retrieving TPI models:', error);
-    res.status(500).json({ error: 'Error retrieving TPI models' });
+    console.error('Error retrieving TPI models:', error)
+    res.status(500).json({ error: 'Error retrieving TPI models' })
   }
-});
+})
 
 app.put('/api/update-tpi/:id', async (req, res) => {
   const tpiId = req.params.id

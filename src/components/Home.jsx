@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 
-import '../css/home.css' 
+import '../css/home.css'
 
 const colors = ['#007bff', '#28a745', '#6f42c1']
 
