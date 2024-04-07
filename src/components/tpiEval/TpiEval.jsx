@@ -65,8 +65,7 @@ async function getExpertNameByToken (token) {
  * @param {string} candidateName - Le nom du candidat pour lequel récupérer le TPI.
  * @returns {object} Le TPI trouvé pour le candidat spécifié.
  */
-async function getTpiByCandidate(year,candidateName) {
-  
+async function getTpiByCandidate (year, candidateName) {
   try {
     // Définir les options de la requête, y compris l'en-tête personnalisé
     const requestOptions = {
@@ -74,76 +73,165 @@ async function getTpiByCandidate(year,candidateName) {
       headers: {
         'Content-Type': 'application/json'
       }
-    };
+    }
 
     // Effectuer une requête GET à l'API pour récupérer le TPI par nom de candidat
-    const response = await fetch(`${apiUrl}/api/tpi/${year}/byCandidate/${candidateName}`, requestOptions);
-    
+    const response = await fetch(
+      `${apiUrl}/api/tpi/${year}/byCandidate/${candidateName}`,
+      requestOptions
+    )
+
     // Vérifier si la réponse est OK (200)
     if (!response.ok) {
-      throw new Error('Erreur lors de la récupération du TPI par candidat');
+      throw new Error('Erreur lors de la récupération du TPI par candidat')
     }
 
     // Extraire les données JSON de la réponse
-    const tpi = await response.json();
+    const tpi = await response.json()
 
     // Retourner le TPI récupéré
-    return tpi;
+    return tpi
   } catch (error) {
-    console.error('Erreur lors de la récupération du TPI par candidat :', error);
-    throw error;
+    console.error('Erreur lors de la récupération du TPI par candidat :', error)
+    throw error
   }
 }
 
+// Définir une fonction pour récupérer
+// les évaluations pour une année spécifique
+async function getEvaluationsForYear (year) {
+  try {
+    // Effectuer une requête GET vers la route '/evaluations/:year'
+    const response = await fetch(`${apiUrl}/load-tpiEvals/${year}`)
+
+    // Vérifier si la réponse est ok (statut 200)
+    if (!response.ok) {
+      throw new Error('Erreur lors de la récupération des évaluations')
+    }
+
+    // Convertir la réponse en JSON
+    const evaluations = await response.json()
+
+    // Retourner les évaluations récupérées
+    return evaluations
+  } catch (error) {
+    // En cas d'erreur, afficher un message d'erreur dans la console
+    console.error('Erreur:', error.message)
+    // Retourner null en cas d'erreur pour indiquer un échec
+    return null
+  }
+}
+//#endregion
+
+//#region : composants internes
+
+function EvaluationList ({ evaluations, setLoadTpiEval }) {
+  const [filterEnterprise, setFilterEnterprise] = useState('')
+
+  const handleOnClisk_tpiEval = dataTpiEval => {
+    setLoadTpiEval(dataTpiEval)
+  }
+
+  const filteredEvaluations = evaluations.filter(evaluation =>
+    evaluation.datasHeader.EntrepriseName.replace('ETML /', '')
+      .toLowerCase()
+      .includes(filterEnterprise.toLowerCase())
+  )
+
+  return (
+    <div className='evaluation-list'>
+      <h2>Liste des évaluations</h2>
+      <input
+        type='text'
+        placeholder="Filtrer par CDP..."
+        value={filterEnterprise}
+        onChange={e => setFilterEnterprise(e.target.value)}
+      />
+      <ul className='evaluation-items'>
+        {filteredEvaluations.map((evaluation, index) => (
+          <li
+            key={index}
+            className='evaluation-item'
+            title={`Description : ${evaluation.tpiRemarque}\nNote : ${evaluation.noteObtenu}`}
+            onClick={() => handleOnClisk_tpiEval(evaluation)}
+          >
+            <span className='evaluations-year'>{evaluations.year}</span>
+
+            <p className='evaluation-ref'>Refs: {evaluation.tpiRef}</p>
+
+            <p className='evaluation-candidate'>
+              {evaluation.datasHeader['Candidat.eName']}
+            </p>
+
+            <p className='evaluation-expert1'>
+              {evaluation.datasHeader.Expert1Name}
+            </p>
+
+            <p className='evaluation-expert2'>
+              {evaluation.datasHeader.Expert2Name}
+            </p>
+
+            <p className='evaluation-company'>
+              {evaluation.datasHeader.EntrepriseName.replace('ETML /', '')}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 //#endregion
 
 // Composant principal
 function TpiEvalModule () {
   // État pour stocker les informations d'évaluation
   const [evaluations, setEvaluations] = useState([])
-  const [isNewEval, SetIsNewEval] = useState(false)
+  const [isNewEval, setIsNewEval] = useState(false)
+  const [datasEval, setDatasEval] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Appel unique lors du chargement de la page
-  // Charger les évaluations depuis le localstorage
+  const filterEvaluationsByCandidate = () => {
+    return evaluations.filter(evaluation => {
+      return evaluation.datasHeader['Candidat.eName']
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase())
+    })
+  }
+
   useEffect(() => {
-    // Obtenir les paramètres de l'URL
-    const hasToken = new URLSearchParams(window.location.search)
+    const year = 2023
+    // Appeler la fonction getEvaluationsForYear pour récupérer les évaluations pour l'année 2023
+    getEvaluationsForYear(year)
+      .then(evaluations => {
+        if (evaluations) {
+          evaluations.year = year
+          // Mettre à jour l'état avec les évaluations récupérées
+          setEvaluations(evaluations)
+        } else {
+          // Gérer le cas où la récupération des évaluations a échoué
+          console.log(
+            "Échec de la récupération des évaluations pour l'année 2023"
+          )
+        }
+      })
+      .catch(error => {
+        // Gérer les erreurs de récupération des évaluations
+        console.error('Erreur lors de la récupération des évaluations:', error)
+      })
+  }, []) // Le tableau vide des dépendances signifie que ce useEffect s'exécutera uniquement après le premier rendu
 
-    // test si le token est bon ...
-    const isExpert = getExpertNameByToken(hasToken.get('token'))
-
-    // ToDo ...
-    /**
-     * l'idée étant de valider le token pour ne pas demander les accréditations
-     * afficher les evals qui peut modifier et lire
-     * afficher les evals qui peux uniquement lire ...
-     *
-     */
-
-    const savedEvaluations = localStorage.getItem(`tpiEval_${isExpert.name}`)
-    if (savedEvaluations) {
-      setEvaluations(JSON.parse(savedEvaluations))
+  // Le useEffect suivant est utilisé pour déclencher la création d'une nouvelle évaluation
+  useEffect(() => {
+    if (datasEval != null) {
+      setIsNewEval(true)
     }
-  }, [])
-
-  // Fonction pour sauvegarder les évaluations dans le localstorage
-  const saveEvaluations = () => {
-    localStorage.setItem('evaluations', JSON.stringify(evaluations))
-  }
-
-  // Fonction pour ajouter une nouvelle évaluation
-  const addEvaluation = newEvaluation => {
-    setEvaluations([...evaluations, newEvaluation])
-  }
-
-  // Fonction pour supprimer une évaluation
-  const deleteEvaluation = index => {
-    const updatedEvaluations = evaluations.filter((_, i) => i !== index)
-    setEvaluations(updatedEvaluations)
-  }
+  }, [datasEval])
 
   const handleNewEval = () => {
-    SetIsNewEval(previousState => !previousState)
+    setIsNewEval(previousState => !previousState)
+    if (datasEval) {
+      setDatasEval(null)
+    }
   }
 
   // TODO: Ajouter d'autres fonctions et composants nécessaires
@@ -171,10 +259,17 @@ function TpiEvalModule () {
       </main>
 
       <section id='newEvalForm'>
-        {isNewEval && <NewEvaluationForm addEvaluation={addEvaluation} searchCandidat={getTpiByCandidate} />}
+        {isNewEval && (
+          <NewEvaluationForm
+            searchCandidat={getTpiByCandidate}
+            loadTpiEval={datasEval}
+            setLoadTpiEval={setDatasEval}
+          />
+        )}
       </section>
 
-      {/* Exemple : <EvaluationList evaluations={evaluations} deleteEvaluation={deleteEvaluation} /> */}
+      <EvaluationList evaluations={evaluations} setLoadTpiEval={setDatasEval} />
+
       {/* Exemple : <AdminControls saveEvaluations={saveEvaluations} /> */}
     </div>
   )

@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faSave, faSnowflake, faTrash } from '@fortawesome/free-solid-svg-icons'
+import {
+  faL,
+  faSave,
+  faSnowflake,
+  faTrash
+} from '@fortawesome/free-solid-svg-icons'
 
-import { PDFDocument, PdfJustify, StandardFonts } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib'
 
 import {
   HeaderLine,
@@ -12,7 +17,6 @@ import {
 import { Section, TablePoints } from './headerForm/Section'
 
 import '../../css/tpiEval/newEvaluationForm.css'
-import { el } from 'date-fns/locale'
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
 const debugMode = process.env.REACT_APP_DEBUG === 'true'
@@ -26,7 +30,7 @@ function getFieldValue (inputName) {
   // Recherche de l'élément de formulaire par id
   const fieldById = document.getElementById(inputName)
   if (fieldById) {
-    console.log('id', fieldById)
+    console.log('id', fieldById.innerText)
     return fieldById.innerText
   }
 
@@ -43,7 +47,7 @@ function getFieldValue (inputName) {
   return null // Ou une autre valeur par défaut selon vos besoins
 }
 
-// Fonction pour peupler tous les champs du PDF 
+// Fonction pour peupler tous les champs du PDF
 // en fonction des données saisies dans le formulaire web
 const populatePdfFields = async () => {
   try {
@@ -60,12 +64,12 @@ const populatePdfFields = async () => {
     const fields = form.getFields() // tous les champs
 
     const fieldMappings = {
-      headerCandidat1: 'Candidat.eName',
-      headerCandidat2: 'Candidat.eName',
-      headerCandidat3: 'Candidat.eName',
-      headerCandidat4: 'Candidat.eName',
-      headerCandidat5: 'Candidat.eName',
-      headerCandidat6: 'Candidat.eName',
+      headerCandidat1: 'refCandidat',
+      headerCandidat2: 'refCandidat',
+      headerCandidat3: 'refCandidat',
+      headerCandidat4: 'refCandidat',
+      headerCandidat5: 'refCandidat',
+      headerCandidat6: 'refCandidat',
       nameBoss: 'EntrepriseName',
       telBoss: 'EntreprisePhone',
       emailBoss: 'EntrepriseEmail',
@@ -209,8 +213,10 @@ const populatePdfFields = async () => {
     const pdfUrl = URL.createObjectURL(pdfBlob)
     // Ouvrir le PDF dans une nouvelle fenêtre
     window.open(pdfUrl)
+    return true
   } catch (error) {
     console.error('Erreur lors de la récupération du document PDF:', error)
+    return false
   }
 }
 
@@ -232,67 +238,28 @@ function extractDataFromElements (attributeName) {
   return datas
 }
 
-function showPopup (textHTML) {
-  // Récupérer l'élément popup et son contenu
-  const popup = document.getElementById('popup')
-  const popupContent = document.getElementById('popup-content')
+const populateElementsWithData = (attributeName, data) => {
+  const elementsWithData = document.querySelectorAll(`[${attributeName}]`)
 
-  // Mettre à jour le contenu de la popup
-  popupContent.innerHTML = textHTML
+  elementsWithData.forEach(element => {
+    const attributeValue = element.getAttribute(attributeName)
 
-  // Afficher la popup
-  popup.style.display = 'block'
-
-  popup.onclick = () => {
-    popup.style.display = 'none'
-  }
+    if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+      // Si l'élément est un champ de saisie, attribuez la valeur correspondante
+      if (data == ' ') {
+        element.value = ''
+      } else {
+        element.value = data[attributeValue]
+      }
+    } else {
+      // Sinon, attribuez null (ou la valeur correspondante si nécessaire)
+      // Ici, vous pouvez traiter les autres types d'éléments comme des sélecteurs, des cases à cocher, etc.
+    }
+  })
 }
 
-function NewEvaluationForm ({ addEvaluation,searchCandidat }) {
-  const [data, setData] = useState()
-
-  const interval = 120000
-
-  useEffect(() => {
-    const saveData = () => {
-      if (data) {
-        try {
-          const jsonData = JSON.stringify(data)
-          localStorage.setItem('newEvalForm', jsonData)
-          console.log('Données sauvegardées avec succès:', jsonData)
-        } catch (error) {
-          console.error(
-            'Erreur lors de la sauvegarde des données JSON :',
-            error
-          )
-        }
-      } else {
-        console.log('Aucune données à sauvegarder.')
-      }
-    }
-
-    const saveDataInterval = setInterval(saveData, interval)
-
-    const loadData = () => {
-      const savedData = localStorage.getItem('newEvalForm')
-     
-      if (savedData !== null && savedData !== undefined) {
-        try {
-          const parsedData = JSON.parse(savedData)
-          console.log('Données récupérées :', parsedData)
-          setData(parsedData)
-        } catch (error) {
-          console.error("Erreur lors de l'analyse des données JSON :", error)
-        }
-      } else {
-        console.log('Aucune donnée trouvée dans le localStorage.')
-      }
-    }
-
-    loadData()
-
-    return () => clearInterval(saveDataInterval)
-  }, [data, interval])
+function NewEvaluationForm ({ searchCandidat, loadTpiEval, setLoadTpiEval }) {
+  const [data, setData] = useState(null)
 
   // json =>  partie(string) maxPoints(int): pointsObtenus(int):
   const [resultsOfParts, setResultsOfParts] = useState([
@@ -702,13 +669,90 @@ function NewEvaluationForm ({ addEvaluation,searchCandidat }) {
     })
   }
 
+  async function saveTpiEval (year, evaluationData) {
+    try {
+      const response = await fetch(`${apiUrl}/save-tpiEval`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ year, evaluationData })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save evaluation')
+      }
+
+      const responseData = await response.json()
+
+      // If the request succeeds, you can handle the response here if necessary
+      console.log('New evaluation saved:', responseData)
+      return responseData
+    } catch (error) {
+      // If the request fails, you can handle the error here
+      console.error('Error saving evaluation:', error.message)
+      throw error // You can choose to propagate the error or handle it differently
+    }
+  }
+
+  useEffect(() => {
+    // Chargez les données au montage du composant
+    const fetchData = async () => {
+      try {
+        setData(loadTpiEval) // Mettez à jour l'état avec les données chargées
+      } catch (error) {
+        console.error('Erreur lors du chargement des données:', error)
+      }
+    }
+
+    fetchData() // Appelez la fonction fetchData au montage du composant
+  }, [loadTpiEval]) // Exécutez l'effet lorsque loadTpiEval change
+
+  useEffect(() => {
+    // Fonction pour mettre à jour les points dans les éléments HTML appropriés
+    const updatePoints = (elementId, value) => {
+      const element = document.getElementById(elementId)
+      if (element) {
+        element.innerText = value
+      }
+    }
+
+    // Affichez les données lorsque `data` change
+    if (data != null) {
+      // Mise à jour des points dans les éléments HTML appropriés
+      updatePoints('Asomme', data.pointsObtenusA)
+      updatePoints('Bsomme', data.pointsObtenusB)
+      updatePoints('Csomme', data.pointsObtenusC)
+      updatePoints('Contraction_Asomme', data.pointsObtenusA)
+      updatePoints('Contraction_Bsomme', data.pointsObtenusB)
+      updatePoints('Contraction_Csomme', data.pointsObtenusC)
+      updatePoints('Contraction_ABCsomme', data.pointsObtenusABC)
+      updatePoints('Contraction_note', data.noteObtenu)
+
+      // Affichage des données dans les éléments HTML appropriés
+      document.getElementsByName('refCandidat')[0].value = data.tpiRef
+      document.getElementsByName('remarque')[0].value = data.tpiRemarque
+      populateElementsWithData('data-header', data.datasHeader)
+      populateElementsWithData('data-justification', data.datasJustification)
+      populateElementsWithData('data-ptechplus', data.dataPTechPlus)
+      populateElementsWithData('data-ptechselected', data.dataPTechSelected)
+      populateElementsWithData('data-point', data.dataPoints)
+
+      freeze(true)
+    }
+  }, [data]) // Exécutez l'effet lorsque data change
+
   const handleSave = () => {
+    const Ref = document.getElementsByName('refCandidat')[0].value
     const datasHeader = extractDataFromElements('data-header')
     const datasJustification = extractDataFromElements('data-justification')
     const dataPTechPlus = extractDataFromElements('data-ptechplus')
     const dataPTechSelected = extractDataFromElements('data-ptechselected')
     const dataPoints = extractDataFromElements('data-point')
+    const Remarque = document.getElementsByName('remarque')[0].value
+
     const data = {
+      tpiRef: Ref,
       datasHeader: datasHeader,
       datasJustification: datasJustification,
       dataPTechPlus: dataPTechPlus,
@@ -718,7 +762,8 @@ function NewEvaluationForm ({ addEvaluation,searchCandidat }) {
       pointsObtenusB: resultsOfParts[1].pointsObtenus,
       pointsObtenusC: resultsOfParts[2].pointsObtenus,
       pointsObtenusABC: resultsOfParts[3].pointsObtenus,
-      noteObtenu: resultsOfParts[4].pointsObtenus
+      noteObtenu: resultsOfParts[4].pointsObtenus,
+      tpiRemarque: Remarque
     }
 
     setData(data)
@@ -727,32 +772,52 @@ function NewEvaluationForm ({ addEvaluation,searchCandidat }) {
     console.log('Données sauvegardées :', data)
   }
 
-  const handleFreeze = async () => {
+  const freeze = isFreeze => {
     // Désactiver tous les champs de formulaire après avoir figé les données
     const inputFields = document.querySelectorAll('input, textarea')
     inputFields.forEach(field => {
-      field.disabled = true
+      field.disabled = isFreeze
     })
 
     // Ajouter le membre freeze aux données avec la valeur "yes"
+    // (est-ce vraiment nécessaire ?)
     const dataWithFreeze = { ...data, freeze: 'yes' }
+  }
+
+  const handleFreeze = async () => {
+    freeze(true)
+
     if (data !== null) {
-      populatePdfFields()
+      if (populatePdfFields()) {
+        const currentYear = '2023' //new Date().getFullYear()
+        saveTpiEval(currentYear, data)
+      }
     } else {
       alert("Le système a besoin d'une sauvegarde avant de faire un freeze")
     }
   }
 
   const handleClear = () => {
-    setData('')
+    // Réinitialiser les valeurs des champs utilisés dans handleSave
+    document.getElementsByName('refCandidat')[0].value = ''
+    document.getElementsByName('remarque')[0].value = ''
+
+    populateElementsWithData('data-header', ' ')
+    populateElementsWithData('data-justification', ' ')
+    populateElementsWithData('data-ptechplus', ' ')
+    populateElementsWithData('data-ptechselected', ' ')
+    populateElementsWithData('data-point', ' ')
+
+    freeze(false)(null)
+
+    // Affichage dans la console pour confirmer que les données sont effacées
+    console.log('Données effacées')
   }
-
-
 
   return (
     <>
       <div id='page1'>
-        <HeaderLine isVisible={true} searchCandidat={searchCandidat}/>
+        <HeaderLine isVisible={true} searchCandidat={searchCandidat} />
         <Header
           label1={'Entreprise formatrice/Chef de Projet'}
           label2={'Candidat.e'}
@@ -780,13 +845,8 @@ function NewEvaluationForm ({ addEvaluation,searchCandidat }) {
 
         <h2>Remarques</h2>
 
-        <div className='remaque'>
-          <textarea
-            name='remarque'
-            id='remarque'
-            rows='11'
-            cols='30'
-          ></textarea>
+        <div className='remarque'>
+          <textarea name='remarque' rows='11' cols='30'></textarea>
         </div>
       </div>
 

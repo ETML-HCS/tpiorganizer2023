@@ -452,8 +452,8 @@ const TablePoints = ({ title, results }) => {
                     return (
                       <>
                         <td>{r.rowTitle}</td>
-                        <td>{r.maxPoints}</td>
-                        <td id={`Contraction_${id}`}>{r.pointsObtenus}</td>
+                        <td className='maxPts'>{r.maxPoints}</td>
+                        <td className='maxObtenu' id={`Contraction_${id}`}>{r.pointsObtenus}</td>
                       </>
                     )
                   })()}

@@ -3,6 +3,30 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons'
 import { getYear } from 'date-fns'
 
+// Pour accéder à la variable d'environnement REACT_APP_DEBUG
+const debugMode = process.env.REACT_APP_DEBUG === 'true'
+
+// Pour accéder à la variable d'environnement REACT_APP_API_URL
+const apiUrl = debugMode
+  ? process.env.REACT_APP_API_URL_TRUE
+  : process.env.REACT_APP_API_URL_FALSE
+
+async function getExpertByName (name) {
+  try {
+    const response = await fetch(`${apiUrl}/api/expert/${name}`)
+    if (!response.ok) {
+      throw new Error('Expert not found')
+    }
+    const data = await response.json()
+    const expert = data.expert
+    console.log('getExpertByName: ', expert)
+    return expert
+  } catch (error) {
+    console.error('Error:', error.message)
+    return null
+  }
+}
+
 function showPopup (textHTML) {
   return new Promise((resolve, reject) => {
     // Récupérer l'élément popup et son contenu
@@ -20,7 +44,6 @@ function showPopup (textHTML) {
       // Vérifier si un bouton radio est sélectionné
       if (event.target.type === 'radio' && event.target.checked) {
         const selectedCandidat = event.target.value
-        console.log('Candidat sélectionné :', selectedCandidat)
         popup.style.display = 'none'
         resolve(selectedCandidat)
       }
@@ -36,35 +59,47 @@ function showPopup (textHTML) {
   })
 }
 
-const insertDetails = c => {
+const insertDetails = async (c, refCandidat) => {
   if (c != null) {
-    
-    const refCandidat = document.getElementById('refCandidat')
-
     const entrepriseNameInput = document.getElementById('txtEntreprise')
     const entreprisePhoneInput = document.getElementById('txtEntreprisePhone')
     const entrepriseEmailInput = document.getElementById('txtEntrepriseEmail')
-
     const candidatNameInput = document.getElementById('txtCandidat.e')
-
     const expert1NameInput = document.getElementById('txtExpert1')
-
+    const expert1EmailInput = document.getElementById('txtExpert1Email')
     const expert2NameInput = document.getElementById('txtExpert2')
+    const expert2EmailInput = document.getElementById('txtExpert2Email')
+    const remarque = document.getElementsByName('remarque')[0]
+
+    const refTpi = document.querySelectorAll('refCandidat')
 
     // Insérer les détails de l'entreprise
-    refCandidat.value = c.refTpi
-    entrepriseNameInput.value = 'ETML /CFPV '
+    entrepriseNameInput.value = 'ETML / ' + c.boss
     entreprisePhoneInput.value = '+41 21 316 77 77'
-    entrepriseEmailInput.value = '@eduvaud.ch'
+    const entrepriseExpert = await getExpertByName(c.boss)
+    entrepriseEmailInput.value = entrepriseExpert ? entrepriseExpert.email : ''
 
     // Insérer les détails du candidat
     candidatNameInput.value = c.candidat
 
     // Insérer les détails du premier expert
     expert1NameInput.value = c.expert1
+    const expert1 = await getExpertByName(c.expert1)
+    expert1EmailInput.value = expert1 ? expert1.email : ''
 
     // Insérer les détails du deuxième expert
     expert2NameInput.value = c.expert2
+    const expert2 = await getExpertByName(c.expert2)
+    expert2EmailInput.value = expert2 ? expert2.email : ''
+
+    remarque.value = 'Sujet : ' + c.sujet
+
+    refTpi.forEach(element => {
+      element.textContent = c.refTpi
+    })
+
+    // Nécessité d'appliquer cette opération pour supprimer le focus causé par le bouton de recherche
+    refCandidat(c.refTpi)
   }
 }
 
@@ -74,47 +109,53 @@ const HeaderLine = ({ isVisible, searchCandidat }) => {
   const [selectedCandidat, setSelectedCandidat] = useState(null)
 
   useEffect(() => {
-    insertDetails(selectedCandidat)
+    insertDetails(selectedCandidat, setSearchThisCandidat)
   }, [selectedCandidat])
+  
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Attendre que la promesse se résolve pour obtenir les données
-        const data = await tpiMatches;
+        if (tpiMatches !== null) { // Vérifiez si tpiMatches n'est pas null
+          // Attendre que la promesse se résolve pour obtenir les données
+          const data = await tpiMatches;
   
-        console.log('Données récupérées :', data);
+          if (data !== undefined) { // Vérifiez si data n'est pas undefined
+            console.log('Données récupérées :', data);
   
-        // Initialisez une variable pour stocker les noms des candidats
-        let candidats = '';
+            // Initialisez une variable pour stocker les noms des candidats
+            let candidats = '';
   
-        // Parcourez chaque élément de tpiMatches et récupérez le nom du candidat
-        data.forEach(element => {
-          // Créez un bouton radio avec le nom du candidat comme label
-          candidats += `<div>
-            <input type="radio" id="${element._id}" name="candidat" value="${element.candidat}">
-            <label for="${element._id}">${element.candidat}</label>
-          </div>`;
-        });
+            // Parcourez chaque élément de tpiMatches et récupérez le nom du candidat
+            data.forEach(element => {
+              // Créez un bouton radio avec le nom du candidat comme label
+              candidats += `<div>
+                <input type="radio" id="${element._id}" name="candidat" value="${element.candidat}">
+                <label for="${element._id}">${element.candidat}</label>
+              </div>`;
+            });
   
-        // Appelez la fonction showPopup avec les noms des candidats
-        showPopup(candidats)
-          .then(selectedCandidateName => {
-            // Trouvez l'objet du candidat sélectionné dans la liste tpiMatches
-            const selectedCandidate = data.find(
-              candidate => candidate.candidat === selectedCandidateName
-            );
-            if (selectedCandidate) {
-              // Stockez le candidat sélectionné
-              setSelectedCandidat(selectedCandidate);
-              console.log('selection: ', selectedCandidate);
-            } else {
-              console.error('Candidat non trouvé dans la liste des candidats');
-            }
-          })
-          .catch(error => {
-            console.error(error.message);
-            // Gérer les erreurs de la popup
-          });
+            // Appelez la fonction showPopup avec les noms des candidats
+            showPopup(candidats)
+              .then(selectedCandidateName => {
+                // Trouvez l'objet du candidat sélectionné dans la liste tpiMatches
+                const selectedCandidate = data.find(
+                  candidate => candidate.candidat === selectedCandidateName
+                );
+                if (selectedCandidate) {
+                  // Stockez le candidat sélectionné
+                  setSelectedCandidat(selectedCandidate);
+                } else {
+                  console.error('Candidat non trouvé dans la liste des candidats');
+                }
+              })
+              .catch(error => {
+                console.error(error.message);
+                // Gérer les erreurs de la popup
+              });
+          } else {
+            console.error('Données non définies');
+          }
+        }
       } catch (error) {
         console.error('Erreur lors de la récupération des données :', error);
         // Gérer les erreurs de la promesse
@@ -123,11 +164,11 @@ const HeaderLine = ({ isVisible, searchCandidat }) => {
   
     // Appel de la fonction fetchData pour récupérer les données
     fetchData();
-  }, [tpiMatches]); // Observateur pour les changements de tpiMatches
+  }, [tpiMatches]);
+  
   
   const handleSearchClick = () => {
     // Mettez ici le code pour gérer le clic sur le bouton de recherche du candidat
-    console.log('Recherche du candidat avec le terme :', searchThisCandidat)
     const year = 2023 //new Date().getFullYear(); // Obtenir l'année actuelle
     const matches = searchCandidat(year, searchThisCandidat)
     setTpiMatches(matches) // Mettre à jour l'état local avec les résultats de la recherche
@@ -143,16 +184,18 @@ const HeaderLine = ({ isVisible, searchCandidat }) => {
         Procédure de qualification : 88600/1/2/3 Informaticienne
         CFC/Informaticien CFC (Ordonnance 2014)
       </div>
+
       <div className={`headerFormulaire ${isVisible ? '' : 'hidden'}`}>
         Formulaire d’évaluation Candidat/-e:{' '}
-        <span  id='refPage'>
+        <span id='refPage'>
           <input
-            id='refCandidat'
+            name='refCandidat'
             type='text'
             placeholder='Nom du candidat'
             value={searchThisCandidat}
             onChange={handleInputChange}
           />
+
           <button id='searchCandidat' onClick={handleSearchClick}>
             <FontAwesomeIcon icon={faArrowRight} /> Importer ce candidat
           </button>

@@ -1,14 +1,22 @@
-// Importez la fonction ObjectId de la bibliothèque MongoDB native
-const { ObjectId } = require('mongodb')
-
+//#region : dépendances 
+const fs = require('fs')
 const express = require('express')
 const cors = require('cors')
 
 const db = require('./config/dbConfig')
-
 const bodyParser = require('body-parser')
 const nodemailer = require('nodemailer')
+const { is } = require('date-fns/locale')
+
 const mongoose = require('mongoose')
+
+const path = require('path')
+const app = express()
+//#endregion
+
+//#region : models 
+
+const {Evaluation ,TpiEvalCollection} = require('./models/tpiEvalModel')
 
 const TpiModelsYear = require('./models/tpiModels')
 const User = require('./models/userModels')
@@ -19,13 +27,19 @@ const {
 } = require('./models/tpiRoomsModels')
 
 const TpiExperts = require('./models/tpiExpertsModel')
-const { is } = require('date-fns/locale')
 
-const app = express()
-
+// constantes 
 const isDemo = process.env.REACT_APP_DEBUG === 'true'
 const port = isDemo ? 5000 : 6000
 
+// const pour les messages d'erreurs
+const ERROR_MESSAGES = {
+  MISSING_TOKEN: 'Token manquant dans la requête.',
+  EXPERT_NOT_FOUND: 'Aucun expert trouvé avec ce token.',
+  INTERNAL_ERROR: "Erreur interne lors de la récupération du nom de l'expert."
+}
+
+//#region : API
 app.use(cors())
 app.use(express.json())
 
@@ -33,13 +47,6 @@ app.get('/', (req, res) => {
   res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`)
 })
 
-// const pour les messages d'erreurs
-
-const ERROR_MESSAGES = {
-  MISSING_TOKEN: 'Token manquant dans la requête.',
-  EXPERT_NOT_FOUND: 'Aucun expert trouvé avec ce token.',
-  INTERNAL_ERROR: "Erreur interne lors de la récupération du nom de l'expert."
-}
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 
@@ -59,41 +66,51 @@ app.post('/api/send-email', async (req, res) => {
 app.get('/api/tpi/:year/byCandidate/:candidateName', async (req, res) => {
   try {
     // Récupérer le début du nom du candidat depuis les paramètres de la requête
-    const candidateNameStart = req.params.candidateName;
+    const candidateNameStart = req.params.candidateName
     // Récupérer l'année depuis les paramètres de la requête
-    const year = req.params.year;
+    const year = req.params.year
 
     // Afficher un message dans la console pour indiquer le début de la recherche
-    console.log(`Recherche des TPI de l'année ${year} dont le nom du candidat commence par "${candidateNameStart}"...`);
+    console.log(
+      `Recherche des TPI de l'année ${year} dont le nom du candidat commence par "${candidateNameStart}"...`
+    )
 
     // Rechercher les TPI dans la base de données dont le nom du candidat commence par la valeur spécifiée
-    const tpiList = await TpiModelsYear(year).find({ candidat: { $regex: `^${candidateNameStart}`, $options: 'i' } });
+    const tpiList = await TpiModelsYear(year).find({
+      candidat: { $regex: `^${candidateNameStart}`, $options: 'i' }
+    })
 
     // Vérifier si des TPI ont été trouvés pour le candidat
     if (tpiList.length === 0) {
       // Afficher un message dans la console si aucun TPI n'a été trouvé
-      console.log(`Aucun TPI trouvé pour le candidat dont le nom commence par "${candidateNameStart}"`);
+      console.log(
+        `Aucun TPI trouvé pour le candidat dont le nom commence par "${candidateNameStart}"`
+      )
       // Retourner une réponse JSON avec un code d'erreur 404 si aucun TPI n'a été trouvé
-      return res.status(404).json({ error: 'Aucun TPI trouvé pour ce candidat' });
+      return res
+        .status(404)
+        .json({ error: 'Aucun TPI trouvé pour ce candidat' })
     }
 
     // Afficher les TPI trouvés dans la console
-    console.log(`TPIs trouvés pour le candidat dont le nom commence par "${candidateNameStart}":`, tpiList);
+    console.log(
+      `TPIs trouvés pour le candidat dont le nom commence par "${candidateNameStart}":`,
+      tpiList
+    )
 
     // Ajouter des en-têtes à la réponse pour fournir des informations supplémentaires sur la ressource retournée
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('X-Comment', 'Ressource TPI par nom de candidat');
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('X-Comment', 'Ressource TPI par nom de candidat')
 
     // Retourner les TPI trouvés dans la réponse JSON
-    res.json(tpiList);
+    res.json(tpiList)
   } catch (error) {
     // Afficher un message d'erreur dans la console en cas d'erreur
-    console.error('Erreur lors de la recherche des TPI par candidat :', error);
+    console.error('Erreur lors de la recherche des TPI par candidat :', error)
     // Retourner une réponse d'erreur avec un code d'erreur 500 en cas d'erreur interne du serveur
-    res.status(500).send('Erreur interne du serveur');
+    res.status(500).send('Erreur interne du serveur')
   }
-});
-
+})
 
 /**
  * Recherche un responsable par son nom dans la base de données.
@@ -160,6 +177,26 @@ app.get('/api/experts/listExpertsOrBoss', async (req, res) => {
   }
 })
 
+// Route pour obtenir l'objet total selon le nom de l'expert
+app.get('/api/expert/:name', async (req, res) => {
+  try {
+    const name = req.params.name
+    // Recherche dans la base de données pour trouver l'expert avec le nom spécifié
+    const expert = await TpiExperts.findOne({ name: name })
+    if (!expert) {
+      return res.status(404).json({ message: 'Expert not found' })
+    }
+    // Vous pouvez faire ici tout traitement nécessaire sur l'objet total avant de le renvoyer
+    // Par exemple, si l'objet total est stocké dans la base de données, vous pouvez le récupérer ici.
+
+    // Renvoyer l'expert avec le statut 200 OK
+    res.status(200).json({ expert: expert })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ message: 'Internal Server Error' })
+  }
+})
+
 app.get('/api/experts/getNameByToken', async (req, res) => {
   try {
     // Récupérer le token de la requête
@@ -218,6 +255,95 @@ app.put('/api/experts/putTokens', async (req, res) => {
     res.status(500).send('Erreur interne du serveur')
   }
 })
+
+// Définir un endpoint pour récupérer le contenu d'un fichier PDF
+app.get('/api/get-pdf', async (req, res) => {
+  try {
+    // Chemin vers le fichier PDF sur le disque
+    const pdfFilePath = path.join(__dirname, './models/mEvalV3.pdf')
+
+    // Vérifier si le chemin contient bien un fichier PDF
+    if (!pdfFilePath.toLowerCase().endsWith('.pdf')) {
+      console.error('Le chemin spécifié ne pointe pas vers un fichier PDF')
+      return res
+        .status(400)
+        .send('Le chemin spécifié ne pointe pas vers un fichier PDF')
+    }
+
+    // Afficher un message indiquant que la requête a été reçue
+    console.log('Requête pour récupérer le fichier PDF reçue avec succès')
+
+    // Lire le contenu du fichier PDF de manière asynchrone
+    const pdfData = await fs.promises.readFile(pdfFilePath)
+
+    // Envoyer le contenu du fichier PDF en tant que réponse
+    res.setHeader('Content-Type', 'application/pdf')
+    res.send(pdfData)
+  } catch (error) {
+    console.error('Erreur lors de la récupération du fichier PDF:', error)
+    res.status(500).send('Erreur lors de la récupération du fichier PDF')
+  }
+})
+
+
+// routes pour les évaluations (tpiEval)
+
+// Route POST pour sauvegarder une nouvelle évaluation
+app.post('/save-tpiEval', async (req, res) => {
+  try {
+    // Extraire les données de la requête
+    const { year, evaluationData } = req.body
+
+    // Vérifier si la collection pour l'année donnée existe déjà
+    let evalCollection = await TpiEvalCollection.findOne({ year })
+
+    // Si la collection n'existe pas, la créer
+    if (!evalCollection) {
+      evalCollection = new TpiEvalCollection({ year })
+    }
+
+    // Créer une nouvelle instance d'évaluation avec les données reçues
+    const newEvaluation = new Evaluation(evaluationData)
+
+    // Sauvegarder la nouvelle évaluation dans la base de données
+    const savedEvaluation = await newEvaluation.save()
+
+    // Ajouter l'identifiant de la nouvelle évaluation à la collection d'évaluations de l'année correspondante
+    evalCollection.evaluations.push(savedEvaluation._id)
+    await evalCollection.save()
+
+    // Envoyer la nouvelle évaluation sauvegardée en tant que réponse
+    res.status(201).json(savedEvaluation)
+  } catch (error) {
+    // En cas d'erreur, envoyer un code d'état 500 (Internal Server Error) avec le message d'erreur
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// Route GET pour récupérer la collection d'évaluations pour une année donnée
+app.get('/load-tpiEvals/:year', async (req, res) => {
+  try {
+    // Extraire l'année de la requête
+    const { year } = req.params;
+
+    // Trouver la collection d'évaluations pour l'année spécifiée
+    const evalCollection = await TpiEvalCollection.findOne({ year }).populate('evaluations');
+
+    // Vérifier si la collection existe
+    if (!evalCollection) {
+      return res.status(404).json({ message: "Aucune collection d'évaluations trouvée pour cette année." });
+    }
+
+    // Récupérer les évaluations associées à cette collection
+    const evaluations = evalCollection.evaluations;
+
+    // Envoyer les évaluations récupérées en tant que réponse
+    res.status(200).json(evaluations);
+  } catch (error) {
+    // En cas d'erreur, envoyer un code d'état 500 (Internal Server Error) avec le message d'erreur
+    res.status(500).json({ message: error.message });
+  }
+});
 
 //#endregion
 
