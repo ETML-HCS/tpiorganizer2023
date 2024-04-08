@@ -21,7 +21,7 @@ import { showNotification } from './components/Tools'
 import './css/globalStyles.css'
 
 const bcrypt = require('bcryptjs')
-const versionO = '24.04.01'
+const versionO = '24.05.1'
 
 //#region Layout
 const Layout = ({ isAuthenticated, login }) => {
@@ -33,10 +33,12 @@ const Layout = ({ isAuthenticated, login }) => {
   // Fonction pour déterminer si l'en-tête doit être affiché
   const shouldShowHeader = () => {
     // Vérifie si le chemin d'accès actuel ne commence pas par '/calendrierDefenses/' ou '/TpiEval/'
-    const afficherEnTete = !(
-      location.pathname.startsWith('/calendrierDefenses') ||
-      location.pathname.startsWith('/TpiEval')
-    )
+
+    const afficherEnTete =
+      location.pathname !== '/' &&
+      location.pathname !== '/calendrierDefenses' &&
+      location.pathname !== '/TpiEval' &&
+      location.pathname !== '/login'
 
     return afficherEnTete
   }
@@ -164,7 +166,6 @@ const Footer = () => {
   // État local pour contrôler l'affichage du pied de page
   const [showFooter, setShowFooter] = useState(false)
 
-  // Utilisation du hook useEffect pour exécuter une fonction à chaque fois que le composant est monté
   useEffect(() => {
     // Fonction pour gérer le défilement de la page
     const handleScroll = () => {
@@ -175,10 +176,13 @@ const Footer = () => {
       setShowFooter(isBottom)
     }
 
+    // Afficher le pied de page lors du montage initial du composant
+    setShowFooter(true)
+
     // Ajouter un écouteur d'événement pour le défilement de la page
     window.addEventListener('scroll', handleScroll)
 
-    // Retirer l'écouteur d'événement lors du démontage du composant
+    // Retirer l'écouteur d'événement lors du démontage du composant pour éviter les fuites de mémoire
     return () => {
       window.removeEventListener('scroll', handleScroll)
     }
@@ -188,11 +192,8 @@ const Footer = () => {
   return (
     <footer className={showFooter ? 'footer' : 'footer hidden'}>
       <div className='footer-content'>
-        <p>
-          Réalisé par Helder Costa Lopes pour l'ETML/CFPV | © 2023 Tpi Organizer
-          - Tous droits réservés
-        </p>
-        <p>Version {versionO}</p>
+        <span>Version {versionO}</span>
+        Réalisé par l'ETML/CFPV | © 2023 Tpi Organizer - Tous droits réservés
       </div>
     </footer>
   )

@@ -260,6 +260,7 @@ const populateElementsWithData = (attributeName, data) => {
 
 function NewEvaluationForm ({ searchCandidat, loadTpiEval, setLoadTpiEval }) {
   const [data, setData] = useState(null)
+  const [isActive, setIsActive] = useState(false);
 
   // json =>  partie(string) maxPoints(int): pointsObtenus(int):
   const [resultsOfParts, setResultsOfParts] = useState([
@@ -814,8 +815,21 @@ function NewEvaluationForm ({ searchCandidat, loadTpiEval, setLoadTpiEval }) {
     console.log('Données effacées')
   }
 
+  const toggleActive = () => {
+    setIsActive(!isActive);
+    console.log('isActive:', !isActive); // Affiche la vraie valeur de isActive après modification
+  };
+
   return (
     <>
+    <div>
+      <span id='tpiEvalMode'>
+        <div className='label-tpiEvalMode'>Mode P-Appro</div>
+        <button type='button' className={isActive ? 'active' : ''} onClick={toggleActive}></button>
+      </span>
+    </div>
+
+
       <div id='page1'>
         <HeaderLine isVisible={true} searchCandidat={searchCandidat} />
         <Header

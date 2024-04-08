@@ -154,29 +154,28 @@
 .footer {
   background-color: white;
   position: fixed;
-  bottom: 5px;
-  left: -20px;
+  bottom: 0px;
+  left: -42px;
   width: calc(100% + 40px);
   color: black; /* Couleur de texte par défaut */
   font-size: 12px;
-  text-align: right;
+ 
   transition: color 0.3s; /* Ajout d'une transition sur la couleur */
   z-index: -1;
 }
 
+.footer-content {
+  text-align: right;
+}
+
+.footer-content span{
+  position: fixed;
+  left: 2px;
+}
+
 .footer:hover {
-  color: #ff6f61; /* Couleur du texte au survol */
+  color: #6181ff; /* Couleur du texte au survol */
 }
-
-.footer-content p {
-  margin: 0;
-}
-
-.footer-content p:first-child,
-.footer-content p:last-child {
-  margin-right: 40px;
-}
-
 
 /* Media query pour les appareils avec une largeur maximale de 767px */
 @media (max-width: 767px) {

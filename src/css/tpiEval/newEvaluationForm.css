@@ -386,16 +386,16 @@ input[type='number']:focus {
   list-style-type: none;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 300px));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 250px));
+  gap: 13px;
 }
 
 .evaluation-item {
   background-color: #f9f9f9;
   border: 1px solid #ddd;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 15px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.1);
 }
 
 .evaluation-ref {
@@ -436,4 +436,73 @@ input[type='number']:focus {
   content: 'CDP > ';
   font-weight: bold;
   color: #2ecc71;
+}
+
+/* Effet toggle pour le tpiEval Mode */
+
+/* Styles de base du conteneur */
+#tpiEvalMode {
+  position: relative;
+  margin-left: 55px;
+  margin-bottom: 30px;
+}
+
+/* Styles du texte à côté du bouton */
+#tpiEvalMode div {
+  position: absolute;
+  left: 10px;
+  top:10px;
+  width: 100px;
+  font-size: 1.1em;
+}
+
+/* Styles du bouton */
+#tpiEvalMode button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 50px; /* Largeur du bouton */
+  height: 30px; /* Hauteur du bouton */
+  border-radius: 15px; /* Pour arrondir les coins */
+  background-color: #edeaea; /* Couleur de fond par défaut */
+  border: none;
+  outline: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+/* Styles du curseur */
+#tpiEvalMode button::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 2px; /* Décalage initial du curseur vers la droite */
+  transform: translateY(-50%);
+  width: 26px; /* Largeur du curseur */
+  height: 26px; /* Hauteur du curseur */
+  border-radius: 50%; /* Pour arrondir le curseur */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Ombre du curseur */
+  transition: right 0.3s ease, background-color 0.3s ease; /* Animation de déplacement et de couleur */
+}
+
+/* Styles du curseur en mode activé */
+#tpiEvalMode button.active::after {
+  right: 24px; /* Déplacement du curseur vers la gauche */
+}
+
+/* Styles du curseur en mode activé (vert) */
+#tpiEvalMode button.active::after {
+  background-color: #4ec952; /* Couleur verte */
+}
+
+/* Styles du curseur en mode désactivé (rouge) */
+#tpiEvalMode button::after {
+  background-color: #f0392b; /* Couleur rouge */
+}
+
+.label-tpiEvalMode{
+  position: relative;
+  left: 90px;
+  top:8px;
+  font-weight: bold;
 }
