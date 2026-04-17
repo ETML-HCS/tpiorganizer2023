@@ -1,125 +1,292 @@
-import React, { useState } from "react";
-import { AES } from "crypto-js";
+import React, { useState } from "react"
+import { AES } from "crypto-js"
+
+import { createUser } from "../tpiControllers/TpiUsersController.jsx"
+import { showNotification } from "../Tools.jsx"
 import {
-  createUser,
-  getUsers,
-  updateUser,
-} from "../tpiControllers/TpiUsersController";
+  TRACKER_ROLE_OPTIONS,
+  getTrackerRoleConfig,
+  getTrackerRoleLabel
+} from "./trackerRoles.js"
 
-const InputField = ({ type, placeholder, value, onChange }) => {
+const EMPTY_FORM_DATA = {
+  login: "",
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  password: "",
+  role: ""
+}
+
+const InputField = ({ label, className = "", type, placeholder, value, onChange, ...props }) => {
   return (
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-    />
-  );
-};
+    <label className={`tracker-field ${className}`.trim()}>
+      <span className='tracker-sr-only'>{label}</span>
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        aria-label={label}
+        {...props}
+      />
+    </label>
+  )
+}
 
-const Register = ({secret}) => {
-  const [activeForm, setActiveForm] = useState(null);
-  const [formData, setFormData] = useState({
-    login: "",
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    password: "",
-    studentId: "",
-    bossId: "",
-    expertID: "",
-    role: "",
-  });
+const RoleOption = ({ roleOption, isActive, onSelect }) => {
+  return (
+    <button
+      type='button'
+      className={`tracker-role-option tracker-role-option--${roleOption.className} ${
+        isActive ? "active" : ""
+      }`.trim()}
+      aria-pressed={isActive}
+      onClick={() => onSelect(roleOption.value)}
+    >
+      <span className='tracker-role-option-topline'>
+        <span className='tracker-role-option-label'>{roleOption.label}</span>
+        <span className='tracker-role-option-chip'>
+          {roleOption.highlights?.length || 0} repères
+        </span>
+      </span>
+      <span className='tracker-role-option-summary'>{roleOption.summary}</span>
+    </button>
+  )
+}
+
+const Register = ({ secret }) => {
+  const [activeForm, setActiveForm] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState(() => ({ ...EMPTY_FORM_DATA }))
+  const activeRoleConfig = activeForm ? getTrackerRoleConfig(activeForm) : null
+  const activeRoleHighlights = activeRoleConfig?.highlights || []
 
   const handleFormSelection = (formType) => {
-    setActiveForm(formType);
-    setFormData({ ...formData, role: formType });
-  };
+    setActiveForm(formType)
+    setFormData((currentForm) => ({
+      ...currentForm,
+      role: formType
+    }))
+  }
 
   const handleInputChange = (field, value) => {
-    setFormData({ ...formData, [field]: value });
-  };
+    setFormData((currentForm) => ({
+      ...currentForm,
+      [field]: value
+    }))
+  }
+
+  const resetForm = () => {
+    setActiveForm(null)
+    setFormData({ ...EMPTY_FORM_DATA })
+  }
 
   const hashToPassword = (password) => {
-    console.log(password,"||",secret);
-    return AES.encrypt(password, secret).toString();
-  };
+    return AES.encrypt(String(password || ""), secret).toString()
+  }
 
-  const handleRegistration = () => {
-    console.log(formData);
-    const hashedPassword = hashToPassword(formData.password);
-    console.log(hashedPassword);
-    createUser({ ...formData, password: hashedPassword });
-    setActiveForm(false);
-  };
+  const handleRegistration = async (event) => {
+    event.preventDefault()
+
+    if (!activeForm) {
+      showNotification("Veuillez choisir un profil à inscrire.", "error", 4000)
+      return
+    }
+
+    if (!secret) {
+      showNotification(
+        "Le secret de chiffrement du suivi est manquant.",
+        "error",
+        4000
+      )
+      return
+    }
+
+    const normalizedFormData = {
+      ...formData,
+      login: formData.login.trim(),
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      role: activeForm
+    }
+
+    if (
+      !normalizedFormData.login ||
+      !normalizedFormData.firstName ||
+      !normalizedFormData.lastName ||
+      !normalizedFormData.email ||
+      !normalizedFormData.password
+    ) {
+      showNotification(
+        "Veuillez compléter les champs obligatoires avant l'inscription.",
+        "error",
+        4000
+      )
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      await createUser({
+        ...normalizedFormData,
+        password: hashToPassword(normalizedFormData.password)
+      })
+
+      showNotification(
+        `${getTrackerRoleLabel(activeForm)} inscrit avec succès.`,
+        "success",
+        3500
+      )
+      resetForm()
+    } catch (error) {
+      showNotification(
+        error?.message || "Impossible d'inscrire l'utilisateur.",
+        "error",
+        4000
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
-    <div className="register">
-      <h2>Inscription</h2>
-      <ul className="form-selection">
-        <li onClick={() => handleFormSelection("student")}>Étudiant</li>
-        <li onClick={() => handleFormSelection("projectManager")}>Chef de projet</li>
-        <li onClick={() => handleFormSelection("dean")}>Doyen</li>
-        <li onClick={() => handleFormSelection("expert")}>Expert</li>
-      </ul>
-      {/* Affichez le formulaire sélectionné en fonction de l'état activeForm */}
-      {activeForm && (
-        <div className={`${activeForm}-registration active`}>
-          <h3>
-            {activeForm === "student"
-              ? "Étudiant"
-              : activeForm === "projectManager"
-              ? "Chef de projet"
-              : activeForm === "dean"
-              ? "Doyen"
-              : "Expert"}
-          </h3>
-          <InputField
-            type="text"
-            placeholder="Login"
-            value={formData.login}
-            onChange={(e) => handleInputChange("login", e.target.value)}
-          />
-          <InputField
-            type="text"
-            placeholder="Prénom"
-            value={formData.firstName}
-            onChange={(e) => handleInputChange("firstName", e.target.value)}
-          />
-          <InputField
-            type="text"
-            placeholder="Nom de famille"
-            value={formData.lastName}
-            onChange={(e) => handleInputChange("lastName", e.target.value)}
-          />
-          <InputField
-            type="email"
-            placeholder="Adresse e-mail"
-            value={formData.email}
-            onChange={(e) => handleInputChange("email", e.target.value)}
-          />
-          <InputField
-            type="password"
-            placeholder="password"
-            value={formData.password}
-            onChange={(e) => handleInputChange("password", e.target.value)}
-          />
+    <section className='tracker-panel tracker-register-card'>
+      <div className='tracker-card-head'>
+        <span className='tracker-panel-eyebrow'>Inscription</span>
+        <span className='tracker-card-status'>
+          {activeForm
+            ? `${getTrackerRoleLabel(activeForm)} sélectionné`
+            : `${TRACKER_ROLE_OPTIONS.length} profils disponibles`}
+        </span>
+      </div>
 
-          <button onClick={handleRegistration}>
-            S'inscrire en tant que{" "}
-            {activeForm === "student"
-              ? "étudiant"
-              : activeForm === "projectManager"
-              ? "chef de projet"
-              : activeForm === "dean"
-              ? "doyen"
-              : "expert"}
-          </button>
+      <div className='tracker-register-intro'>
+        <h2>Créer un compte de suivi</h2>
+        <p className='tracker-card-copy'>
+          Choisissez un rôle, complétez les informations de base, puis
+          enregistrez un compte chiffré pour l’espace de suivi.
+        </p>
+      </div>
+
+      <div className='tracker-role-grid' aria-label='Profils à inscrire'>
+        {TRACKER_ROLE_OPTIONS.map((roleOption) => (
+          <RoleOption
+            key={roleOption.value}
+            roleOption={roleOption}
+            isActive={activeForm === roleOption.value}
+            onSelect={handleFormSelection}
+          />
+        ))}
+      </div>
+
+      {activeForm ? (
+        <form
+          className={`tracker-registration-form tracker-registration-form--${activeForm}`}
+          onSubmit={handleRegistration}
+        >
+          <div className='tracker-registration-summary'>
+            <div>
+              <span className='tracker-panel-eyebrow'>Profil sélectionné</span>
+              <h3>{getTrackerRoleLabel(activeForm)}</h3>
+              <p>
+                {activeRoleConfig?.summary ||
+                  "Le formulaire adapte l'inscription au rôle choisi."}
+              </p>
+            </div>
+
+            {activeRoleHighlights.length > 0 ? (
+              <ul className='tracker-mini-list' aria-label='Repères du profil'>
+                {activeRoleHighlights.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className='tracker-field-grid'>
+            <InputField
+              label="Login"
+              className='tracker-field--full'
+              type='text'
+              placeholder="Nom d'utilisateur"
+              value={formData.login}
+              autoComplete='username'
+              required
+              onChange={(e) => handleInputChange("login", e.target.value)}
+            />
+            <InputField
+              label='Prénom'
+              type='text'
+              placeholder='Prénom'
+              value={formData.firstName}
+              autoComplete='given-name'
+              required
+              onChange={(e) => handleInputChange("firstName", e.target.value)}
+            />
+            <InputField
+              label='Nom de famille'
+              type='text'
+              placeholder='Nom de famille'
+              value={formData.lastName}
+              autoComplete='family-name'
+              required
+              onChange={(e) => handleInputChange("lastName", e.target.value)}
+            />
+            <InputField
+              label='Adresse e-mail'
+              className='tracker-field--full'
+              type='email'
+              placeholder='Adresse e-mail'
+              value={formData.email}
+              autoComplete='email'
+              required
+              onChange={(e) => handleInputChange("email", e.target.value)}
+            />
+            <InputField
+              label='Téléphone'
+              type='tel'
+              placeholder='Téléphone'
+              value={formData.phone}
+              autoComplete='tel'
+              onChange={(e) => handleInputChange("phone", e.target.value)}
+            />
+            <InputField
+              label='Mot de passe'
+              type='password'
+              placeholder='Mot de passe'
+              value={formData.password}
+              autoComplete='new-password'
+              required
+              onChange={(e) => handleInputChange("password", e.target.value)}
+            />
+          </div>
+
+          <div className='tracker-form-footer'>
+            <p className='tracker-form-note'>
+              Le mot de passe est chiffré avant l&apos;enregistrement.
+            </p>
+            <button type='submit' className='tracker-primary-button' disabled={isSubmitting}>
+              {isSubmitting
+                ? "Enregistrement..."
+                : `Créer le compte ${getTrackerRoleLabel(activeForm).toLowerCase()}`}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className='tracker-register-empty'>
+          <p>
+            Choisissez un profil ci-dessus pour afficher le formulaire
+            correspondant.
+          </p>
         </div>
       )}
-    </div>
-  );
-};
+    </section>
+  )
+}
 
-export default Register;
+export default Register

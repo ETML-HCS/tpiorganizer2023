@@ -1,0 +1,65 @@
+_id,id,name,site,email,date,token,role
+663116ceba4d5648f8383ef8,1,Cyril Sokoloff,ETML,cyril.sokoloff@eduvaud.ch,2024-05-01T08:41:05.914Z,5f9cb08874c89e16b528527d6b14210baa52e0b111989e09fb17a7e7aa5b8035,projectManager
+663116ceba4d5648f8383ef9,2,Vincent Emery,externe,vincent.emery@eduvaud.ch,2024-05-01T08:41:05.927Z,657baa8eb9744838695177b8445f55c94f36d3cdd78e5c44ce4d800480b88a9d,
+663116ceba4d5648f8383efa,3,Sheyla Oliveira Kobi,ETML,sheyla.oliveira@eduvaud.ch,2024-05-01T08:41:05.930Z,b628f7255d00bffd58e1d614ef858ac68caa60836fb6b6d2793252ac10610b59,projectManager
+663116ceba4d5648f8383efb,4,Alain-Philippe Garraux,ETML,alainphilippe.garraux@eduvaud.ch,2024-05-01T08:41:05.935Z,b78685c284054c29cc615da5658e5901b439aeb5a3d0704c5b9de11033b442f5,projectManager
+663116ceba4d5648f8383efc,5,Isabelle Stucki,ETML,isabelle.stucki@eduvaud.ch,2024-05-01T08:41:05.938Z,a7e0b98737f037c491210e3419adfb1b88557b3b2b511438ee503c3b1f881a75,projectManager
+663116ceba4d5648f8383efd,6,Livio Nagy,externe,livio.nagy@eduvaud.ch,2024-05-01T08:41:05.941Z,fa07ae668fe3c4287a6457d5f7f8748b6f85bc03f4dfde23a27b0fab639d93fa,
+663116ceba4d5648f8383efe,7,Loïc Schmid,externe,loïc.schmid@eduvaud.ch,2024-05-01T08:41:05.944Z,46287e9bcc626931b6ec16226149d8751901379e9ef4f9ace0acfedf580910e0,
+663116ceba4d5648f8383eff,8,Marc-Olivier Domenjoz,externe,marc-olivier.domenjoz@eduvaud.ch,2024-05-01T08:41:05.946Z,1482fd4e5b3d781c4d1fce31b2d6c15019f9c0990e97e5380fb394abdde808e1,
+663116ceba4d5648f8383f00,9,Romain Gehrig,ETML,romain.gehrig@eduvaud.ch,2024-05-01T08:41:05.949Z,0cfb0dd8755ecc6b29d6cf041b104a3a65f456e2f51d667b6010b4e9476c641e,projectManager
+663116ceba4d5648f8383f01,10,Karim Bourahla,ETML,karim.bourahla@eduvaud.ch,2024-05-01T08:41:05.952Z,d9a3f56f42427e89a41c163957da3e60e75cd512c37f02ca5555082c79814355,projectManager
+663116ceba4d5648f8383f02,11,Laurent Duding,ETML,laurent.duding@eduvaud.ch,2024-05-01T08:41:05.954Z,31a9abb50fe1d93bf28e6bdf760347b3d8c452fcc5b49f868f1d0917287c0156,projectManager
+663116ceba4d5648f8383f03,12,Fryderyk Dachowski,externe,fryderyk.dachowski@eduvaud.ch,2024-05-01T08:41:05.956Z,006ec5ba36f2221469af3292dca84617572846126c08ac170019d626ff332be8,
+663116ceba4d5648f8383f04,13,Dimitrios Lymberis,CFPV,dimitri.lymberis@eduvaud.ch,2024-05-01T08:41:05.958Z,9a8a2309044146aff2dede854cbf3d88bac09325230734b4b7e104bb974b499b,projectManager
+663116ceba4d5648f8383f05,14,Cédric Schaffter,CFPV,cedric.schaffter@eduvaud.ch,2024-05-01T08:41:05.959Z,60c824c418b3399f4b9800bdad0f28d41569b39a672a9e3cbae5902a7412baa0,projectManager
+663116ceba4d5648f8383f06,15,Xavier Carrel,CFPV,xavier.carrel@eduvaud.ch,2024-05-01T08:41:05.962Z,abbf8b9f5819026f0d64339e2f6d8a5867a92c1af9c2e2ff5f393d62962739e4,projectManager
+663116ceba4d5648f8383f07,16,Gaël Sonney,CFPV,gael.sonney@eduvaud.ch,2024-05-01T08:41:05.965Z,9f115a3c85313f478fc65e735bed692138319fd35419ad047d77a1deb627d059,projectManager
+663116ceba4d5648f8383f08,17,Helder Manuel Costa Lopes,CFPV,helder.costa@eduvaud.ch,2024-05-01T08:41:05.968Z,f233d16bebae73aa27848cc5dd72e551f5dd80ebdfdf5dc911652cc46867a11c,projectManager
+663116ceba4d5648f8383f09,18,Yvan Cochet,externe,yvan.cochet@eduvaud.ch,2024-05-01T08:41:05.971Z,be5cbfd4ea680a1b54d441e6f948c911331da21fc3302e10aa4ff87e873ea430,
+663116ceba4d5648f8383f0a,19,Roberto Ferrari,CFPV,roberto.ferrari@eduvaud.ch,2024-05-01T08:41:05.974Z,f8bc109ac6a02f2ecca08b35f5add30e815af74b1754e373f2c684099f727a23,projectManager
+663116ceba4d5648f8383f0b,20,Patrick Chenaux,CFPV,patrick.chenaux@eduvaud.ch,2024-05-01T08:41:05.976Z,591f773aa8fb57948767569b27c56c5b2f82240f9799e1df98eecaec886409b4,projectManager
+663116ceba4d5648f8383f0c,21,Aurélie Curchod,externe,aurelie.curchod@eduvaud.ch,2024-05-01T08:41:05.978Z,ae93782f3b5a54374c2dac1e836904f8923f0800ddd8db30fe1821a423cfc1d2,
+663116ceba4d5648f8383f0d,22,Jonathan Melly,externe,jonathan.melly@eduvaud.ch,2024-05-01T08:41:05.980Z,cb3112ee8f429bd4b57c4da44b1614b7322cf149fb902ab7482a074a21a8353f,
+663116ceba4d5648f8383f0e,23,Stéphane Gerber,Gerber Systems,stéphane.gerber@eduvaud.ch,2024-05-01T08:41:05.982Z,ea86c8cf122b613f2b56931f10ebf2d0720b7fde6e7ea00f393a9b5dbbdaa8fd,
+663116ceba4d5648f8383f0f,24,Laurent Deschamps,externe,laurent.deschamps@eduvaud.ch,2024-05-01T08:41:05.984Z,eec59de6f2cec1e4a3894d17e895f6b3ae39fe6396045d8269cd45d48336b65e,
+663116ceba4d5648f8383f10,25,Michel Delgado,ETML,michel.delgado@eduvaud.ch,2024-05-01T08:41:05.987Z,6c0c83e131de77ee825bd799892964b6f0678a5356bc5cf694e6887658fd83cd,projectManager
+663116ceba4d5648f8383f11,26,Bertrand Sahli,CFPV,bertrand.sahli@eduvaud.ch,2024-05-01T08:41:05.988Z,bc394991c0eeaeb93cdf2fb2758d437520bda3b7f7d5ab7192385e418a8b0413,projectManager
+663116ceba4d5648f8383f12,27,Antoine Mveng,externe,antoine.mveng@eduvaud.ch,2024-05-01T08:41:05.990Z,7f3159628752de78c36a0667b8df2921010dce2cd34a45efbff33838c4ef0c83,
+663116ceba4d5648f8383f13,28,Alain Girardet,externe,alain.girardet@eduvaud.ch,2024-05-01T08:41:05.992Z,a82bff14a43964a12b8daea324963e0babb9ac73730e4ce6c93a95719f0898aa,
+663116ceba4d5648f8383f14,29,Grégory Charmier,externe,grégory.charmier@eduvaud.ch,2024-05-01T08:41:05.994Z,7a648544549724c35cf77f5512603b165db08be25703e477074558e239eee2db,
+663116ceba4d5648f8383f15,30,Albert Richard,externe,albert.richard@etml-es.ch,2024-05-01T08:41:05.996Z,abd8ca8e1906486979f3b986f3251371c6bed8849388c719b4fad4f9ed60568b,
+663116ceba4d5648f8383f16,31,Alexandre Graf,externe,alg@web-services.com,2024-05-01T08:41:05.998Z,67bc5751cf7dd0211bcbd1ddb052270823c7517c63686f1dafaaa6a9c313128a,
+663116ceba4d5648f8383f17,32,Aurelie Curchod,externe,aurelie.curchod@eduvaud.ch,2024-05-01T08:41:06.000Z,edb8cc27c4e4fc93bbcae3d8adbd0b2310f77ca4b8a45d43f7011294f274c331,
+663116ceba4d5648f8383f18,33,Baptiste Masson,externe,baptiste.masson@elca.ch,2024-05-01T08:41:06.002Z,49fd600bf0664e488a0141be908a1787df893e89605d9c88de544edb6926df8a,
+663116ceba4d5648f8383f19,34,Wolf Benjamin,externe,bw-tpi@hotmail.com,2024-05-01T08:41:06.004Z,18fcbec2ec478791651975c520d323517824b43276a01d5c432919333d4af4be,
+663116ceba4d5648f8383f1a,35,Claude Albert Muller Theurillat,externe,claude-albert.muller-theurillat@vd.ch,2024-05-01T08:41:06.005Z,6c68b41375945a09bac951bcf735cb0f88aeeeb28cddbe7b2bbeddf9d9830609,
+663116ceba4d5648f8383f1b,36,Berney Daniel,externe,daniel.berney@heig-vd.ch,2024-05-01T08:41:06.007Z,1ac398fa34782e83a97f036122b943de1ac0759ab6abcb66be1cab056a673b12,
+663116ceba4d5648f8383f1c,37,Jean-Luc Roduit,externe,dedecop2@gmail.com,2024-05-01T08:41:06.009Z,29f0797c8a59b56648d564c0958420c4a1d23072c6e1c3a2a28cea21a66b07fe,
+663116ceba4d5648f8383f1d,38,Ernesto Montemayor,externe,ernesto@bati-technologie.ch,2024-05-01T08:41:06.011Z,ddd339be9a534f3d9973a111d8f8ccf414cafe5c559a0ce3d877832d5cbd5168,
+663116ceba4d5648f8383f1e,39,Flavio Pacifico,externe,flavio.i.pacifico@gmail.com,2024-05-01T08:41:06.013Z,3c0a661a8da0ddf40286f7aa004fed336313ec40d8a915c148c8ce50462f8274,
+663116ceba4d5648f8383f1f,40,Frederic Boy,externe,frederic.boy@jobinsa.ch,2024-05-01T08:41:06.014Z,c027648430d1538c9a221e4791f72776688cfd08bd26b1241f975d3786ab946b,
+663116ceba4d5648f8383f20,41,Frédérique Andolfatto,externe,frederique.andolfatto@cpnv.ch,2024-05-01T08:41:06.016Z,9a3a9e51a111ec7a45e489a5ba9799737a51257708e716844a4d8f6521e0e5c3,
+663116ceba4d5648f8383f21,42,Gabriel Maret,externe,gab.maret@gmail.com,2024-05-01T08:41:06.019Z,39dd62f1868d7e2e3374754c94e302f26c8a0fd0775e466f604c40bbf4513fa2,
+663116ceba4d5648f8383f22,43,Jonathan Tonelli,externe,Jonathan@tonelli.ch,2024-05-01T08:41:06.021Z,8c6fe5549a561e1dcd5b938ea0e8f0f2713499fb71be3968dfc26fa97038bbc4,
+663116ceba4d5648f8383f23,44,Junior Mbuyi,externe,junior.mbuyi@epfl.ch,2024-05-01T08:41:06.023Z,4640f5194969a0711fe3ef9b28c451fecfddacb438cec9c996010d4f14878380,
+663116ceba4d5648f8383f24,45,Luc Venries,externe,luc.venries@epfl.ch,2024-05-01T08:41:06.025Z,81a8db7a9e9dd36592c9616daf448fd2c9c696689c65ef39744092be510f239c,
+663116ceba4d5648f8383f25,46,Matthieu Gressly,externe,matthieu.gressly@gmail.com,2024-05-01T08:41:06.027Z,c72356efaee6dad5c34f4aa6efa83b61eb7d9ccd709cb8a684c4244fe50df59b,
+663116ceba4d5648f8383f26,47,Olivier Mellina,externe,mellina.olivier@gmail.com,2024-05-01T08:41:06.029Z,7155a8ccf0a02e1f267942506968bc77a701a859733f59857b5bcb5b641b3bcc,
+663116ceba4d5648f8383f27,48,Michael Wyssa,externe,Michael.WYSSA@cpnv.ch,2024-05-01T08:41:06.031Z,3bc295d727f64f969eca733c9feb99b6372ec8d32aafc3ea98a7d826a659e05b,
+663116ceba4d5648f8383f28,49,Nemanja Pantic,externe,nemo.pantic@gmail.com,2024-05-01T08:41:06.033Z,f72a2333fd19717705ca75ebc155f1eae5b4395a9de68a018fc40bb80db6ebef,
+663116ceba4d5648f8383f29,50,Nicolas Borboën,externe,nicolas.borboen@epfl.ch,2024-05-01T08:41:06.035Z,ee56ed57fd901b75957fa6dc4dbe05fcd7d6b301f5986dc0c89a67218febad6d,
+663116ceba4d5648f8383f2a,51,Bernard Oberson,externe,oberson.bernard@gmail.com,2024-05-01T08:41:06.037Z,76ffa74d8167672889ffb3ca166c7cfbd57c7f0379a1e87de22b3d986bb522c3,
+663116ceba4d5648f8383f2b,52,Patrick Pretre,externe,patrick.pretre@bluewin.ch,2024-05-01T08:41:06.039Z,1b25ec6db09cef017e94cd4d30d7d069e97d2f97e51806fc4610bd4421a9070f,
+663116ceba4d5648f8383f2c,53,Malherbe Roger,externe,r.malherbe@rmsoft.ch,2024-05-01T08:41:06.041Z,4132f7e2f4b171b657b20bfe8bf73c839399a5348fc24f947152e977dee0ca62,
+663116ceba4d5648f8383f2d,54,Raphael Rhyn,externe,raphael.rhyn@arches.ch,2024-05-01T08:41:06.043Z,ae6e4774a4f6f3b5cb3d3709e28913578d8fa0d6c7de3e1f028e46bcdfefa5db,
+663116ceba4d5648f8383f2e,55,Serge Wenger,externe,serge.wenger@matisa.ch,2024-05-01T08:41:06.045Z,6b1c56767cc633db374eeceee979d0266373b23afbbede9b48952f8fdc48c758,
+663116ceba4d5648f8383f2f,56,Suleyman Ceran,externe,sueleyman.ceran@gmail.com,2024-05-01T08:41:06.046Z,486e51758e90d6f75c05f1f38a67ee50c7b562b379b4b1ca8ada3931bb62c863,
+663116ceba4d5648f8383f30,57,Yannis Ansermoz,externe,yannis.ansermoz@protonmail.com,2024-05-01T08:41:06.048Z,e482d20a37315edd48292ce3243235dd5b864747be8c351ad1895dbc2450086f,
+663116ceba4d5648f8383f31,58,Yves Bertino,externe,yves@bertino.ch,2024-05-01T08:41:06.050Z,30fdc74d8469d478816523027d2b51334aabe29a2417d939169f5b6761b9a5f5,
+663116ceba4d5648f8383f32,59,Alain Pittet,externe,alain.pittet@info-domo.ch,2024-05-01T08:41:06.052Z,d0cf261d97a2137bf06f3bab1cf10387b228ffeb3c81368d4cf66f159aa66b61,
+663116ceba4d5648f8383f33,60,André Mottier,externe,andre.mottier@eduvaud.ch,2024-05-01T08:41:06.054Z,448021cdd61c595d371dad7f3a3a9d83bff91a741b9532c2f1211a3897373a19,
+663116ceba4d5648f8383f34,61,Arnaud Sartoni,externe,arnaud.sartoni@epfl.ch,2024-05-01T08:41:06.055Z,57c192b15e4b53f87072f8c4e06a8eb78458569aba87fcd88390d71aadf4a577,
+663116ceba4d5648f8383f35,62,Mergim Krasniqi,externe,kramergim@gmail.com,2024-05-01T08:41:06.057Z,50fd5aa28a607fef8b243cf9efe4ec3a44e9b36154294a06c39d452c51923344,
+663116ceba4d5648f8383f36,62,Raphaël Favre,externe,raphael.favre@eduvaud.ch,2024-05-01T08:41:06.058Z,8549576bf3681ba6198907099d385969546190a15703a64f00b47ead6786d7b0,
+663116ceba4d5648f8383f37,62,Raphaël Gilloz,externe,raphael@gilloz.ch,2024-05-01T08:41:06.060Z,7157d98c83f4530195ce31305cb562eff826fb495d3873c2a4196ff63991c809,

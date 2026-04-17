@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
-import { showNotification } from '../Tools.jsx'
-import config from '../../config/configO2023.json'
+import React, { useState, useEffect } from "react"
+import { useLocation, useParams } from "react-router-dom"
+import { soutenancesService } from "../../services/apiService"
+import { planningConfigService } from "../../services/planningService"
+import { showNotification } from "../Tools.jsx"
+import { buildPlanningConfigForYear } from "../tpiSchedule/tpiScheduleData"
+import {
+  formatSoutenanceDateLabel,
+  normalizeSoutenanceDateEntries
+} from "../tpiSchedule/soutenanceDateUtils"
 
 const CreneauPropositionPopup = ({
   expertOrBoss,
@@ -10,20 +16,12 @@ const CreneauPropositionPopup = ({
   fermerPopup
 }) => {
   const [propositions, setPropositions] = useState([])
-  const [selectedDate, setSelectedDate] = useState('')
-  // const [selectedDate, setSelectedDate] = useState('');
-  const [selectedCreneau, setSelectedCreneau] = useState('')
-  const [forceRender, setForceRender] = useState(false)
+  const [selectedDate, setSelectedDate] = useState("")
+  const [selectedCreneau, setSelectedCreneau] = useState("")
+  const [soutenanceDateOptions, setSoutenanceDateOptions] = useState([])
 
   const { year } = useParams() // Extrait l'année des paramètres d'URL
-
-  // Pour accéder à la variable d'environnement REACT_APP_DEBUG
-  const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
-
-  // Pour accéder à la variable d'environnement REACT_APP_API_URL
-  const apiUrl = debugMode
-    ? process.env.REACT_APP_API_URL_TRUE
-    : process.env.REACT_APP_API_URL_FALSE
+  const location = useLocation()
 
   useEffect(() => {
     if (schedule.length > 0) {
@@ -32,6 +30,34 @@ const CreneauPropositionPopup = ({
     }
   }, [schedule])
 
+  useEffect(() => {
+    let isCancelled = false
+    const fallbackConfig = buildPlanningConfigForYear({}, year)
+
+    const loadConfig = async () => {
+      try {
+        const config = await planningConfigService.getByYear(year)
+
+        if (!isCancelled) {
+          setSoutenanceDateOptions(normalizeSoutenanceDateEntries(config?.soutenanceDates || []))
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error("Erreur lors du chargement des dates de soutenance :", error)
+          setSoutenanceDateOptions(
+            normalizeSoutenanceDateEntries(fallbackConfig?.soutenanceDates || [])
+          )
+        }
+      }
+    }
+
+    void loadConfig()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [year])
+
   const ajouterProposition = () => {
     // Vérification de la sélection de la date et du créneau
     if (selectedDate && selectedCreneau) {
@@ -39,7 +65,7 @@ const CreneauPropositionPopup = ({
         // Vérifie les doublons avant d'ajouter
         if (
           !propositions.some(
-            prop =>
+            (prop) =>
               prop.date === selectedDate && prop.creneau === selectedCreneau
           )
         ) {
@@ -48,68 +74,54 @@ const CreneauPropositionPopup = ({
             { date: selectedDate, creneau: selectedCreneau }
           ])
         } else {
-          showNotification('Cette proposition a déjà été faite.', 2000)
+          showNotification("Cette proposition a déjà été faite.", 2000)
         }
       } else {
-        showNotification('Vous ne pouvez pas ajouter plus de 3 propositions.')
+        showNotification("Vous ne pouvez pas ajouter plus de 3 propositions.")
       }
     } else {
-      showNotification('Veuillez sélectionner une date et un créneau.')
+      showNotification("Veuillez sélectionner une date et un créneau.")
     }
   }
 
-  const handleDateChange = e => {
+  const handleDateChange = (e) => {
     setSelectedDate(e.target.value)
   }
 
   const sauvegarderPropositions = async () => {
-    const url = `${apiUrl}/api/save-propositions/${year}/${expertOrBoss}/${tpiData.id}/${tpiData._id}`
-
     const propositionsData = {
       isValidated: false,
       submit: propositions
     }
 
     try {
-      const response = await envoyerRequete(url, 'PUT', propositionsData)
-      traiterReponse(response)
+      const queryParams = new URLSearchParams(location.search)
+      await soutenancesService.updateOffers(year, tpiData._roomId, tpiData._id, expertOrBoss, {
+        offres: propositionsData
+      }, {
+        token: queryParams.get("token") || undefined,
+        ml: queryParams.get("ml") || undefined
+      })
+      traiterReponse()
+      setPropositions([]) // Réinitialisez les propositions après la sauvegarde
     } catch (error) {
-      console.error('Erreur :', error)
+      console.error("Erreur :", error)
       afficherNotificationErreur()
     } finally {
-      // Mettre à jour l'état pour forcer un re-render
-      setForceRender(prevState => !prevState)
       fermerPopup()
     }
   }
 
-  const envoyerRequete = async (url, method, body) => {
-    const response = await fetch(url, {
-      method: method,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    })
-
-    if (!response.ok) {
-      throw new Error(
-        'Erreur lors de la mise à jour des propositions acceptées'
-      )
-    }
-    return response
-  }
-
-  const traiterReponse = response => {
-    showNotification('Propositions mises à jour avec succès', 'success')
+  const traiterReponse = () => {
+    showNotification("Propositions mises à jour avec succès", "success")
   }
 
   const afficherNotificationErreur = () => {
-    showNotification('Erreur lors de la mise à jour de la proposition', 'error')
+    showNotification("Erreur lors de la mise à jour de la proposition", "error")
   }
 
   // Conversion des créneaux en  pair de périodes
-  const p = ['01', '03', '05', '07', '09', '11', '13', '15', '17']
+  const p = ["01", "03", "05", "07", "09", "11", "13", "15", "17"]
 
   return (
     <div className='popup-container'>
@@ -118,16 +130,16 @@ const CreneauPropositionPopup = ({
 
         <select value={selectedDate} onChange={handleDateChange}>
           <option value=''>Sélectionnez une date</option>
-          {config.soutenanceDates.map(date => (
-            <option key={date} value={date}>
-              {date}
+          {soutenanceDateOptions.map((date) => (
+          <option key={date.date} value={date.date}>
+              {`${formatSoutenanceDateLabel(date.date)}${(date.min || date.special) ? " • SPECIAL" : ""}`}
             </option>
           ))}
         </select>
 
         <select
           value={selectedCreneau}
-          onChange={e => setSelectedCreneau(e.target.value)}
+          onChange={(e) => setSelectedCreneau(e.target.value)}
         >
           {schedule.map((creneau, index) => (
             <option

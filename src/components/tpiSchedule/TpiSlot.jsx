@@ -3,14 +3,25 @@ import { useDrop } from 'react-dnd'
 
 import TpiCard from './TpiCard'
 import { ItemTypes } from './Constants'
+import { createEmptyTpi } from './tpiScheduleData'
 
 const TpiSlot = ({
   tpiData,
   isEditTPICard,
   timeValues,
   onUpdateTpi,
-  onSwapTpiCardsProp
+  onSwapTpiCardsProp,
+  detailLevel = 2,
+  roomSite = '',
+  roomName = '',
+  roomDate = '',
+  peopleRegistry = [],
+  stakeholderShortIdHints = {},
+  soutenanceDates = [],
+  validationMarker = null
 }) => {
+  const safeTpiData = tpiData || createEmptyTpi()
+
   const handleUpdateTpiCard = updatedTpi => {
     // Mettre à jour l'état local si nécessaire
     onUpdateTpi(updatedTpi) // Propager l'update à DateRoom
@@ -19,10 +30,11 @@ const TpiSlot = ({
   const [{ isOver }, dropRef] = useDrop({
     accept: ItemTypes.TPI_CARD,
     drop: item => {
-      console.log('drop called with:', item.tpi.id)
-      const draggedTpi = item.tpi.id
-      console.log('drop called with:', tpiData.id)
-      onSwapTpiCardsProp(draggedTpi, tpiData.id)
+      const draggedTpi = item?.tpi?.id
+      if (!draggedTpi || !safeTpiData.id) {
+        return
+      }
+      onSwapTpiCardsProp(draggedTpi, safeTpiData.id)
     },
     collect: monitor => ({
       isOver: monitor.isOver()
@@ -31,10 +43,10 @@ const TpiSlot = ({
 
   // permet d'ajout un encadrage vert afin de visualiser les tpi acceptés
   const isExpert1Validated =
-    tpiData.expert1.offres && tpiData.expert1.offres.isValidated
+    safeTpiData.expert1?.offres?.isValidated
   const isExpert2Validated =
-    tpiData.expert2.offres && tpiData.expert2.offres.isValidated
-  const isBossValidated = tpiData.boss.offres && tpiData.boss.offres.isValidated
+    safeTpiData.expert2?.offres?.isValidated
+  const isBossValidated = safeTpiData.boss?.offres?.isValidated
 
   // Vérifier que toutes les propriétés isValidated existent et sont true
   const tpiIsValidatedForAll =
@@ -43,18 +55,26 @@ const TpiSlot = ({
   return (
     <div
       ref={dropRef}
-      className={`tpiSlot ${isOver ? 'dragOver' : ''}`}
+      className={`tpiSlot detail-level-${detailLevel} ${isOver ? 'dragOver' : ''}`}
       id={`green-${tpiIsValidatedForAll}`}
     >
       <div className={`timeSlot`}>
         <p className='top'>{timeValues[0]}</p>
         <p className='bottom'>{timeValues[1]}</p>
-        <span>{}</span>
       </div>
       <TpiCard
-        tpi={tpiData}
+        tpi={safeTpiData}
         isEditingTpiCard={isEditTPICard}
         onUpdateTpi={handleUpdateTpiCard}
+        detailLevel={detailLevel}
+        roomSite={roomSite}
+        roomName={roomName}
+        roomDate={roomDate}
+        peopleRegistry={peopleRegistry}
+        stakeholderShortIdHints={stakeholderShortIdHints}
+        soutenanceDates={soutenanceDates}
+        hasValidationError={Boolean(validationMarker?.hasError)}
+        validationErrorMessages={Array.isArray(validationMarker?.messages) ? validationMarker.messages : []}
       />
     </div>
   )

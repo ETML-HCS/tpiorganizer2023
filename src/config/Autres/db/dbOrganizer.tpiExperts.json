@@ -808,4 +808,24 @@
     "$date": "2024-03-05T09:24:24.929Z"
   },
   "token": "df8a873753c54fcd6731028e5f045376d71fef67701ec894502c40cc983f70bc"
-}]
+},
+
+
+{
+  "_id": {
+    "$oid": "65b37219d68c8153f1315dfd"
+  },
+  "id": 58,
+  "name": "Alain Pittet",
+  "site": "externe",
+  "email": "yves@bertino.ch",
+  "role": "expert",
+  "date": {
+    "$date": "2024-03-05T09:24:24.929Z"
+  },
+  "token": "df8a873753c54fcd6731028e5f045376d71fef67701ec894502c40cc983f70bc"
+},
+
+
+
+]

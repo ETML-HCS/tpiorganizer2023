@@ -1,5 +1,16 @@
 /* --------------- Région : Configuration générale --------------- */
 
+#tpiEval,
+#tpiEval *,
+#tpiEval *::before,
+#tpiEval *::after {
+  box-sizing: border-box;
+}
+
+#tpiEval {
+  overflow-x: clip;
+}
+
 /*Cartouche */
 
 #searchCandidat {
@@ -31,11 +42,12 @@
 }
 
 table {
-  width: 90vw;
-  max-width: 1100px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   border-collapse: collapse;
   border: 1px solid #333;
+  table-layout: fixed;
 }
 
 /* Styles généraux pour les cellules */
@@ -51,6 +63,7 @@ td input,
 td textarea {
   margin: 0 auto;
   width: 100%;
+  max-width: 100%;
 }
 
 /* Styles pour les en-têtes de tableau */
@@ -108,14 +121,13 @@ tfoot td:nth-child(2){
 
 }
 
-
-
 /* --------------- Région : Styles spécifiques --------------- */
 
 .remaque {
   display: flex;
   margin: 0 auto;
-  width: 80vw;
+  width: 100%;
+  max-width: 1100px;
   justify-content: center;
 }
 
@@ -264,6 +276,8 @@ input[type='number']:focus {
 .identityHeader {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
+  width: 100%;
   max-width: 1100px;
   margin: 15px auto;
   border: 1px solid black;
@@ -273,7 +287,8 @@ input[type='number']:focus {
 .headerField {
   display: flex;
   flex-direction: column;
-  width: 50%;
+  flex: 1 1 320px;
+  min-width: 0;
   padding: 12px;
   margin: 3px;
   background-color: #efeded2a; /* Gris clair */
@@ -281,9 +296,9 @@ input[type='number']:focus {
 }
 
 .headerField input {
-  width: calc(100% - 20px);
+  width: 100%;
   text-align: left;
-  margin-left: 20px;
+  margin-left: 0;
   margin-bottom: 5px;
 }
 
@@ -294,6 +309,8 @@ input[type='number']:focus {
 .btn_validation {
   display: flex;
   float: right;
+  flex-wrap: wrap;
+  gap: 5px;
   margin-top: 10px;
   margin-right: 30px;
 }
@@ -315,11 +332,12 @@ input[type='number']:focus {
 #newEvalForm {
   margin-top: 20px;
   margin-bottom: 45px;
+  overflow-x: clip;
 }
 
 [id^='inputsAdd_'] {
   width: calc(100% - 40px);
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .input_questionAdd {
@@ -332,7 +350,7 @@ input[type='number']:focus {
 }
 
 .remarque textarea {
-  width: 90vw;
+  width: 100%;
   max-width: 1100px;
   background-color: #d8e8fa27;
 }
@@ -346,14 +364,14 @@ input[type='number']:focus {
 #popup {
   display: none;
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  right: 24px;
+  bottom: 24px;
   background-color: #f9f9f9; /* Couleur de fond */
   border-radius: 10px; /* Coins arrondis */
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.3); /* Ombre portée */
   padding: 20px;
   z-index: 9999;
+  max-width: min(420px, calc(100vw - 48px));
 }
 
 #popup-content {
@@ -386,7 +404,7 @@ input[type='number']:focus {
   list-style-type: none;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 250px));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 13px;
 }
 
@@ -412,7 +430,7 @@ input[type='number']:focus {
   padding: 8px 12px;
   border-radius: 5px;
   margin-bottom: 10px;
-  white-space: nowrap; /* Pour forcer le texte à rester sur une ligne */
+  white-space: normal;
   overflow: hidden; /* Pour cacher le texte qui dépasse */
   text-overflow: ellipsis; /* Pour afficher des points de suspension si le texte dépasse */
 }
@@ -439,70 +457,261 @@ input[type='number']:focus {
 }
 
 /* Effet toggle pour le tpiEval Mode */
+/* Styles uniformisés pour le composant toggleMode */
+.toggleMode {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  gap: 20px;
+}
 
-/* Styles de base du conteneur */
-#tpiEvalMode {
+/* Styles uniformisés pour chaque élément dans toggleMode */
+.toggleMode span {
   position: relative;
-  margin-left: 55px;
-  margin-bottom: 30px;
+  margin-left: 10px;
+  margin-bottom: 20px;
 }
 
-/* Styles du texte à côté du bouton */
-#tpiEvalMode div {
-  position: absolute;
-  left: 10px;
-  top:10px;
-  width: 100px;
-  font-size: 1.1em;
+/* Styles uniformisés pour le texte à côté du bouton */
+.toggleMode div {
+  display: inline-block;
+  font-weight: bold;
+  font-size: 12px;
 }
 
-/* Styles du bouton */
-#tpiEvalMode button {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 50px; /* Largeur du bouton */
-  height: 30px; /* Hauteur du bouton */
-  border-radius: 15px; /* Pour arrondir les coins */
-  background-color: #edeaea; /* Couleur de fond par défaut */
+/* Styles uniformisés pour le bouton */
+.toggleMode button {
+  display: flex;
+  position: relative;
+  margin-top: 10px;
+  width: 50px;
+  height: 30px;
+  border-radius: 15px;
+  background-color: #edeaea;
   border: none;
   outline: none;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
 
-/* Styles du curseur */
-#tpiEvalMode button::after {
+/* Styles uniformisés pour le curseur */
+.toggleMode button::after {
   content: "";
   position: absolute;
   top: 50%;
-  right: 2px; /* Décalage initial du curseur vers la droite */
+  right: 2px;
   transform: translateY(-50%);
-  width: 26px; /* Largeur du curseur */
-  height: 26px; /* Hauteur du curseur */
-  border-radius: 50%; /* Pour arrondir le curseur */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Ombre du curseur */
-  transition: right 0.3s ease, background-color 0.3s ease; /* Animation de déplacement et de couleur */
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: right 0.3s ease, background-color 0.3s ease;
 }
 
-/* Styles du curseur en mode activé */
-#tpiEvalMode button.active::after {
-  right: 24px; /* Déplacement du curseur vers la gauche */
+/* Styles uniformisés pour le curseur en mode activé */
+.toggleMode button.active::after {
+  right: 24px;
 }
 
-/* Styles du curseur en mode activé (vert) */
-#tpiEvalMode button.active::after {
-  background-color: #4ec952; /* Couleur verte */
+/* Styles uniformisés pour le curseur en mode activé (vert) */
+.toggleMode button.active::after {
+  background-color: #4ec952;
 }
 
-/* Styles du curseur en mode désactivé (rouge) */
-#tpiEvalMode button::after {
-  background-color: #f0392b; /* Couleur rouge */
+/* Styles uniformisés pour le curseur en mode désactivé (rouge) */
+.toggleMode button::after {
+  background-color: #f0392b;
 }
 
-.label-tpiEvalMode{
+/* Styles uniformisés pour le composant yearSelect */
+.yearSelect {
+  display: flex;
   position: relative;
-  left: 90px;
-  top:8px;
+}
+
+/* Styles uniformisés pour le titre du select */
+.select-title {
   font-weight: bold;
+}
+
+/* Styles uniformisés pour le select */
+#yearTpi {
+  display: block;
+  width: 150px;
+  margin-top: 9px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Styles uniformisés pour les options du select */
+option {
+  font-size: 14px;
+}
+
+/* SECOND PASS REFINEMENTS */
+#tpiEval .toggleMode {
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(214, 224, 232, 0.82);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.94) 0%, rgba(255, 255, 255, 0.94) 100%);
+}
+
+#tpiEval .toggleMode span,
+#tpiEval .yearSelect {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(214, 224, 232, 0.72);
+  background: #ffffff;
+}
+
+#tpiEval .toggleMode div,
+#tpiEval .select-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+#tpiEval .toggleMode button {
+  margin-top: 10px;
+  background: #e2e8f0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+#tpiEval .toggleMode button.active {
+  background: rgba(34, 197, 94, 0.16);
+}
+
+#tpiEval #yearTpi {
+  min-height: 42px;
+  margin-top: 10px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+}
+
+#tpiEval [id^='page'] {
+  margin-top: 18px;
+  padding: 20px;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 22px;
+  border: 1px solid rgba(214, 224, 232, 0.82);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.05);
+}
+
+#tpiEval .headerField {
+  border-radius: 16px;
+  border: 1px solid rgba(214, 224, 232, 0.78);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+#tpiEval .headerField input,
+#tpiEval input,
+#tpiEval textarea,
+#tpiEval select {
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+}
+
+#tpiEval .headerField input {
+  min-height: 42px;
+  margin-left: 0;
+  padding: 0 12px;
+}
+
+#tpiEval table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+#tpiEval th,
+#tpiEval td {
+  border-color: rgba(214, 224, 232, 0.82);
+}
+
+#tpiEval th {
+  background: #eef4f8;
+  color: #0f172a;
+}
+
+#tpiEval .remarque {
+  margin-top: 18px;
+}
+
+#tpiEval .remarque textarea {
+  min-height: 140px;
+  padding: 14px;
+}
+
+#tpiEval .btn_validation {
+  float: none;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 24px 0 0;
+}
+
+#tpiEval .btn_validation button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+}
+
+#tpiEval #popup {
+  border: 1px solid rgba(214, 224, 232, 0.86);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 20px 36px rgba(15, 23, 42, 0.16);
+}
+
+@media (max-width: 767px) {
+  #tpiEval .toggleMode {
+    padding: 14px;
+  }
+
+  #tpiEval .toggleMode span,
+  #tpiEval .yearSelect,
+  #tpiEval [id^='page'] {
+    width: 100%;
+  }
+
+  #tpiEval [id^='page'] {
+    padding: 16px;
+  }
+
+  #tpiEval .btn_validation {
+    justify-content: stretch;
+  }
+
+  #tpiEval .btn_validation button {
+    width: 100%;
+  }
+
+  #tpiEval table {
+    display: block;
+    overflow-x: clip;
+  }
+
+  #tpiEval .identityHeader {
+    flex-direction: column;
+  }
+
+  #tpiEval .headerField {
+    width: 100%;
+  }
 }

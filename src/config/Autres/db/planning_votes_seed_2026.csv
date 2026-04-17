@@ -1,0 +1,148 @@
+Reference;Candidat;Expert1;Expert2;ChefProjet;Sujet;Entreprise;Site;AnneeSource
+1649;Hunacek Sacha;Albert Richard;Gabriel Maret;Cyril Sokoloff;IaaS, Azure AD;ETML-Sébeillon;ETML-Sébeillon;2023
+1661;Guerrero Fernandez Gabriel;Albert Richard;Laurent Duding;Vincent Emery;Endpoint protection et durcissement des postes de travail et serveurs avec Microsoft Defender et Intune.;SyselCom;SyselCom;2023
+1663;Aloise Francesco;Alexandre Graf;Gabriel Maret;Sheyla Oliveira Kobi;Mise en place d'une infrastructure RDS;ETML-Sébeillon;ETML-Sébeillon;2023
+1665;Sayeh Younes;Alexandre Graf;Roberto Ferrari;Alain-Philippe Garraux;Site web de gestion des travaux dans une maison;ETML-Sébeillon;ETML-Sébeillon;2023
+1666;Tare Parraga Esmeralda Beatriz;Alexandre Graf;Raphael Rhyn;Isabelle Stucki;Script pour la surveillance à distance de postes Windows 10 et 11 dans un domaine;ETML-Sébeillon;ETML-Sébeillon;2023
+1621;Simoes Braga Tiago;Alexandre Graf;Claude Albert Muller Theurillat;Sheyla Oliveira Kobi;Mise en place d'une infrastructure vmware et orchestration des serveurs ?;ETML-Sébeillon;ETML-Sébeillon;2023
+1647;De Almeida Pereira Ricardo;Alexandre Graf;;Livio Nagy;Intégration de Terraform à des pipelines Github;Merkle;Merkle;2023
+1648;Carqueijo Ribeiro Patricia Alexandra;Ernesto Montemayor;Antoine Mveng;Loïc Schmid;Remplacement du système de Wiki actuel pour la documentation du SI;Eben Hézer;Eben Hézer;2023
+1674;Oro Manuel;Yves Bertino;Aurelie Curchod;Marc-Olivier Domenjoz;Application web permettant d’ordonnancer la création de tickets;Vaudoise;Vaudoise;2023
+1614;Zwahlen Léo;Baptiste Masson;Jonathan Tonelli;Romain Gehrig;Déploiement et configuration automatisés de postes Windows;ETML-Sébeillon;ETML-Sébeillon;2023
+1660;Tauxe Florian;Baptiste Masson;Patrick Pretre;Karim Bourahla;Mise en place d'une solution WSUS;ETML-Sébeillon;ETML-Sébeillon;2023
+1667;Sevivas da Costa Lukas;Baptiste Masson;Jonathan Tonelli;Sheyla Oliveira Kobi;Mise en place d'une infrastructure VmWare;ETML-Sébeillon;ETML-Sébeillon;2023
+1668;Praz Nolan;Baptiste Masson;Raphael Rhyn;Laurent Duding;Mettre en oeuvre un logiciel d’inventaire et de ticketing;ETML-Sébeillon;ETML-Sébeillon;2023
+1671;Bolli Joca;Baptiste Masson;Jonathan Tonelli;Laurent Duding;Automatisation d’installation de VM MS-Server pour l’école;ETML-Sébeillon;ETML-Sébeillon;2023
+1676;Good Killian;Baptiste Masson;Patrick Pretre;Alain-Philippe Garraux;Comparaison de 2 outils de ticketing (support);ETML-Sébeillon;ETML-Sébeillon;2023
+1692;Capelli Dorian;Baptiste Masson;Raphael Rhyn;Laurent Duding;Scripts pour la surveillance et la maintenance des systèmes Windows dans une PME;ETML-Sébeillon;ETML-Sébeillon;2023
+1617;El Aamely Hamza;Bernard Oberson;Benjamin Wolf;Dimitrios Lymberis;SpentSharing Gestion de dépense commune;ETML-Vennes;ETML-Vennes;2023
+1655;Mendes Loïc;Bernard Oberson;Benjamin Wolf;Cédric Schaffter;Générateur de code Qr;ETML-Vennes;ETML-Vennes;2023
+1656;Regenass Maxime;Bernard Oberson;Benjamin Wolf;Xavier Carrel;Runeo, plateforme de gestion de transports d'artistes (extension);ETML-Vennes;ETML-Vennes;2023
+1658;Sartoni Clément;Bernard Oberson;Benjamin Wolf;Xavier Carrel;Runeo, plateforme de gestion de transports d'artistes (extension);ETML-Vennes;ETML-Vennes;2023
+1659;Füllemann Nathan;Ernesto Montemayor;Benjamin Wolf;Xavier Carrel;Runeo, plateforme de gestion de transports d'artistes (extension);ETML-Vennes;ETML-Vennes;2023
+1664;D Angelo Alessandro;Bernard Oberson;Benjamin Wolf;Dimitrios Lymberis;Gestion d'un stock (matériel nformatique );ETML-Vennes;ETML-Vennes;2023
+1675;Pfister Anthony;Benjamin Wolf;Daniel Berney;Gaël Sonney;Gestion de prêts d'articles entre particuliers;ETML-Vennes;ETML-Vennes;2023
+1745;Boumaza Béchir;Bernard Oberson;Benjamin Wolf;Helder Manuel Costa Lopes;RoomMaster - Maîtrisez la réservation de salles de réunion avec PHP;ETML-Vennes;ETML-Vennes;2023
+1749;Bracey Matteo Alexandre;Ernesto Montemayor;Benjamin Wolf;Dimitrios Lymberis;Création d'un framework simplifié intégrant tous les concepts du pattern architectural MVC;ETML-Vennes;ETML-Vennes;2023
+1653;Cartier Julien Barnabé;Benjamin Wolf;Jean-Luc Roduit;Yvan Cochet;Migration Azure AD Connect vers Azure AD Connect Cloud Sync sur Intel NUC 11 Pro;Paléo;Paléo;2023
+1672;Sugrañes Oria Santiago;Yves Bertino;Bernard Oberson;Gaël Sonney;Gestion de matchs e-sport;ETML-Vennes;ETML-Vennes;2023
+1742;Paetzel Thilo;Bernard Oberson;Daniel Berney;Helder Manuel Costa Lopes;CoPropVote: La solution de gestion et de vote des projets de copropriété;ETML-Vennes;ETML-Vennes;2023
+1753;Lovink Mark Christiaan;Bernard Oberson;Roger Malherbe;Helder Manuel Costa Lopes;ChessPy : JEU D'ÉCHECS EN PYTHON AVEC PYGAME;ETML-Vennes;ETML-Vennes;2023
+1803;Petrovic Saska;Yves Bertino;Bernard Oberson;Antoine Mveng;SasCook - site web de gestion de recettes de cuisine;ETML-Vennes;ETML-Vennes;2023
+1704;Stoimenovski Sanchez Viktor;Ernesto Montemayor;Bertrand Sahli;Fryderyk Dachowski;Module de sélection de coussin selon les critères du client.;Elite's Bed;Elite's Bed;2023
+1670;Philipona Sylvain;Suleyman Ceran;Daniel Berney;Roberto Ferrari;Gestion des utilisateurs dans AD école;ETML-Vennes;ETML-Vennes;2023
+1741;Marcinkiewicz Damian Gabriel;Serge Wenger;Daniel Berney;Patrick Chenaux;Gestion de préparation physique;ETML-Vennes;ETML-Vennes;2023
+1643;Voide Sébastien;Ernesto Montemayor;Patrick Pretre;Laurent Deschamps;Migration d'une application d'intégration architecturale en web;EPFL-LESO;EPFL-LESO;2023
+1645;Duruz Sébastien;Ernesto Montemayor;Yves Bertino;Aurélie Curchod;Gestion d'une collection de thé;ETML-Vennes;ETML-Vennes;2023
+1744;Ferreira Magalhães Rodrigues João Pedro;Ernesto Montemayor;Michael Wyssa;Jonathan Melly;LemanRide HTML/PHP;ETML-Vennes;ETML-Vennes;2023
+1644;Takache Youness;Roger Malherbe;Flavio Pacifico;Stéphane Gerber;Programme de déploiement simplifié d’une instance de la gestion des vendanges;Gerber Systems;Gerber Systems;2023
+1646;Perez Ochoa Diego Miguel;Jean-Luc Roduit;Frederic Boy;Pascal Junod;création d'une petite infrastructure virtualisée;ETML-Vennes;ETML-Vennes;2023
+1651;Matthey Thibault;Jean-Luc Roduit;Frederic Boy;Pascal Junod;création d'une petite infrastructure virtualisée;ETML-Vennes;ETML-Vennes;2023
+1673;Rogey Mathias;Frédérique Andolfatto;Serge Wenger;Laurent Deschamps;Acquisition de mesure (GIU) d'un RadonMapper;EPFL-LESO;EPFL-LESO;2023
+1669;Narducci Cyril;Roberto Ferrari;Frédérique Andolfatto;Alain-Philippe Garraux;Site web de gestion de vélos perdus/volés;ETML-Sébeillon;ETML-Sébeillon;2023
+1654;Gebhardt Théo;Matthieu Gressly;Gabriel Maret;Michel Delgado;Monitoring d'une infrastructure avec PRTG;ETML-Sébeillon;ETML-Sébeillon;2023
+1804;Fernandez Yasmine;Matthieu Gressly;Jonathan Tonelli;Bertrand Sahli;Mise en place d'un Raspberry Pi comme serveur de fichiers domestique;ETML-Vennes;ETML-Vennes;2023
+1615;Martins Constantino Bruno;Nicolas Borboën;Junior Mbuyi;Antoine Mveng;JNLTRAV- mon journal de travail;ETML-Vennes;ETML-Vennes;2023
+1694;Höhn Anthony;Nicolas Borboën;Junior Mbuyi;Alain Girardet;Plateforme Web de vente de produits locaux, avec Symphony;ETML-Vennes;ETML-Vennes;2023
+1746;Assayah David Sydney;Yves Bertino;Luc Venries;Grégory Charmier;Application web permettant l'échange de cartes à collectionner;ETML-Vennes;ETML-Vennes;2023
+1747;Berseth Valentin;Serge Wenger;Michael Wyssa;Jonathan Melly;CalendarGenerator C#/WinForms/ICAL;ETML-Vennes;ETML-Vennes;2023
+1608;Santa Cruz Paz Gustavo Andrés;Serge Wenger;Nemanja Pantic;Romain Gehrig;;;Vennes;2023
+1743;Sadiku Kushtrim;Olivier Mellina;Nemanja Pantic;Cédric Schaffter;Intégration d'un serveur Linux dans un réseau Windows grâce à Samba;ETML-Vennes;ETML-Vennes;2023
+1650;Bensaci Théo;Nicolas Borboën;Suleyman Ceran;Aurélie Curchod;Plateforme tutoriel REGEX;ETML-Vennes;ETML-Vennes;2023
+1752;Fernandez Samuel;Nicolas Borboën;Yves Bertino;Grégory Charmier;Application web pour le partage de sons libres de droits;ETML-Vennes;ETML-Vennes;2023
+1755;Hosch Romain Alexandre;Nicolas Borboën;Yves Bertino;Patrick Chenaux;Powershell;ETML-Vennes;ETML-Vennes;2023
+1652;Pittier Joël;Suleyman Ceran;Yannis Ansermoz;Cédric Schaffter;Mettre en place une solution d'hébergement de site web (LAN + HTTPS);ETML-Vennes;ETML-Vennes;2023
+1657;Fischer Valentin;Suleyman Ceran;Yannis Ansermoz;Jonathan Melly;K8sAutoRollback déploiement automatisé;ETML-Vennes;ETML-Vennes;2023
+1917;Fatima Ezzahra Abid;Montemayor Ernesto;S'inscrire;Xavier Carrel;Runeo-Desk, web app de gestion de transports d'artistes;ETML;Lausanne;2024
+1893;Emilien Charpié;Oberson Bernard;Wyssa Michael;Jonathan Melly;CocoDetective - Analyse d’image;ETML;Lausanne;2024
+1929;Tim Froidevaux;Graf Alexandre;Sartoni Arnaud;Michel Delgado;Virtualisation / Monitoring d'une infrastructure physique existante avec PRTG;ETML;Lausanne;2024
+1952;Samuel King Alexandre;Glassey Nicolas;Borboën Nicolas;Aurélie Curchod;CodeTris : Le bloc de la programmation;ETML;Lausanne;2024
+1957;Aurélien Dévaud;Montemayor Ernesto;Viret Loic;Dimitrios Lymberis;Multimedia - Gestion de fichiers de musique;ETML;Lausanne;2024
+1961;Samuel Develey;Montemayor Ernesto;Pittet Alain;Laurent Deschamps;Contrôleur d’éclairage DALI;ETML;Lausanne;2024
+1962;Mathis Broquet;Malherbe Roger;Mottier André;Dimitrios Lymberis;Développement d’une plateforme web de gestion de location d’une cabane scoute;ETML;Lausanne;2024
+1846;Bustabad Yannick Pena;Graf Alexandre;Gonzalez Mikael;Sheyla Oliveira Kobi;Mise en place une infrastructure VmWare Vsphere;ETML;Lausanne;2024
+1854;Simon Baeriswyl;Mellina Olivier;Venries Luc;Mathieu Meylan;FIA services;ETML;Lausanne;2024
+1855;Diego Alfonso Da Silva;Roduit Jean-Luc;Tonelli Jonathan;Laurent Duding;Redondance des principaux services sur un serveur Microsoft pour une PME;ETML;Lausanne;2024
+1856;Pruthvin Kandasamy;Mergim Krasniqi;Benzonana Pascal;Mathieu Meylan;Site pour un club de pétanque;ETML;Lausanne;2024
+1870;Dylan Bontems;Wolf Benjamin;Malherbe Roger;Patrick Chenaux;Mise en place d'une solution WSUS;ETML;Lausanne;2024
+1872;Alexandre Fernandes;Wolf Benjamin;Malherbe Roger;Helder Manuel Costa Lopes;Quiz interactif PHP, MySQL, authentification, interface simple, score en temps réel.;ETML;Lausanne;2024
+1874;Bruno Grin;Mellina Olivier;Wolf Benjamin;Mathieu Meylan;API pour onduleur;ETML;Lausanne;2024
+1875;Timothee Victor Carlier;Graf Alexandre;Sartoni Arnaud;Nicolas Cuendet;RaspberryPi, Système de surveillance;ETML;Lausanne;2024
+1876;Lucie de Oliveira;Montemayor Ernesto;Pretre Patrick;Alain-Philippe Garraux;Comparatif de solutions pour la supervision d'un LAN de PME;ETML;Lausanne;2024
+1877;Sean Kellen Ford;Oberson Bernard;Maret Gabriel;Isabelle Stucki;Configuration de postes client dans un domaine à l'aide de scripts Powershell;ETML;Lausanne;2024
+1879;Nicolas Berdoz;Pantic Nemanja;Tonelli Jonathan;Laurent Duding;Automatisation d’installation de VM MS-Server pour l’école;ETML;Lausanne;2024
+1880;Sacha Jean Laurent Bourquard;Roduit Jean-Luc;Wolf Benjamin;Nicolas Cuendet;Plateforme Multi-OS Virtualisée pour environnement de test;ETML;Lausanne;2024
+1881;Fabrice Bred Geni Gelsomino;Ceran Süleyman;Bertino Yves;Cédric Schaffter;Mise en place d'une infrastructure PME avec redondance de services;ETML;Lausanne;2024
+1882;Dylan Hentschel;Graf Alexandre;Gressly Matthieu;Nicolas Cuendet;Système de sauvegarde;ETML;Lausanne;2024
+1883;Yann Imperadori;Oberson Bernard;Ceran Süleyman;Cédric Schaffter;Mise en place de SCCM;ETML;Lausanne;2024
+1886;Jonathan Samuel Nicholas Dale;Roduit Jean-Luc;Pantic Nemanja;Nicolas Cuendet;Infrastructure Virtuel Linux KVM;ETML;Lausanne;2024
+1887;Antoine Stéphane Roger;Graf Alexandre;Gilloz Raphaël;Cyril Sokoloff;Hyperviseur haute disponibilité;ETML;Lausanne;2024
+1888;Noah Favre;Montemayor Ernesto;Tonelli Jonathan;Alain-Philippe Garraux;Paramétrage et sécurisation de SQL Serveur;ETML;Lausanne;2024
+1889;Léonard Frauchiger;Pantic Nemanja;Berney Daniel;Cyril Sokoloff;RaspberryPi, Magic Mirror;ETML;Lausanne;2024
+1940;Kinan Jano;Berney Daniel;Malherbe Roger;Helder Manuel Costa Lopes;Modernisation des évaluations modules ICT;ETML;Lausanne;2024
+1949;Salvatore Lombardo Robustiano;Malherbe Roger;Berney Daniel;Karim Bourahla;Application web (blog);ETML;Lausanne;2024
+1954;Ali Issolah;Wolf Benjamin;Maillard Karim;Antoine Mveng;Gestion d'événements culturels;ETML;Lausanne;2024
+1956;Kendy Song;Berney Daniel;Andolfatto Frédérique;Jonathan Melly;GuiKopia : Un système de backup basé sur Kopia;ETML;Lausanne;2024
+1963;Alexander Gaillard;Wolf Benjamin;Malherbe Roger;Xavier Carrel;Volscore, application Web pour l'aide au marquage de matches de volleyball;ETML;Lausanne;2024
+1970;Daddy Avdylaj Kevin;Borboën Nicolas;Benzonana Pascal;Gael Sonney;Gestion des activité d'un apiculteur;ETML;Lausanne;2024
+1973;Thomas Rey;Wolf Benjamin;Viret Loic;Dimitrios Lymberis;Gestion de suivis des TPI;ETML;Lausanne;2024
+1974;Henry Chouriberry Noa;Wolf Benjamin;Ceran Süleyman;Antoine Mveng;Troc de livres;ETML;Lausanne;2024
+1890;Leonar Dupuis;Borboën Nicolas;Ceran Süleyman;Gael Sonney;Gestion des activités enseignants;ETML;Lausanne;2024
+1908;Yann Mangiagli;Berney Daniel;Maret Gabriel;Gael Sonney;Powershell;ETML;Lausanne;2024
+1916;Mohamed Salma Abdulkadir;Maillard Karim;Oberson Bernard;Xavier Carrel;Backend API pour Runeo-Desk - proof of concept;ETML;Lausanne;2024
+1918;Ella-Anelisse Corozel;Mellina Olivier;Ceran Süleyman;Cédric Schaffter;Contrôle parental et router software;ETML;Lausanne;2024
+1919;Marie Déglise Camille;Borboën Nicolas;Favre Raphaël;Bertrand Sahli;DataVerse: Site Web analyse et exploration de données météorologiques;ETML;Lausanne;2024
+1920;Théo Ghaemmaghami;Wenger Serge;Berney Daniel;Patrick Chenaux;To Do List avançée;ETML;Lausanne;2024
+1923;Bilal Mamo;Roduit Jean-Luc;Berney Daniel;Karim Bourahla;Mise en place un annuaire d'entreprise;ETML;Lausanne;2024
+1925;Matthe Suboonsan Chris Noah;Borboën Nicolas;Oberson Bernard;Dimitrios Lymberis;Gestion de suivis pour des cas de médiation;ETML;Lausanne;2024
+1934;Samuel dos Santos;Oberson Bernard;Venries Luc;Grégory Charmier;Application web qui a pour but de mélanger des participants pour favoriser les interactions sociales.;ETML;Lausanne;2024
+1936;Yu Wu Guo;Wenger Serge;Berney Daniel;Patrick Chenaux;Scrum follow-up;ETML;Lausanne;2024
+1939;Harun Findik;Wenger Serge;Andolfatto Frédérique;Roberto Ferrari;Logiciel d'apprentissage par mémorisation;ETML;Lausanne;2024
+1942;Saraneethan Shanthakumar;Roduit Jean-Luc;Wolf Benjamin;Michel Delgado;Mise en place un annuaire pour une entreprise Linux;ETML;Lausanne;2024
+1976;Mbayo Gregory;Borboën Nicolas;Oberson Bernard;Alain Girardet;Site web - Gestion du café;ETML;Lausanne;2024
+2051;Al Asfar Ahmad;Nemanja Pantic;Michel Delgado;Vincent Emery;Evaluation et mise en œuvre système de patch management pour un environnement Linux;Le Mont-Sur-Lausanne;Vennes;2025
+2052;Dormond Théo;Serge Wenger;Alain Pittet;Laurent Deschamps @ EPFL;Automatisation d'une salle audiovisuelle;Lausanne;Vennes;2025
+2053;Dussault Morgan;Roger Malherbe;Michael Wyssa;Xavier Carrel;GitTools: Edition du journal de travail, basé sur les metadatas des commits Git;Vennes;Vennes;2025
+2054;Eklu Samuel;Ernesto Montemayor;Roger Malherbe;Pascal Bangerter;IC-Services Actifs - Automatisation du déploiement d’un site web;Lausanne;Vennes;2025
+2055;Jakupovic Azur;Serge Wenger;Alain Pittet;Laurent Deschamps @ EPFL;Système de monitoring adaptatif pour dispositif DALI;Lausanne;Vennes;2025
+2056;Kablouti Adam;Yves Bertino;Nemanja Pantic;Gael Sonney;Gestion d'écurie de Formule1;Vennes;Vennes;2025
+2057;Martins Fernandes Dylan;Alexandre Graf;Arnaud Sartoni;Isabelle Stucki;Scripts pour la configuration à distance de postes Windows 10 et 11 dans un domaine;Vennes;Vennes;2025
+2058;Naylor  Natasha;Roger Malherbe;Nicolas BORBOEN;Anass Benfares;Développement site web applicatif;Vennes;Vennes;2025
+2059;Paul Luca;Jean-Luc Roduit;Luc Venries;Alain Garraux;Paramétrage et sécurisation du Microsoft SQL Serveur;Vennes;Vennes;2025
+2060;Scordato Alessio;;Volkan Sutcu;Raphaël Merot;Gycha Streaming – solution de streaming vidéo pour enseignement;Pully;Vennes;2025
+2066;Artero Dylan;Suleyman Ceran;Arnaud Sartoni;Rajah Selva;Système de Gestion des demandes d’employés temporaire;Aubonne;Vennes;2025
+2061;Despotovic Miljana;Albert Richard;Glassey Nicolas;Léa Cherpillod;Migration d’une application de gestion de mots de passe vers un conteneur autogéré;Lausanne;Vennes;2025
+2062;Hofstetter Yann;Serge Wenger;Daniel Berney;Patrick Chenaux;Application Desktop;Vennes;Vennes;2025
+2063;Intriere Thomas;;Bernard Oberson;Adriano Lorini;Infrastructure virtuelle pour une PME;Lausanne;Vennes;2025
+2067;Jaquet Xavier;Carlos Perez;Jean-Luc Roduit;Sheyla Oliveira Kobi;Système de Supervision avec Prometheus et Grafana sur Linux;Vennes;Vennes;2025
+2064;Montandon Alexandre;Alexandre Graf;Jonathan Tonelli;Patrick Chenaux;Mise en place d'une infrastructure virtuelle;Vennes;Vennes;2025
+2068;Morais Pinheiro Dilan;Yves Bertino;Olivier Mellina;Mathieu Meylan;Solution mini-NAS, File Browser, VPN;Vennes;Vennes;2025
+2065;Osmanovic Bajro;Ernesto Montemayor;Bernard Oberson;Alain Garraux;Gestion de vélos perdus sous PHP/MySQL.;Vennes;Vennes;2025
+2069;Sulejmani Mefail;Yves Bertino;Albert Richard;Helder Manuel Costa Lopes;Système d'arrosage automatique;Vennes;Vennes;2025
+2070;Carneiro Jeremias Dany;Ernesto Montemayor;Nemanja Pantic;Dimitrios Lymberis;EcoTrack : Application Web pour la gestion des ressources naturelles et le suivi environnemental;Vennes;Vennes;2025
+2071;Dongmo Fokou Sarah;Yves Bertino;Nemanja Pantic;Cédric Schaffter;Password Manager;Vennes;Vennes;2025
+2072;Egal Ahmed Omar;Roger Malherbe;Nemanja Pantic;Helder Manuel Costa Lopes;Application Desktop;Vennes;Vennes;2025
+2073;Escobar Toro Santiago;Bernard Oberson;Claude-Albert Muller Theurillat;Gael Sonney;Shop en ligne;Vennes;Vennes;2025
+2074;Eyer Kaeno Louis;Serge Wenger;Alain Pittet;Laurent Deschamps;Capteur de présence intelligent;Vennes;Vennes;2025
+2075;Iglesias Rodriguez Yago;Alexandre Graf;Jonathan Tonelli;Laurent Duding;Automatisation d’installation de VM MS-Server pour l’école;Vennes;Vennes;2025
+2076;Mohajerani Hanieh;Daniel Berney;Francis Varela;Karim Bourahla;Mise en place d'une solution WSUS;Vennes;Vennes;2025
+2077;Pelloquin Maxime;Daniel Berney;Gabriel Maret;Laurent Duding;Redondance des principaux services d'un serveur Microsoft d'une PME;Vennes;Vennes;2025
+2078;Périsset Abigaël;Albert Richard;Daniel Berney;Michel Delgado;Mise en place d'une infrastructure d'entreprise reliée à Internet;Vennes;Vennes;2025
+2079;Pignat Valentin;Benjamin Wolf;Bernard Oberson;Grégory Charmier;Runeo-Desk - application de gestion des transports d'artistes - Riders;Vennes;Vennes;2025
+2080;Pittet Joël;Olivier Mellina;Arnaud Sartoni;Karim Bourahla;Intégration de GNU/Linux dans une infrastructure Windows;Vennes;Vennes;2025
+2150;Remeniuk Dmytro;Benjamin Wolf;Michael Wyssa;Xavier Carrel;Runeo-Desk, application de gestion des transports d'artistes;Vennes;Vennes;2025
+2081;Scerri Yann;Albert Richard;Jonathan Tonelli;Alexis Gugler;Mise en place de LAPS sur un DC et sécurisation AD avec PingCastle;Vennes;Vennes;2025
+2082;Sierro Félix;Yves Bertino;Olivier Mellina;Alain Garraux;Comparatif de solutions pour la supervision d'un LAN;Vennes;Vennes;2025
+2083;Tille Sébastien;Alexandre Graf;Gabriel Maret;Alexis Gugler;Déploiement de RDS : exécution des applications sur serveur avec accès distant à travers RDP;Vennes;Vennes;2025
+2084;Yildiz Mustafa;Bernard Oberson;Michael Wyssa;Jonathan Melly;Linkeli : raccourcisseur d’URL;Vennes;Vennes;2025
+2094;Cuendet Ugo;Isabelle Stucki;Nemanja Pantic;François-Xavier Meuwly;Automatisation du transfert de données pour les tableaux de bord de réunion journalière de suivi des performances.;Tolochenaz;Vennes;2025
+2095;Deriaz Eliott;Roger Malherbe;Daniel Berney;Gael Sonney;Gestion de parc automobile d'entreprise;Vennes;Vennes;2025
+2096;Gétain Maël;Roger Malherbe;Karim Maillard;Patrick Chenaux;Site Web avec pour reconnaissance d'image;Vennes;Vennes;2025
+2097;Greppin Sam;Ernesto Montemayor;Suleyman Ceran;Mathieu Meylan;Développement site web applicatif;Vennes;Vennes;2025
+2098;Lachavanne Jérémy;Suleyman Ceran;Pascal Benzonana;Dimitrios Lymberis;PedagoDay: Application web de gestion des inscriptions à une journée pédagogique;Vennes;Vennes;2025
+2099;Magnenat Elio;Suleyman Ceran;Pascal Benzonana;Dimitrios Lymberis;BiblioSolidaire : Application Web Autonome de Gestion de Bibliothèque pour Zones sans Internet;Vennes;Vennes;2025
+2100;Masson Néo;Suleyman Ceran;Claude-Albert Muller Theurillat;Anass Benfares;Développement site web applicatif;Vennes;Vennes;2025
+2101;Orlando Theo;Nemanja Pantic;Gabriel Maret;Marco Grosso;Microsoft Teams Rooms;Lausanne;Vennes;2025
+2102;Vaucher Eliott;Suleyman Ceran;Isabelle Stucki;Maeva Londero;Outil de sélection des cours Mineur IDEAS;Lausanne;Vennes;2025
+2142;Mbayo Grégory;Roger Malherbe;Nemanja Pantic;Antoine Mveng;Système de réservation pour un club de sport;Vennes;Vennes;2025
+2139;Berdoz Nicolas;Daniel Berney;Gabriel Maret;Bertrand Sahli;Création de comptes et fixation de droits automatisées;Vennes;Vennes;2025

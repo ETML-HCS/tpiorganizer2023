@@ -1,4 +1,41 @@
-import { React, Fragment, useState } from 'react'
+import { React, Fragment, useState } from "react"
+
+const DEFAULT_MAX_POINTS = 3
+const DEFAULT_MIN_POINTS = 0
+
+function toFiniteNumber(value, fallback) {
+  const parsedValue = Number(value)
+
+  if (Number.isFinite(parsedValue)) {
+    return parsedValue
+  }
+
+  return fallback
+}
+
+function getQuestionMaxPoints(question) {
+  return toFiniteNumber(question.maxPoints, DEFAULT_MAX_POINTS)
+}
+
+function getQuestionMinPoints(question) {
+  if (question.minPoints !== undefined) {
+    return toFiniteNumber(question.minPoints, DEFAULT_MIN_POINTS)
+  }
+
+  if (question.lowerBoundMode === "negative-max") {
+    return -getQuestionMaxPoints(question)
+  }
+
+  return DEFAULT_MIN_POINTS
+}
+
+function clampQuestionPoints(value, question) {
+  const maxPoints = getQuestionMaxPoints(question)
+  const minPoints = getQuestionMinPoints(question)
+  const parsedValue = toFiniteNumber(value, minPoints)
+
+  return Math.min(maxPoints, Math.max(minPoints, parsedValue))
+}
 
 const TableFooter = ({ partNumber, maxPoints, totalPoints }) => {
   return (
@@ -7,7 +44,7 @@ const TableFooter = ({ partNumber, maxPoints, totalPoints }) => {
         <td
           colSpan={2}
         >{`Total partie ${partNumber} (${maxPoints} points max)`}</td>
-        <td colSpan={2} id={`${partNumber.split(' ')[1]}somme`}>
+        <td colSpan={2} id={`${partNumber.split(" ")[1]}somme`}>
           {totalPoints}
         </td>
       </tr>
@@ -15,48 +52,51 @@ const TableFooter = ({ partNumber, maxPoints, totalPoints }) => {
   )
 }
 
-function replaceDigit (string, replacement) {
+function replaceDigit(string, replacement) {
   // Diviser la chaîne en utilisant '_'
-  const parts = string.split('_')
+  const parts = string.split("_")
   // Remplacer le troisième élément par la valeur de remplacement
   parts[2] = replacement
   // Rejoindre les parties en utilisant '_'
-  return parts.join('_')
+  return parts.join("_")
 }
 
 const Question = ({ question, updatePts }) => {
-  const [points, setPoints] = useState(question.pt)
-  const [justification, setJustification] = useState('')
+  const [points, setPoints] = useState(clampQuestionPoints(question.pt, question))
+  const [justification, setJustification] = useState("")
   const [additionalInputs, setAdditionalInputs] = useState(0) // État pour le nombre d'inputs texte supplémentaires
   const [selectedQuestion, setSelectedQuestion] = useState(null) // État pour suivre la question sélectionnée
   const [isActif, setIsActif] = useState(false)
 
-  const handlePointsChange = e => {
-    const newPoints = parseInt(e.target.value)
-    if (!isNaN(newPoints) && newPoints >= 0 && newPoints <= 3) {
-      setPoints(newPoints)
-      updatePts(newPoints)
+  const handlePointsChange = (e) => {
+    const newPoints = parseInt(e.target.value, 10)
+
+    if (!isNaN(newPoints)) {
+      const normalizedPoints = clampQuestionPoints(newPoints, question)
+
+      setPoints(normalizedPoints)
+      updatePts(normalizedPoints)
     }
   }
 
-  const handleJustificationChange = e => {
+  const handleJustificationChange = (e) => {
     setJustification(e.target.value)
   }
 
   const addTextField = () => {
     if (selectedQuestion != null) {
-      const splitId = selectedQuestion.split('_').slice(0, -1).join('_') // Pour conserver toutes les parties sauf la dernière
-      const newSplitId = 'inputsAdd' + splitId.substring('input'.length) // Remplacez 'inputsAdd' par la nouvelle valeur
+      const splitId = selectedQuestion.split("_").slice(0, -1).join("_") // Pour conserver toutes les parties sauf la dernière
+      const newSplitId = "inputsAdd" + splitId.substring("input".length) // Remplacez 'inputsAdd' par la nouvelle valeur
       const inputsAdd_id = document.getElementById(newSplitId)
-      inputsAdd_id.style.display = 'block'
+      inputsAdd_id.style.display = "block"
     }
-    setAdditionalInputs(prevInputs => prevInputs + 1) // Ajoute un input texte supplémentaire à chaque clic sur le bouton "+"
+    setAdditionalInputs((prevInputs) => prevInputs + 1) // Ajoute un input texte supplémentaire à chaque clic sur le bouton "+"
     setIsActif(true)
   }
 
   const removeTextField = () => {
     if (additionalInputs > 0) {
-      setAdditionalInputs(prevInputs => prevInputs - 1) // Supprime un input texte supplémentaire à chaque clic sur le bouton "-"
+      setAdditionalInputs((prevInputs) => prevInputs - 1) // Supprime un input texte supplémentaire à chaque clic sur le bouton "-"
     }
 
     // Vérifiez si additionalInputs sera égal à 0 après la soustraction
@@ -64,20 +104,20 @@ const Question = ({ question, updatePts }) => {
     setIsActif(additionalInputs > 1) // Si additionalInputs est supérieur à 1, isActif sera true, sinon false
   }
 
-  const selectQuestion = sourceId => {
+  const selectQuestion = (sourceId) => {
     // Remplace le chiffre x dans sourceId par '0'
-    const targetId = replaceDigit(sourceId, '0')
+    const targetId = replaceDigit(sourceId, "0")
 
     // Met à jour la question sélectionnée avec targetId (la question modifiée)
     setSelectedQuestion(targetId)
 
     // Cache la zone d'entrée d'identifiant inputsAdd_A
     const inputsAdd_id = document.getElementById(
-      `inputsAdd_${sourceId.split('_')[1]}`
+      `inputsAdd_${sourceId.split("_")[1]}`
     )
 
     if (inputsAdd_id) {
-      inputsAdd_id.style.display = 'none'
+      inputsAdd_id.style.display = "none"
     }
 
     // Echange le contenu de l'input qui contient l'identifiant avec celui de targetId
@@ -93,21 +133,21 @@ const Question = ({ question, updatePts }) => {
 
   const handleClickHelp = (textHTML) => {
     // Récupérer l'élément popup et son contenu
-    const popup = document.getElementById('popup');
-    const popupContent = document.getElementById('popup-content');
-    
-    // Mettre à jour le contenu de la popup
-    popupContent.innerHTML = textHTML;
-  
-    // Afficher la popup
-    popup.style.display = 'block';
+    const popup = document.getElementById("popup")
+    const popupContent = document.getElementById("popup-content")
 
-    popup.onclick =hidePopup
+    // Mettre à jour le contenu de la popup
+    popupContent.innerHTML = textHTML
+
+    // Afficher la popup
+    popup.style.display = "block"
+
+    popup.onclick = hidePopup
   }
-  
-  function hidePopup () {
-    var popup = document.getElementById('popup')
-    popup.style.display = 'none'
+
+  function hidePopup() {
+    var popup = document.getElementById("popup")
+    popup.style.display = "none"
   }
 
   const isNewQuestion = question.fieldText !== undefined
@@ -115,7 +155,7 @@ const Question = ({ question, updatePts }) => {
   return (
     <>
       <tr>
-        <td onClick={()=>handleClickHelp(question.help)}>
+        <td onClick={() => handleClickHelp(question.help)}>
           <div className='critere-id col-1'>{question.idCritere}</div>
         </td>
 
@@ -139,17 +179,17 @@ const Question = ({ question, updatePts }) => {
                   className='btn_questionAdd'
                   onClick={addTextField}
                 >
-                  {' '}
-                  +{' '}
+                  {" "}
+                  +{" "}
                 </button>
 
                 <button
                   type='button'
-                  className={`btn_questionMinus ${isActif ? '' : 'disabled'}`}
+                  className={`btn_questionMinus ${isActif ? "" : "disabled"}`}
                   onClick={removeTextField}
                 >
-                  {' '}
-                  -{' '}
+                  {" "}
+                  -{" "}
                 </button>
               </span>
 
@@ -169,7 +209,7 @@ const Question = ({ question, updatePts }) => {
                       }
                       className='btn_Selected'
                     >
-                      {'\u279C'}
+                      {"\u279C"}
                     </button>
                     <input
                       type='text'
@@ -191,8 +231,8 @@ const Question = ({ question, updatePts }) => {
             type='number'
             value={points}
             onChange={handlePointsChange}
-            min='0'
-            max='3'
+            min={getQuestionMinPoints(question)}
+            max={getQuestionMaxPoints(question)}
             name={`${question.idCritere}pt`}
             data-point={`${question.idCritere}`}
           />
@@ -211,9 +251,8 @@ const Question = ({ question, updatePts }) => {
 }
 
 const Section = ({ title, questions, results, updatePoints }) => {
-  const [totalPoints, setTotalPoints] = useState(0)
   const [questionPoints, setQuestionPoints] = useState(
-    Array(questions.length).fill(0)
+    questions.map((question) => clampQuestionPoints(question.pt, question))
   )
 
   const updateTotalPoints = (index, pts) => {
@@ -223,7 +262,6 @@ const Section = ({ title, questions, results, updatePoints }) => {
     const newTotalPoints = newQuestionPoints.reduce((acc, pt) => acc + pt, 0)
 
     setQuestionPoints(newQuestionPoints)
-    setTotalPoints(newTotalPoints)
     updatePoints(newTotalPoints)
   }
 
@@ -243,9 +281,9 @@ const Section = ({ title, questions, results, updatePoints }) => {
           <tbody>
             {questions.map((question, index) => (
               <Question
-                key={index}
+                key={question.idCritere}
                 question={question}
-                updatePts={pts => updateTotalPoints(index, pts)}
+                updatePts={(pts) => updateTotalPoints(index, pts)}
               />
             ))}
           </tbody>
@@ -437,23 +475,25 @@ const TablePoints = ({ title, results }) => {
                   {(() => {
                     let id
                     if (
-                      r.rowTitle.split(' ')[1] !== 'A' &&
-                      r.rowTitle.split(' ')[1] !== 'B' &&
-                      r.rowTitle.split(' ')[1] !== 'C'
+                      r.rowTitle.split(" ")[1] !== "A" &&
+                      r.rowTitle.split(" ")[1] !== "B" &&
+                      r.rowTitle.split(" ")[1] !== "C"
                     ) {
-                      if (r.rowTitle.split(' ')[0] === 'Note') {
-                        id = 'note'
+                      if (r.rowTitle.split(" ")[0] === "Note") {
+                        id = "note"
                       } else {
-                        id = 'ABCsomme'
+                        id = "ABCsomme"
                       }
                     } else {
-                      id = r.rowTitle.split(' ')[1] + 'somme'
+                      id = r.rowTitle.split(" ")[1] + "somme"
                     }
                     return (
                       <>
                         <td>{r.rowTitle}</td>
                         <td className='maxPts'>{r.maxPoints}</td>
-                        <td className='maxObtenu' id={`Contraction_${id}`}>{r.pointsObtenus}</td>
+                        <td className='maxObtenu' id={`Contraction_${id}`}>
+                          {r.pointsObtenus}
+                        </td>
                       </>
                     )
                   })()}

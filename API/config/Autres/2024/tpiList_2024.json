@@ -1,0 +1,2811 @@
+[{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb2"
+  },
+  "tpiRef": 1978,
+  "candidat": "da Silva Fernandes Diogo",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Nicolas Glassey",
+  "expert1": "Oberson Bernard",
+  "expert2": "Charmier Grégory",
+  "Sujet": "I lost it (application aidant les utilisateurs à retrouver les objets perdus)",
+  "tags": "Php, HTML5",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 juin",
+  "dateDepart": "30.11.-1",
+  "dateFin": "30.11.-1"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb3"
+  },
+  "tpiRef": 1830,
+  "candidat": "LucasFernandes",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "DEMARCHE",
+  "lieu-site": "Lausanne",
+  "boss": "Michael Lopes",
+  "expert1": "S'inscrire",
+  "expert2": "Sartoni Arnaud",
+  "Sujet": "Mise en place d’un serveur PXE",
+  "tags": "Windows 2022 / AD / DNS / PXE / MDT",
+  "domaine": "Système",
+  "dateDepart": "13.05.2024",
+  "dateFin": "28.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb4"
+  },
+  "tpiRef": 1920,
+  "candidat": "Théo Ghaemmaghami",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Patrick Chenaux",
+  "expert1": "Wenger Serge",
+  "expert2": "S'inscrire",
+  "Sujet": "To Do List avançée",
+  "tags": "C#, MySQL, Dll",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.05.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb5"
+  },
+  "tpiRef": 1921,
+  "candidat": "Kathleen Lu",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne",
+  "boss": "Laurent Deschamps",
+  "expert1": "S'inscrire",
+  "expert2": "S'inscrire",
+  "Sujet": "Comptage de personnes",
+  "tags": "Prog nano",
+  "domaine": "Nano PC",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "TPI au LESO"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb6"
+  },
+  "tpiRef": 1936,
+  "candidat": "Yu  Wu Guo",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Patrick Chenaux",
+  "expert1": "S'inscrire",
+  "expert2": "S'inscrire",
+  "Sujet": "Scrum follow-up",
+  "tags": "C#, MySQL, Dll",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb7"
+  },
+  "tpiRef": 1890,
+  "candidat": "Leonar  Dupuis",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Gael Sonney",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Gestion des activités enseignants",
+  "tags": "PHP",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb8"
+  },
+  "tpiRef": 1908,
+  "candidat": "Yann  Mangiagli",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Gael Sonney",
+  "expert1": "Berney Daniel",
+  "expert2": "Maret Gabriel",
+  "Sujet": "Powershell",
+  "tags": "Powershell",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabb9"
+  },
+  "tpiRef": 1918,
+  "candidat": "Ella-Anelisse Corozel",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Cédric Schaffter",
+  "expert1": "Mellina Olivier",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Contrôle parental et router software",
+  "tags": "IPTABLES, Linux",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabba"
+  },
+  "tpiRef": 1919,
+  "candidat": "Marie Déglise Camille",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Bertrand Sahli",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Favre Raphaël",
+  "Sujet": "DataVerse: Site Web analyse et exploration de données météorologiques",
+  "tags": "Dev Web, Laravel, HTML5, CSS3",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabbb"
+  },
+  "tpiRef": 1923,
+  "candidat": "Bilal Mamo",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Karim Bourahla",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Berney Daniel",
+  "Sujet": "Mise en place un annuaire d'entreprise",
+  "tags": "DHCP, DNS, etc.",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabbc"
+  },
+  "tpiRef": 1925,
+  "candidat": "Matthew Suboonsan Chris Noah",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Dimitrios Lymberis",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Oberson Bernard",
+  "Sujet": "Gestion de suivis pour des cas de médiation",
+  "tags": "Dev Web,  HTML5, CSS3, MySQL",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabbd"
+  },
+  "tpiRef": 1934,
+  "candidat": "Samuel dos Santos",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Grégory Charmier",
+  "expert1": "Oberson Bernard",
+  "expert2": "Venries Luc",
+  "Sujet": "Application web qui a pour but de mélanger des participants pour favoriser les interactions sociales.",
+  "tags": "Dev Web, Laravel PHP, HTML5, CSS3, MySQL",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabbe"
+  },
+  "tpiRef": 1939,
+  "candidat": "Harun Findik",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Roberto Ferrari",
+  "expert1": "Wenger Serge",
+  "expert2": "Andolfatto FrÃ©dÃ©rique",
+  "Sujet": "Logiciel d'apprentissage par mémorisation",
+  "tags": "C#, WinForms",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabbf"
+  },
+  "tpiRef": 1942,
+  "candidat": "Saraneethan Shanthakumar",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Michel Delgado",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Wolf Benjamin",
+  "Sujet": "Mise en place un annuaire pour une entreprise Linux",
+  "tags": "Samba, OpenLDAP, DHCP, DNS",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc0"
+  },
+  "tpiRef": 1976,
+  "candidat": "Mbayo Gregory",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Alain Girardet",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Oberson Bernard",
+  "Sujet": "Site web - Gestion du café",
+  "tags": "PHP, CSS",
+  "domaine": "Développement web",
+  "remarque(s)": "Redoublant. Défense le 12 ou 13 juin",
+  "dateDepart": "13.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A13"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc1"
+  },
+  "tpiRef": 1821,
+  "candidat": "Loïc Graber",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Etat de Vaud, (DSI)",
+  "lieu-site": "Renens VD",
+  "boss": "Daniel",
+  "expert1": "Masson Baptiste",
+  "expert2": "Garraux Alain-Philippe",
+  "Sujet": "Monitoring de la Cyberadministration VD avec Cisco Thousand",
+  "tags": "ThousandEyes / LAN / WAN",
+  "domaine": "Système",
+  "dateDepart": "06.05.2024",
+  "dateFin": "22.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc2"
+  },
+  "tpiRef": 1827,
+  "candidat": "Guorui Wu",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Practeo SA",
+  "lieu-site": "Villeneuve",
+  "boss": "Glauser Michael",
+  "expert1": "Bertino Yves",
+  "expert2": "Visinand Patrick",
+  "Sujet": "Mise en place en place d’une solution de télé-travail dans un réseau existant",
+  "tags": "FW SSLVPN / AD",
+  "domaine": "Système",
+  "dateDepart": "06.05.2024",
+  "dateFin": "19.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc3"
+  },
+  "tpiRef": 1828,
+  "candidat": "Elie Lavanchy",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "SICPA",
+  "lieu-site": "Prilly",
+  "boss": "Chanson Bernard",
+  "expert1": "Venries Luc",
+  "expert2": "Girardet Alain",
+  "Sujet": "Restaurer un annuaire Active Directory et ses services à la suite d une attaque de rançongiciel",
+  "tags": "AD / Azure AD / Entra",
+  "domaine": "Système",
+  "dateDepart": "06.05.2024",
+  "dateFin": "28.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc4"
+  },
+  "tpiRef": 1903,
+  "candidat": "Valentin Delay",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Inecsys Sàrl",
+  "lieu-site": "Lausanne",
+  "boss": "Nicolas Amos",
+  "expert1": "Maret Gabriel",
+  "expert2": "Gonzalez Mikael",
+  "Sujet": "Evaluation de solution de patch management dans le Cloud",
+  "tags": "Windows 10/11/2022 / Linux",
+  "domaine": "Système",
+  "dateDepart": "06.05.2024",
+  "dateFin": "03.06.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc5"
+  },
+  "tpiRef": 1969,
+  "candidat": "Alexis Rojas Aldana Hector",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "La Vaudoise",
+  "lieu-site": "Lausanne",
+  "boss": "Marc-Olivier Domenjoz",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Application gestion centre impression",
+  "tags": "VAPrint, Visual Studio, Git, bamboo",
+  "domaine": "Développement",
+  "dateDepart": "06.05.2024",
+  "dateFin": "31.05.2024",
+  "salle": "TPI en entreprise"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc6"
+  },
+  "tpiRef": 1972,
+  "candidat": "Amanda Nogués Miguel Carolina",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Bibliothèque cant. et univ.",
+  "lieu-site": "Lausanne",
+  "boss": "Schiker Augustin",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Perez Carlos",
+  "Sujet": "Une application web de planification d’horaires pour la gestion des apprentis au sein de la BCU Lausanne.",
+  "tags": "PHP / CSS / Angular / MySQL",
+  "domaine": "Dev",
+  "dateDepart": "06.05.2024",
+  "dateFin": "24.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc7"
+  },
+  "tpiRef": 1926,
+  "candidat": "Maryline Vougaz",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "Objectis",
+  "lieu-site": "Yverdon",
+  "boss": "Paul-Henri Maillefer",
+  "expert1": "Berney Daniel",
+  "expert2": "Lopes Helder",
+  "Sujet": "Mise en place des backups des gits de projet Azure Devops.",
+  "tags": "PowerShell, Token, AzureDevops, Git, Backup, NAS",
+  "domaine": "Système",
+  "dateDepart": "04.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "TPI en entreprise"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc8"
+  },
+  "tpiRef": 1954,
+  "candidat": "Ali Issolah",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-site": "Lausanne",
+  "boss": "Antoine Mveng",
+  "expert1": "S'inscrire",
+  "expert2": "S'inscrire",
+  "Sujet": "Gestion d'événements culturels",
+  "tags": "PHP, JS, CSS, HTML, MVC",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabc9"
+  },
+  "tpiRef": 1845,
+  "candidat": "Aurélien Maxence Lahaye",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "SyselCloud",
+  "lieu-site": "Le Mont-sur-Lausanne",
+  "boss": "Vincent Emery",
+  "expert1": "Mellina Olivier",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Gestion centralisé de firewall Fortigate avec la solution Fortimanager",
+  "tags": "Firewall, management, sécurité, réseau",
+  "domaine": "Système",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "TPI en entreprise"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabca"
+  },
+  "tpiRef": 1846,
+  "candidat": "Bustabad Yannick Pena",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Sheyla Oliveira Kobi",
+  "expert1": "Graf Alexandre",
+  "expert2": "Gonzalez Mikael",
+  "Sujet": "Mise en place une infrastructure VmWare Vsphere",
+  "tags": "Esxi, vCenter, AD, HA",
+  "domaine": "Virtualisation",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabcb"
+  },
+  "tpiRef": 1854,
+  "candidat": "Simon Baeriswyl",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Mathieu Meylan",
+  "expert1": "Mellina Olivier",
+  "expert2": "Venries Luc",
+  "Sujet": "FIA services",
+  "tags": "Raspberry Pi, Linux, DHCP, DNS, HTTP",
+  "domaine": "Système, Nano PC",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabcc"
+  },
+  "tpiRef": 1855,
+  "candidat": "Diego Alfonso Da Silva",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Laurent Duding",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Tonelli Jonathan",
+  "Sujet": "Redondance des principaux services sur un serveur Microsoft pour une PME",
+  "tags": "Windows Server, automatisation",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabcd"
+  },
+  "tpiRef": 1856,
+  "candidat": "Pruthvin Kandasamy",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Mathieu Meylan",
+  "expert1": "Krasniqi Mergim",
+  "expert2": "Benzonana Pascal",
+  "Sujet": "Site pour un club de pétanque",
+  "tags": "Wordpress, Extension, PHP, MySQL, HTML5, CSS3, JS",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabce"
+  },
+  "tpiRef": 1874,
+  "candidat": "Bruno Grin",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Mathieu Meylan",
+  "expert1": "Mellina Olivier",
+  "expert2": "Wolf Benjamin",
+  "Sujet": "API pour onduleur",
+  "tags": "Raspberry Pi, Linux, RestAPI, HTTP, HTML5, CSS3, JS",
+  "domaine": "Nano Ordi",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabcf"
+  },
+  "tpiRef": 1875,
+  "candidat": "Timothee Victor Carlier",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Nicolas Cuendet",
+  "expert1": "Graf Alexandre",
+  "expert2": "Sartoni Arnaud",
+  "Sujet": "RaspberryPi, Système de surveillance",
+  "tags": "RaspberyPi; Caméra; Serveurs données Vidéo",
+  "domaine": "Nano PC",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd0"
+  },
+  "tpiRef": 1876,
+  "candidat": "Lucie de Oliveira",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Alain-Philippe Garraux",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Pretre Patrick",
+  "Sujet": "Comparer les solutions de monitoring de GLPI et ATERA",
+  "tags": "Monitoring, GLPI, ATERA.",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd1"
+  },
+  "tpiRef": 1877,
+  "candidat": "Sean Kellen Ford",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Isabelle Stucki",
+  "expert1": "Oberson Bernard",
+  "expert2": "Maret Gabriel",
+  "Sujet": "Configuration de postes client dans un domaine à l'aide de scripts Powershell",
+  "tags": "Powershell, Windows Server, Windows 10 et 11",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd2"
+  },
+  "tpiRef": 1879,
+  "candidat": "Nicolas Berdoz",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Laurent Duding",
+  "expert1": "Pantic Nemanja",
+  "expert2": "Tonelli Jonathan",
+  "Sujet": "Automatisation d’installation de VM MS-Server pour l’école",
+  "tags": "VirtualBox, scripting, MSI",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd3"
+  },
+  "tpiRef": 1880,
+  "candidat": "Sacha Jean Laurent Bourquard",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Nicolas Cuendet",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Wolf Benjamin",
+  "Sujet": "Plateforme Multi-OS Virtualisée pour environnement de test",
+  "tags": "Docker; Environnement; Réseaux",
+  "domaine": "Virtualisation",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd4"
+  },
+  "tpiRef": 1881,
+  "candidat": "Fabrice Bred Geni Gelsomino",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Cédric Schaffter",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Bertino Yves",
+  "Sujet": "Mise en place d'une infrastructure PME avec redondance de services",
+  "tags": "Windows Server, Active Directory, Failover",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd5"
+  },
+  "tpiRef": 1882,
+  "candidat": "Dylan Hentschel",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Nicolas Cuendet",
+  "expert1": "Graf Alexandre",
+  "expert2": "Gressly Matthieu",
+  "Sujet": "Système de sauvegarde",
+  "tags": "Backup; Restauration; Veeam; Plan de sauvegarde",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd6"
+  },
+  "tpiRef": 1883,
+  "candidat": "Yann Imperadori",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Cédric Schaffter",
+  "expert1": "Oberson Bernard",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Mise en place de SCCM",
+  "tags": "SCCM",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd7"
+  },
+  "tpiRef": 1886,
+  "candidat": "Jonathan Samuel Nicholas Dale",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Nicolas Cuendet",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Infrastructure Virtuel Linux KVM",
+  "tags": "Hyperviseur; Linux; Kvm; Serveurs; Infrastructure",
+  "domaine": "Virtualisation",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd8"
+  },
+  "tpiRef": 1887,
+  "candidat": "Antoine Stéphane Roger",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Cyril Sokoloff",
+  "expert1": "Graf Alexandre",
+  "expert2": "Gilloz Raphaël",
+  "Sujet": "Hyperviseur haute disponibilité",
+  "tags": "Cluster, Windows serveur, Hyper-V, HD",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabd9"
+  },
+  "tpiRef": 1888,
+  "candidat": "Noah Favre",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Alain-Philippe Garraux",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Tonelli Jonathan",
+  "Sujet": "Paramétrage et sécurisation de SQL Serveur",
+  "tags": "Système, SQL Serveur, paramétrages, sécuritsation",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabda"
+  },
+  "tpiRef": 1889,
+  "candidat": "Léonard Frauchiger",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Cyril Sokoloff",
+  "expert1": "Pantic Nemanja",
+  "expert2": "Berney Daniel",
+  "Sujet": "RaspberryPi, Magic Mirror",
+  "tags": "RaspberryPi, Python, json, caméra",
+  "domaine": "Système, Nano PC",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabdb"
+  },
+  "tpiRef": 1949,
+  "candidat": "Salvatore Lombardo Robustiano",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Karim Bourahla",
+  "expert1": "Malherbe Roger",
+  "expert2": "Berney Daniel",
+  "Sujet": "Application web (blog)",
+  "tags": "Laravel / Vue.js",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabdc"
+  },
+  "tpiRef": 1956,
+  "candidat": "Kendy Song",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Jonathan Melly",
+  "expert1": "Berney Daniel",
+  "expert2": "Andolfatto FrÃ©dÃ©rique",
+  "Sujet": "GuiKopia : Un système de backup basé sur Kopia",
+  "tags": "C# WinForms",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabdd"
+  },
+  "tpiRef": 1970,
+  "candidat": "Daddy Avdylaj Kevin",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Gael Sonney",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Benzonana Pascal",
+  "Sujet": "Gestion des activité d'un apiculteur",
+  "tags": "VueJS, MongoDB, HTML5, CSS3",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabde"
+  },
+  "tpiRef": 1973,
+  "candidat": "Thomas Rey",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Dimitrios Lymberis",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Viret Loic",
+  "Sujet": "Gestion de suivis des TPI",
+  "tags": "Dev Web, Laravel PHP, HTML5, CSS3, MySQL",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabdf"
+  },
+  "tpiRef": 1974,
+  "candidat": "Henry Chouriberry Noa",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Antoine Mveng",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Troc de livres",
+  "tags": "PHP, JS, CSS, HTML, MVC",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 12 ou 13 juin",
+  "dateDepart": "02.05.2024",
+  "dateFin": "03.06.2024",
+  "salle": "Sur le site de Vennes, A11"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe0"
+  },
+  "tpiRef": 1967,
+  "candidat": "Reza Tavassoli Mohammad",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "GRI",
+  "lieu-site": "Montagny-près-Yverdon",
+  "boss": "CHILLEMI Mike",
+  "expert1": "S'inscrire",
+  "expert2": "S'inscrire",
+  "Sujet": "Création d un jeu de cartes interactif sur Unity.",
+  "tags": "C# / Unity",
+  "domaine": "Dév",
+  "dateDepart": "01.05.2024",
+  "dateFin": "22.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe1"
+  },
+  "tpiRef": 1835,
+  "candidat": "Pierre Louis Hubert Roy",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Support Info IT Sàrl",
+  "lieu-site": "Baulmes",
+  "boss": "Frank Duchene",
+  "expert1": "Rhyn Raphael",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Mise en place d une haute disponibilité de services Docker",
+  "tags": "Linux / Docker / VMWare",
+  "domaine": "Système",
+  "dateDepart": "01.05.2024",
+  "dateFin": "21.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe2"
+  },
+  "tpiRef": 1844,
+  "candidat": "Lya Sapho Belabbas",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne (Ecublens)",
+  "boss": "Deschamps Laurent",
+  "expert1": "Wenger Serge",
+  "expert2": "Pretre Patrick",
+  "Sujet": "Élaboration d’une visite virtuelle d’un bâtiment expérimental",
+  "tags": "JS / C# / HTML CSS",
+  "domaine": "Dev",
+  "dateDepart": "01.05.2024",
+  "dateFin": "27.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe3"
+  },
+  "tpiRef": 1850,
+  "candidat": "Rayan Ramiaramanana",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Micro Informatic Systems SA",
+  "lieu-site": "Montagny-près-Yverdon",
+  "boss": "Romao Artur",
+  "expert1": "Berney Daniel",
+  "expert2": "Oberson Bernard",
+  "Sujet": "Mise en place d une infrastructure pour le déploiement d’images sur Windows",
+  "tags": "Windows 10 / 2022 / MDT / WDS",
+  "domaine": "Système",
+  "dateDepart": "01.05.2024",
+  "dateFin": "22.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe4"
+  },
+  "tpiRef": 1848,
+  "candidat": "Tibô Ferreira de Carvalho",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Patrick Altieri",
+  "expert1": "Graf Alexandre",
+  "expert2": "Sokoloff Cyril",
+  "Sujet": "Infrastructure hybride et redondant d’une PME intègrant une solution de backup",
+  "tags": "VMWare ESXi et Workstation, Windows Server (AD, DNS, DHCP, FS), Veeam Backup",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe5"
+  },
+  "tpiRef": 1849,
+  "candidat": "Gabriel Gloor",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Francis Varela",
+  "expert1": "Bertino Yves",
+  "expert2": "Duding Laurent",
+  "Sujet": "Mise en place d'une infrastructure avec WLAN pour une association",
+  "tags": "VMWare, Windows Server avec Active Directory, WLAN, serveur d'impression, NAS",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe6"
+  },
+  "tpiRef": 1851,
+  "candidat": "Ambre Miellot",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Francis Varela",
+  "expert1": "Garraux Alain-Philippe",
+  "expert2": "Bertino Yves",
+  "Sujet": "Mise en place d'une infrastructure segmentée par des VLAN pour une PME",
+  "tags": "Windows Server avec Active Directory, VLAN, serveur d'impression, serveur de fichiers",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe7"
+  },
+  "tpiRef": 1852,
+  "candidat": "Ayami Ogay",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Michael Wyssa",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Melly Jonathan",
+  "Sujet": "Mise en place d'une infrastrucutre pour une PME (AD, DNS, DHCP, getion de fichier)",
+  "tags": "Windows Server avec Active Directory, serveur de fichiers",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin, TPI 70h",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe8"
+  },
+  "tpiRef": 1853,
+  "candidat": "Edward Robert George Alexander Stewart",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Julien Savary",
+  "expert1": "Girardet Alain",
+  "expert2": "Oberson Bernard",
+  "Sujet": "Création d'un quiz de révision",
+  "tags": "PHP, JS, CSS, HTML, Framework, MVC",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabe9"
+  },
+  "tpiRef": 1858,
+  "candidat": "Yasin Salih Akyüz",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Pascal Benzonana",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Charmier Grégory",
+  "Sujet": "Site Web pour vente de produits locaux",
+  "tags": "PHP, JS, CSS, HTML, Framework, MVC",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabea"
+  },
+  "tpiRef": 1860,
+  "candidat": "Gwenaël William West",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Claude Rochat",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Schaffter CÃ©dric",
+  "Sujet": "Monter une infrastructure informatique pour une petite entreprise",
+  "tags": "VMWare, Windows Server (AD, DNS, DHCP), DFS (Distributed File System)",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin, TPI 70h",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabeb"
+  },
+  "tpiRef": 1861,
+  "candidat": "Elodie Dépierraz",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Julien Savary",
+  "expert1": "Rhyn Raphael",
+  "expert2": "Oliveira Kobi Sheyla",
+  "Sujet": "Mise en place d'une infrastructure pour une association",
+  "tags": "VMWare, Windows Server avec Active Directory, serveur web, serveur d'impression, NAS",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabec"
+  },
+  "tpiRef": 1867,
+  "candidat": "Crystalle Gueissaz",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Claude Rochat",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Schaffter CÃ©dric",
+  "Sujet": "Monter une infrastructure informatique pour une petite entreprise",
+  "tags": "VMWare, Windows Server (AD, DNS, DHCP), DFS (Distributed File System)",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabed"
+  },
+  "tpiRef": 1869,
+  "candidat": "da Silva Maikol Correia",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Pascal Benzonana",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Melly Jonathan",
+  "Sujet": "Plateforme type AutoScout en C#",
+  "tags": "C#, Windows Form",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabee"
+  },
+  "tpiRef": 1873,
+  "candidat": "Ian Alain Bienvenu Clot",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Basile Geiser",
+  "expert1": "Gressly Matthieu",
+  "expert2": "Wyssa Michael",
+  "Sujet": "Implémentation et déploiement d'une solution RMM",
+  "tags": "Serveur, TimeMachine, Veeam Agent",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabef"
+  },
+  "tpiRef": 1878,
+  "candidat": "Nathan Thomas Roger Chauveau",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Julien Ithurbide",
+  "expert1": "Berney Daniel",
+  "expert2": "Lopes Helder",
+  "Sujet": "Développement d'une application PowerApps permettant la gestion des diplômes ES",
+  "tags": "PowerApps, Power Automate",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf0"
+  },
+  "tpiRef": 1884,
+  "candidat": "Romain Humbert-Droz-Laurent",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Francis Varela",
+  "expert1": "Graf Alexandre",
+  "expert2": "Richard Albert",
+  "Sujet": "Mise en place d'un WDS pour une PME",
+  "tags": "VMware,WDS, PXE, Windows Server, Déploiement d'OS Windows",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf1"
+  },
+  "tpiRef": 1885,
+  "candidat": "Arthur Eliott Bottemanne",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Loïc Viret",
+  "expert1": "Ferrari Roberto",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Jeu d'echec sur Unity",
+  "tags": "Unity, C#, Jeu de plateau",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf2"
+  },
+  "tpiRef": 1891,
+  "candidat": "Paul-Loup Maxime Alexis Germain",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Francis Varela",
+  "expert1": "Rhyn Raphael",
+  "expert2": "Roduit Jean-Luc",
+  "Sujet": "Mise en place d'une infrastructure AD, DNS et DHCP, basé sur SAMBA et déployée sur de multisites avec Dockers",
+  "tags": "VMware, Linux, Dockers, Samba, AD, DHCP, DNS, multi-site",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf3"
+  },
+  "tpiRef": 1894,
+  "candidat": "David da Silva Soares",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Patrick Altieri",
+  "expert1": "Gressly Matthieu",
+  "expert2": "Sokoloff Cyril",
+  "Sujet": "Infrastructure redondante d’une PME qui intègre une solution de ticketing",
+  "tags": "VMWare, Windows Server (AD, DNS, DHCP) redondant et GLPI",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf4"
+  },
+  "tpiRef": 1896,
+  "candidat": "Benjamin Scott O Conner",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Julien Savary",
+  "expert1": "Girardet Alain",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Création d'un site d'e-commerce",
+  "tags": "PHP, JS, CSS, HTML, Framework, MVC",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf5"
+  },
+  "tpiRef": 1897,
+  "candidat": "Thomas Pétermann",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Nicolas Glassey",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Jeu 2D sur Unity",
+  "tags": "Unity, C#, 2D",
+  "domaine": "Gaming",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf6"
+  },
+  "tpiRef": 1899,
+  "candidat": "Maxime Grégoire Borgeaud",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Pascal Benzonana",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Mveng Evina Galeazi Antoine Honore",
+  "Sujet": "Gestion RH en node JS",
+  "tags": "Node JS",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf7"
+  },
+  "tpiRef": 1900,
+  "candidat": "Valentin Wilhem",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Julien Savary",
+  "expert1": "Berney Daniel",
+  "expert2": "Ferrari Roberto",
+  "Sujet": "Création d'une application mobile pense-bête",
+  "tags": "Kotlin, Android, dev. mobile",
+  "domaine": "Développement mobile",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf8"
+  },
+  "tpiRef": 1901,
+  "candidat": "Joshua Surico",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Nicolas Glassey",
+  "expert1": "Bertino Yves",
+  "expert2": "Malherbe Roger",
+  "Sujet": "Système de chat",
+  "tags": "Php, HTML5, Firebase, Socket API",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabf9"
+  },
+  "tpiRef": 1904,
+  "candidat": "Pierrot Métille",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Romain Roy",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Ithurbide Julien",
+  "Sujet": "Déploiement d’un tenant M365 de test avec une synchronisation AD avec Entra ID et Intune",
+  "tags": "AD, Entra ID, Intune, Tenant M365",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabfa"
+  },
+  "tpiRef": 1905,
+  "candidat": "Ethann Schneider",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Michael Wyssa",
+  "expert1": "Malherbe Roger",
+  "expert2": "Melly Jonathan",
+  "Sujet": "Création d'une application Web de communication",
+  "tags": "Angular, JS",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabfb"
+  },
+  "tpiRef": 1906,
+  "candidat": "Adam Sifate",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Raphael Favre",
+  "expert1": "Malherbe Roger",
+  "expert2": "Berney Daniel",
+  "Sujet": "Application Boîte à outils pour électronicien",
+  "tags": "Python",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabfc"
+  },
+  "tpiRef": 1910,
+  "candidat": "Miguel Monteiro Pereira Rui",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Patrick Altieri",
+  "expert1": "Girardet Alain",
+  "expert2": "Pittet Alain",
+  "Sujet": "Insfrastructure redondante dans le cloud intégrant Microsoft Intune",
+  "tags": "Microsoft Azure Active Directory et Intune",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabfd"
+  },
+  "tpiRef": 1911,
+  "candidat": "Mahé Lavaud",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Yawo Konoutse",
+  "expert1": "Oberson Bernard",
+  "expert2": "Duding Laurent",
+  "Sujet": "Infrastructure réseau avec des services redondants intégrant le système DFS",
+  "tags": "VMWare, Windows Server (AD, DNS, DHCP), DFS (Distributed File System)",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabfe"
+  },
+  "tpiRef": 1912,
+  "candidat": "Sylvain Georges Léchaire",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Yann Saison",
+  "expert1": "Rhyn Raphael",
+  "expert2": "Schaffter CÃ©dric",
+  "Sujet": "Mise en place du réseau d’une PME en virtualisation sous Windows Server",
+  "tags": "VMWare, Windows Server (AD, DNS, DHCP) redondant, GPO",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aabff"
+  },
+  "tpiRef": 1915,
+  "candidat": "Lucas Chris Machard",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Yawo Konoutse",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Richard Albert",
+  "Sujet": "Accès authentifié à la console Cisco avec des comptes AD via Serveur NPS/RADIUS",
+  "tags": "Active Directory, Server NPS/RADIUS, Cisco (routeur/switch)",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac00"
+  },
+  "tpiRef": 1922,
+  "candidat": "Nuno Ribeiro Pereira",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Julien Burger (Nespresso)",
+  "expert1": "Berney Daniel",
+  "expert2": "Nicolas Glassey",
+  "Sujet": "Script powershell de validation (post installation)",
+  "tags": "Powershell, WServer",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac01"
+  },
+  "tpiRef": 1924,
+  "candidat": "Amos Le Coq",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Raphael Favre",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Mveng Evina Galeazi Antoine Honore",
+  "Sujet": "Application web d inscription à des stages d une association",
+  "tags": "PHP, JS, CSS, HTML, MVC",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac02"
+  },
+  "tpiRef": 1930,
+  "candidat": "Valentin Maurer",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Dominique Plancherel",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Andolfatto FrÃ©dÃ©rique",
+  "Sujet": "Gestion des connexions physiques d'un réseau LAN",
+  "tags": "LAN, recensement liaison physiques",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac03"
+  },
+  "tpiRef": 1933,
+  "candidat": "Lester Miehlbradt Garis",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Loïc Viret",
+  "expert1": "Graf Alexandre",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Jeu 2D sur Unity",
+  "tags": "Unity, C#, 2D",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 10 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac04"
+  },
+  "tpiRef": 1938,
+  "candidat": "Loik Meylan",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Sylvain Fasola",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Lopes Helder",
+  "Sujet": "Sauvegarde d'une infrastructure de PME",
+  "tags": "Système, Backup, Veeam",
+  "domaine": "Système",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac05"
+  },
+  "tpiRef": 1941,
+  "candidat": "Marie Martet Antoine Claude Emm",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Frédérique Andolfatto",
+  "expert1": "Ferrari Roberto",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Gestion du stock pour une petite entreprise horlogère",
+  "tags": "C#, Windows Form",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "29.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac06"
+  },
+  "tpiRef": 1977,
+  "candidat": "Santos Tiago",
+  "typeApp": {
+    "": "CPNV Entreprise"
+  },
+  "lieu-entreprise": "CPNV",
+  "lieu-site": "Ste-Croix",
+  "boss": "Yawo Konoutse",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Schaffter CÃ©dric",
+  "Sujet": "Solution d’infrastructure réseau et système (simulé) pour PME de virtualisation",
+  "tags": "Windows Server (AD, DNS, DHCP, GPO), VMWare",
+  "domaine": "Système, réseau",
+  "remarque(s)": "Redoublant, Défense le 10 ou 11 juin",
+  "dateDepart": "30.04.2024",
+  "dateFin": "30.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac07"
+  },
+  "tpiRef": 1825,
+  "candidat": "Luigi Martella",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "EvoLink SA",
+  "lieu-site": "Daillens",
+  "boss": "Kuhn Loic",
+  "expert1": "Garraux Alain-Philippe",
+  "expert2": "Masson Baptiste",
+  "Sujet": "Déploiement d’un système de monitoring (surveillance proactive et réactive) à travers le logiciel Atera",
+  "tags": "Monitoring / Atera",
+  "domaine": "Système",
+  "dateDepart": "29.04.2024",
+  "dateFin": "21.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac08"
+  },
+  "tpiRef": 1832,
+  "candidat": "Clément Jean Cédric Burnier",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Etat de Vaud, (DSI)",
+  "lieu-site": "Renens VD",
+  "boss": "Fernandez Carlos",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Delgado Michel",
+  "Sujet": "Création automatique de VM dans un environnement virtuel",
+  "tags": "Windows 2022 / Vmware / PowerCLI",
+  "domaine": "Système",
+  "dateDepart": "29.04.2024",
+  "dateFin": "16.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac09"
+  },
+  "tpiRef": 1833,
+  "candidat": "Esteban Luis Martin",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "TL SA",
+  "lieu-site": "Lausanne",
+  "boss": "Dos Santos Antonio Manuel",
+  "expert1": "Perez Carlos",
+  "expert2": "Pretre Patrick",
+  "Sujet": "Virtualisation et intégration d un serveur de compilation Linux / Yocto",
+  "tags": "Vmware / RHEL / Ansible",
+  "domaine": "Système",
+  "dateDepart": "29.04.2024",
+  "dateFin": "22.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac0a"
+  },
+  "tpiRef": 1892,
+  "candidat": "Louis Valentim",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Chemin de fer Montreux Ob.Be.",
+  "lieu-site": "Montreux",
+  "boss": "Desponds Alexandre",
+  "expert1": "Mutlu Deniz",
+  "expert2": "Sonney Gaël",
+  "Sujet": "Rapport de vente webshop – interface utilisateur",
+  "tags": "Cake PHP / Vue.JS / API",
+  "domaine": "Dév",
+  "dateDepart": "29.04.2024",
+  "dateFin": "16.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac0b"
+  },
+  "tpiRef": 1893,
+  "candidat": "Emilien Charpié",
+  "classe":"MIN4",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Jonathan Melly",
+  "expert1": "Oberson Bernard",
+  "expert2": "Wyssa Michael",
+  "Sujet": "CocoDetective - Analyse d’image",
+  "tags": "WEB/Laravel",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 5 ou 6 juin",
+  "dateDepart": "29.04.2024",
+  "dateFin": "29.05.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac0c"
+  },
+  "tpiRef": 1929,
+  "candidat": "Tim Froidevaux",
+  "classe":"MIN4",
+  "typeApp": {
+    "": "ETML Entreprise"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Michel Delgado",
+  "expert1": "Graf Alexandre",
+  "expert2": "Sartoni Arnaud",
+  "Sujet": "Virtualisation / Monitoring d'une infrastructure physique existante avec PRTG",
+  "tags": "Monitoring, PRTG, Monitoring, Virtualisation",
+  "domaine": "Système, virtualisation",
+  "remarque(s)": "Défense le 5 ou 6 juin",
+  "dateDepart": "29.04.2024",
+  "dateFin": "29.05.2024",
+  "salle": "Sur le site de Sébeillon, N512a"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac0d"
+  },
+  "tpiRef": 1952,
+  "candidat": "Samuel King Alexandre",
+  "classe":"MID4",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Aurélie Curchod",
+  "expert1": "Nicolas Glassey",
+  "expert2": "BORBOEN Nicolas",
+  "Sujet": "CodeTris : Le bloc de la programmation",
+  "tags": "C#, Console",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 5 ou 6 juin",
+  "dateDepart": "29.04.2024",
+  "dateFin": "29.05.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac0e"
+  },
+  "tpiRef": 1957,
+  "candidat": "Aurélien Dévaud",
+  "classe":"MID4",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Dimitrios Lymberis",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Viret Loic",
+  "Sujet": "Multimedia - Gestion de fichiers de musique",
+  "tags": "Dev c#",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 5 ou 6 juin",
+  "dateDepart": "29.04.2024",
+  "dateFin": "29.05.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac0f"
+  },
+  "tpiRef": 1961,
+  "candidat": "Samuel Develey",
+  "classe":"MID4",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Laurent Deschamps",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Pittet Alain",
+  "Sujet": "Contrôleur d’éclairage DALI",
+  "tags": "C#",
+  "domaine": "Développement",
+  "remarque(s)": "Défense le 5 ou 6 juin",
+  "dateDepart": "29.04.2024",
+  "dateFin": "29.05.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac10"
+  },
+  "tpiRef": 1962,
+  "candidat": "Mathis Broquet",
+  "typeApp": {
+    "": "ETML Dev"
+  },
+  "classe":"MID4",
+  "lieu-entreprise": "ETML-Sébeillon",
+  "lieu-site": "Lausanne",
+  "boss": "Dimitrios Lymberis",
+  "expert1": "Malherbe Roger",
+  "expert2": "Mottier André",
+  "Sujet": "Développement d’une plateforme web de gestion de location d’une cabane scoute",
+  "tags": "Dev Web, Laravel PHP, HTML5, CSS3, MySQL",
+  "domaine": "Développement web",
+  "remarque(s)": "Défense le 5 ou 6 juin",
+  "dateDepart": "29.04.2024",
+  "dateFin": "29.05.2024",
+  "salle": "Sur le site de Vennes, A12"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac11"
+  },
+  "tpiRef": 1965,
+  "candidat": "Samira Greco",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Liip SA",
+  "lieu-site": "Lausanne",
+  "boss": "Sergio Mendolia",
+  "expert1": "Carrard CÃ©dric",
+  "expert2": "Berney Daniel",
+  "Sujet": "Desk Availability Checker",
+  "tags": "PHP / HTML / CSS",
+  "domaine": "Dév",
+  "dateDepart": "29.04.2024",
+  "dateFin": "14.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac12"
+  },
+  "tpiRef": 1820,
+  "candidat": "Théo Cannizzaro",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Meanquest SA",
+  "lieu-site": "Ecublens",
+  "boss": "Laporte Yves",
+  "expert1": "Bertino Yves",
+  "expert2": "Wyssa Michael",
+  "Sujet": "Création d’un SI d’entreprise PME avec accès VPN",
+  "tags": "AD /Sophos /SSL VPN / Windows",
+  "domaine": "Systeme",
+  "dateDepart": "22.04.2024",
+  "dateFin": "08.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac13"
+  },
+  "tpiRef": 1837,
+  "candidat": "Stéphane Pereira de Carvalho",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Varisystems SA",
+  "lieu-site": "Crissier",
+  "boss": "Bersier Ludovic",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Rogeiro Angelo",
+  "Sujet": "Création dune infrastructure client avec ferme de serveurs",
+  "tags": "Windows RDS / AD",
+  "domaine": "Système",
+  "dateDepart": "22.04.2024",
+  "dateFin": "15.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac14"
+  },
+  "tpiRef": 1839,
+  "candidat": "François Michel Pani",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Dubois & Dépraz SA",
+  "lieu-site": "Le Lieu",
+  "boss": "Linder Matthias",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Rhyn Raphael",
+  "Sujet": "Mise en place d une infrastructure informatique pour une PME",
+  "tags": "Windows 10/11/ Serveur / PRTG / MECM",
+  "domaine": "Système",
+  "dateDepart": "22.04.2024",
+  "dateFin": "08.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac15"
+  },
+  "tpiRef": 1895,
+  "candidat": "David Rémi Kneuss",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "CHUV - Service informatique",
+  "lieu-site": "Lausanne",
+  "boss": "Rubattel Antoine",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Mise en place d’un moodle pour la formation des collaborateurs",
+  "tags": "Ubuntu / Doodle / MySQL",
+  "domaine": "Infra",
+  "dateDepart": "22.04.2024",
+  "dateFin": "07.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac16"
+  },
+  "tpiRef": 1859,
+  "candidat": "Alexandre Varela Tavares",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Loterie Romande",
+  "lieu-site": "Lausanne",
+  "boss": "Caplan Gaspar",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Pretre Patrick",
+  "Sujet": "Formulaire permettant aux joueurs de transférer leurs documents d identité.",
+  "tags": "C# / SQL / Github Actions",
+  "domaine": "Dév",
+  "dateDepart": "17.04.2024",
+  "dateFin": "07.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac17"
+  },
+  "tpiRef": 1932,
+  "candidat": "Alexander Baltaian",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne (Ecublens)",
+  "boss": "Nicolas Dubois",
+  "expert1": "Wenger Serge",
+  "expert2": "Mveng Evina Galeazi Antoine Honore",
+  "Sujet": "ENAC-IT-BUDGET - Application web de consultation des budgets IT",
+  "tags": "C# / ASP.net",
+  "domaine": "Dev",
+  "dateDepart": "16.04.2024",
+  "dateFin": "08.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac18"
+  },
+  "tpiRef": 1863,
+  "candidat": "Aurélien Niederhäuser",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne (Ecublens)",
+  "boss": "Chevalley Nicolas",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Wyssa Michael",
+  "Sujet": "POC : Secure-IT – Attaques & Analyse",
+  "tags": "Windows/Mac/Linux Python Apache MySQL",
+  "domaine": "Systeme",
+  "dateDepart": "15.04.2024",
+  "dateFin": "07.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac19"
+  },
+  "tpiRef": 1865,
+  "candidat": "Alexandre Narr",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "CHUV - Service informatique",
+  "lieu-site": "Lausanne",
+  "boss": "Pedroletti Michael",
+  "expert1": "Berney Daniel",
+  "expert2": "Sokoloff Cyril",
+  "Sujet": "Installation et configuration d’un serveur Zabbix",
+  "tags": "Monitoring Ubuntu / windows /macos",
+  "domaine": "Systeme",
+  "dateDepart": "15.04.2024",
+  "dateFin": "07.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac1a"
+  },
+  "tpiRef": 1947,
+  "candidat": "Jorge Andrade Leitão Christophe",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "EvoLink SA",
+  "lieu-site": "Daillens",
+  "boss": "Monthoux Alexis",
+  "expert1": "Malherbe Roger",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Configuration automatisée de systèmes téléphoniques 3CX",
+  "tags": "C# .net / PABX",
+  "domaine": "Dev",
+  "dateDepart": "15.04.2024",
+  "dateFin": "07.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac1b"
+  },
+  "tpiRef": 1945,
+  "candidat": "Hervé Zucchinetti",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Bobst Mex SA",
+  "lieu-site": "Mex",
+  "boss": "Lauper Marc",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Benzonana Pascal",
+  "Sujet": "Synchronisation initiale de données dans une architecture micro-service serverless",
+  "tags": "C# PowerShell Azure",
+  "domaine": "DEV",
+  "dateDepart": "12.04.2024",
+  "dateFin": "02.05.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac1c"
+  },
+  "tpiRef": 1822,
+  "candidat": "Meuwly Noé",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "2easy informatique SA",
+  "lieu-site": "Payerne",
+  "boss": "Henguely Kevin",
+  "expert1": "Duding Laurent",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Implémentation d’un MDM Microsoft 365 (Azure AD, Exchange Online, Teams,Sharepoint et Intunes) en PME",
+  "tags": "M365 / DNS / Azure AD / Exchange Online Intunes",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "23.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac1d"
+  },
+  "tpiRef": 1823,
+  "candidat": "Luc Berset",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Altern8 SA",
+  "lieu-site": "EVOK Altern 8 SA Rte des Daillettes 21, 1700 Fribourg",
+  "boss": "Rosset Fabien",
+  "expert1": "Bertino Yves",
+  "expert2": "Oberson Bernard",
+  "Sujet": "Mise en place d’une infrastructure informatique avec un disaster recovery plan",
+  "tags": "Infra / Windows / Acronis",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "22.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac1e"
+  },
+  "tpiRef": 1824,
+  "candidat": "Achille Galileo Iaccheo",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Masset SA",
+  "lieu-site": "Le Mont-sur-Lausanne",
+  "boss": "Costache Dragos",
+  "expert1": "Malherbe Roger",
+  "expert2": "Pretre Patrick",
+  "Sujet": "Mise en place d’une infrastructure réseau d’entreprise Windows Server 2022",
+  "tags": "DNS / DHCP / WDS I WSUS",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "24.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac1f"
+  },
+  "tpiRef": 1831,
+  "candidat": "Mathieu Rapin",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "2easy informatique SA",
+  "lieu-site": "Payerne",
+  "boss": "Henguely Kevin",
+  "expert1": "Duding Laurent",
+  "expert2": "Rhyn Raphael",
+  "Sujet": "Création d’un “Microsoft Failover Cluster”",
+  "tags": "AD / HyperV/ Syno / VLAN",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "24.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac20"
+  },
+  "tpiRef": 1836,
+  "candidat": "César de Sousa Caldas Rui",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Haleon CH SARL",
+  "lieu-site": "Nyon",
+  "boss": "Tyagi Vineet",
+  "expert1": "Pantic Nemanja",
+  "expert2": "Berney Daniel",
+  "Sujet": "Qualification et configuration Scanette pour production pour fabrication",
+  "tags": "Scanette / Windows / QR Code",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "19.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac21"
+  },
+  "tpiRef": 1864,
+  "candidat": "Felipe Agudelo Stouvenel",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Swisscom",
+  "lieu-site": "Lausanne",
+  "boss": "Roon Micha",
+  "expert1": "Carrard CÃ©dric",
+  "expert2": "Sahli Bertrand",
+  "Sujet": "Création d’un explorateur de transactions pour Hedera Hashgraph",
+  "tags": "Next.JS / Tailwind",
+  "domaine": "Dév",
+  "dateDepart": "08.04.2024",
+  "dateFin": "24.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac22"
+  },
+  "tpiRef": 1898,
+  "candidat": "Emilie Dorer",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne (Ecublens)",
+  "boss": "Venries Luc",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Rhyn Raphael",
+  "Sujet": "EWS2AWS (EPFL WordPress Sites to AWS)",
+  "tags": "AWS / Restic / WP /",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "25.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac23"
+  },
+  "tpiRef": 1914,
+  "candidat": "Hamza Elaämely",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "AVS, Rue des Moulins 31800 Vevey",
+  "lieu-site": "Vevey",
+  "boss": "Tonelli Jonathan",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Gonzalez Mikael",
+  "Sujet": "Effectuer un Proof of Concept de mise en place BitLocker avec Manage Engine Endpoint Central selon besoin CCVD.",
+  "tags": "Windows 10/11/2022 /  Accès Manage Engine Endpoint Central",
+  "domaine": "Systeme",
+  "dateDepart": "08.04.2024",
+  "dateFin": "23.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac24"
+  },
+  "tpiRef": 1937,
+  "candidat": "Gabriel Rossi",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Figeas SA",
+  "lieu-site": "Lausanne",
+  "boss": "Helfre Alexandre",
+  "expert1": "Masson Baptiste",
+  "expert2": "Oberson Bernard",
+  "Sujet": "Gestion d’un incident de sécurité à la suite d’une infection par un malware",
+  "tags": "NIST / Barracuda / MS Defender",
+  "domaine": "Système",
+  "dateDepart": "08.04.2024",
+  "dateFin": "24.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac25"
+  },
+  "tpiRef": 1857,
+  "candidat": "Jérémy Renaud",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Swissquote Bank SA",
+  "lieu-site": "Gland",
+  "boss": "Selvay Yohann",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Mettre dans GitHub la configuration complète de notre outil de surveillance Nagios etconstruire la documentation",
+  "tags": "Github / Nagios",
+  "domaine": "Système",
+  "dateDepart": "02.04.2024",
+  "dateFin": "15.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac26"
+  },
+  "tpiRef": 1866,
+  "candidat": "Raphaël Yvan Andréa Chiapolino",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Elca Informatique SA",
+  "lieu-site": "Lausanne",
+  "boss": "Baptiste MASSON",
+  "expert1": "BORBOEN Nicolas",
+  "expert2": "Tonelli Jonathan",
+  "Sujet": "Implémentation d’Owncloud",
+  "tags": "Linux / Https",
+  "domaine": "Système",
+  "dateDepart": "02.04.2024",
+  "dateFin": "15.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac27"
+  },
+  "tpiRef": 1909,
+  "candidat": "Mattia Morel",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne (Ecublens)",
+  "boss": "Chanez Grégory",
+  "expert1": "Roduit Jean-Luc",
+  "expert2": "Pretre Patrick",
+  "Sujet": "Mise en place d’un outil de corrélation de logs des serveurs proxy de la faculté des Sciences de la vie",
+  "tags": "NGINX / Ubuntu / Gestion des log",
+  "domaine": "Système",
+  "dateDepart": "02.04.2024",
+  "dateFin": "15.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac28"
+  },
+  "tpiRef": 1951,
+  "candidat": "Romain Antunes",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Etat de Vaud, (DSI)",
+  "lieu-site": "Renens VD",
+  "boss": "Manuel Siggen",
+  "expert1": "Sahli Bertrand",
+  "expert2": "Nicolas Glassey",
+  "Sujet": "Personnalisation de l ordre des applications sur le portail IAM de l Etat-de-Vaud.",
+  "tags": "Java, SpringBoot et Hibernate, Angular, Typescript",
+  "domaine": "DEV",
+  "dateDepart": "02.04.2024",
+  "dateFin": "16.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac29"
+  },
+  "tpiRef": 1958,
+  "candidat": "Scott Botta Alexandre",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Trianon SA",
+  "lieu-site": "Nyon",
+  "boss": "Ginier Loic",
+  "expert1": "Folomietow Borys",
+  "expert2": "Muller Theurillat Claude Albert",
+  "Sujet": "Gestion des données d’impôt à la source",
+  "tags": "C# / VS Code / Angular",
+  "domaine": "Dév",
+  "dateDepart": "02.04.2024",
+  "dateFin": "18.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac2a"
+  },
+  "tpiRef": 1813,
+  "candidat": "GERARD Evan",
+  "typeApp": {
+    "": "ARCHES Entreprise"
+  },
+  "lieu-entreprise": "Philip Morris",
+  "lieu-site": "NeuchÃ¢tel",
+  "boss": "Lucas Pompilio",
+  "expert1": "Bertino Yves",
+  "expert2": "Gonzalez Mikael",
+  "Sujet": "Installation et paramétrage d’un serveur Windows Server ainsi que la mise en place de ses services pour le bon fonctionnement d’une petite entreprise",
+  "tags": "Windows Server, réseau",
+  "domaine": "Infra Réseau,",
+  "remarque(s)": "doit encore compléter la partie 6 et 8 du cdc...",
+  "dateDepart": "21.03.2024",
+  "dateFin": "05.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac2b"
+  },
+  "tpiRef": 1841,
+  "candidat": "Arnaud Jean Leichtnam",
+  "typeApp": {
+    "": "Dual Tech Sys"
+  },
+  "lieu-entreprise": "Apco Technologies SA",
+  "lieu-site": "Aigle",
+  "boss": "Robert Steeve",
+  "expert1": "Ceran Suleyman",
+  "expert2": "Delgado Michel",
+  "Sujet": "Transfert de données sécurisé",
+  "tags": "Windows / GPO / Services / Antivirus",
+  "domaine": "Systeme",
+  "dateDepart": "18.03.2024",
+  "dateFin": "04.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac2c"
+  },
+  "tpiRef": 1810,
+  "candidat": "COCHARD Brayan",
+  "typeApp": {
+    "": "ARCHES Entreprise"
+  },
+  "lieu-entreprise": "Protocol",
+  "lieu-site": "Lausanne",
+  "boss": "Adriano Lorini",
+  "expert1": "Wolf Benjamin",
+  "expert2": "Gressly Matthieu",
+  "Sujet": "Mise en place d’une infrastructure Active Directory, Terminal serveur et applications, gestion de droits et backup.",
+  "tags": "VM Windows 2022, Windows serveur AD et TSE, backup et réplication Veeam",
+  "domaine": "Infra Réseau,",
+  "dateDepart": "11.03.2024",
+  "dateFin": "22.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac2d"
+  },
+  "tpiRef": 1946,
+  "candidat": "Smith Pasquier William",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Vaudoise Générale SA",
+  "lieu-site": "Lausanne",
+  "boss": "Randin Yann",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Gonzalez Mikael",
+  "Sujet": "Amélioration de l'expérience client sur le formulaire de déclaration efnol HiO.",
+  "tags": "Angular / C# / JS / CSS / Jenkins",
+  "domaine": "Dev",
+  "dateDepart": "11.03.2024",
+  "dateFin": "26.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac2e"
+  },
+  "tpiRef": 1968,
+  "candidat": "Tiziano Bertolini Flavio",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Golink SA",
+  "lieu-site": "Paudex",
+  "boss": "Maillard Karim",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Bertino Yves",
+  "Sujet": "Outil de surveillance des serveurs, monitoring et envoi d alerte par email et SMS.",
+  "tags": "NodeJS, SQL, HTML et JavaScript",
+  "domaine": "Dev",
+  "dateDepart": "11.03.2024",
+  "dateFin": "28.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac2f"
+  },
+  "tpiRef": 1944,
+  "candidat": "Simão Romano Schindler",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Vaudoise Générale SA",
+  "lieu-site": "Lausanne",
+  "boss": "Rohner Lazhar",
+  "expert1": "Wenger Serge",
+  "expert2": "Berney Daniel",
+  "Sujet": "Reconnaissance des cartes d’identité, passeports et permis de conduire suisses avec Microsoft Azure.",
+  "tags": "Azure / Java",
+  "domaine": "DEV",
+  "dateDepart": "07.03.2024",
+  "dateFin": "02.04.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac30"
+  },
+  "tpiRef": 1815,
+  "candidat": "GOJGIC  Lazar",
+  "typeApp": {
+    "": "ARCHES Entreprise"
+  },
+  "lieu-entreprise": "1Swiss1",
+  "lieu-site": "GenÃ¨ve",
+  "boss": "Tarek Watfa",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Bertino Yves",
+  "Sujet": "Mise en place d'une plateforme Web en Python pour RH connectée à Active Directory permettant la gestion autonome de collaborateurs selon la validation d’un responsable.",
+  "tags": "Python, PowerShell, Active Directory. MSSQL",
+  "domaine": "Dev",
+  "dateDepart": "04.03.2024",
+  "dateFin": "15.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac31"
+  },
+  "tpiRef": 1816,
+  "candidat": "SAVARY Corentin",
+  "typeApp": {
+    "": "ARCHES Entreprise"
+  },
+  "lieu-entreprise": "InfoSynergie",
+  "lieu-site": "Givisiez (FR)",
+  "boss": "Bastien CHATELAIN",
+  "expert1": "Sokoloff Cyril",
+  "expert2": "Ceran Suleyman",
+  "Sujet": "Evolution de l’infrastructure informatique d’un client",
+  "tags": "Windows Server 2022, Veeam Backup et PRTG Monitoring, Synology",
+  "domaine": "Infra Réseau,",
+  "dateDepart": "04.03.2024",
+  "dateFin": "15.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac32"
+  },
+  "tpiRef": 1812,
+  "candidat": "FAVRE Liam",
+  "typeApp": {
+    "": "ARCHES Entreprise"
+  },
+  "lieu-entreprise": "TL",
+  "lieu-site": "Lausanne",
+  "boss": "Xavier Enfedaque",
+  "expert1": "Montemayor Ernesto",
+  "expert2": "Roduit Jean-Luc",
+  "Sujet": "Intégration de machines dans un environnement Azure AD",
+  "tags": "Azure AD et ressources group, sécurité NSG, firewall tl, MFA dans un environnement cloud.",
+  "domaine": "Infra Réseau,",
+  "dateDepart": "27.02.2024",
+  "dateFin": "12.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac33"
+  },
+  "tpiRef": 1950,
+  "candidat": "David Aeschlimann",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Orif Pomy",
+  "lieu-site": "Pomy",
+  "boss": "Didier Viret",
+  "expert1": "Venries Luc",
+  "expert2": "Nicolas Glassey",
+  "Sujet": "Gestion des plannings et des absences dans une application de timbrage",
+  "tags": "PHP / Bootstrap / CodeIgniter",
+  "domaine": "dev",
+  "dateDepart": "27.02.2024",
+  "dateFin": "21.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac34"
+  },
+  "tpiRef": 1971,
+  "candidat": "Alexandre Breuil",
+  "typeApp": {
+    "": "Dual Dev"
+  },
+  "lieu-entreprise": "Nagravision SA",
+  "lieu-site": "Cheseaux-sur-Lausanne",
+  "boss": "Gradassi Luca",
+  "expert1": "Graf Alexandre",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Développement d’un module Flutter qui s’interface avec ChatGPT.",
+  "tags": "API / Rest / AWS",
+  "domaine": "DEV",
+  "dateDepart": "26.02.2024",
+  "dateFin": "14.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac35"
+  },
+  "tpiRef": 1817,
+  "candidat": "SCHEIBLER Florent",
+  "typeApp": {
+    "": "ARCHES Entreprise"
+  },
+  "lieu-entreprise": "FirstPoint",
+  "lieu-site": "Lausanne",
+  "boss": "Frédéric Marmillod",
+  "expert1": "Masson Baptiste",
+  "expert2": "Carrel Xavier",
+  "Sujet": "Afin d’assurer un suivi proactif des projets de nos clients, nous avons besoin d’un outil en ligne permettant de monitorer les sites et d’avoir une vue d’ensemble des projets que nous gérons",
+  "tags": "PHP et Javascript, framework TailwindCSS, Laravel et Livewi, APIs",
+  "domaine": "Dev",
+  "dateDepart": "19.02.2024",
+  "dateFin": "05.03.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac36"
+  },
+  "tpiRef": 1806,
+  "candidat": "Ronzano Rocco",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "EPFL",
+  "lieu-site": "Lausanne (Ecublens)",
+  "boss": "Chevalley Nicolas",
+  "expert1": "Wenger Serge",
+  "expert2": "Pantic Nemanja",
+  "Sujet": "Raspberry Pi : Utilisation à domicile et services avancés.",
+  "tags": "Ansible, Docker, Apache, SSL, Webmin, SMB, CUPS, Git",
+  "domaine": "Développement",
+  "remarque(s)": "Redoublant",
+  "dateDepart": "29.01.2024",
+  "dateFin": "12.02.2024"
+},
+{
+  "_id": {
+    "$oid": "6623e1b0721530544f6aac37"
+  },
+  "tpiRef": 1807,
+  "candidat": "Mbayo Gregory",
+  "typeApp": {
+    "": "Dual Entreprise"
+  },
+  "lieu-entreprise": "Azuris",
+  "lieu-site": "Lausanne",
+  "boss": "Collier Kelly",
+  "expert1": "Gonzalez Mikael",
+  "expert2": "Sutcu Volkan",
+  "Sujet": "Automatisation de récolte d’informations sur diverses ressources.",
+  "tags": "PowerShell et Bash, Windows, Unix",
+  "domaine": "Développement",
+  "remarque(s)": "Redoublant",
+  "dateDepart": "20.12.2023",
+  "dateFin": "01.02.2024"
+}]

@@ -1,113 +1,68 @@
-import { createTpiModel, getTpiModels } from "../tpiControllers/TpiController.jsx";
-import { showNotification } from "../Tools.jsx";
+import { createTpiModel, getTpiModels } from '../tpiControllers/TpiController.jsx'
+import { showNotification } from '../Tools.jsx'
 
 // Fonction pour sauvegarder un TPI dans la base de données via le serveur
-export const saveTpiToServer = async (tpiDetails) => {
-  console.log("Save TPI to server: ", tpiDetails);
-
+export const saveTpiToServer = async (tpiDetails, year) => {
   // Vérifier si les champs obligatoires sont remplis
-  if (!tpiDetails.refTpi || !tpiDetails.candidat || !tpiDetails.boss) {
+  if (!tpiDetails.refTpi || !tpiDetails.candidat || !tpiDetails.experts?.[1] || !tpiDetails.experts?.[2] || !tpiDetails.boss) {
     // Afficher un message d'erreur indiquant que certains champs sont obligatoires
-    showNotification("Veuillez remplir tous les champs obligatoires.",3000);
+    showNotification(
+      'Reference, candidat, expert 1, expert 2 et chef de projet sont requis.',
+      'error',
+      3000
+    )
     // Sortir de la fonction sans sauvegarder les données s'il manque des champs obligatoires
-    return;
+    return null
   }
+
+  if (!year) {
+    showNotification("Impossible de sauvegarder sans annee selectionnee.", 'error', 3000)
+    return null
+  }
+
   try {
     // Appeler la fonction du client pour créer ou mettre à jour le modèle de TPI dans la base de données via le serveur
-    const savedModel = await createTpiModel(tpiDetails);
+    const savedModel = await createTpiModel(tpiDetails, year)
 
     // Afficher le message en conséquence
     const message = savedModel
-      ? "TPI sauvegardé avec succès - ref " + savedModel.refTpi
-      : "Erreur lors de la sauvegarde du TPI";
+      ? 'TPI sauvegardé avec succès - ref ' + savedModel.refTpi
+      : 'Erreur lors de la sauvegarde du TPI'
 
-      showNotification(message,3000);
-      
+    showNotification(message, savedModel ? 'success' : 'error', 3000)
+    return savedModel
   } catch (error) {
-    console.error("Erreur lors de la sauvegarde du TPI:", error);
-    // Afficher un message d'erreur en cas d'échec de la sauvegarde
-    const errorMessage = document.createElement("div");
-    errorMessage.innerText =
-      "Erreur lors de la sauvegarde du TPI. Veuillez réessayer plus tard.";
-    errorMessage.className = "errorMessage show";
-    document.body.appendChild(errorMessage);
-
-    // Supprimer le message d'erreur après quelques secondes (par exemple, 3 secondes)
-    setTimeout(() => {
-      errorMessage.classList.remove("show");
-      document.body.removeChild(errorMessage);
-    }, 3000);
+    console.error('Erreur lors de la sauvegarde du TPI:', error)
+    showNotification(
+      'Erreur lors de la sauvegarde du TPI. Veuillez reessayer plus tard.',
+      'error',
+      3000
+    )
+    return null
   }
-};
-
-// Ancienne fonction pour sauvegarder un TPI dans localStorage (version locale)
-export const saveTpi = (tpiDetails) => {
-  console.log("Save TPI: ", tpiDetails);
-
-  // Vérifier si les champs obligatoires sont remplis
-  if (!tpiDetails.refTpi || !tpiDetails.candidat || !tpiDetails.boss) {
-
-    // Afficher un message d'erreur indiquant que certains champs sont obligatoires
-    showNotification("Veuillez remplir tous les champs obligatoires.", 3000);
-    // Sortir de la fonction sans sauvegarder les données s'il manque des champs obligatoires
-    return;
-  }
-
-  // Récupérer la liste des TPIs existants depuis le localStorage
-  const tpiList = JSON.parse(localStorage.getItem("tpiList")) || [];
-
-  // Vérifier si le TPI existe déjà en fonction de son refTpi
-  const existingTpiIndex = tpiList.findIndex(
-    (tpi) => tpi.refTpi === tpiDetails.refTpi
-  );
-
-  let isUpdate = false; // Variable pour indiquer si c'est une mise à jour
-
-  if (existingTpiIndex !== -1) {
-    // Si le TPI existe déjà (mise à jour), remplacez les données du TPI existant
-    tpiList[existingTpiIndex] = tpiDetails;
-    isUpdate = true; // Marquer comme mise à jour
-  } else {
-    // Si le TPI n'existe pas (nouvelle sauvegarde), ajoutez-le à la liste
-    tpiList.push(tpiDetails);
-  }
-
-  // Enregistrez la liste mise à jour des TPIs dans le localStorage
-  localStorage.setItem("tpiList", JSON.stringify(tpiList));
-
-  // Afficher le message en conséquence
-  const message = isUpdate
-    ? "Mise à jour du TPI ref " + tpiDetails.refTpi
-    : "Sauvegarde du TPI ref " + tpiDetails.refTpi;
-
-  showNotification(message, 3000);
-};
-
-// Fonction pour récupérer la liste des TPI depuis localStorage
-export const getTpiList = () => {
-  return JSON.parse(localStorage.getItem("tpiList")) || [];
-};
+}
 
 // Fonction pour récupérer la liste des TPI depuis le serveur
-export const getTpiFromServer = async (year) => { // Ajoute le paramètre 'year'
+export const getTpiFromServer = async year => {
+  // Ajoute le paramètre 'year'
   try {
     // Appeler la fonction du client pour récupérer les modèles de TPI depuis le serveur en fonction de l'année
-    const tpiModels = await getTpiModels(year);
+    const tpiModels = await getTpiModels(year)
 
     // Afficher le message en cas de succès
-    console.log(`TPI récupérés depuis le serveur pour l'année ${year}:`, tpiModels);
 
-    return tpiModels;
+    return tpiModels
   } catch (error) {
     console.error(
-      "Erreur lors de la récupération des TPI depuis le serveur:",
+      'Erreur lors de la récupération des TPI depuis le serveur:',
       error
-    );
+    )
 
     showNotification(
-      "Erreur lors de la récupération des TPI depuis le serveur. Veuillez réessayer plus tard.",
+      'Erreur lors de la récupération des TPI depuis le serveur. Veuillez réessayer plus tard.',
+      'error',
       3000
-    );
+    )
+    throw error
   }
-};
-
+}

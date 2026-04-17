@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { soutenancesService } from '../../services/apiService'
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
 const debugMode = process.env.REACT_APP_DEBUG === 'true'
@@ -45,11 +46,6 @@ export const checkRoomExistenceById = async idRoom => {
       `${apiUrl}/api/check-room-existence/${idRoom}`
     )
 
-    console.log(
-      "Réponse reçue de l'API pour l'existence de la salle:",
-      response.data
-    )
-
     // Vérifier si la réponse est valide et contient les champs nécessaires
     if (response.data && 'exists' in response.data && '_id' in response.data) {
       return response.data // { exists: true/false, _id: roomId }
@@ -86,13 +82,9 @@ export const createTpiRooms = async roomData => {
 
 export const createTpiCollectionForYear = async (year, roomData) => {
   try {
-    const response = await axios.post(
-      `${apiUrl}/create-tpi-collection/${year}`,
-      roomData
-    )
-    if (response.status === 200) {
-      console.log(`Collection TPI pour l'année ${year} créée avec succès.`)
-      return response.data
+    const response = await soutenancesService.publishRoom(year, roomData)
+    if (response) {
+      return response
     } else {
       console.error(
         `Erreur lors de la création de la collection TPI pour l'année ${year}`
@@ -102,6 +94,17 @@ export const createTpiCollectionForYear = async (year, roomData) => {
   } catch (error) {
     console.error(
       `Erreur réseau lors de la création de la collection TPI pour l'année ${year}: ${error.message}`
+    )
+    throw error
+  }
+}
+
+export const publishSoutenancesFromPlanning = async year => {
+  try {
+    return await soutenancesService.publishFromPlanning(year)
+  } catch (error) {
+    console.error(
+      `Erreur réseau lors de la publication des soutenances depuis le planning pour l'année ${year}: ${error.message}`
     )
     throw error
   }

@@ -1,249 +1,958 @@
-import React, { useState } from 'react'
-
-import NewRoomForm from './NewRoomForm'
-import axios from 'axios'
-
-// Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === 'true' // Convertir en booléen si nécessaire
-// Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = debugMode
-  ? process.env.REACT_APP_API_URL_TRUE
-  : process.env.REACT_APP_API_URL_FALSE
+import React, { useEffect, useMemo, useState, useRef } from "react"
+import { createPortal } from "react-dom"
+import { Link, useLocation } from "react-router-dom"
+import PageToolbar from "../shared/PageToolbar"
+import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
+import { WrapIcon } from "../shared/InlineIcons"
+import {
+  getSoutenanceDateBadgeLabel,
+  getSoutenanceDateBadgeTone,
+  normalizeSoutenanceDateEntries
+} from "./soutenanceDateUtils"
 
 const TpiScheduleButtons = ({
-  onNewRoom,
   onToggleEditing,
   onSave,
-  OnSendBD,
+  onSendBD,
   onExport,
-  onPublish,
-  configData,
   onLoadConfig,
+  onFetchConfig,
+  selectedYear,
+  onYearChange,
+  availableYears = [],
+  workflowState = "planning",
+  activeSnapshotVersion = null,
+  workflowActionLoading = false,
+  pendingWorkflowAction = "",
+  validationResult = null,
+  onValidatePlanification,
+  onFreezeSnapshot,
+  onOpenVotes,
+  onRemindVotes,
+  onCloseVotes,
+  onPublishDefinitive,
+  onSendSoutenanceLinks,
+  onOpenVotesTracking,
+  onOpenSoutenances,
+  roomsCount = 0,
+  usedTpiCount = null,
+  totalTpiCount = null,
+  localConflictCount = 0,
+  tpiCardDetailLevel = 2,
+  onTpiCardDetailLevelChange = null,
+  roomFilters = { site: "", date: "", room: "" },
+  roomSiteOptions = [],
+  roomDateOptions = [],
+  roomNameOptions = [],
+  onRoomFiltersChange = null,
+  onClearRoomFilters = null,
+  soutenanceDates = [],
+  roomCatalogBySite = {},
+  onGenerateRoomsFromCatalog = null,
+  isRoomsFocusMode = false,
+  isRoomsWrapMode = false,
+  onToggleRoomsFocusMode = null,
+  onToggleRoomsWrapMode = null,
+  nonImportableTpiCount = 0,
+  roomsHashAtFreeze = null,
+  currentRoomsHash = null,
   toggleArrow,
-  onFetchConfig
+  isArrowUp
 }) => {
-  const [showForm, setShowForm] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [selectedYear, setSelectedYear] = useState(null)
+  const [activeToolTab, setActiveToolTab] = useState("data")
+  const [activeWorkflowTab, setActiveWorkflowTab] = useState("preparation")
+  const fileInputRef = useRef(null)
+  const location = useLocation()
 
-  const years = [2023, 2024, 2025, 2026]
+  const years = useMemo(() => {
+    const parsedYears = availableYears
+      .map((year) => Number.parseInt(year, 10))
+      .filter((year) => Number.isInteger(year))
 
-  // Appelle la fonction fournie par le composant parent
-  const handleFetchConfig = selectedYear => {
-    console.log(selectedYear)
-    onFetchConfig(selectedYear)
-  }
-
-  const handleAddRoom = () => {
-    setShowForm(true)
-  }
-
-  const handleSendConfig = () => {
-    OnSendBD()
-  }
-
-  const handleEdition = () => {
-    setIsEditing(prevState => !prevState)
-    onToggleEditing(prevState => !prevState)
-  }
-
-  const handleExport = () => {
-    setIsEditing(false)
-    onToggleEditing(false)
-    onExport()
-  }
-
-  const handleSave = () => {
-    onSave()
-  }
-
-  const handlePublish = () => {
-    onPublish()
-  }
-
-  const handleFileChange = event => {
-    const file = event.target.files[0]
-    if (file) {
-      // Charger le fichier .json en utilisant FileReader
-      const fileReader = new FileReader()
-      fileReader.onload = e => {
-        const jsonData = e.target.result
-        onLoadConfig(jsonData) // Appeler la fonction pour traiter les données chargées
-      }
-      fileReader.readAsText(file)
+    if (Number.isInteger(Number(selectedYear))) {
+      parsedYears.push(Number(selectedYear))
     }
-  }
 
-  const handleRapatrierClick = async year => {
-    try {
-      // Télécharger la collection (a) tpiSoutenance_2024 (représentant les salles) :
-      // Cette collection reflète la vue des experts et du responsable.
-      // Télécharger la collection (b) tpiRooms_2024 (représentant également les salles) :
-      // Cette collection est la vue de l'organisateur.
-      // Pour chaque salle de la collection (a) :
-      // Extraire les parties tpiDatas (objets tpi) des experts1, experts2 et du responsable, contenant les offres.
-      // Écraser les parties correspondantes dans la salle de la collection (b) :
-      // tpiDatas (objets tpi) des experts1, experts2 et du responsable.
-      // Comme les indexes sont identiques entre les deux collections,
-      // envisager simplement de reprendre toute la collection (a) pour écraser la collection (b) pourrait être une option ?
+    const uniqueYears = Array.from(new Set(parsedYears))
 
-      try {
-        const response = await axios.post(
-          `${apiUrl}/api/overwrite-tpi-rooms/${year}`
-        )
-        console.log(response.data.message) // Print the response message
-      } catch (error) {
-        console.error('Error overwriting TPI rooms:', error)
-      }
-
-      console.log('Mise à jour des offres terminée avec succès.')
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour des offres :', error)
+    if (uniqueYears.length === 0) {
+      return [new Date().getFullYear()]
     }
-  }
 
-  function getInitialYear () {
-    const dateElement = document.querySelector('.date')
-    if (dateElement) {
-      const dateString = dateElement.textContent.trim()
-      const match = dateString.match(/(\w+) (\d{1,2})-(\d{1,2})-(\d{4})/) // Regex pour extraire le jour, le mois et l'année
-      if (match) {
-        const day = parseInt(match[2])
-        const month = parseInt(match[3]) - 1 // Soustraire 1 car les mois en JavaScript sont 0-indexés
-        const year = parseInt(match[4])
-        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-          const date = new Date(year, month, day)
-          if (!isNaN(date.getTime())) {
-            return date.getFullYear() // Renvoie l'année si la date est valide
+    return uniqueYears.sort((a, b) => a - b)
+  }, [availableYears, selectedYear])
+
+  const effectiveYear = Number.isInteger(Number(selectedYear))
+    ? Number(selectedYear)
+    : years[years.length - 1]
+
+  const hasSnapshot = Boolean(activeSnapshotVersion)
+  const isPlanningState = workflowState === "planning"
+  const isVotingState = workflowState === "voting_open"
+  const isPublishedState = workflowState === "published"
+  const canOpenVoteTracking = isVotingState || isPublishedState
+  const canPublishDefinitive = isVotingState || isPublishedState
+  const isActionRunning = (actionKey) =>
+    workflowActionLoading && pendingWorkflowAction === actionKey
+  const planningHeaderSlot =
+    typeof document !== "undefined"
+      ? document.getElementById("planning-header-slot")
+      : null
+
+  // Le gel est-il déjà fait ET les salles n'ont pas changé ?
+  const roomsUnchangedSinceFreeze = roomsHashAtFreeze && currentRoomsHash && roomsHashAtFreeze === currentRoomsHash
+  const isAlreadyFrozen = hasSnapshot && roomsUnchangedSinceFreeze
+  const hasStaleSnapshot = hasSnapshot && currentRoomsHash && roomsHashAtFreeze && !roomsUnchangedSinceFreeze
+  const canStartVotes = isPlanningState && hasSnapshot && !hasStaleSnapshot
+
+  const validationYear = Number.parseInt(validationResult?.year, 10)
+  const validationSummary = validationResult?.summary || {}
+  const validationIssueCount = Number(validationSummary.issueCount || validationSummary.hardConflictCount || 0)
+  const validationClassMismatchCount = Number(validationSummary.classMismatchCount || 0)
+  const validationSequenceViolationCount = Number(validationSummary.sequenceViolationCount || 0)
+  const validationImportIssueCount = Number(validationSummary.importIssueCount || 0)
+  const validationUnplannedTpiCount = Number(validationSummary.unplannedTpiCount || 0)
+  const validationIssues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
+  const validationCheckedAt = validationResult?.checkedAt
+    ? new Date(validationResult.checkedAt)
+    : null
+  const validationCheckedAtLabel =
+    validationCheckedAt && !Number.isNaN(validationCheckedAt.getTime())
+      ? validationCheckedAt.toLocaleString("fr-CH")
+      : ""
+  const hasValidationForCurrentYear =
+    Number.isInteger(validationYear) && validationYear === Number(effectiveYear)
+  const isValidationSuccessful =
+    hasValidationForCurrentYear && Boolean(validationResult?.summary) && validationIssueCount === 0
+  const hasTpiUsageCount =
+    Number.isInteger(usedTpiCount) && Number.isInteger(totalTpiCount)
+  const hasLocalConflictCount = Number.isInteger(localConflictCount) && localConflictCount > 0
+
+  const validationLabel = isActionRunning("validate")
+    ? "Vérification..."
+    : isValidationSuccessful
+      ? "Vérifié"
+      : "Vérifier"
+
+  const validationIssueDetails = []
+  if (validationSummary.personOverlapCount > 0) {
+    validationIssueDetails.push(`${validationSummary.personOverlapCount} conflit(s) personne`)
+  }
+  if (validationSummary.roomOverlapCount > 0) {
+    validationIssueDetails.push(`${validationSummary.roomOverlapCount} conflit(s) salle`)
+  }
+  if (validationClassMismatchCount > 0) {
+    validationIssueDetails.push(`${validationClassMismatchCount} incompatibilité(s) de salle`)
+  }
+  if (validationSequenceViolationCount > 0) {
+    validationIssueDetails.push(`${validationSequenceViolationCount} séquence(s) trop longue(s)`)
+  }
+  if (validationUnplannedTpiCount > 0) {
+    validationIssueDetails.push(`${validationUnplannedTpiCount} TPI sans créneau`)
+  }
+  if (validationImportIssueCount > 0) {
+    validationIssueDetails.push(`${validationImportIssueCount} écart(s) GestionTPI/Planning`)
+  }
+  const validationIssueDetailText = validationIssueDetails.length > 0
+    ? ` (${validationIssueDetails.join(', ')})`
+    : ''
+
+  const validationTooltip = isValidationSuccessful
+    ? `Vérification ${effectiveYear} déjà effectuée${validationCheckedAtLabel ? ` le ${validationCheckedAtLabel}` : ""}.`
+    : hasValidationForCurrentYear && validationIssueCount > 0
+      ? `Vérification ${effectiveYear} terminée: ${validationIssueCount} erreur(s) détectée(s)${validationIssueDetailText}.`
+      : hasLocalConflictCount
+        ? `${localConflictCount} conflit(s) détecté(s) dans le planning local. Lance la vérification pour tenter une optimisation automatique et obtenir le détail.`
+        : "Optimiser puis vérifier l'unicité par créneau, la séquence des TPI et les déplacements avant le snapshot."
+  const workflowBadge = validationIssueCount > 0
+    ? String(validationIssueCount)
+    : hasLocalConflictCount
+      ? String(localConflictCount)
+      : ""
+
+  const workflowTabs = useMemo(() => ([
+    {
+      id: "preparation",
+      label: "Préparation",
+      state: "planning"
+    },
+    {
+      id: "vote",
+      label: "Vote",
+      state: "voting_open"
+    },
+    {
+      id: "finalisation",
+      label: "Finalisation",
+      state: "published"
+    }
+  ]), [])
+
+  useEffect(() => {
+    const nextActiveWorkflowTab =
+      workflowTabs.find((tab) => tab.state === workflowState)?.id || "preparation"
+    setActiveWorkflowTab(nextActiveWorkflowTab)
+  }, [workflowState, workflowTabs])
+
+  const toolbarTabs = useMemo(() => [
+    {
+      id: "data",
+      label: "Données"
+    },
+    {
+      id: "rooms",
+      label: "Salles",
+      badge: Number.isInteger(Number(roomsCount)) && Number(roomsCount) > 0
+        ? String(roomsCount)
+        : ""
+    },
+    {
+      id: "workflow",
+      label: "Workflow",
+      badge: workflowBadge
+    }
+  ], [roomsCount, workflowBadge])
+
+  const navigationLinks = useMemo(() => {
+    if (location.pathname === "/planification") {
+      return MAIN_NAVIGATION_LINKS.filter((link) => link.to !== "/planification")
+    }
+
+    return MAIN_NAVIGATION_LINKS
+  }, [location.pathname])
+
+  const cardDetailOptions = useMemo(() => [
+    {
+      level: 0,
+      label: "0",
+      title: "Identifiants des parties prenantes sur une ligne",
+      description: "IDs PP"
+    },
+    {
+      level: 1,
+      label: "1",
+      title: "Nom du candidat uniquement",
+      description: "Candidat seul"
+    },
+    {
+      level: 2,
+      label: "2",
+      title: "Candidat, experts et chef de projet",
+      description: "Équipe"
+    },
+    {
+      level: 3,
+      label: "3",
+      title: "Tous les détails disponibles",
+      description: "Complet"
+    }
+  ], [])
+
+  const normalizedRoomSiteOptions = useMemo(() => {
+    const options = Array.isArray(roomSiteOptions) ? roomSiteOptions : []
+    return Array.from(new Set(options.map((site) => String(site || "").trim()).filter(Boolean)))
+      .sort((left, right) => left.localeCompare(right))
+  }, [roomSiteOptions])
+
+  const normalizedRoomDateOptions = useMemo(() => {
+    const options = Array.isArray(roomDateOptions) ? roomDateOptions : []
+
+    return options
+      .map((option) => {
+        if (option && typeof option === "object") {
+          return {
+            value: String(option.value || "").trim(),
+            label: String(option.label || option.value || "").trim()
           }
         }
-      }
+
+        const value = String(option || "").trim()
+        return {
+          value,
+          label: value
+        }
+      })
+      .filter((option) => Boolean(option.value))
+  }, [roomDateOptions])
+
+  const normalizedRoomNameOptions = useMemo(() => {
+    const options = Array.isArray(roomNameOptions) ? roomNameOptions : []
+
+    return options
+      .map((option) => {
+        if (option && typeof option === "object") {
+          return {
+            value: String(option.value || "").trim(),
+            label: String(option.label || option.value || "").trim()
+          }
+        }
+
+        const value = String(option || "").trim()
+        return {
+          value,
+          label: value
+        }
+      })
+      .filter((option) => Boolean(option.value))
+      .sort((left, right) => left.label.localeCompare(right.label))
+  }, [roomNameOptions])
+
+  const normalizedRoomCatalogBySite = useMemo(() => {
+    const source = roomCatalogBySite && typeof roomCatalogBySite === "object" ? roomCatalogBySite : {}
+    const siteKeys = Array.from(
+      new Set(
+        Object.keys(source || {})
+          .map((site) => String(site || "").trim().toUpperCase())
+          .filter(Boolean)
+      )
+    ).sort((left, right) => left.localeCompare(right))
+
+    return siteKeys.reduce((acc, site) => {
+      const rooms = Array.isArray(source[site]) ? source[site] : []
+      acc[site] = Array.from(
+        new Set(rooms.map((room) => String(room || "").trim()).filter(Boolean))
+      ).sort((left, right) => left.localeCompare(right))
+      return acc
+    }, {})
+  }, [roomCatalogBySite])
+
+  const roomCatalogSiteOptions = useMemo(() => {
+    return Object.keys(normalizedRoomCatalogBySite).sort((left, right) => left.localeCompare(right))
+  }, [normalizedRoomCatalogBySite])
+
+  const normalizedSoutenanceDates = useMemo(() => {
+    return normalizeSoutenanceDateEntries(soutenanceDates)
+  }, [soutenanceDates])
+
+  const handleToggleRoomsFocusMode = () => {
+    if (!isRoomsFocusMode) {
+      setActiveToolTab("rooms")
     }
-    return new Date().getFullYear() // Utilisation de la date en cours comme valeur par défaut si aucune année n'est trouvée dans le DOM
+
+    if (typeof onToggleRoomsFocusMode === "function") {
+      onToggleRoomsFocusMode()
+    }
   }
 
-  return (
-    <div id='tools'>
-      {showForm ? (
-        <NewRoomForm
-          onNewRoom={onNewRoom}
-          configData={configData}
-          setShowForm={setShowForm}
-        />
-      ) : (
-        <>
-          <button
-            id='btNewRoom'
-            onClick={handleAddRoom}
-            title='Ajouter une nouvelle salle'
-          >
-            Ajouter salle &#x1F4DA;
-          </button>
+  const handleToggleRoomsWrapMode = () => {
+    if (typeof onToggleRoomsWrapMode === "function") {
+      onToggleRoomsWrapMode()
+    }
+  }
 
-          <button
-            id='btSendConfig'
-            onClick={handleSendConfig}
-            title='Transmettre les salles vers la base de données'
-          >
-            Salles{`->`}BDD 🧬
-          </button>
+  const handleYearChange = (event) => {
+    const parsedYear = Number.parseInt(event.target.value, 10)
+    if (Number.isInteger(parsedYear) && onYearChange) {
+      onYearChange(parsedYear)
+    }
+  }
 
-          {isEditing && (
+  const planningHeaderPortal = !isRoomsFocusMode && planningHeaderSlot
+    ? createPortal(
+        <div className="app-header-planification-slot">
+          {typeof onToggleRoomsWrapMode === "function" ? (
             <button
-              id='btExport'
-              onClick={handleExport}
-              title='Exporter les données'
+              type="button"
+              className={`page-tools-action-btn secondary planning-room-wrap-toggle app-header-planification-wrap-toggle ${isRoomsWrapMode ? "active" : ""}`.trim()}
+              onClick={handleToggleRoomsWrapMode}
+              aria-pressed={isRoomsWrapMode}
+              aria-label={isRoomsWrapMode ? "Désactiver le retour à la ligne" : "Activer le retour à la ligne"}
+              title={isRoomsWrapMode ? "Désactiver le retour à la ligne" : "Afficher les salles sur plusieurs lignes"}
+              data-testid="planning-room-wrap-toggle"
             >
-              Exporter &#x1F4E5;
+              <span className="planning-room-wrap-toggle-icon" aria-hidden="true">
+                <WrapIcon />
+              </span>
             </button>
-          )}
-
-          <button
-            id='btEdition'
-            onClick={handleEdition}
-            title='Basculer en mode édition'
-          >
-            Modifier &#x1F4DD;
-          </button>
-
-          <button
-            id='btSave'
-            onClick={handleSave}
-            title='Enregistrer les modifications'
-          >
-            Enregistrer &#x1F4BE;
-          </button>
-
-          <label
-            htmlFor='configFile'
-            style={{ padding: '1px 6px', height: '24px' }}
-            id='btLoadFile'
-            title='Charger un fichier de configuration'
-          >
-            Charger &#x1F4C2;
-          </label>
-
-          <input
-            type='file'
-            id='configFile'
-            accept='.json'
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-          />
-
-          <button
-            onClick={() => handleFetchConfig(selectedYear)}
-            id='btFetchConfig'
-            title='Charger les salles depuis la base de données'
-          >
-            Salles{'<-'}BDD🧬
-          </button>
-
-          <button
-            onClick={handlePublish}
-            id='btPublier'
-            title='Publier les informations'
-          >
-            Publier 📅
-          </button>
-
-          <div>
-            <label>Select a year:</label>
-            <select
-              onChange={e => setSelectedYear(parseInt(e.target.value))}
-              value={selectedYear || getInitialYear()}
-              // Utilisation de la fonction getInitialYear pour déterminer la valeur par défaut
+          ) : null}
+          {typeof onToggleRoomsFocusMode === "function" ? (
+            <button
+              type="button"
+              className={`page-tools-action-btn secondary planning-room-focus-toggle app-header-planification-focus-toggle ${isRoomsFocusMode ? "active" : ""}`.trim()}
+              onClick={handleToggleRoomsFocusMode}
+              aria-pressed={isRoomsFocusMode}
+              aria-label={isRoomsFocusMode ? "Quitter le mode focus" : "Activer le mode focus"}
+              title={isRoomsFocusMode ? "Quitter le mode focus" : "Afficher uniquement les salles"}
+              data-testid="planning-room-focus-toggle"
             >
-              <option value=''>Select Year{": "}</option>
-              {years.map(year => (
+              <span className="planning-room-focus-toggle-icon" aria-hidden="true">
+                {isRoomsFocusMode ? "⤡" : "⛶"}
+              </span>
+            </button>
+          ) : null}
+          <span className="app-header-planification-snapshot">
+            Snapshot : {hasSnapshot ? `v${activeSnapshotVersion}` : "—"}
+          </span>
+          <label className="app-header-planification-year" htmlFor="planning-year-select">
+            <select
+              id="planning-year-select"
+              onChange={handleYearChange}
+              value={effectiveYear}
+              aria-label="Année"
+            >
+              {years.map((year) => (
                 <option key={year} value={year}>
                   {year}
                 </option>
               ))}
             </select>
+          </label>
+        </div>,
+        planningHeaderSlot
+      )
+    : null
+
+  const handleToggleEditing = () => {
+    setIsEditing((prev) => !prev)
+    if (onToggleEditing) {
+      onToggleEditing()
+    }
+  }
+
+  const handleFileLoad = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result
+      if (content && onLoadConfig) {
+        onLoadConfig(content)
+      }
+    }
+    reader.readAsText(file)
+
+    // Reset pour permettre de recharger le même fichier
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  return (
+    <>
+      {planningHeaderPortal}
+
+      {!isRoomsFocusMode ? (
+        <PageToolbar
+          id="tools"
+          className="planning-tools"
+          flatHeader
+          eyebrow=""
+          tabs={toolbarTabs}
+          activeTab={activeToolTab}
+          onTabChange={setActiveToolTab}
+          tabListLabel="Sections de planification"
+          tabsClassName="planning-tools-tabs"
+          navigationLinks={navigationLinks}
+          toggleArrow={toggleArrow}
+          isArrowUp={isArrowUp}
+          ariaLabel="Outils de planification"
+          bodyClassName="planning-tools-body"
+        >
+      {activeToolTab === "data" ? (
+        <section className="planning-tools-panel planning-tools-panel-data">
+          <div className="planning-tools-button-row planning-tools-button-grid">
+            <button
+              type="button"
+              className={`page-tools-action-btn secondary ${isEditing ? "active-edit" : ""}`}
+              onClick={handleToggleEditing}
+              title={
+                hasTpiUsageCount
+                  ? `Activer ou désactiver l'édition des cartes et des salles. ${usedTpiCount}/${totalTpiCount} TPI utilisés.`
+                  : "Activer ou désactiver l'édition des cartes et des salles."
+              }
+            >
+              <span className="planning-edit-toggle-label">
+                {isEditing ? "Édition activée" : "Mode édition"}
+              </span>
+              {isEditing && hasTpiUsageCount ? (
+                <span className="planning-edit-toggle-count">
+                  ({usedTpiCount}/{totalTpiCount})
+                </span>
+              ) : null}
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              id="planning-file-input"
+              data-testid="planning-file-input"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={handleFileLoad}
+            />
+            <label
+              htmlFor="planning-file-input"
+              className="planning-tools-file-label"
+              title="Importer un fichier JSON de configuration (salles et TPI)."
+            >
+              Importer JSON
+            </label>
 
             <button
-              className='publish-button'
-              onClick={() => handleRapatrierClick(selectedYear)}
-              title={`Rapatrier les informations pour l'année ${
-                selectedYear || '??'
-              } ↩️`}
-              disabled={!selectedYear}
+              className="planning-data-btn save"
+              onClick={onSave}
+              title="Enregistrer la configuration courante dans le navigateur."
             >
-              Rapatrier ↩️
+              Sauvegarder localement
+            </button>
+
+            <button
+              className="planning-data-btn export"
+              onClick={onExport}
+              title="Télécharger une sauvegarde JSON de la configuration."
+            >
+              Exporter JSON
+            </button>
+
+            <button
+              className="planning-data-btn fetch"
+              onClick={() => onFetchConfig?.(effectiveYear)}
+              title={`Recharger la configuration ${effectiveYear} depuis la base de données.`}
+            >
+              Charger BDD
+            </button>
+
+            <button
+              className="planning-data-btn transmit"
+              onClick={onSendBD}
+              title="Synchroniser la configuration courante vers la base de données."
+            >
+              Envoyer BDD
             </button>
           </div>
+        </section>
+      ) : null}
+
+      {activeToolTab === "rooms" ? (
+        <section className="planning-tools-panel planning-tools-panel-rooms">
+          <div className="planning-tools-panel-head">
+            <div className="planning-tools-panel-copy">
+              <h4>Configuration</h4>
+              <p>Les noms de rooms viennent de Configuration. Ce bouton crée les rooms du planning pour chaque date avec les créneaux définis par site.</p>
+            </div>
+            <div className="planning-room-form-head-actions">
+              {typeof onGenerateRoomsFromCatalog === "function" ? (
+                <button
+                  type="button"
+                  className="page-tools-action-btn secondary"
+                  onClick={onGenerateRoomsFromCatalog}
+                >
+                  Créer les rooms du planning
+                </button>
+              ) : null}
+              <Link
+                to="/configuration"
+                className="page-tools-action-btn primary"
+                aria-label="Ouvrir Configuration"
+                title="Ouvrir le module Configuration"
+              >
+                Configuration
+              </Link>
+            </div>
+          </div>
+
+          <div className="planning-room-overview-grid">
+            <article className="planning-room-overview-card">
+              <div className="planning-room-overview-head">
+                <h5>Dates</h5>
+              </div>
+
+              {normalizedSoutenanceDates.length > 0 ? (
+                <div className="planning-room-dates-list planning-room-dates-list--compact">
+                  {normalizedSoutenanceDates.map((date) => (
+                    (() => {
+                      const badgeLabel = getSoutenanceDateBadgeLabel(date)
+                      const badgeTone = getSoutenanceDateBadgeTone(date)
+
+                      return (
+                        <span
+                          key={date.date}
+                          className="planning-room-date-chip planning-room-date-chip--compact"
+                          aria-label={date.label}
+                        >
+                          <span>{date.label}</span>
+                          {badgeLabel ? (
+                            <span
+                              className={`planning-room-date-chip-badge ${
+                                badgeTone ? badgeTone : ""
+                              }`.trim()}
+                            >
+                              {badgeLabel}
+                            </span>
+                          ) : null}
+                        </span>
+                      )
+                    })()
+                  ))}
+                </div>
+              ) : (
+                <div className="planning-room-dates-empty">
+                  Aucune date.
+                </div>
+              )}
+            </article>
+
+            <article className="planning-room-overview-card">
+              <div className="planning-room-overview-head">
+                <h5>Sites</h5>
+              </div>
+
+              {roomCatalogSiteOptions.length > 0 ? (
+                <div className="planning-room-site-list">
+                  {roomCatalogSiteOptions.map((site) => {
+                    const roomNames = normalizedRoomCatalogBySite[site] || []
+
+                    return (
+                      <div key={site} className="planning-room-site-overview">
+                        <div className="planning-room-site-overview-head">
+                          <strong>{site}</strong>
+                        </div>
+
+                        {roomNames.length > 0 ? (
+                          <div className="planning-room-dates-list planning-room-dates-list--compact">
+                            {roomNames.map((roomName) => (
+                              <span
+                                key={`${site}-${roomName}`}
+                                className="planning-room-date-chip planning-room-date-chip--compact"
+                                aria-label={roomName}
+                              >
+                                <span>{roomName}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="planning-room-dates-empty">
+                            Aucun nom.
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="planning-room-dates-empty">
+                  Aucun site.
+                </div>
+              )}
+            </article>
+          </div>
+
+          {typeof onRoomFiltersChange === "function" ? (
+            <div className="planning-room-actions-row">
+              {typeof onTpiCardDetailLevelChange === "function" ? (
+                <div
+                  className="planning-room-density"
+                  role="radiogroup"
+                  aria-label="Niveau de détail des cartes TPI"
+                >
+                  <span className="planning-room-density-label">Cartes</span>
+                  <div className="planning-room-density-options">
+                    {cardDetailOptions.map((option) => {
+                      const isSelected = Number(tpiCardDetailLevel) === option.level
+
+                      return (
+                        <label
+                          key={option.level}
+                          className={`planning-room-density-option ${isSelected ? "active" : ""}`}
+                          title={option.title}
+                        >
+                          <input
+                            type="radio"
+                            name="planning-tpi-card-detail-level"
+                            value={option.level}
+                            checked={isSelected}
+                            onChange={() => onTpiCardDetailLevelChange(option.level)}
+                            aria-label={option.title}
+                          />
+                          <span className="planning-room-density-value">{option.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="planning-room-filters">
+                <div className="page-tools-field planning-room-filter">
+                  <select
+                    className="page-tools-field-control"
+                    value={roomFilters?.site || ""}
+                    onChange={(event) => onRoomFiltersChange({ site: event.target.value })}
+                    aria-label="Filtrer par site"
+                  >
+                    <option value="">Tous</option>
+                    {normalizedRoomSiteOptions.map((site) => (
+                      <option key={site} value={site}>
+                        {site}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="page-tools-field planning-room-filter">
+                  <select
+                    className="page-tools-field-control"
+                    value={roomFilters?.date || ""}
+                    onChange={(event) => onRoomFiltersChange({ date: event.target.value })}
+                    aria-label="Filtrer par date"
+                  >
+                    <option value="">Toutes</option>
+                    {normalizedRoomDateOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="page-tools-field planning-room-filter">
+                  <select
+                    className="page-tools-field-control"
+                    value={roomFilters?.room || ""}
+                    onChange={(event) => onRoomFiltersChange({ room: event.target.value })}
+                    aria-label="Filtrer par salle"
+                  >
+                    <option value="">Toutes</option>
+                    {normalizedRoomNameOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className="page-tools-action-btn secondary planning-room-filter-reset"
+                  onClick={onClearRoomFilters}
+                  disabled={!(roomFilters?.site || roomFilters?.date || roomFilters?.room)}
+                >
+                  Réinit.
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {activeToolTab === "workflow" ? (
+        <section className="planning-tools-panel planning-tools-panel-workflow">
+          {workflowActionLoading ? (
+            <div className="planning-workflow-progress">
+              Action en cours : {pendingWorkflowAction || "workflow"}
+            </div>
+          ) : null}
 
           <div
-            onClick={() => toggleArrow(!toggleArrow)} // Utilisez une fonction pour mettre à jour l'état
-            id='upArrowButton'
-            className={!toggleArrow ? '' : 'active'} // Assurez-vous que la logique conditionnelle correspond à l'état désiré
+            className="planning-workflow-tabs page-tools-tabs"
+            role="tablist"
+            aria-label="Étapes du workflow"
           >
-            ▲ ▲ ▲{' '}
+            {workflowTabs.map((tab) => {
+              const isActive = activeWorkflowTab === tab.id
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  className={`page-tools-tab ${isActive ? "active" : ""}`.trim()}
+                  aria-selected={isActive}
+                  aria-controls={`planning-workflow-panel-${tab.id}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => setActiveWorkflowTab(tab.id)}
+                  title={tab.label}
+                >
+                  {tab.icon ? (
+                    <span className="page-tools-tab-icon" aria-hidden="true">
+                      <tab.icon />
+                    </span>
+                  ) : null}
+                  <span className="page-tools-tab-label">{tab.label}</span>
+                </button>
+              )
+            })}
           </div>
-        </>
-      )}
-    </div>
+
+          <div className="planning-workflow-stage">
+            {activeWorkflowTab === "preparation" ? (
+              <section
+                className="planning-workflow-section"
+                id="planning-workflow-panel-preparation"
+                role="tabpanel"
+              >
+                <div className="planning-workflow-section-actions">
+                  <button
+                    className={`planning-workflow-btn neutral ${isValidationSuccessful ? "validated" : ""}`}
+                    onClick={onValidatePlanification}
+                    disabled={workflowActionLoading || !isPlanningState || isValidationSuccessful}
+                    title={validationTooltip}
+                  >
+                    {validationLabel}
+                  </button>
+
+                  <button
+                    className="planning-workflow-btn primary"
+                    onClick={onFreezeSnapshot}
+                    disabled={workflowActionLoading || !isPlanningState || isAlreadyFrozen || nonImportableTpiCount > 0}
+                    title={
+                      nonImportableTpiCount > 0
+                        ? "Corrige les TPI non importables avant de geler le snapshot."
+                        : isAlreadyFrozen
+                        ? `Snapshot v${activeSnapshotVersion} déjà gelé. Modifie une salle pour créer une nouvelle version.`
+                        : "Figer la version planification à soumettre aux votes."
+                    }
+                  >
+                    {isActionRunning("freeze")
+                      ? "Gel..."
+                      : isAlreadyFrozen
+                        ? `Gelé v${activeSnapshotVersion}`
+                        : "Geler snapshot"}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {activeWorkflowTab === "vote" ? (
+              <section
+                className="planning-workflow-section"
+                id="planning-workflow-panel-vote"
+                role="tabpanel"
+              >
+                <div className="planning-workflow-section-actions">
+                  <button
+                    className="planning-workflow-btn primary"
+                    onClick={onOpenVotes}
+                    disabled={workflowActionLoading || !canStartVotes}
+                    title={
+                      hasStaleSnapshot
+                        ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
+                        : canStartVotes
+                        ? "Ouvrir la campagne de votes."
+                        : "Snapshot requis avant ouverture des votes."
+                    }
+                  >
+                    {isActionRunning("startVotes") ? "Ouverture..." : "Ouvrir votes"}
+                  </button>
+
+                  <button
+                    className="planning-workflow-btn neutral"
+                    onClick={onOpenVotesTracking}
+                    disabled={workflowActionLoading || !canOpenVoteTracking || !onOpenVotesTracking}
+                    title="Ouvrir la page de suivi des votes pour cette année."
+                  >
+                    Suivre votes
+                  </button>
+
+                  <button
+                    className="planning-workflow-btn neutral"
+                    onClick={onRemindVotes}
+                    disabled={workflowActionLoading || !isVotingState}
+                    title="Relancer les non-répondants."
+                  >
+                    {isActionRunning("remindVotes")
+                      ? "Relance..."
+                      : "Relancer votes"}
+                  </button>
+
+                  <button
+                    className="planning-workflow-btn neutral"
+                    onClick={onCloseVotes}
+                    disabled={workflowActionLoading || !isVotingState}
+                    title="Clore la campagne de votes."
+                  >
+                    {isActionRunning("closeVotes") ? "Clôture..." : "Clore votes"}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {activeWorkflowTab === "finalisation" ? (
+              <section
+                className="planning-workflow-section"
+                id="planning-workflow-panel-finalisation"
+                role="tabpanel"
+              >
+                <div className="planning-workflow-section-actions">
+                  <button
+                    className="planning-workflow-btn success"
+                    onClick={onPublishDefinitive}
+                    disabled={workflowActionLoading || !canPublishDefinitive}
+                    title="Publier la version définitive dans Soutenances."
+                  >
+                    {isActionRunning("publish")
+                      ? "Publication..."
+                      : "Publier définitif"}
+                  </button>
+
+                  <button
+                    className="planning-workflow-btn success"
+                    onClick={onSendSoutenanceLinks}
+                    disabled={workflowActionLoading || !isPublishedState}
+                    title="Renvoyer les magic links de soutenance."
+                  >
+                    {isActionRunning("sendLinks")
+                      ? "Envoi..."
+                      : "Envoyer liens"}
+                  </button>
+
+                  <button
+                    className="planning-workflow-btn open"
+                    onClick={onOpenSoutenances}
+                    disabled={workflowActionLoading}
+                  >
+                    Ouvrir Soutenances
+                  </button>
+                </div>
+              </section>
+            ) : null}
+          </div>
+
+          {validationResult ? (
+            <div
+              className={`planning-validation-report ${
+                validationIssueCount > 0 ? "has-issues" : "is-valid"
+              }`}
+            >
+              <div className="planning-validation-report-head">
+                <strong>
+                  {validationIssueCount > 0
+                    ? `Erreurs détectées: ${validationIssueCount}`
+                    : "Planning valide"}
+                </strong>
+                <span>
+                  {validationCheckedAtLabel
+                    ? `Vérifié le ${validationCheckedAtLabel}`
+                    : `Année ${effectiveYear}`}
+                </span>
+              </div>
+
+              {validationIssueCount > 0 ? (
+                <ul className="planning-validation-report-list">
+                  {validationIssues.slice(0, 6).map((issue, index) => (
+                    <li key={`${issue.type || "issue"}-${index}`}>
+                      {issue.message || "Contrainte bloquante détectée."}
+                    </li>
+                  ))}
+                  {validationIssues.length > 6 ? (
+                    <li className="planning-validation-report-more">
+                      + {validationIssues.length - 6} autre(s) erreur(s)
+                    </li>
+                  ) : null}
+                </ul>
+              ) : (
+                <p className="planning-validation-report-ok">
+                  Aucune contrainte bloquante détectée.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+        </PageToolbar>
+      ) : null}
+    </>
   )
 }
 

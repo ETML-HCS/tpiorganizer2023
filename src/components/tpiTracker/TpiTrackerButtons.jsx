@@ -1,48 +1,92 @@
-import { useState, useEffect } from "react";
+import { useState } from "react"
+
+import { showNotification } from "../Tools.jsx"
+import PageToolbar from "../shared/PageToolbar.jsx"
+import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation.js"
+import { getTrackerRoleLabel } from "./trackerRoles.js"
 
 const TpiTrackerButtons = ({ toggleArrow, isArrowUp, user }) => {
-  const [onConnecting, setOnConnecting] = useState(user);
+  const isConnected = Boolean(user)
+  const [activeTab, setActiveTab] = useState("shortcuts")
+  const roleLabel = isConnected ? getTrackerRoleLabel(user?.role) : "Utilisateur"
 
-  useEffect(() => {
-    setOnConnecting(user);
-  }, [user]);
+  const toolbarTabs = [
+    { id: "shortcuts", label: "Raccourcis" },
+    { id: "account", label: "Compte" }
+  ]
+
+  const notifyComingSoon = (label) => {
+    showNotification(`${label} bientôt disponible.`, "info", 2500)
+  }
 
   return (
-    <>
-      <div id="tools">
-        {onConnecting ? (
-          <>
-            <button id="btMyTPI"> Mes TPI
-              <span role="img" aria-label="TPI">
-                📝
-              </span>{" "}
-             
+    <PageToolbar
+      id='tools'
+      className='tpi-tracker-tools'
+      eyebrow='Actions rapides'
+      title='Raccourcis et compte'
+      description='Cette barre sert à ouvrir les raccourcis du profil, suivre l’état de session et accéder aux autres écrans du module.'
+      meta={
+        <span className='page-tools-chip'>
+          {isConnected ? `Connecté · ${roleLabel}` : "Hors ligne"}
+        </span>
+      }
+      tabs={toolbarTabs}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      tabListLabel='Sections des actions rapides'
+      navigationLinks={MAIN_NAVIGATION_LINKS}
+      toggleArrow={toggleArrow}
+      isArrowUp={isArrowUp}
+      ariaLabel='Barre d’actions du module'
+    >
+      {activeTab === "shortcuts" ? (
+        isConnected ? (
+          <div className='page-tools-inline-row'>
+            <button
+              id='btMyTPI'
+              type='button'
+              className='page-tools-action-btn primary'
+              onClick={() => notifyComingSoon("Mes TPI")}
+            >
+              Mes TPI
             </button>
-            <button id="btPlanner">Cal/Défenses
-              <span role="img" aria-label="Calendrier">
-                📅
-              </span>{" "}
-              
+            <button
+              id='btPlanner'
+              type='button'
+              className='page-tools-action-btn secondary'
+              onClick={() => notifyComingSoon("Planification")}
+            >
+              Planification
             </button>
-            <button dir="btCompte"> Compte
-              <span role="img" aria-label="Compte">
-                👤
-              </span>{" "}
-             
+            <button
+              id='btCompte'
+              type='button'
+              className='page-tools-action-btn secondary'
+              onClick={() => notifyComingSoon("Compte")}
+            >
+              Compte
             </button>
-          </> ) : ( 
-          <h3 style={{ color: "Red" }}>merci de vous connecter</h3>
-        )}
-        <div
-          onClick={toggleArrow}
-          id="upArrowButton"
-          className={!isArrowUp ? "" : "active"}
-        >
-          ▲ ▲ ▲
+          </div>
+        ) : (
+          <span className='page-tools-chip'>
+            Connectez-vous pour afficher les raccourcis.
+          </span>
+        )
+      ) : (
+        <div className='page-tools-inline-row'>
+          <span className='page-tools-chip'>
+            {isConnected
+              ? `Login : ${user?.login || "non renseigné"}`
+              : "Aucun compte actif"}
+          </span>
+          <span className='page-tools-chip'>
+            {isConnected ? `Rôle : ${roleLabel}` : "Connexion requise"}
+          </span>
         </div>
-      </div>
-    </>
-  );
-};
+      )}
+    </PageToolbar>
+  )
+}
 
-export default TpiTrackerButtons;
+export default TpiTrackerButtons

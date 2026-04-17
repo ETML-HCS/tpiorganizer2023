@@ -5,7 +5,7 @@ const year = '2017/2018';
 
 const pagex = x => {
   return (
-    <Frame>page {x} sur 6</Frame>
+    <div>page {x} sur 6</div>
   );
 };
 
@@ -20,9 +20,9 @@ const copyRight = (v, year) => {
 
 const footPage = () => {
   return (
-    <Frame>
+    <div>
       <span>Page 1 sur 6</span>
-    </Frame>
+    </div>
   );
 };
 

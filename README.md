@@ -1,6 +1,6 @@
-# TPIorganizer 2023 - Dernière mise à jour le 28/01/2024 (18:30) | V 1.0.0-b
+# TPIorganizer 2023 - Dernière mise à jour le 13/04/2026 | V 1.0.0-b
 
-TPIorganizer 2023 est une application React conçue pour faciliter l'organisation des soutenances de travaux de fin d'études (TPI). Elle offre une gestion flexible des dates et des salles pour ces soutenances.
+TPIorganizer 2023 est une application React conçue pour faciliter l'organisation des soutenances de travaux de fin d'études (TPI). Elle offre une gestion flexible des dates, des salles et du workflow de validation des plannings.
 
 ## Screenshot
 ![HomeO](/captures/HomeO.png)
@@ -24,6 +24,30 @@ TPIorganizer 2023 est une application React conçue pour faciliter l'organisatio
 
 1. **Installation** : Avoir Node.js, cloner le dépôt, installer les dépendances avec `npm install`.
 2. **Utilisation** : Lancer l'app avec `npm start`, accéder via `http://localhost:3000`.
+
+## Développement
+
+- Pour démarrer le backend + frontend en mode développement : `npm run dev`
+- Frontend accessible sur : `http://localhost:3000`
+- API locale exposée sur : `http://localhost:5001`
+- Vérifier le code avec : `npx eslint src --ext .js,.jsx`
+
+## Notes de maintenance
+
+- Corrections récentes sur le planning : gestion des états de vote et variables manquantes dans `PlanningDashboard`.
+- Ajustements tests unitaires pour éviter l'accès direct aux nœuds DOM et utiliser les sélecteurs `@testing-library`.
+- Le projet utilise Vite pour le développement local et React 18.
+
+## Problèmes connus
+
+- `PlanningDashboard` peut planter si des données de planning sont manquantes pour une année non configurée.
+- HMR Vite peut parfois signaler une erreur de websocket sur certains environnements Windows sans impact fonctionnel sur l'app.
+- Certains tests existants utilisent encore des accès DOM directs ou `container.querySelector`.
+
+## Tests
+
+- Exécuter les tests unitaires avec : `npm test`
+- Les tests de composants sont centrés sur `@testing-library/react`.
 
 ## Contributions
 

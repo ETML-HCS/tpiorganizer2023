@@ -1,22 +1,89 @@
+.tpi-tracker-page.page-with-toolbar {
+    width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+    margin: 0 auto;
+    padding: calc(var(--room-padding-top, 72px) + var(--page-toolbar-gap, 18px)) 20px 80px;
+}
+
+.tpi-tracker-page .box {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.tpi-tracker-page .home,
+.tpi-tracker-page .login,
+.tpi-tracker-page .register {
+    margin: 0;
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.tpi-tracker-page .home h1,
+.tpi-tracker-page .login h2,
+.tpi-tracker-page .register h2 {
+    margin-top: 0;
+    margin-bottom: 14px;
+    color: #0f172a;
+}
+
+.tpi-tracker-page .home p,
+.tpi-tracker-page .login p,
+.tpi-tracker-page .register p {
+    color: #475569;
+    line-height: 1.55;
+}
+
+.tpi-tracker-page .login input,
+.tpi-tracker-page .register input {
+    width: 100%;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    box-sizing: border-box;
+}
+
+.tpi-tracker-page .login button,
+.tpi-tracker-page .register button {
+    border-radius: 12px;
+}
+
+.tpi-tracker-page .home,
+.tpi-tracker-page .login,
+.tpi-tracker-page .register,
+.tpi-tracker-page .box,
+.tpi-tracker-page .container {
+    margin-top: 0;
+}
+
+.tpi-tracker-page .box {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
 /* Styles pour la page d'accueil */
-.home {
+.tpi-tracker-page .home {
     margin-top: 50px;
 }
 
-.home h1 {
+.tpi-tracker-page .home h1 {
     font-size: 36px;
     margin-bottom: 20px;
     text-align: center;
 }
 
-.home p {
+.tpi-tracker-page .home p {
     font-size: 18px;
     line-height: 1.6;
     margin-bottom: 15px;
 }
 
 /* Styles pour la page de connexion */
-.login {
+.tpi-tracker-page .login {
     display: block;
     max-width: 350px;
     margin: 0 auto;
@@ -29,12 +96,12 @@
     border-radius: 5px;
 }
 
-.login h2 {
+.tpi-tracker-page .login h2 {
     font-size: x-large;
     margin-bottom: 20px;
 }
 
-.login input {
+.tpi-tracker-page .login input {
     width: 80%;
     height: 30px;
     padding: 10px;
@@ -43,7 +110,7 @@
     border-radius: 5px;
 }
 
-.login button {
+.tpi-tracker-page .login button {
     background-color: #007bff;
     color: #fff;
     font-size: 18px;
@@ -53,49 +120,49 @@
     cursor: pointer;
 }
 
-.login button:hover {
+.tpi-tracker-page .login button:hover {
     background-color: #0056b3;
 }
 
 /* Styles pour les messages d'erreur */
-.login .error-message {
+.tpi-tracker-page .login .error-message {
     color: #dc3545;
     font-size: 14px;
     margin-bottom: 10px;
 }
 
 /* Centrer le contenu */
-.login .center-content {
+.tpi-tracker-page .login .center-content {
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 /* Styles pour la page de planification des soutenances */
-.schedule {
+.tpi-tracker-page .schedule {
     text-align: center;
     margin-top: 50px;
 }
 
-.schedule h2 {
+.tpi-tracker-page .schedule h2 {
     font-size: 24px;
     margin-bottom: 20px;
 }
 
 /* Styles pour la page d'inscription */
-.register {
+.tpi-tracker-page .register {
     text-align: center;
     margin-top: 50px;
     margin-left: auto;
     margin-right: auto;
 }
 
-.register h2 {
+.tpi-tracker-page .register h2 {
     font-size: 24px;
     margin-bottom: 20px;
 }
 
-.form-selection {
+.tpi-tracker-page .form-selection {
     list-style: none;
     padding: 0;
     display: flex;
@@ -103,7 +170,7 @@
     margin-bottom: 20px;
 }
 
-.form-selection li {
+.tpi-tracker-page .form-selection li {
     cursor: pointer;
     padding: 10px 20px;
     border: 1px solid #ccc;
@@ -111,23 +178,23 @@
     margin: 0 5px;
 }
 
-.form-selection li:hover {
+.tpi-tracker-page .form-selection li:hover {
     background-color: #f0f0f0;
 }
 
 /* Styles pour les formulaires d'inscription individuels */
-.student-registration,
-.projectManager-registration,
-.dean-registration,
-.expert-registration {
+.tpi-tracker-page .student-registration,
+.tpi-tracker-page .projectManager-registration,
+.tpi-tracker-page .dean-registration,
+.tpi-tracker-page .expert-registration {
     display: none;
 
 }
 
-.student-registration.active,
-.projectManager-registration.active,
-.dean-registration.active,
-.expert-registration.active {
+.tpi-tracker-page .student-registration.active,
+.tpi-tracker-page .projectManager-registration.active,
+.tpi-tracker-page .dean-registration.active,
+.tpi-tracker-page .expert-registration.active {
     display: flex;
     flex-wrap: wrap;
     max-width: 80%;
@@ -150,18 +217,18 @@
     }
 }
 
-.student-registration h3,
-.projectManager-registration h3,
-.dean-registration h3,
-.expert-registration h3 {
+.tpi-tracker-page .student-registration h3,
+.tpi-tracker-page .projectManager-registration h3,
+.tpi-tracker-page .dean-registration h3,
+.tpi-tracker-page .expert-registration h3 {
     font-size: medium;
 }
 
 /* Utiliser flexbox pour les champs d'inscription */
-.student-registration div,
-.projectManager-registration div,
-.dean-registration div,
-.expert-registration div {
+.tpi-tracker-page .student-registration div,
+.tpi-tracker-page .projectManager-registration div,
+.tpi-tracker-page .dean-registration div,
+.tpi-tracker-page .expert-registration div {
     display: flex;
     margin: 5px;
     flex-wrap: wrap;
@@ -170,19 +237,19 @@
 /* Utiliser media queries pour les écrans plus petits */
 @media screen and (max-width: 600px) {
 
-    .student-registration div,
-    .projectManager-registrationn div,
-    .dean-registration div,
-    .expert-registration div {
+    .tpi-tracker-page .student-registration div,
+    .tpi-tracker-page .projectManager-registration div,
+    .tpi-tracker-page .dean-registration div,
+    .tpi-tracker-page .expert-registration div {
         flex-direction: column;
     }
 }
 
 /* Styles pour les inputs */
-.student-registration input,
-.projectManager-registration input,
-.dean-registration input,
-.expert-registration input {
+.tpi-tracker-page .student-registration input,
+.tpi-tracker-page .projectManager-registration input,
+.tpi-tracker-page .dean-registration input,
+.tpi-tracker-page .expert-registration input {
     flex: 1;
     height: 20px;
     padding: 10px;
@@ -193,10 +260,10 @@
 }
 
 /* Styles pour le bouton */
-.student-registration button,
-.projectManager-registration button,
-.dean-registration button,
-.expert-registration button {
+.tpi-tracker-page .student-registration button,
+.tpi-tracker-page .projectManager-registration button,
+.tpi-tracker-page .dean-registration button,
+.tpi-tracker-page .expert-registration button {
     background-color: #007bff;
     color: #fff;
     font-size: larger;
@@ -208,10 +275,10 @@
 }
 
 /* Styles pour la ligne suivante (bouton) */
-.student-registration .button-container,
-.projectManager-registration .button-container,
-.dean-registration .button-container,
-.expert-registration .button-container {
+.tpi-tracker-page .student-registration .button-container,
+.tpi-tracker-page .projectManager-registration .button-container,
+.tpi-tracker-page .dean-registration .button-container,
+.tpi-tracker-page .expert-registration .button-container {
     display: flex;
     width: 100%;
     justify-content: flex-end;
@@ -229,17 +296,17 @@
 }
 
 /* Styles pour les espaces entre les champs d'inscription et le bouton */
-.student-registration .button-container button,
-.projectManager-registration .button-container button,
-.dean-registration .button-container button,
-.expert-registration .button-container button {
+.tpi-tracker-page .student-registration .button-container button,
+.tpi-tracker-page .projectManager-registration .button-container button,
+.tpi-tracker-page .dean-registration .button-container button,
+.tpi-tracker-page .expert-registration .button-container button {
     margin-top: 10px;
 }
 
-.student-registration button:hover,
-.projectManager-registration button:hover,
-.dean-registration button:hover,
-.expert-registration button:hover {
+.tpi-tracker-page .student-registration button:hover,
+.tpi-tracker-page .projectManager-registration button:hover,
+.tpi-tracker-page .dean-registration button:hover,
+.tpi-tracker-page .expert-registration button:hover {
     background-color: #0056b3;
 }
 
@@ -254,14 +321,19 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.subscriber.etudiant {
+.subscriber.student {
     background-color: #f9f9f9;
     border: 1px solid #007bff;
 }
 
-.subscriber.boss {
+.subscriber.projectManager {
     background-color: #f0f0f0;
     border: 1px solid #17a2b8;
+}
+
+.subscriber.dean {
+    background-color: #fff9e8;
+    border: 1px solid #f59e0b;
 }
 
 .subscriber.expert {
@@ -269,87 +341,1286 @@
     border: 1px solid #28a745;
 }
 
-.tpiTracker h2 {
-    font-size: medium;
-    margin-bottom: 20px;
+/* SECOND PASS REFINEMENTS */
+.tpi-tracker-page {
+    position: relative;
+    isolation: isolate;
 }
 
-.project-list {
-    list-style: none;
-    padding: 0;
+.tpi-tracker-page::before,
+.tpi-tracker-page::after {
+    content: "";
+    position: absolute;
+    width: 320px;
+    height: 320px;
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: -1;
 }
 
-.project-item {
-    display: flex;
+.tpi-tracker-page::before {
+    top: 90px;
+    left: -40px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0) 70%);
+}
+
+.tpi-tracker-page::after {
+    right: -30px;
+    bottom: 10px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0) 72%);
+}
+
+.tpi-tracker-page .box {
+    gap: 20px;
+    align-items: stretch;
+}
+
+.tpi-tracker-page .home,
+.tpi-tracker-page .login,
+.tpi-tracker-page .register,
+.tpi-tracker-page .container,
+.tpi-tracker-page .subscriber {
+    position: relative;
+    overflow: hidden;
+    border-radius: 26px;
+    border: 1px solid rgba(214, 224, 232, 0.86);
+    background: linear-gradient(180deg, #ffffff 0%, #f4f8fb 100%);
+    box-shadow: 0 22px 40px rgba(15, 23, 42, 0.08);
+}
+
+.tpi-tracker-page .home {
+    margin-top: 0;
+    padding: 28px;
+    background: linear-gradient(135deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+.tpi-tracker-page .home h1 {
+    max-width: 14ch;
+    font-size: clamp(2rem, 3vw, 2.9rem);
+    line-height: 1.05;
+    text-align: left;
+}
+
+.tpi-tracker-page .home p {
+    font-size: 1rem;
+    color: #475569;
+}
+
+.tpi-tracker-page .login,
+.tpi-tracker-page .register {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    max-width: none;
+    margin-top: 0;
+    padding: 24px;
+    text-align: left;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 26px;
+}
+
+.tpi-tracker-page .login h2,
+.tpi-tracker-page .register h2 {
+    margin: 0;
+    font-size: 1.28rem;
+}
+
+.tpi-tracker-page .login input,
+.tpi-tracker-page .register input {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 14px;
+    margin: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    background: #ffffff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tpi-tracker-page .login input:focus,
+.tpi-tracker-page .register input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.tpi-tracker-page .login button,
+.tpi-tracker-page .register button {
+    min-height: 46px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.18);
+}
+
+.tpi-tracker-page .form-selection {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.tpi-tracker-page .form-selection li {
+    margin: 0;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.95);
+    font-weight: 700;
+    transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.tpi-tracker-page .form-selection li:hover {
+    transform: translateY(-1px);
+    background: #eef4ff;
+    border-color: #93c5fd;
+}
+
+.tpi-tracker-page .form-selection li.active {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+}
+
+.tpi-tracker-page .registration-panel.active,
+.tpi-tracker-page .student-registration.active,
+.tpi-tracker-page .projectManager-registration.active,
+.tpi-tracker-page .dean-registration.active,
+.tpi-tracker-page .expert-registration.active {
+    width: 100%;
+    max-width: none;
+    padding: 18px;
+    gap: 12px;
+    border: 1px solid rgba(191, 219, 254, 0.92);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(239, 246, 255, 0.94) 0%, rgba(255, 255, 255, 0.96) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.tpi-tracker-page .registration-panel.active h3,
+.tpi-tracker-page .student-registration.active h3,
+.tpi-tracker-page .projectManager-registration.active h3,
+.tpi-tracker-page .dean-registration.active h3,
+.tpi-tracker-page .expert-registration.active h3 {
+    width: 100%;
+    margin: 0 0 4px;
+    font-size: 1rem;
+    color: #0f172a;
+}
+
+.tpi-tracker-page .registration-panel.active input,
+.tpi-tracker-page .student-registration.active input,
+.tpi-tracker-page .projectManager-registration.active input,
+.tpi-tracker-page .dean-registration.active input,
+.tpi-tracker-page .expert-registration.active input {
+    flex: 1 1 220px;
+    min-height: 46px;
+}
+
+.tpi-tracker-page .registration-panel.active button,
+.tpi-tracker-page .student-registration.active button,
+.tpi-tracker-page .projectManager-registration.active button,
+.tpi-tracker-page .dean-registration.active button,
+.tpi-tracker-page .expert-registration.active button {
+    flex: 1 1 100%;
+    margin: 0;
+}
+
+.tpi-tracker-page .container {
+    display: grid;
+    gap: 18px;
+    margin-top: 0;
+    padding: 28px;
+}
+
+.tpi-tracker-page .container h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 2.4vw, 2.3rem);
+    color: #0f172a;
+}
+
+.tpi-tracker-page .container-role {
+    margin: -6px 0 0;
+    color: #475569;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.tpi-tracker-page .subscriber {
+    max-width: none;
+    margin: 0;
+    padding: 24px;
+    min-height: 220px;
+    display: grid;
+    align-content: start;
+    gap: 12px;
+}
+
+.tpi-tracker-page .subscriber-kicker {
+    display: inline-flex;
+    width: fit-content;
     align-items: center;
+    min-height: 30px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.tpi-tracker-page .subscriber h2 {
+    margin: 0;
+    font-size: 1.34rem;
+    color: #0f172a;
+}
+
+.tpi-tracker-page .subscriber p {
+    margin: 0;
+    max-width: 62ch;
+    color: #475569;
+    line-height: 1.6;
+}
+
+.tpi-tracker-page .subscriber.student {
+    background: linear-gradient(135deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+.tpi-tracker-page .subscriber.projectManager {
+    background: linear-gradient(135deg, #f8fffb 0%, #effdf6 100%);
+}
+
+.tpi-tracker-page .subscriber.dean {
+    background: linear-gradient(135deg, #fffdf7 0%, #fff7e8 100%);
+}
+
+.tpi-tracker-page .subscriber.expert {
+    background: linear-gradient(135deg, #fdf8ff 0%, #f7efff 100%);
+}
+
+.tpi-tracker-page .register-empty-state {
+    margin: 0;
+    color: #475569;
+    line-height: 1.6;
+}
+
+@media screen and (max-width: 900px) {
+    .tpi-tracker-page.page-with-toolbar {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .tpi-tracker-page .home,
+    .tpi-tracker-page .login,
+    .tpi-tracker-page .register,
+    .tpi-tracker-page .container,
+    .tpi-tracker-page .subscriber {
+        padding: 20px;
+        border-radius: 22px;
+    }
+
+    .tpi-tracker-page .home h1 {
+        max-width: none;
+    }
+}
+
+/* Tracker redesign */
+.tpi-tracker-page {
+    position: relative;
+    isolation: isolate;
+    min-height: calc(100vh - var(--app-header-height, 66px));
+    --tracker-ink: #0f172a;
+    --tracker-muted: #5a677c;
+    --tracker-border: rgba(148, 163, 184, 0.22);
+    --tracker-surface: rgba(255, 255, 255, 0.92);
+    --tracker-surface-strong: rgba(255, 255, 255, 0.98);
+    --tracker-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+    --tracker-radius: 28px;
+    --tracker-role-accent: #2563eb;
+    background:
+        radial-gradient(circle at 14% 8%, rgba(59, 130, 246, 0.12), transparent 30%),
+        radial-gradient(circle at 84% 0%, rgba(16, 185, 129, 0.12), transparent 26%),
+        linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+    color: var(--tracker-ink);
+}
+
+.tpi-tracker-page::before,
+.tpi-tracker-page::after {
+    content: "";
+    position: absolute;
+    width: 320px;
+    height: 320px;
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(16px);
+}
+
+.tpi-tracker-page::before {
+    top: 100px;
+    left: -70px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.16) 0%, rgba(37, 99, 235, 0) 68%);
+}
+
+.tpi-tracker-page::after {
+    right: -80px;
+    bottom: 0;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0) 70%);
+}
+
+.tpi-tracker-page.page-with-toolbar {
+    width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+    margin: 0 auto;
+    padding: calc(var(--room-padding-top, 72px) + var(--page-toolbar-gap, 18px)) 20px 92px;
+}
+
+.tracker-page-shell {
+    display: grid;
+    gap: 20px;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-shell {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 26px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(245, 249, 255, 0.92) 100%);
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(18px);
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-header,
+#tools.tpi-tracker-tools.page-tools .page-tools-topline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px 16px;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-eyebrow,
+#tools.tpi-tracker-tools.page-tools .page-tools-title,
+#tools.tpi-tracker-tools.page-tools .page-tools-description {
+    min-width: 0;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-eyebrow {
+    grid-column: 1;
+    color: #0f766e;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-title {
+    grid-column: 1;
+    font-size: 1rem;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-description {
+    grid-column: 1;
+    display: block;
+    margin: 4px 0 0;
+    max-width: 68ch;
+    color: #55657a;
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-meta,
+#tools.tpi-tracker-tools.page-tools .page-tools-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-chip {
+    background: linear-gradient(180deg, #e0f2fe 0%, #dbeafe 100%);
+    border-color: rgba(96, 165, 250, 0.2);
+    color: #1e3a8a;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-tabs {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 6px;
+    padding: 4px;
+    border-color: rgba(203, 213, 225, 0.86);
+    background: linear-gradient(180deg, #eef4fb 0%, #e9eff7 100%);
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-tab {
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 0.78rem;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-tab.active {
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-navigation {
+    gap: 6px;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-navigation-link {
+    min-height: 24px;
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(148, 163, 184, 0.22);
+    color: #334155;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-navigation-link.active {
+    background: linear-gradient(180deg, #edf4fb 0%, #dbeafe 100%);
+    border-color: rgba(96, 165, 250, 0.52);
+    color: #1e3a8a;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-body {
+    gap: 10px;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-inline-row {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-action-btn {
+    min-height: 42px;
+    padding: 0 16px;
+    border-radius: 14px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-action-btn.primary {
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    color: #ffffff;
+    border-color: #1d4ed8;
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-action-btn.secondary {
+    background: rgba(255, 255, 255, 0.9);
+    color: #334155;
+    border-color: rgba(148, 163, 184, 0.24);
+}
+
+#tools.tpi-tracker-tools.page-tools .page-tools-action-btn.secondary:hover:not(:disabled) {
+    background: #f8fbff;
+}
+
+.tracker-panel {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    gap: 16px;
+    padding: 24px;
+    border: 1px solid var(--tracker-border);
+    border-radius: var(--tracker-radius);
+    background: linear-gradient(180deg, var(--tracker-surface-strong) 0%, rgba(247, 250, 252, 0.96) 100%);
+    box-shadow: var(--tracker-shadow);
+    backdrop-filter: blur(16px);
+}
+
+.tracker-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--tracker-role-accent, #2563eb) 0%, rgba(37, 99, 235, 0) 100%);
+}
+
+.tracker-panel > * {
+    position: relative;
+    z-index: 1;
+}
+
+.tracker-panel-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #0f766e;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.tracker-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 10px;
-    border-bottom: 1px solid #ccc;
+    gap: 12px;
 }
 
-.project-item:last-child {
-    border-bottom: none;
-}
-
-.project-name {
-    font-size: 18px;
-    font-weight: bold;
-}
-
-.project-description {
-    font-size: 14px;
-    color: #777;
-}
-
-.register-options {
-    display: flex;
+.tracker-card-status {
+    display: inline-flex;
     align-items: center;
-    margin-top: 20px;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.95);
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
-.register-label {
-    font-size: 16px;
-    margin-right: 10px;
+.tracker-card-copy {
+    margin: 0;
+    color: var(--tracker-muted);
+    line-height: 1.6;
 }
 
-.register-button {
-    background-color: #007bff;
-    color: #fff;
-    font-size: 16px;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
+.tracker-panel h2 {
+    margin: 0;
+    font-size: clamp(1.2rem, 1.8vw, 1.55rem);
+    line-height: 1.1;
+    color: var(--tracker-ink);
 }
 
-.register-button:hover {
-    background-color: #0056b3;
+.tracker-auth-grid,
+.tracker-dashboard-grid {
+    display: grid;
+    gap: 20px;
+    align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
-/* Style pour les boutons suivi-estudiants */
-.userActions {
+.tracker-dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.tracker-hero-card {
+    grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+    gap: 20px;
+    padding: 28px;
+    color: #f8fafc;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 42%, #1d4ed8 100%);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.tracker-hero-card::before {
+    height: 5px;
+    background: linear-gradient(90deg, #38bdf8 0%, #10b981 100%);
+}
+
+.tracker-hero-card .tracker-panel-eyebrow {
+    color: rgba(191, 219, 254, 0.95);
+}
+
+.tracker-hero-copy {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+}
+
+.tracker-hero-copy h1 {
+    margin: 0;
+    max-width: 13ch;
+    font-size: clamp(2rem, 4vw, 3.4rem);
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+    color: #ffffff;
+}
+
+.tracker-hero-copy p {
+    margin: 0;
+    max-width: 60ch;
+    color: rgba(226, 232, 240, 0.82);
+    line-height: 1.65;
+}
+
+.tracker-badge-row {
     display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.tracker-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.tracker-hero-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.tracker-metric-card {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    padding: 18px;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.tracker-metric-value {
+    color: #ffffff;
+    font-size: clamp(1.6rem, 3vw, 2.5rem);
+    line-height: 1;
+    font-weight: 800;
+}
+
+.tracker-metric-label {
+    color: rgba(226, 232, 240, 0.78);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 800;
+}
+
+.tracker-metric-detail {
+    margin: 0;
+    color: rgba(241, 245, 249, 0.8);
+    line-height: 1.5;
+    font-size: 0.92rem;
+}
+
+.tracker-guide-card {
+    display: grid;
+    gap: 14px;
+}
+
+.tracker-step-list {
+    display: grid;
+    gap: 12px;
+}
+
+.tracker-step-item {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: rgba(248, 250, 252, 0.9);
+}
+
+.tracker-step-index {
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1d4ed8;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
 }
 
-.tpiTracker button {
-    background-color: #007bff;
-    color: #fff;
-    font-size: medium;
-    margin-left: 10px;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 5px;
+.tracker-step-item h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+    color: var(--tracker-ink);
+}
+
+.tracker-step-item p {
+    margin: 0;
+    color: var(--tracker-muted);
+    line-height: 1.55;
+}
+
+.tracker-guide-note {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.03);
+    color: #475569;
+    line-height: 1.55;
+}
+
+.tracker-login-card {
+    display: grid;
+    gap: 16px;
+}
+
+.tracker-login-card .tracker-card-status {
+    background: rgba(219, 234, 254, 0.95);
+    color: #1d4ed8;
+}
+
+.tracker-field-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tracker-field {
+    display: block;
+    min-width: 0;
+}
+
+.tracker-field input {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 14px;
+    border: 1px solid rgba(203, 213, 225, 0.92);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--tracker-ink);
+    box-sizing: border-box;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.tracker-field input::placeholder {
+    color: #94a3b8;
+}
+
+.tracker-field input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.tracker-field--full {
+    grid-column: 1 / -1;
+}
+
+.tracker-inline-error {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(248, 113, 113, 0.24);
+    background: #fef2f2;
+    color: #b91c1c;
+    line-height: 1.5;
+}
+
+.tracker-primary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    color: #ffffff;
+    font-weight: 800;
+    box-shadow: 0 16px 30px rgba(37, 99, 235, 0.18);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.tracker-primary-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(37, 99, 235, 0.24);
+}
+
+.tracker-primary-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.tracker-register-card {
+    display: grid;
+    gap: 16px;
+}
+
+.tracker-register-intro {
+    display: grid;
+    gap: 8px;
+}
+
+.tracker-register-intro h2 {
+    margin: 0;
+    font-size: 1.34rem;
+}
+
+.tracker-register-card .tracker-card-status {
+    background: rgba(220, 252, 231, 0.92);
+    color: #166534;
+}
+
+.tracker-role-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.tracker-role-option {
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    text-align: left;
+    color: var(--tracker-ink);
     cursor: pointer;
-    transition: background-color 0.2s, transform 0.1s;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.tpiTracker button:hover {
-    background-color: #0056b3;
-    transform: scale(1.05);
+.tracker-role-option:hover {
+    transform: translateY(-1px);
+    border-color: rgba(96, 165, 250, 0.46);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
 }
 
-.tpiTracker .button i {
-    margin-right: 5px;
+.tracker-role-option.active {
+    border-color: var(--tracker-role-accent);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.1);
+    background: linear-gradient(180deg, rgba(239, 246, 255, 0.96) 0%, #ffffff 100%);
+}
+
+.tracker-role-option-topline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.tracker-role-option-label {
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+.tracker-role-option-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.92);
+    color: #334155;
+    font-size: 0.7rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.tracker-role-option-summary {
+    color: var(--tracker-muted);
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.tracker-role-option--student.active,
+.tracker-project-card--student,
+.tracker-session-card--student,
+.tracker-registration-form--student {
+    --tracker-role-accent: #2563eb;
+}
+
+.tracker-role-option--projectManager.active,
+.tracker-project-card--projectManager,
+.tracker-session-card--projectManager,
+.tracker-registration-form--projectManager {
+    --tracker-role-accent: #10b981;
+}
+
+.tracker-role-option--dean.active,
+.tracker-project-card--dean,
+.tracker-session-card--dean,
+.tracker-registration-form--dean {
+    --tracker-role-accent: #d97706;
+}
+
+.tracker-role-option--expert.active,
+.tracker-project-card--expert,
+.tracker-session-card--expert,
+.tracker-registration-form--expert {
+    --tracker-role-accent: #8b5cf6;
+}
+
+.tracker-registration-form {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+    border-radius: 22px;
+    border: 1px solid rgba(191, 219, 254, 0.92);
+    background: linear-gradient(180deg, rgba(239, 246, 255, 0.82) 0%, rgba(255, 255, 255, 0.96) 100%);
+}
+
+.tracker-registration-summary {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr);
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.tracker-registration-summary h3 {
+    margin: 6px 0 8px;
+    font-size: 1.18rem;
+    color: var(--tracker-ink);
+}
+
+.tracker-registration-summary p {
+    margin: 0;
+    color: var(--tracker-muted);
+    line-height: 1.55;
+}
+
+.tracker-mini-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.tracker-mini-list li {
+    position: relative;
+    padding-left: 22px;
+    color: #334155;
+    line-height: 1.5;
+}
+
+.tracker-mini-list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--tracker-role-accent, #2563eb) 0%, rgba(37, 99, 235, 0.55) 100%);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.tracker-form-footer {
+    display: grid;
+    gap: 10px;
+}
+
+.tracker-form-note {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.tracker-register-empty {
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px dashed rgba(148, 163, 184, 0.36);
+    background: rgba(248, 250, 252, 0.84);
+    color: var(--tracker-muted);
+    line-height: 1.55;
+}
+
+.tracker-session-card {
+    display: grid;
+    gap: 18px;
+}
+
+.tracker-session-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.tracker-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, var(--tracker-role-accent, #2563eb) 0%, rgba(37, 99, 235, 0.75) 100%);
+    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    box-shadow: 0 16px 30px rgba(37, 99, 235, 0.24);
+}
+
+.tracker-session-copy {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.tracker-session-copy h2 {
+    margin: 0;
+    font-size: 1.34rem;
+}
+
+.tracker-session-copy p {
+    margin: 0;
+    color: var(--tracker-muted);
+    line-height: 1.55;
+}
+
+.tracker-session-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin: 0;
+}
+
+.tracker-session-fact {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: rgba(248, 250, 252, 0.92);
+}
+
+.tracker-session-fact dt {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+}
+
+.tracker-session-fact dd {
+    margin: 0;
+    color: var(--tracker-ink);
+    font-weight: 700;
+    word-break: break-word;
+}
+
+.tracker-action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.tracker-action-tile {
+    display: grid;
+    gap: 8px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(247, 250, 253, 0.96) 100%);
+}
+
+.tracker-action-tile h3 {
+    margin: 0;
+    font-size: 0.94rem;
+    color: var(--tracker-ink);
+}
+
+.tracker-action-tile p {
+    margin: 0;
+    color: var(--tracker-muted);
+    line-height: 1.5;
+    font-size: 0.92rem;
+}
+
+.tracker-session-summary {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(191, 219, 254, 0.82);
+    background: rgba(239, 246, 255, 0.78);
+    color: #1e3a8a;
+    line-height: 1.55;
+}
+
+.tracker-project-card {
+    display: grid;
+    gap: 16px;
+}
+
+.tracker-project-card h2 {
+    font-size: 1.34rem;
+}
+
+.tracker-project-card .tracker-card-copy {
+    color: var(--tracker-muted);
+}
+
+.tracker-project-summary {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: rgba(255, 255, 255, 0.9);
+    color: #334155;
+    line-height: 1.55;
+}
+
+.tracker-highlight-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.tracker-highlight-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    color: #334155;
+    line-height: 1.5;
+}
+
+.tracker-highlight-list li::before {
+    content: "";
+    flex: 0 0 9px;
+    width: 9px;
+    height: 9px;
+    margin-top: 0.45em;
+    border-radius: 999px;
+    background: var(--tracker-role-accent, #2563eb);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.tracker-project-note {
+    display: grid;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.03);
+}
+
+.tracker-project-note span {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+    color: #64748b;
+}
+
+.tracker-project-note p {
+    margin: 0;
+    color: #334155;
+    line-height: 1.55;
+}
+
+.tracker-empty-card {
+    display: grid;
+    gap: 12px;
+}
+
+.tracker-empty-card h2 {
+    font-size: 1.28rem;
+}
+
+.tracker-empty-card p {
+    margin: 0;
+    color: var(--tracker-muted);
+    line-height: 1.55;
+}
+
+.tracker-login-card,
+.tracker-register-card,
+.tracker-guide-card,
+.tracker-session-card,
+.tracker-project-card,
+.tracker-empty-card {
+    min-width: 0;
+}
+
+@media (max-width: 1100px) {
+    .tracker-hero-card {
+        grid-template-columns: 1fr;
+    }
+
+    .tracker-hero-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 860px) {
+    .tpi-tracker-page.page-with-toolbar {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    #tools.tpi-tracker-tools.page-tools .page-tools-shell {
+        padding: 12px 14px 14px;
+        border-radius: 22px;
+    }
+
+    #tools.tpi-tracker-tools.page-tools .page-tools-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tracker-panel {
+        padding: 20px;
+        border-radius: 22px;
+    }
+
+    .tracker-auth-grid,
+    .tracker-dashboard-grid,
+    .tracker-field-grid,
+    .tracker-registration-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .tracker-hero-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .tracker-hero-card {
+        padding: 22px;
+    }
+
+    .tracker-hero-copy h1 {
+        max-width: none;
+        font-size: clamp(1.9rem, 9vw, 2.6rem);
+    }
+
+    .tracker-hero-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .tracker-session-head {
+        flex-direction: column;
+    }
+
+    .tracker-avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+    }
+
+    .tracker-action-grid,
+    .tracker-session-facts,
+    .tracker-role-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tracker-card-head {
+        align-items: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .tracker-panel {
+        padding: 18px;
+    }
+
+    #tools.tpi-tracker-tools.page-tools .page-tools-description {
+        font-size: 0.8rem;
+    }
+
+    #tools.tpi-tracker-tools.page-tools .page-tools-action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    #tools.tpi-tracker-tools.page-tools .page-tools-inline-row {
+        width: 100%;
+    }
 }

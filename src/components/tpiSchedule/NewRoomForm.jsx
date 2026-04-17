@@ -1,11 +1,62 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { showNotification } from "../Tools.jsx";
+import {
+  applySoutenanceDateYear,
+  formatSoutenanceDateLabel,
+  getSoutenanceDateBadgeLabel,
+  normalizeSoutenanceDateEntries
+} from "./soutenanceDateUtils";
 
-const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
-  const [date, setDate] = useState("");
+const NewRoomForm = ({ onNewRoom, setShowForm, configData, soutenanceDates = [], roomCatalogBySite = {}, selectedYear = null }) => {
+  const availableDates = useMemo(() => normalizeSoutenanceDateEntries(soutenanceDates), [soutenanceDates])
+  const availableSites = useMemo(() => {
+    const source = roomCatalogBySite && typeof roomCatalogBySite === "object" ? roomCatalogBySite : {}
+    return Object.keys(source)
+      .map((site) => String(site || "").trim().toUpperCase())
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right))
+  }, [roomCatalogBySite])
+  const [date, setDate] = useState("")
   const [nameRoom, setNameRoom] = useState("");
   const [site, setSite] = useState("");
-  const [availableRooms, setAvailableRooms] = useState([]);
+
+  const availableRooms = useMemo(() => {
+    const hasCatalogRooms = Object.prototype.hasOwnProperty.call(roomCatalogBySite || {}, site)
+    const catalogRooms = hasCatalogRooms ? roomCatalogBySite?.[site] || [] : []
+    return hasCatalogRooms ? catalogRooms : []
+  }, [roomCatalogBySite, site]);
+
+  useEffect(() => {
+    if (availableDates.length === 0) {
+      setDate("")
+      return
+    }
+
+    if (date && availableDates.some((entry) => entry.date === date)) {
+      return
+    }
+
+    const yearAdjustedDate = applySoutenanceDateYear(date, selectedYear)
+    if (yearAdjustedDate && availableDates.some((entry) => entry.date === yearAdjustedDate)) {
+      setDate(yearAdjustedDate)
+      return
+    }
+
+    if (!date) {
+      setDate(availableDates[0]?.date || "")
+    }
+  }, [availableDates, date, selectedYear])
+
+  useEffect(() => {
+    if (availableSites.length === 0) {
+      setSite("")
+      return
+    }
+
+    if (!availableSites.includes(site)) {
+      setSite(availableSites[0])
+    }
+  }, [availableSites, site])
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
@@ -13,103 +64,120 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData }) => {
     if (date && nameRoom && site) {
       onNewRoom({ date, nameRoom, site });
       setShowForm(false);
-      setDate(date);
-      setNameRoom(nameRoom);
-      setSite(site);
+      setDate("");
+      setNameRoom("");
+      setSite("");
     } else {
       showNotification(
-        "Veuillez saisir les informations demandées avant de valider la salle, s'il vous plaît.",
+        "Renseigne la date, le site et la salle avant de valider.",
         3000
       );
     }
   };
 
   const handleCancel = () => {
-    // Reset the form fields and hide the form
     setDate("");
     setNameRoom("");
     setSite("");
-    setAvailableRooms([]);
     setShowForm(false);
   };
 
   const handleSiteChange = (e) => {
     const selectedSite = e.target.value;
     setSite(selectedSite);
-
-    if (selectedSite === "ETML") {
-      // Utiliser configData.etml.rooms pour accéder aux salles ETML
-      const rooms = configData.etml.rooms;
-      setAvailableRooms(rooms);
-    } else if (selectedSite === "CFPV") {
-      // Utiliser configData.cfpv.rooms pour accéder aux salles CFPV
-      const rooms = configData.cfpv.rooms;
-      setAvailableRooms(rooms);
-    } else {
-      setAvailableRooms([]);
-    }
+    setNameRoom("");
   };
 
+  const submitDisabledReason =
+    availableDates.length === 0
+      ? "Ajoute d'abord des dates de soutenance"
+      : availableSites.length === 0
+        ? "Ajoute d'abord des sites"
+      : availableRooms.length === 0
+        ? "Ajoute d'abord des noms de salles"
+        : undefined
+
   return (
-    <form className="addRoom" onSubmit={handleFormSubmit}>
-      <label htmlFor="date">Date :</label>
-      <input
-        type="date"
-        id="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        required
-      />
+    <form className="addRoom room-add-form" onSubmit={handleFormSubmit}>
+      <div className="room-add-grid">
+        <label className="page-tools-field room-add-field" htmlFor="date">
+          <span className="page-tools-field-label">Date</span>
+          <select
+            className="page-tools-field-control"
+            id="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            required
+            disabled={availableDates.length === 0}
+          >
+            <option value="">
+              {availableDates.length > 0 ? "Sélectionner une date" : "Ajoute d'abord des dates"}
+            </option>
+            {availableDates.map((availableDate) => (
+              (() => {
+                const badgeLabel = getSoutenanceDateBadgeLabel(availableDate)
 
-      <label htmlFor="site">Site :</label>
-      <select id="site" value={site} onChange={handleSiteChange} required>
-        <option value="">Sélectionner une option</option>
-        <option value="ETML">ETML</option>
-        <option value="CFPV">CFPV</option>
-      </select>
+                return (
+                  <option key={availableDate.date} value={availableDate.date}>
+                    {`${formatSoutenanceDateLabel(availableDate.date)}${badgeLabel ? ` • ${badgeLabel}` : ""}`}
+                  </option>
+                )
+              })()
+            ))}
+          </select>
+        </label>
 
-      <label htmlFor="availableRooms">Salles disponibles :</label>
-      <select
-        id="availableRooms"
-        value={nameRoom}
-        onChange={(e) => setNameRoom(e.target.value)}
-        required
-      >
-        <option value="">Sélectionner une salle</option>
-        {availableRooms.map((availableRoom) => (
-          <option key={availableRoom} value={availableRoom}>
-            {availableRoom}
-          </option>
-        ))}
-      </select>
+        <label className="page-tools-field room-add-field" htmlFor="site">
+          <span className="page-tools-field-label">Site</span>
+          <select className="page-tools-field-control" id="site" value={site} onChange={handleSiteChange} required disabled={availableSites.length === 0}>
+            <option value="">
+              {availableSites.length > 0 ? "Sélectionner" : "Ajoute d'abord des sites"}
+            </option>
+            {availableSites.map((siteCode) => (
+              <option key={siteCode} value={siteCode}>
+                {siteCode}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <div
-        type="submit"
-        onClick={handleFormSubmit}
-        style={{
-          fontWeight: "bolder",
-          backgroundColor: "#0074D9",
-          color: "white",
-          padding: "5px",
-          textAlign: "center",
-          borderRadius: "5px"
-        }}
-      >
-        Valider
+        <label className="page-tools-field room-add-field" htmlFor="availableRooms">
+          <span className="page-tools-field-label">Salle</span>
+          <select
+            className="page-tools-field-control"
+            id="availableRooms"
+            value={nameRoom}
+            onChange={(e) => setNameRoom(e.target.value)}
+            required
+            disabled={!site || availableRooms.length === 0}
+          >
+            <option value="">
+              {site
+                ? (availableRooms.length > 0 ? 'Sélectionner une salle' : 'Ajoute des noms de salles')
+                : 'Choisir un site'}
+            </option>
+            {availableRooms.map((availableRoom) => (
+              <option key={availableRoom} value={availableRoom}>
+                {availableRoom}
+              </option>
+            ))}
+          </select>
+        </label>
+
       </div>
-      <div
-        style={{
-          position: "absolute",
-          top: "0px",
-          right: "5px",
-          cursor: "pointer",
-          fontSize: "18px",
-          fontWeight: "bold",
-          color:"red",
-        }}
-        onClick={handleCancel}
-      >
-        &times;
+
+      <div className="room-add-actions">
+        <button type="button" className="page-tools-action-btn secondary" onClick={handleCancel}>
+          Annuler
+        </button>
+        <button
+          type="submit"
+          className="page-tools-action-btn primary"
+          disabled={Boolean(submitDisabledReason)}
+          title={submitDisabledReason}
+        >
+          Valider
+        </button>
       </div>
     </form>
   );

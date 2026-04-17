@@ -15,20 +15,24 @@ const tpiDataSchema = new mongoose.Schema({
     type: Number
   },
   id: { type: String },
+  candidatPersonId: { type: String },
   candidat: 
   { 
     type:String 
   },
  expert1: { 
     name: String,
+    personId: String,
     offres: offreDataSchema
   },
   expert2: { 
     name: String,
+    personId: String,
     offres: offreDataSchema
   },
   boss: { 
     name: String,
+    personId: String,
     offres: offreDataSchema 
   },
 })

@@ -1,0 +1,21 @@
+{
+  "apiUrl": "http://localhost:6000",
+  "soutenanceDates": ["2025-06-04", "2025-06-05", "2025-06-11", "2025-06-12"],
+  "cfpv": {
+    "rooms": [
+      "Vennes - A01",
+      "Vennes - A02",
+      "Vennes - A03",
+      "Vennes - A11",
+      "Vennes - A12",
+      "Vennes - A13",
+      "Vennes - A21",
+      "Vennes - A22",
+      "Vennes - A23"
+    ],
+    "breakline": 0.1667,
+    "tpiTime": 1,
+    "firstTpiStart": 8,
+    "numSlots": 8
+  }
+}

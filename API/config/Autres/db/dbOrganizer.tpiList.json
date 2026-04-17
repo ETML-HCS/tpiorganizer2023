@@ -1,0 +1,1173 @@
+[{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a5b"
+  },
+  "refTpi": "1649",
+  "__v": 0,
+  "boss": "Cyril Sokoloff",
+  "candidat": "Hunacek Sacha",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073292000000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313075884000000"
+    }
+  },
+  "description": "IaaS, Azure AD",
+  "expert1": "Albert Richard",
+  "expert2": "Gabriel Maret",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "IaaS, Azure AD",
+  "tags": [
+    "Réseau",
+    "système",
+    "Infrastructure",
+    "Virtualisation"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a5e"
+  },
+  "refTpi": "1661",
+  "__v": 0,
+  "boss": "Vincent Emery",
+  "candidat": "Guerrero Fernandez Gabriel",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073896800000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313076488800000"
+    }
+  },
+  "description": "Système",
+  "expert1": "Albert Richard",
+  "expert2": "Laurent Duding",
+  "lieu": "SyselCom",
+  "sujet": "Endpoint protection et durcissement des postes de travail et serveurs avec Microsoft Defender et Intune.",
+  "tags": [
+    "Windows 11",
+    " Windows Server 2022",
+    " Defender",
+    " Intune"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a61"
+  },
+  "refTpi": "1663",
+  "__v": 0,
+  "boss": "Sheyla Oliveira Kobi",
+  "candidat": "Aloise Francesco",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "-55795478400000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "-55795478400000"
+    }
+  },
+  "description": "",
+  "expert1": "Alexandre Graf",
+  "expert2": "Gabriel Maret",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Mise en place d'une infrastructure RDS",
+  "tags": [
+    "WinSrv 2022",
+    "AD",
+    "RemoteDesktop"
+  ],
+  "date1ereVisite": null,
+  "date2emeVisite": null,
+  "dateRenduFinal": null,
+  "dateSoutenance": null
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a64"
+  },
+  "refTpi": "1665",
+  "__v": 0,
+  "boss": "Alain-Philippe Garraux",
+  "candidat": "Sayeh Younes",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Alexandre Graf",
+  "expert2": "Roberto Ferrari",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Site web de gestion des travaux dans une maison",
+  "tags": [
+    "Django",
+    "Python",
+    "JS",
+    "HTML",
+    "MySQL."
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a67"
+  },
+  "refTpi": "1666",
+  "__v": 0,
+  "boss": "Isabelle Stucki",
+  "candidat": "Tare Parraga Esmeralda Beatriz",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073896800000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313076488800000"
+    }
+  },
+  "description": "Système",
+  "expert1": "Alexandre Graf",
+  "expert2": "Raphael Rhyn",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Script pour la surveillance à distance de postes Windows 10 et 11 dans un domaine",
+  "tags": [
+    "Script Powershell",
+    " Windows 10 et 11+Server 2022"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a6a"
+  },
+  "refTpi": "1621",
+  "__v": 0,
+  "boss": "Sheyla Oliveira Kobi",
+  "candidat": "Simoes Braga Tiago ",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Alexandre Graf",
+  "expert2": "Claude Albert Muller Theurillat",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Mise en place d'une infrastructure vmware et orchestration des serveurs ?",
+  "tags": [
+    "vmware"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a6d"
+  },
+  "refTpi": "1647",
+  "__v": 0,
+  "boss": "Livio Nagy",
+  "candidat": "De Almeida Pereira Ricardo",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement",
+  "expert1": "Alexandre Graf",
+  "expert2": "",
+  "lieu": "Merkle",
+  "sujet": "Intégration de Terraform à des pipelines Github",
+  "tags": [
+    "scripting",
+    " pipelines (DevOps)",
+    " Bitbucket",
+    " AWS "
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a70"
+  },
+  "refTpi": "1648",
+  "__v": 0,
+  "boss": "Loïc Schmid",
+  "candidat": "Carqueijo Ribeiro Patricia Alexandra",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Antoine Mveng",
+  "lieu": "Eben Hézer",
+  "sujet": "Remplacement du système de Wiki actuel pour la documentation du SI",
+  "tags": [
+    "Debian",
+    " Wiki ",
+    " LDAP",
+    " BookStack "
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a73"
+  },
+  "refTpi": "1674",
+  "__v": 0,
+  "boss": "Marc-Olivier Domenjoz",
+  "candidat": "Oro Manuel",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Yves Bertino",
+  "expert2": "Aurelie Curchod",
+  "lieu": "Vaudoise",
+  "sujet": "Application web permettant d’ordonnancer la création de tickets ",
+  "tags": [
+    "C#",
+    " .NET Core 6. EntityFramework",
+    " Blazor",
+    " Mudblazor",
+    " Jquery",
+    " Hangfire"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a76"
+  },
+  "refTpi": "1614",
+  "__v": 0,
+  "boss": "Romain Gehrig",
+  "candidat": "Zwahlen Léo",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Baptiste Masson",
+  "expert2": "Jonathan Tonelli",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Déploiement et configuration automatisés de postes Windows",
+  "tags": [
+    "Windows",
+    " SCCM",
+    " MDT",
+    " WDS"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a79"
+  },
+  "refTpi": "1660",
+  "__v": 0,
+  "boss": "Karim Bourahla",
+  "candidat": "Tauxe Florian",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073896800000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313076488800000"
+    }
+  },
+  "description": "",
+  "expert1": "Baptiste Masson",
+  "expert2": "Patrick Pretre",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Mise en place d'une solution WSUS",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a7c"
+  },
+  "refTpi": "1667",
+  "__v": 0,
+  "boss": "Sheyla Oliveira Kobi",
+  "candidat": "Sevivas da Costa Lukas",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Baptiste Masson",
+  "expert2": "Jonathan Tonelli",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Mise en place d'une infrastructure VmWare",
+  "tags": [
+    "Vmware",
+    " Cluster",
+    " VCenter"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a7f"
+  },
+  "refTpi": "1668",
+  "__v": 0,
+  "boss": "Laurent Duding",
+  "candidat": "Praz Nolan",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Baptiste Masson",
+  "expert2": "Raphael Rhyn",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Mettre en oeuvre un logiciel d’inventaire et de ticketing",
+  "tags": [
+    "GLPI",
+    " procédures"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a82"
+  },
+  "refTpi": "1671",
+  "__v": 0,
+  "boss": "Laurent Duding",
+  "candidat": "Bolli Joca",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Baptiste Masson",
+  "expert2": "Jonathan Tonelli",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Automatisation d’installation de VM MS-Server pour l’école",
+  "tags": [
+    "VirtualBox",
+    " scripting",
+    " MSI"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a85"
+  },
+  "refTpi": "1676",
+  "__v": 0,
+  "boss": "Alain-Philippe Garraux",
+  "candidat": "Good Killian",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073896800000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313076488800000"
+    }
+  },
+  "description": "Système, infrastructure",
+  "expert1": "Baptiste Masson",
+  "expert2": "Patrick Pretre",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Comparaison de 2 outils de ticketing (support)",
+  "tags": [
+    "GLPI et Service Now"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8470c210c8426ee34a88"
+  },
+  "refTpi": "1692",
+  "__v": 0,
+  "boss": "Laurent Duding",
+  "candidat": "Capelli Dorian",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Baptiste Masson",
+  "expert2": "Raphael Rhyn",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Scripts pour la surveillance et la maintenance des systèmes Windows dans une PME",
+  "tags": [
+    "Windows",
+    " Powershell",
+    " scripts"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a8b"
+  },
+  "refTpi": "1617",
+  "__v": 0,
+  "boss": "Dimitrios Lymberis",
+  "candidat": "El Aamely Hamza",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Bernard Oberson",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "SpentSharing Gestion de dépense commune",
+  "tags": [
+    "Laravel",
+    "Php",
+    "Mysql"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a8e"
+  },
+  "refTpi": "1655",
+  "__v": 0,
+  "boss": "Cédric Schaffter",
+  "candidat": "Mendes Loïc",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Developpement desktop",
+  "expert1": "Bernard Oberson",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "Générateur de code Qr",
+  "tags": [
+    "C#",
+    " QrCode",
+    " MVC"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a91"
+  },
+  "refTpi": "1656",
+  "__v": 0,
+  "boss": "Xavier Carrel",
+  "candidat": "Regenass Maxime",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Bernard Oberson",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "Runeo, plateforme de gestion de transports d'artistes (extension)",
+  "tags": [
+    "Laravel",
+    " PhP",
+    " Javascript"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a94"
+  },
+  "refTpi": "1658",
+  "__v": 0,
+  "boss": "Xavier Carrel",
+  "candidat": "Sartoni Clément",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Mobile",
+  "expert1": "Bernard Oberson",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "Runeo, plateforme de gestion de transports d'artistes (extension)",
+  "tags": [
+    "Application mobile",
+    " React Native"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a97"
+  },
+  "refTpi": "1659",
+  "__v": 0,
+  "boss": "Xavier Carrel",
+  "candidat": "Füllemann Nathan",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073292000000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313075884000000"
+    }
+  },
+  "description": "",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "Runeo, plateforme de gestion de transports d'artistes (extension)",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a9a"
+  },
+  "refTpi": "1664",
+  "__v": 0,
+  "boss": "Dimitrios Lymberis",
+  "candidat": "D Angelo Alessandro",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Bernard Oberson",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "Gestion d'un stock (matériel nformatique )",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34a9d"
+  },
+  "refTpi": "1675",
+  "__v": 0,
+  "boss": "Gaël Sonney",
+  "candidat": "Pfister Anthony",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Benjamin Wolf",
+  "expert2": "Daniel Berney",
+  "lieu": "ETML-Vennes",
+  "sujet": "Gestion de prêts d'articles entre particuliers",
+  "tags": [
+    "PHP",
+    " mysql"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34aa0"
+  },
+  "refTpi": "1745",
+  "__v": 0,
+  "boss": "Helder Manuel Costa Lopes",
+  "candidat": "Boumaza Béchir",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Bernard Oberson",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "RoomMaster - Maîtrisez la réservation de salles de réunion avec PHP",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34aa3"
+  },
+  "refTpi": "1749",
+  "__v": 0,
+  "boss": "Dimitrios Lymberis",
+  "candidat": "Bracey Matteo Alexandre",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Benjamin Wolf",
+  "lieu": "ETML-Vennes",
+  "sujet": "Création d'un framework simplifié intégrant tous les concepts du pattern architectural MVC",
+  "tags": [
+    "PHP",
+    " MVC"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34aa6"
+  },
+  "refTpi": "1653",
+  "__v": 0,
+  "boss": "Yvan Cochet",
+  "candidat": "Cartier Julien Barnabé",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Benjamin Wolf",
+  "expert2": "Jean-Luc Roduit",
+  "lieu": "Paléo",
+  "sujet": "Migration Azure AD Connect vers Azure AD Connect Cloud Sync sur Intel NUC 11 Pro",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34ab8"
+  },
+  "refTpi": "1672",
+  "__v": 0,
+  "boss": "Gaël Sonney",
+  "candidat": "Sugrañes Oria Santiago",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Yves Bertino",
+  "expert2": "Bernard Oberson",
+  "lieu": "ETML-Vennes",
+  "sujet": "Gestion de matchs e-sport",
+  "tags": [
+    "Laravel",
+    " Node API"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34abb"
+  },
+  "refTpi": "1742",
+  "__v": 0,
+  "boss": "Helder Manuel Costa Lopes",
+  "candidat": "Paetzel Thilo",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Mobile",
+  "expert1": "Bernard Oberson",
+  "expert2": "Daniel Berney",
+  "lieu": "ETML-Vennes",
+  "sujet": "CoPropVote: La solution de gestion et de vote des projets de copropriété",
+  "tags": [
+    "Android studio"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34ac1"
+  },
+  "refTpi": "1753",
+  "__v": 0,
+  "boss": "Helder Manuel Costa Lopes",
+  "candidat": "Lovink Mark Christiaan",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement desktop",
+  "expert1": "Bernard Oberson",
+  "expert2": "Roger Malherbe",
+  "lieu": "ETML-Vennes",
+  "sujet": "ChessPy : JEU D'ÉCHECS EN PYTHON AVEC PYGAME",
+  "tags": [
+    "Python",
+    " pyGame"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34ac4"
+  },
+  "refTpi": "1803",
+  "__v": 0,
+  "boss": "Antoine Mveng",
+  "candidat": "Petrovic Saska",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Yves Bertino",
+  "expert2": "Bernard Oberson",
+  "lieu": "ETML-Vennes",
+  "sujet": "SasCook - site web de gestion de recettes de cuisine",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8471c210c8426ee34ac7"
+  },
+  "refTpi": "1704",
+  "__v": 0,
+  "boss": "Fryderyk Dachowski",
+  "candidat": "Stoimenovski Sanchez Viktor",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Bertrand Sahli",
+  "lieu": "Elite's Bed",
+  "sujet": "Module de sélection de coussin selon les critères du client.",
+  "tags": [
+    "ASP.NET ",
+    " C# ",
+    " Entity Framework ",
+    " HTML/JS/Python"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34acd"
+  },
+  "refTpi": "1670",
+  "__v": 0,
+  "boss": "Roberto Ferrari",
+  "candidat": "Philipona Sylvain",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Suleyman Ceran",
+  "expert2": "Daniel Berney",
+  "lieu": "ETML-Vennes",
+  "sujet": "Gestion des utilisateurs dans AD école",
+  "tags": [
+    "Powershell"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34ad3"
+  },
+  "refTpi": "1741",
+  "__v": 0,
+  "boss": "Patrick Chenaux",
+  "candidat": "Marcinkiewicz Damian Gabriel",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Desktop",
+  "expert1": "Serge Wenger",
+  "expert2": "Daniel Berney",
+  "lieu": "ETML-Vennes",
+  "sujet": "Gestion de préparation physique",
+  "tags": [
+    "C#",
+    " .Net"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34adf"
+  },
+  "refTpi": "1643",
+  "__v": 0,
+  "boss": "Laurent Deschamps",
+  "candidat": "Voide Sébastien",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Patrick Pretre",
+  "lieu": "EPFL-LESO",
+  "sujet": "Migration d'une application d'intégration architecturale en web",
+  "tags": [
+    "C# ",
+    " Web"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34ae2"
+  },
+  "refTpi": "1645",
+  "__v": 0,
+  "boss": "Aurélie Curchod",
+  "candidat": "Duruz Sébastien",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Yves Bertino",
+  "lieu": "ETML-Vennes",
+  "sujet": "Gestion d'une collection de thé",
+  "tags": [
+    "Blazor Server",
+    " MySQL"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34ae8"
+  },
+  "refTpi": "1744",
+  "__v": 0,
+  "boss": "Jonathan Melly",
+  "candidat": "Ferreira Magalhães Rodrigues João Pedro",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Ernesto Montemayor",
+  "expert2": "Michael Wyssa",
+  "lieu": "ETML-Vennes",
+  "sujet": "LemanRide HTML/PHP",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34aee"
+  },
+  "refTpi": "1644",
+  "__v": 0,
+  "boss": "Stéphane Gerber",
+  "candidat": "Takache Youness",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Roger Malherbe",
+  "expert2": "Flavio Pacifico",
+  "lieu": "Gerber Systems",
+  "sujet": "Programme de déploiement simplifié d’une instance de la gestion des vendanges",
+  "tags": [
+    "C#",
+    " Asp.net core",
+    " sql server"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34af1"
+  },
+  "refTpi": "1646",
+  "__v": 0,
+  "boss": "Pascal Junod",
+  "candidat": "Perez Ochoa Diego Miguel",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Virtualisation, système, infrastructure",
+  "expert1": "Jean-Luc Roduit",
+  "expert2": "Frederic Boy",
+  "lieu": "ETML-Vennes",
+  "sujet": "création d'une petite infrastructure virtualisée",
+  "tags": [
+    "vmware",
+    " vcenter",
+    " vsphere",
+    " windows serveur 2022",
+    " AD",
+    " DNS",
+    " DHCP",
+    " FTP"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34af4"
+  },
+  "refTpi": "1651",
+  "__v": 0,
+  "boss": "Pascal Junod",
+  "candidat": "Matthey Thibault",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Virtualisation, système, infrastructure",
+  "expert1": "Jean-Luc Roduit",
+  "expert2": "Frederic Boy",
+  "lieu": "ETML-Vennes",
+  "sujet": "création d'une petite infrastructure virtualisée",
+  "tags": [
+    "vmware",
+    " vcenter",
+    " vsphere",
+    " windows serveur 2022",
+    " AD",
+    " DNS",
+    " DHCP",
+    " FS"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34af7"
+  },
+  "refTpi": "1673",
+  "__v": 0,
+  "boss": "Laurent Deschamps",
+  "candidat": "Rogey Mathias",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Frédérique Andolfatto",
+  "expert2": "Serge Wenger",
+  "lieu": "EPFL-LESO",
+  "sujet": "Acquisition de mesure (GIU) d'un RadonMapper",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34afa"
+  },
+  "refTpi": "1669",
+  "__v": 0,
+  "boss": "Alain-Philippe Garraux",
+  "candidat": "Narducci Cyril",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073896800000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313076488800000"
+    }
+  },
+  "description": "",
+  "expert1": "Roberto Ferrari",
+  "expert2": "Frédérique Andolfatto",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Site web de gestion de vélos perdus/volés",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8472c210c8426ee34b00"
+  },
+  "refTpi": "1654",
+  "__v": 0,
+  "boss": "Michel Delgado",
+  "candidat": "Gebhardt Théo",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système, infrastructure",
+  "expert1": "Matthieu Gressly",
+  "expert2": "Gabriel Maret",
+  "lieu": "ETML-Sébeillon",
+  "sujet": "Monitoring d'une infrastructure avec PRTG",
+  "tags": [
+    "VMware",
+    " PRTG",
+    " monitoring"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b18"
+  },
+  "refTpi": "1804",
+  "__v": 0,
+  "boss": "Bertrand Sahli",
+  "candidat": "Fernandez Yasmine",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Matthieu Gressly",
+  "expert2": "Jonathan Tonelli",
+  "lieu": "ETML-Vennes",
+  "sujet": "Mise en place d'un Raspberry Pi comme serveur de fichiers domestique",
+  "tags": [
+    "Linux",
+    " Raspberry Pi",
+    " NextCloud"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b1b"
+  },
+  "refTpi": "1615",
+  "__v": 0,
+  "boss": "Antoine Mveng",
+  "candidat": "Martins Constantino Bruno",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Nicolas Borboën",
+  "expert2": "Junior Mbuyi",
+  "lieu": "ETML-Vennes",
+  "sujet": "JNLTRAV- mon journal de travail",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b1e"
+  },
+  "refTpi": "1694",
+  "__v": 0,
+  "boss": "Alain Girardet",
+  "candidat": "Höhn Anthony",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Nicolas Borboën",
+  "expert2": "Junior Mbuyi",
+  "lieu": "ETML-Vennes",
+  "sujet": "Plateforme Web de vente de produits locaux, avec Symphony",
+  "tags": [
+    "Symphony"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b24"
+  },
+  "refTpi": "1746",
+  "__v": 0,
+  "boss": "Grégory Charmier",
+  "candidat": "Assayah David Sydney",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Yves Bertino",
+  "expert2": "Luc Venries",
+  "lieu": "ETML-Vennes",
+  "sujet": "Application web permettant l'échange de cartes à collectionner",
+  "tags": [
+    "PHP",
+    " MySQL",
+    " Bootstrap"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b30"
+  },
+  "refTpi": "1747",
+  "__v": 0,
+  "boss": "Jonathan Melly",
+  "candidat": "Berseth Valentin",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Desktop",
+  "expert1": "Serge Wenger",
+  "expert2": "Michael Wyssa",
+  "lieu": "ETML-Vennes",
+  "sujet": "CalendarGenerator C#/WinForms/ICAL",
+  "tags": [
+    "c#",
+    " winforms",
+    " ical"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b33"
+  },
+  "refTpi": "1608",
+  "__v": 0,
+  "boss": "Romain Gehrig",
+  "candidat": "Santa Cruz Paz Gustavo Andrés",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Serge Wenger",
+  "expert2": "Nemanja Pantic",
+  "lieu": "",
+  "sujet": "",
+  "tags": []
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b36"
+  },
+  "refTpi": "1743",
+  "__v": 0,
+  "boss": "Cédric Schaffter",
+  "candidat": "Sadiku Kushtrim",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Infrastructure",
+  "expert1": "Olivier Mellina",
+  "expert2": "Nemanja Pantic",
+  "lieu": "ETML-Vennes",
+  "sujet": "Intégration d'un serveur Linux dans un réseau Windows grâce à Samba",
+  "tags": [
+    "Linux",
+    " Samba",
+    " Windows"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b3c"
+  },
+  "refTpi": "1650",
+  "__v": 0,
+  "boss": "Aurélie Curchod",
+  "candidat": "Bensaci Théo",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Développement Web",
+  "expert1": "Nicolas Borboën",
+  "expert2": "Suleyman Ceran",
+  "lieu": "ETML-Vennes",
+  "sujet": "Plateforme tutoriel REGEX",
+  "tags": [
+    "React JS",
+    " Node JS"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b42"
+  },
+  "refTpi": "1752",
+  "__v": 0,
+  "boss": "Grégory Charmier",
+  "candidat": "Fernandez Samuel",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "",
+  "expert1": "Nicolas Borboën",
+  "expert2": "Yves Bertino",
+  "lieu": "ETML-Vennes",
+  "sujet": "Application web pour le partage de sons libres de droits",
+  "tags": [
+    "PHP",
+    " Laravel",
+    " MySQL"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8473c210c8426ee34b45"
+  },
+  "refTpi": "1755",
+  "__v": 0,
+  "boss": "Patrick Chenaux",
+  "candidat": "Hosch Romain Alexandre",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Administration",
+  "expert1": "Nicolas Borboën",
+  "expert2": "Yves Bertino",
+  "lieu": "ETML-Vennes",
+  "sujet": "Powershell",
+  "tags": [
+    "Windows",
+    " Powershell"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8474c210c8426ee34b7b"
+  },
+  "refTpi": "1652",
+  "__v": 0,
+  "boss": "Cédric Schaffter",
+  "candidat": "Pittier Joël",
+  "dateDepart": null,
+  "dateFin": null,
+  "description": "Système",
+  "expert1": "Suleyman Ceran",
+  "expert2": "Yannis Ansermoz",
+  "lieu": "ETML-Vennes",
+  "sujet": "Mettre en place une solution d'hébergement de site web (LAN + HTTPS)",
+  "tags": [
+    "HTTPS",
+    " Serveur Web"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8474c210c8426ee34b7e"
+  },
+  "refTpi": "1657",
+  "__v": 0,
+  "boss": "Jonathan Melly",
+  "candidat": "Fischer Valentin",
+  "dateDepart": {
+    "$date": {
+      "$numberLong": "6313073896800000"
+    }
+  },
+  "dateFin": {
+    "$date": {
+      "$numberLong": "6313076488800000"
+    }
+  },
+  "description": "Système, infrastructure",
+  "expert1": "Suleyman Ceran",
+  "expert2": "Yannis Ansermoz",
+  "lieu": "ETML-Vennes",
+  "sujet": "K8sAutoRollback déploiement automatisé",
+  "tags": [
+    "kubernetes",
+    " devops"
+  ]
+},
+{
+  "_id": {
+    "$oid": "65aa8475c210c8426ee34b9f"
+  },
+  "refTpi": "",
+  "__v": 0,
+  "dateDepart": null,
+  "dateFin": null,
+  "tags": []
+}]

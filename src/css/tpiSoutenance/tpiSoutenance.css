@@ -23,10 +23,12 @@
   --grid-gap: 30px;
 }
 
-body {
+.tpi-soutenance-page {
   position: relative;
+  width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+  margin: 0 auto;
+  padding: calc(var(--room-padding-top, 72px) + 22px) 0 56px;
   font-family: Arial, Helvetica, sans-serif;
-  padding: 15px;
 }
 
 .hidden {
@@ -42,24 +44,22 @@ body {
   right: 0;
 }
 
-h1 {
+.title,
+.demo {
   margin: 0;
-  font-size: 30px;
+  font-size: 28px;
   text-transform: capitalize;
   font-weight: bold;
-  background-image: linear-gradient(
-    to left,
-    var(--accent-color-etml),
-    var(--accent-color-cfpv)
-  );
+  background-image: linear-gradient(to left,
+      var(--accent-color-etml),
+      var(--accent-color-cfpv));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  /* Pour s'assurer que le dégradé s'applique correctement au texte */
 }
 
-h1::before {
-  content: 'Version de démonstration';
+.demo:before {
+  content: "Version de démonstration";
   /* Cela va forcer le contenu à apparaître sur une nouvelle ligne */
   position: absolute;
   top: 40px;
@@ -73,7 +73,7 @@ h1::before {
   z-index: 100;
 }
 
-h3 {
+.tpi-soutenance-page h3 {
   text-align: center;
   font-size: 2em;
   font-weight: bolder;
@@ -81,13 +81,43 @@ h3 {
   margin-bottom: 2px;
 }
 
-h4 {
+.tpi-soutenance-page h4 {
   text-align: center;
   font-size: 1.7em;
   margin-top: 2px;
 }
 
-p {
+.soutenance-room-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.soutenance-room-class-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+
+.soutenance-room-class-badge.is-matu {
+  background: rgba(236, 254, 255, 0.22);
+  border-color: rgba(165, 243, 252, 0.42);
+}
+
+.tpi-soutenance-page p {
   margin: 0;
   padding: 0;
 }
@@ -96,32 +126,34 @@ p {
 .header-soutenance {
   position: fixed;
   top: 15px;
-  width: 100%;
+  left: 1%;
+  width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
   display: grid;
-  grid-template-columns: auto auto; /* Divise en deux colonnes */
-  grid-template-rows: auto auto; /* Divise en deux lignes */
-}
-
-/* Classe pour la démonstration */
-.demo {
-  grid-column: 1; /* Prend toute la première colonne */
-  grid-row: 1; /* Se trouve dans la première ligne */
+  grid-template-columns: auto auto;
+  /* Divise en deux colonnes */
+  grid-template-rows: auto auto;
+  /* Divise en deux lignes */
 }
 
 /* Classe pour le message de bienvenue */
 .welcom {
-  grid-column: 1 / span 2; /* Prend toute la largeur des deux colonnes */
-  grid-row: 2; /* Se trouve dans la deuxième ligne */
-  justify-content: start; /* Aligne le contenu sur le côté gauche */
-  font-size: 25px;
-  margin-top: 20px;
+  grid-column: 1 / span 2;
+  /* Prend toute la largeur des deux colonnes */
+  grid-row: 2;
+  /* Se trouve dans la deuxième ligne */
+  justify-content: start;
+  /* Aligne le contenu sur le côté gauche */
+  margin-top: 10px;
 }
 
 /* Classe pour les filtres */
 .filters {
-  grid-column: 2; /* Se trouve dans la deuxième colonne */
-  grid-row: 1; /* Se trouve dans la première ligne */
-  gap: 5px; /* Espacement entre les éléments enfants */
+  grid-column: 2;
+  /* Se trouve dans la deuxième colonne */
+  grid-row: 1;
+  /* Se trouve dans la première ligne */
+  gap: 5px;
+  /* Espacement entre les éléments enfants */
 }
 
 .filters select {
@@ -163,21 +195,27 @@ p {
 
 /* Styles spécifiques des classes et sélecteurs */
 .soutenances {
-  width: 100%;
-  margin-top: 120px;
-  z-index: 1000;
+  width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 90px;
   background-color: white;
   margin-bottom: 50px;
+
 }
 
 .soutenances.filterActive {
-  margin-left: 77px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .dataGrid {
   display: grid;
   grid-template-columns: auto auto;
-  justify-content: start;
+  justify-content: center;
+  align-content: center;
+  /* le zoom n'est pas pris en compte dans firefox */
+  /* zoom: 0.477; */
 }
 
 .horairesBox {
@@ -186,12 +224,11 @@ p {
   grid-template-rows: auto;
   font-size: var(--font-size);
   margin-top: calc(var(--height-header) + var(--element-padding));
-  margin-right: 12px;
+  margin-right: 15px;
   background-color: white;
-  width: 55px;
 }
 
-[class^='horaire_'] {
+[class^="horaire_"] {
   display: flex;
   /*start - end */
   /*flex-direction: row;*/
@@ -204,7 +241,7 @@ p {
   text-align: center;
 
   margin-left: 0;
-  margin-top: 5px;
+  margin-top: 15px;
   gap: 5px;
 }
 
@@ -219,7 +256,13 @@ p {
   gap: var(--grid-gap);
 }
 
-[class^='salle ETML'] {
+.salles-container-smartphone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--grid-gap);
+}
+
+[class^="salle ETML"] {
   position: relative;
   border: 2px solid var(--accent-color-etml);
   border-radius: 8px;
@@ -233,7 +276,7 @@ p {
   padding-bottom: var(--element-padding);
 }
 
-[class^='salle CFPV'] {
+[class^="salle CFPV"] {
   position: relative;
   border: 2px solid var(--accent-color-cfpv);
   border-radius: 8px;
@@ -252,7 +295,7 @@ p {
   background-color: var(--bg-color-cfpv);
 }
 
-.ETML [class^='header_'] {
+.ETML [class^="header_"] {
   width: 100%;
   border-radius: 5px 5px 0 0;
   background-color: var(--accent-color-etml);
@@ -262,7 +305,7 @@ p {
   grid-row-end: 2;
 }
 
-.CFPV [class^='header_'] {
+.CFPV [class^="header_"] {
   width: 100%;
   border-radius: 5px 5px 0 0;
   background-color: var(--accent-color-cfpv);
@@ -335,7 +378,11 @@ p {
   line-height: 2.1;
   margin-bottom: 5px;
   white-space: nowrap;
-  margin-bottom: 0;
+  /* Empêche le texte de se retourner à la ligne */
+  overflow: hidden;
+  /* Masque tout texte dépassant de la zone délimitée */
+  text-overflow: ellipsis;
+  /* Ajoute des points de suspension (...) à la fin du texte tronqué */
 }
 
 .site {
@@ -453,7 +500,7 @@ p {
   margin-bottom: 15px;
 }
 
-.popup input[type='date'],
+.popup input[type="date"],
 .popup select {
   box-sizing: border-box;
   padding: 1.2vh;
@@ -519,24 +566,22 @@ p {
 .ETML .time-label {
   font-size: 0.8rem;
   position: absolute;
-  top: 8px;
-  right: 6px;
+  top: 27px;
+  right: 19px;
   font-weight: 600;
   background-color: var(--shadow-color-etml);
-  /* Légère transparence pour la lisibilité */
-  padding: 4px;
+  padding: 2px;
   border-radius: 5px;
 }
 
 .CFPV .time-label {
   font-size: 0.8rem;
   position: absolute;
-  top: 8px;
-  right: 6px;
+  top: 27px;
+  right: 19px;
   font-weight: 600;
   background-color: var(--shadow-color-cfpv);
-  /* Légère transparence pour la lisibilité */
-  padding: 4px;
+  padding: 2px;
   border-radius: 5px;
 }
 
@@ -564,7 +609,7 @@ p {
 }
 
 .stabilo::after {
-  content: '';
+  content: "";
   display: block;
   width: 95%;
   height: 100%;
@@ -606,9 +651,8 @@ button.smartphone {
 }
 
 button.smartphone:nth-child(even) {
-  background-color: var(
-    --accent-color-etml
-  ); /* Couleur de fond pour les boutons pairs */
+  background-color: var(--accent-color-etml);
+  /* Couleur de fond pour les boutons pairs */
 }
 
 .filters-smartphone {
@@ -621,29 +665,31 @@ button.smartphone:nth-child(even) {
 /*#endregion*/
 
 /*  #region PRINT  Styles appliqués uniquement lors de l'impression */
+
 @media print {
+
   @page {
-    size: A4 portrait;
-    /* Force le mode portrait pour l'impression */
-    margin: 20mm;
-    /* Définit les marges de la page imprimée */
+    size: A4 landscape;
+    margin: 0;
+    zoom: 0.56;
+  }
+
+  :root {
+    --height-tpi: 105px;
   }
 
   body {
-    width: 100%;
-    /* Assure que le corps prend toute la largeur de la page */
+    padding: 0;
     margin: 0 auto;
-    /* Centre le contenu horizontalement */
-    max-width: 210mm;
-    /* Largeur maximale du contenu pour s'adapter à la largeur de la page A4 */
-    box-sizing: border-box;
-    /* Assure que la largeur inclut le padding et la bordure */
+  }
 
-    color: black;
+  #header *,
+  .buttonDelete {
+    display: none;
   }
 
   h1 {
-    font-size: 16pt;
+    font-size: 14pt;
     text-align: center;
     margin-top: 0;
     margin-bottom: 1px;
@@ -651,26 +697,31 @@ button.smartphone:nth-child(even) {
   }
 
   h3 {
-    font-size: 18pt;
+    font-size: 12pt;
     margin-top: 8px;
     height: 1.1;
   }
 
   h4 {
-    font-size: 14pt;
+    font-size: 11pt;
     margin-top: 0;
     margin-bottom: 25px;
   }
 
+  .demo,
+  .welcom,
+  .btniCal,
+  footer {
+    display: none;
+  }
+
   /* Crée une ligne d'en-tête pour le tableau */
   .header-row {
-    position: relative;
-    /* Positionnement absolu par rapport à son parent */
     width: 100%;
-    /* Prend la pleine largeur de l'élément parent */
     display: flex;
-    /* Affiche comme un tableau pour aligner les cellules d'en-tête */
-    margin-top: -20px;
+    margin-top: -15px;
+    margin-bottom: 12px;
+    font-size: 11pt;
   }
 
   .header-cell {
@@ -680,6 +731,8 @@ button.smartphone:nth-child(even) {
     text-align: center;
     /* Centre le texte */
     width: 175px;
+    padding: 1px;
+    margin-right: 12px;
   }
 
   .horairesBox,
@@ -690,21 +743,17 @@ button.smartphone:nth-child(even) {
     /* Cache les éléments non nécessaires à l'impression */
   }
 
-  [class^='salle'] {
+  [class^="salle"] {
     display: table;
     /* Chaque salle est transformée en tableau */
     width: auto;
     /* Utilise la pleine largeur */
-    margin-bottom: 10mm;
+    margin-bottom: 20px;
     /* Espacement entre les salles */
-    break-inside: avoid;
-    /* Évite les coupures de salle entre les pages */
-    page-break-inside: avoid;
-    /* Alternative pour les navigateurs plus anciens */
-    border: none;
+    break-inside: avoid-column;
   }
 
-  [class^='header_'] {
+  [class^="header_"] {
     display: table-header-group;
     /* L'en-tête devient l'en-tête du tableau */
     position: relative;
@@ -715,32 +764,47 @@ button.smartphone:nth-child(even) {
     /* Centre le texte */
   }
 
+  .soutenances {
+    margin: 0;
+  }
+
+  .salle.CFPV,
+  .salle.ETML {
+    margin: 0 auto;
+    max-height: 297mm;
+    page-break-after: always;
+    -webkit-page-break-after: always;
+    /* Chrome, Safari */
+    -moz-page-break-after: always;
+    /* Firefox */
+    -o-page-break-after: always;
+    /* Opera */
+  }
+
   .tpi-container {
     display: table-row;
     /* Chaque conteneur de TPI est une ligne de tableau */
     height: auto;
-    /* Hauteur ajustée automatiquement */
   }
 
   .tpi-entry {
     display: table-cell;
     vertical-align: middle;
-    padding: 5px;
+    padding: 8px;
     height: 40px;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-align: left;
-    max-width: 174px;
+    text-align: center;
     width: 175px;
-    line-height: 1.1;
     border: none;
-    font-size: 10pt;
+    font-size: 12pt;
   }
 
   .no-filter {
     display: block;
+    padding: 5px;
     margin-top: 5px;
-    margin-left: 5px;
+    margin-left: 22px;
   }
 
   .site {
@@ -776,12 +840,12 @@ button.smartphone:nth-child(even) {
   }
 
   .tpi-data:not(:last-child) {
-    border-bottom: 1px solid #ccc;
+    border-bottom: 1px solid #aba9a9;
     /* Bordure en bas pour séparer les lignes */
   }
 
   .tpi-data:nth-child(odd) {
-    background-color: #f2f2f2;
+    background-color: #fef1fe;
     /* Couleur de fond pour les lignes impaires */
   }
 
@@ -791,17 +855,15 @@ button.smartphone:nth-child(even) {
     /* Ajoute de l'espace au-dessus et en dessous du nom */
   }
 }
+
 /* #endregion */
 
-
 .btniCal {
-  width: auto;
-  padding: 5px 8px;
   position: absolute;
-  top: 0;
-  right: 80px;
-  font-size: 12px;
-  background-color:transparent;
+  top: 3px;
+  right: 12px;
+  font-size: 16px;
+  background-color: transparent;
   border: none;
-  z-index: 99;
+  z-index: 1;
 }

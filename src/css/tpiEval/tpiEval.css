@@ -1,37 +1,433 @@
-h1 {
-  margin: 15px 0;
+#tpiEval.page-with-toolbar {
+  width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+  margin: 0 auto;
+  padding: calc(var(--room-padding-top, 72px) + var(--page-toolbar-gap, 18px)) 0 96px;
+  overflow-x: clip;
 }
 
-p {
-  line-height: 1.5;
-  font-size: 16px;
+#tpiEval .tpi-eval-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
 }
 
+#tpiEval .tpi-eval-action-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+#tpiEval .tpi-eval-action-btn .tpi-eval-action-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+}
+
+#tpiEval .tpi-eval-action-btn.primary {
+  background: linear-gradient(180deg, #1756d6 0%, #1249bb 100%);
+  border-color: #1249bb;
+}
+
+#tpiEval .tpi-eval-action-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #1f66f4 0%, #1249bb 100%);
+}
+
+#tpiEval .tpi-eval-action-btn.secondary {
+  background: #eef4fb;
+  color: #334155;
+}
+
+#tpiEval .tpi-eval-action-btn.secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+#tpiEval .evaluation-list {
+  width: 100%;
+  max-width: none;
+  margin: 20px auto 0;
+  padding: 0 var(--app-page-gutter);
+  box-sizing: border-box;
+}
+
+#tpiEval #newEvalForm {
+  width: 100%;
+  max-width: none;
+  margin: 18px auto 0;
+  padding: 0 var(--app-page-gutter);
+  box-sizing: border-box;
+}
+
+#tpiEval .evaluation-list h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+#tpiEval .evaluation-filter {
+  width: min(100%, 420px);
+  min-height: 38px;
+  padding: 0 12px;
+  margin-bottom: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+
+#tpiEval .evaluation-filter:focus {
+  outline: none;
+  border-color: #1756d6;
+  box-shadow: 0 0 0 3px rgba(23, 86, 214, 0.12);
+}
+
+#tpiEval .evaluation-items {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+}
+
+#tpiEval .evaluation-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid #d8e0ea;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+#tpiEval .evaluation-item:hover {
+  transform: translateY(-2px);
+  border-color: #b8c7db;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.09);
+}
+
+#tpiEval .evaluation-item p {
+  margin: 0;
+}
+
+#tpiEval .evaluations-year {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+#tpiEval .evaluation-ref {
+  font-size: 0.84rem;
+  color: #475569;
+  font-weight: 700;
+}
+
+#tpiEval .evaluation-candidate {
+  font-size: 0.98rem;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+#tpiEval .evaluation-expert1,
+#tpiEval .evaluation-expert2,
+#tpiEval .evaluation-company {
+  font-size: 0.88rem;
+  color: #334155;
+}
+
+.modeAppro {
+  position: relative;
+  border: 1px solid rgba(136, 219, 12, 0.6);
+  background: linear-gradient(180deg, #f8fff2 0%, #f2f7eb 100%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.modeAppro::after {
+  content: "P_appro";
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  font-size: 13px;
+  font-weight: bold;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  color: #333;
+}
+
+.modeAppro:hover::after {
+  opacity: 1;
+}
+
+@media (max-width: 767px) {
+  #tpiEval.page-with-toolbar {
+  padding-top: calc(var(--room-padding-top, 72px) + var(--page-toolbar-gap, 18px) - 2px);
+  }
+
+  #tpiEval .tpi-eval-toolbar-actions {
+    width: 100%;
+  }
+
+  #tpiEval .tpi-eval-toolbar-actions .tpi-eval-action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  #tpiEval .evaluation-list {
+    padding: 0 14px;
+  }
+
+  #tpiEval #newEvalForm {
+    padding: 0 14px;
+  }
+
+  #tpiEval .evaluation-items {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* SECOND PASS REFINEMENTS */
 #tpiEval {
-  margin-bottom: 100px;
+  position: relative;
+  isolation: isolate;
 }
 
-nav {
-  background-color: #f0f0f0; /* Background color of the navigation bar */
-  padding: 10px; /* Padding around the navigation bar */
-  margin: 10px 0;
+#tpiEval::before,
+#tpiEval::after {
+  content: "";
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: -1;
 }
 
-/* CSS for the button */
-#btnNewEval {
-  background-color: var(--accent-color-etml); /* Button background color */
-  color: white; /* Text color */
-  border: none; /* Remove button border */
-  padding: 10px 20px; /* Padding inside the button */
-  font-size: 16px; /* Font size */
-  cursor: pointer; /* Change cursor to pointer on hover */
-  transition: background-color 0.3s ease; /* Smooth transition for background color */
+#tpiEval::before {
+  top: 92px;
+  right: 4%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.11) 0%, rgba(37, 99, 235, 0) 72%);
 }
 
-#btnNewEval:hover {
-  background-color: var(--shadow-color-etml);
+#tpiEval::after {
+  bottom: 36px;
+  left: 0;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0) 72%);
 }
 
-#btnNewEval:focus {
-  outline: none; /* Remove focus outline */
+#tpiEval #newEvalForm.evaluation-form-shell {
+  margin: 18px auto 0;
+  padding: 0 var(--app-page-gutter);
+  box-sizing: border-box;
+}
+
+#tpiEval .evaluation-form-head {
+  padding: 24px 26px 18px;
+  border: 1px solid rgba(214, 224, 232, 0.88);
+  border-bottom: none;
+  border-radius: 26px 26px 0 0;
+  background: linear-gradient(180deg, #ffffff 0%, #eef4f8 100%);
+}
+
+#tpiEval .evaluation-form-copy h2 {
+  margin: 6px 0 4px;
+  font-size: 1.3rem;
+  color: #0f172a;
+}
+
+#tpiEval .evaluation-form-copy p {
+  margin: 0;
+  color: #475569;
+}
+
+#tpiEval .evaluation-form-kicker,
+#tpiEval .evaluation-list-kicker,
+#tpiEval .evaluation-list-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+#tpiEval .evaluation-form-kicker {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+#tpiEval .evaluation-form-body {
+  padding: 22px 20px 26px;
+  border: 1px solid rgba(214, 224, 232, 0.88);
+  border-top: none;
+  border-radius: 0 0 26px 26px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 22px 42px rgba(15, 23, 42, 0.08);
+}
+
+#tpiEval .evaluation-list-shell {
+  width: 100%;
+  max-width: none;
+  margin: 20px auto 0;
+  padding: 0 var(--app-page-gutter);
+  box-sizing: border-box;
+}
+
+#tpiEval .evaluation-list-shell .evaluation-list {
+  margin: 0;
+  padding: 24px 26px 26px;
+  border-radius: 26px;
+  border: 1px solid rgba(214, 224, 232, 0.88);
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fb 100%);
+  box-shadow: 0 22px 42px rgba(15, 23, 42, 0.08);
+}
+
+#tpiEval .evaluation-list-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+#tpiEval .evaluation-list-copy h2 {
+  margin: 6px 0 4px;
+  font-size: 1.28rem;
+  color: #0f172a;
+}
+
+#tpiEval .evaluation-list-copy p {
+  margin: 0;
+  color: #475569;
+}
+
+#tpiEval .evaluation-list-kicker {
+  background: #ecfeff;
+  color: #0f766e;
+}
+
+#tpiEval .evaluation-list-count {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+#tpiEval .evaluation-filter-row {
+  margin-bottom: 16px;
+}
+
+#tpiEval .evaluation-items {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+#tpiEval .evaluation-item {
+  min-height: 208px;
+  padding: 18px 18px 16px;
+  gap: 8px;
+}
+
+#tpiEval .evaluation-item p {
+  line-height: 1.45;
+}
+
+#tpiEval .evaluation-ref {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4f8;
+}
+
+#tpiEval .evaluation-expert1,
+#tpiEval .evaluation-expert2,
+#tpiEval .evaluation-company {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+#tpiEval .evaluation-company::before {
+  content: "Entreprise";
+  display: block;
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#tpiEval .modeAppro {
+  border-color: rgba(34, 197, 94, 0.28);
+  box-shadow: 0 16px 30px rgba(34, 197, 94, 0.1);
+}
+
+#tpiEval .modeAppro::after {
+  content: "P-Appro";
+  bottom: 14px;
+  opacity: 1;
+  color: #15803d;
+}
+
+#tpiEval .evaluation-empty-state {
+  padding: 42px 24px;
+  border-radius: 20px;
+  border: 1px dashed rgba(148, 163, 184, 0.46);
+  background: rgba(255, 255, 255, 0.74);
+  text-align: center;
+}
+
+#tpiEval .evaluation-empty-state h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+#tpiEval .evaluation-empty-state p {
+  margin: 0;
+  color: #475569;
+}
+
+@media (max-width: 767px) {
+  #tpiEval #newEvalForm.evaluation-form-shell,
+  #tpiEval .evaluation-list-shell {
+    padding: 0 14px;
+  }
+
+  #tpiEval .evaluation-form-head,
+  #tpiEval .evaluation-form-body,
+  #tpiEval .evaluation-list-shell .evaluation-list {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  #tpiEval .evaluation-list-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #tpiEval .evaluation-list-shell .evaluation-list,
+  #tpiEval .evaluation-form-body {
+    overflow-x: clip;
+  }
 }

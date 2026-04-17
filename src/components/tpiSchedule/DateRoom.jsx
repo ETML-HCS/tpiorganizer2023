@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
@@ -7,6 +7,18 @@ import { fr } from 'date-fns/locale'
 
 import TpiSlot from './TpiSlot'
 import BreakLine from './BreakLine'
+import {
+  createEmptyTpi
+} from './tpiScheduleData'
+import {
+  normalizeSoutenanceDateEntries
+} from './soutenanceDateUtils'
+import {
+  inferRoomClassMode
+} from './tpiScheduleFilters'
+import {
+  buildPlanningSlotKey
+} from './tpiScheduleValidationMarkers'
 
 import '../../css/tpiShedule/tpiSheduleStyle.css'
 
@@ -15,53 +27,354 @@ function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
 }
 
+function toDateInputValue(dateValue) {
+  if (!dateValue) {
+    return ''
+  }
+
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 10)
+}
+
 const DateRoom = ({
   roomData,
   roomIndex,
   onDelete,
+  onUpdateRoom,
   isEditOfRoom,
   onUpdateTpi,
-  onSwapTpiCards
+  onSwapTpiCards,
+  tpiCardDetailLevel = 2,
+  peopleRegistry = [],
+  stakeholderShortIdHints = {},
+  soutenanceDates = [],
+  roomCatalogBySite = {},
+  validationMarkersBySlotKey = {}
 }) => {
   // Fonction pour générer l'ID TPI en fonction de la position (site, room et slots)
   const generateUniqueID = (siteIndex, roomIndex, slotIndex) => {
     return `${siteIndex}_${roomIndex}_${slotIndex}`
   }
 
-  const numSlots = roomData.configSite.numSlots
+  const safeRoomData = roomData || {}
+  const safeConfigSite = safeRoomData.configSite || {
+    breakline: 0.1667,
+    tpiTime: 1,
+    firstTpiStart: 8,
+    numSlots: 8
+  }
+  const numSlots =
+    Number.isInteger(safeConfigSite.numSlots) && safeConfigSite.numSlots > 0
+      ? safeConfigSite.numSlots
+      : 8
   const slots = Array(numSlots).fill(null)
 
-  const breakDurationMinutes = Math.floor(roomData.configSite.breakline * 60) // Durée de la pause en minutes
-  const tpiDurationMinutes = roomData.configSite.tpiTime * 60 // Durée du TPI en minutes
-  const firstTpiStartHour = roomData.configSite.firstTpiStart // Heure de début du premier TPI en heures décimales
+  const breakDurationMinutes = Math.floor(
+    Number(safeConfigSite.breakline) * 60
+  ) // Durée de la pause en minutes
+  const tpiDurationMinutes = Number(safeConfigSite.tpiTime) * 60 // Durée du TPI en minutes
+  const firstTpiStartHour = Number(safeConfigSite.firstTpiStart) // Heure de début du premier TPI en heures décimales
 
-  const formattedDate = format(
-    new Date(roomData.date),
-    "'" +
-    capitalizeFirstLetter(
-      format(new Date(roomData.date), 'EEEE', { locale: fr })
-    ) +
-    "' dd-MM-yyyy",
-    { locale: fr }
+  const parsedDate = new Date(safeRoomData.date)
+  const formattedDate = Number.isNaN(parsedDate.getTime())
+    ? 'Date invalide'
+    : format(
+        parsedDate,
+        "'" +
+          capitalizeFirstLetter(format(parsedDate, 'EEEE', { locale: fr })) +
+          "' dd-MM-yyyy",
+        { locale: fr }
+      )
+
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isEditingRoom, setIsEditingRoom] = useState(false)
+  const [draftName, setDraftName] = useState(safeRoomData.name || '')
+  const [draftDate, setDraftDate] = useState(toDateInputValue(safeRoomData.date))
+  const menuRef = useRef(null)
+  const dateInputRef = useRef(null)
+  const roomSelectRef = useRef(null)
+  const normalizedSoutenanceDates = useMemo(
+    () => normalizeSoutenanceDateEntries(soutenanceDates),
+    [soutenanceDates]
   )
+  const roomDateKey = toDateInputValue(safeRoomData.date)
+  const roomDateEntry = useMemo(
+    () => normalizedSoutenanceDates.find((entry) => entry.date === roomDateKey),
+    [normalizedSoutenanceDates, roomDateKey]
+  )
+  const roomClassMode = useMemo(() => inferRoomClassMode({
+    roomName: safeRoomData.name,
+    roomDateEntry,
+    allowedPrefixes: Array.isArray(roomDateEntry?.classes) ? roomDateEntry.classes : []
+  }), [roomDateEntry, safeRoomData.name])
+  const roomClassBadgeLabel = useMemo(
+    () => (roomClassMode === 'matu' ? 'MATU' : ''),
+    [roomClassMode]
+  )
+
+  const availableRoomNames = useMemo(() => {
+    const siteKey = String(safeRoomData.site || '').trim().toUpperCase()
+    const rooms = Array.isArray(roomCatalogBySite?.[siteKey]) ? roomCatalogBySite[siteKey] : []
+    const normalizedRooms = Array.from(
+      new Set(rooms.map((room) => String(room || '').trim()).filter(Boolean))
+    )
+
+    const currentName = String(draftName || safeRoomData.name || '').trim()
+    if (currentName && !normalizedRooms.includes(currentName)) {
+      return [currentName, ...normalizedRooms]
+    }
+
+    return normalizedRooms
+  }, [draftName, roomCatalogBySite, safeRoomData.name, safeRoomData.site])
+
+  useEffect(() => {
+    setDraftName(safeRoomData.name || '')
+    setDraftDate(toDateInputValue(safeRoomData.date))
+  }, [safeRoomData.name, safeRoomData.date, roomIndex])
+
+  useEffect(() => {
+    if (!isEditOfRoom) {
+      setIsMenuOpen(false)
+      setIsEditingRoom(false)
+    }
+  }, [isEditOfRoom])
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return undefined
+    }
+
+    const handlePointerDown = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false)
+        setIsEditingRoom(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [isMenuOpen])
+
+  useEffect(() => {
+    if (!isEditingRoom) {
+      return
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      const target = dateInputRef.current || roomSelectRef.current
+      target?.focus?.()
+    }, 0)
+
+    return () => window.clearTimeout(focusTimer)
+  }, [isEditingRoom])
+
+  const handleSaveRoom = () => {
+    if (typeof onUpdateRoom === 'function') {
+      onUpdateRoom(roomIndex, {
+        name: draftName.trim() || safeRoomData.name || '',
+        date: draftDate || safeRoomData.date || ''
+      })
+    }
+
+    setIsEditingRoom(false)
+    setIsMenuOpen(false)
+  }
+
+  const handleDeleteRoom = () => {
+    const confirmed = window.confirm(
+      `Supprimer la salle "${safeRoomData.name || 'Salle sans nom'}" ?`
+    )
+
+    if (!confirmed) {
+      setIsMenuOpen(false)
+      return
+    }
+
+    if (typeof onDelete === 'function') {
+      onDelete()
+    }
+    setIsMenuOpen(false)
+  }
+
+  const handleRoomInputKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      handleSaveRoom()
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setIsEditingRoom(false)
+      setDraftName(safeRoomData.name || '')
+      setDraftDate(toDateInputValue(safeRoomData.date))
+    }
+  }
+
+  if (!Array.isArray(safeRoomData.tpiDatas)) {
+    safeRoomData.tpiDatas = []
+  }
+
+  if (!safeRoomData.configSite) {
+    safeRoomData.configSite = safeConfigSite
+  }
 
   return (
     <DndProvider backend={HTML5Backend}>
       <div className='room'>
-        <div className={`date-room site_${roomData.site.toLowerCase()}`}>
-          <div className='date'>{formattedDate}</div>
-          <div className='nameRoom'>{roomData.name}</div>
+        <div
+          ref={menuRef}
+          className={`date-room site_${String(safeRoomData.site || 'etml').toLowerCase()} detail-level-${tpiCardDetailLevel}`}
+        >
+          <div className='date-room-topbar'>
+            <div className='date-room-copy'>
+              {isEditingRoom ? (
+                <>
+                  <label className='date-room-inline-field'>
+                    <span>Date</span>
+                    <input
+                      ref={dateInputRef}
+                      type='date'
+                      value={draftDate}
+                      onChange={(event) => setDraftDate(event.target.value)}
+                      onKeyDown={handleRoomInputKeyDown}
+                    />
+                  </label>
+                  <label className='date-room-inline-field'>
+                    <span>Salle</span>
+                    <select
+                      ref={roomSelectRef}
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      onKeyDown={handleRoomInputKeyDown}
+                    >
+                      <option value=''>Sélectionner une salle</option>
+                      {availableRoomNames.map((roomName) => (
+                        <option key={roomName} value={roomName}>
+                          {roomName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <div className='date'>{formattedDate}</div>
+                  <div className='nameRoom'>{safeRoomData.name || 'Salle sans nom'}</div>
+                </>
+              )}
+            </div>
+
+            <div className='date-room-topbar-right'>
+              {roomClassBadgeLabel ? (
+                <span
+                  className={`date-room-class-badge ${
+                    roomClassBadgeLabel === 'MATU'
+                      ? 'is-matu'
+                      : ''
+                  } date-room-class-badge-inline`.trim()}
+                  title={roomClassBadgeLabel === 'MATU' ? 'Salle MATU' : undefined}
+                  aria-label={roomClassBadgeLabel === 'MATU' ? 'Salle MATU' : undefined}
+                >
+                  {roomClassBadgeLabel}
+                </span>
+              ) : null}
+              {isEditOfRoom ? (
+                <div className='date-room-actions'>
+                  {isEditingRoom ? (
+                    <>
+                      <button
+                        type='button'
+                        className='date-room-action primary'
+                        onClick={handleSaveRoom}
+                        title='Enregistrer les modifications de la salle'
+                      >
+                        ✓ Valider
+                      </button>
+                      <button
+                        type='button'
+                        className='date-room-action secondary'
+                        onClick={() => {
+                          setIsEditingRoom(false)
+                          setDraftName(safeRoomData.name || '')
+                          setDraftDate(toDateInputValue(safeRoomData.date))
+                        }}
+                        title='Annuler les modifications de la salle'
+                      >
+                        Annuler
+                      </button>
+                    </>
+                  ) : (
+                    <div className='date-room-menu-wrap'>
+                      <button
+                        type='button'
+                        className='date-room-menu-trigger'
+                        aria-haspopup='menu'
+                        aria-expanded={isMenuOpen}
+                        aria-label='Menu de la salle'
+                        onClick={() => setIsMenuOpen((prev) => !prev)}
+                        title='Menu de la salle'
+                      >
+                        ⋮
+                      </button>
+
+                      {isMenuOpen ? (
+                        <div className='date-room-menu' role='menu'>
+                          <button
+                            type='button'
+                            className='date-room-menu-item'
+                            onClick={() => {
+                              setIsEditingRoom(true)
+                              setIsMenuOpen(false)
+                            }}
+                            role='menuitem'
+                          >
+                            ✏ Modifier
+                          </button>
+                          <button
+                            type='button'
+                            className='date-room-menu-item danger'
+                            onClick={handleDeleteRoom}
+                            role='menuitem'
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
 
           {slots.map((_, iSlot) => {
             // Appeler la fonction generateUniqueID pour générer l'ID TPI
             const tpiID = generateUniqueID(
-              roomData.site.toLowerCase(),
+              String(safeRoomData.site || 'etml').toLowerCase(),
               roomIndex,
               iSlot
             )
             
-            roomData.tpiDatas[iSlot].id = tpiID
-            const tpi = roomData.tpiDatas[iSlot]
+            const slotTpi = safeRoomData.tpiDatas[iSlot] || createEmptyTpi()
+            slotTpi.id = tpiID
+            safeRoomData.tpiDatas[iSlot] = slotTpi
+            const tpi = slotTpi
 
             const startTimeMinutes = Math.floor(
               iSlot * (tpiDurationMinutes + breakDurationMinutes) +
@@ -84,6 +397,13 @@ const DateRoom = ({
 
             const startTime = `${startTimeHours}:${startTimeMinutesFormatted}`
             const endTime = `${endTimeHours}:${endTimeMinutesFormatted}`
+            const slotValidationKey = buildPlanningSlotKey({
+              dateValue: safeRoomData.date,
+              period: iSlot + 1,
+              site: safeRoomData.site,
+              roomName: safeRoomData.name
+            })
+            const slotValidationMarker = validationMarkersBySlotKey?.[slotValidationKey] || null
 
             return (
               <React.Fragment key={iSlot}>
@@ -93,16 +413,21 @@ const DateRoom = ({
                   onUpdateTpi={updatedTpi => onUpdateTpi(iSlot, updatedTpi)}
                   isEditTPICard={isEditOfRoom}
                   onSwapTpiCardsProp={onSwapTpiCards}
+                  detailLevel={tpiCardDetailLevel}
+                  roomSite={safeRoomData.site}
+                  roomName={safeRoomData.name}
+                  roomDate={safeRoomData.date}
+                  peopleRegistry={peopleRegistry}
+                  stakeholderShortIdHints={stakeholderShortIdHints}
+                  soutenanceDates={soutenanceDates}
+                  validationMarker={slotValidationMarker}
                 />
                 {iSlot !== numSlots - 1 && (
-                  <BreakLine duration={breakDurationMinutes} />
+                  <BreakLine duration={breakDurationMinutes} detailLevel={tpiCardDetailLevel} />
                 )}
               </React.Fragment>
             )
           })}
-        </div>
-        <div className='buttonDelete'>
-          <button onClick={onDelete}>Supprimer</button>
         </div>
       </div>
     </DndProvider>
