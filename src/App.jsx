@@ -1,4 +1,4 @@
-import React, { Fragment, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react"
+import React, { Fragment, Suspense, lazy, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react"
 import {
   BrowserRouter as Router,
   Routes,
@@ -9,18 +9,7 @@ import {
   useParams
 } from "react-router-dom"
 
-import Home from "./components/Home"
-import TpiSchedule from "./components/tpiSchedule/TpiSchedule"
-import TpiManagement from "./components/tpiManagement/TpiManagement"
-import TpiTracker from "./components/tpiTracker/TpiTracker"
-import TpiSoutenance from "./components/tpiSoutenance/TpiSoutenance"
-import TokenGenerator from "./components/genToken/GenToken"
-import LoginPage from "./components/LoginPage"
-import TpiEval from "./components/tpiEval/TpiEval"
-import PartiesPrenantes from "./components/partiesPrenantes/PartiesPrenantes"
-import PlanningConfiguration from "./components/planningConfiguration/PlanningConfiguration"
 import Footer from "./components/footer/Footer"
-import { PlanningDashboard } from "./components/tpiPlanning"
 
 import { toast } from "react-toastify"
 
@@ -42,6 +31,19 @@ import {
 
 import "./css/globalStyles.css"
 
+const Home = lazy(() => import("./components/Home"))
+const TpiSchedule = lazy(() => import("./components/tpiSchedule/TpiSchedule"))
+const TpiManagement = lazy(() => import("./components/tpiManagement/TpiManagement"))
+const TpiTracker = lazy(() => import("./components/tpiTracker/TpiTracker"))
+const TpiSoutenance = lazy(() => import("./components/tpiSoutenance/TpiSoutenance"))
+const TokenGenerator = lazy(() => import("./components/genToken/GenToken"))
+const LoginPage = lazy(() => import("./components/LoginPage"))
+const TpiEval = lazy(() => import("./components/tpiEval/TpiEval"))
+const PartiesPrenantes = lazy(() => import("./components/partiesPrenantes/PartiesPrenantes"))
+const PlanningConfiguration = lazy(() => import("./components/planningConfiguration/PlanningConfiguration"))
+const TpiDetailPage = lazy(() => import("./components/tpiDetail/TpiDetailPage"))
+const PlanningDashboard = lazy(() => import("./components/tpiPlanning/PlanningDashboard"))
+
 // Chemins exclus de l'en-tête
 const HEADER_EXCLUDED_PATHS = ['/', '/login']
 const SOUTENANCE_PATH_REGEX = /^\/Soutenances\/\d{4}$/i
@@ -55,7 +57,9 @@ const TOOLBAR_DEFAULT_OPEN_PATHS = [
 ]
 
 const isToolbarPage = (pathname) =>
-  TOOLBAR_DEFAULT_OPEN_PATHS.includes(pathname) || pathname.startsWith('/planning/')
+  TOOLBAR_DEFAULT_OPEN_PATHS.includes(pathname) ||
+  pathname.startsWith('/planning/') ||
+  pathname.startsWith('/tpi/')
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -93,7 +97,7 @@ const getHeaderContextLabel = (pathname, search = "") => {
   }
 
   if (pathname === "/genTokens") {
-    return "Génération tokens"
+    return "Liens d'accès"
   }
 
   if (pathname === "/TpiEval") {
@@ -110,6 +114,10 @@ const getHeaderContextLabel = (pathname, search = "") => {
     return params.get('tab') === 'votes'
       ? `Suivi votes ${year}`
       : `Planning ${year}`
+  }
+
+  if (pathname.startsWith('/tpi/')) {
+    return 'Fiche TPI'
   }
 
   return ""
@@ -190,7 +198,13 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
     )
   }
 
-  const isAdminView = Boolean(isAuthenticated && IS_ADMIN_UI_ENABLED && !isVotePreview && !hasVoteMagicLinkSession)
+  const isAdminView = Boolean(
+    isAuthenticated &&
+    IS_ADMIN_UI_ENABLED &&
+    !hasMagicLink &&
+    !isVotePreview &&
+    !hasVoteMagicLinkSession
+  )
 
   if (!isAuthenticated && !hasPlanningSession && !hasMagicLink) {
     return <Navigate to='/login' replace />
@@ -205,6 +219,15 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
     />
   )
 }
+
+const RouteLoadingFallback = () => (
+  <div className="planning-dashboard loading">
+    <div className="loading-spinner">
+      <div className="spinner"></div>
+      <p>Chargement de la page...</p>
+    </div>
+  </div>
+)
 
 //#region Layout
 const Layout = ({ isAuthenticated, login, logout }) => {
@@ -456,96 +479,107 @@ const Layout = ({ isAuthenticated, login, logout }) => {
       )}
 
       {/* Configuration des Routes */}
-      <Routes>
-        {/* Redirection par défaut vers la page de connexion si non authentifié */}
-        {!isAuthenticated && (
-          <Route path='*' element={<Navigate to='/login' replace />} />
-        )}
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
+          {/* Redirection par défaut vers la page de connexion si non authentifié */}
+          {!isAuthenticated && (
+            <Route path='*' element={<Navigate to='/login' replace />} />
+          )}
 
-        {/* Route pour la page de connexion */}
-        <Route path='/login' element={<LoginPage login={login} />} />
+          {/* Route pour la page de connexion */}
+          <Route path='/login' element={<LoginPage login={login} />} />
 
-        {/* Routes protégées => authentifié */}
-        {isAuthenticated && (
-          <>
-            <Route path='/' element={<Home />} />
-            <Route
-              path='/planification'
-              element={
-                <TpiSchedule toggleArrow={toggleArrow} isArrowUp={isArrowUp} />
-              }
-            />
-            <Route
-              path='/configuration'
-              element={<PlanningConfiguration />}
-            />
-            <Route
-              path='/gestionTPI'
-              element={
-                <TpiManagement
-                  toggleArrow={toggleArrow}
-                  isArrowUp={isArrowUp}
-                />
-              }
-            />
-            <Route
-              path='/partiesPrenantes'
-              element={
-                <PartiesPrenantes
-                  toggleArrow={toggleArrow}
-                  isArrowUp={isArrowUp}
-                />
-              }
-            />
-            <Route
-              path='/suiviEtudiants'
-              element={
-                <TpiTracker
-                  toggleArrow={toggleArrow}
-                  isArrowUp={isArrowUp}
-                />
-              }
-            />
-            <Route
-              path='/genTokens'
-              element={
-                <TokenGenerator
-                  toggleArrow={toggleArrow}
-                  isArrowUp={isArrowUp}
-                />
-              }
-            />
-            <Route path='*' element={<Navigate to='/' replace />} />
-          </>
-        )}
+          {/* Routes protégées => authentifié */}
+          {isAuthenticated && (
+            <>
+              <Route path='/' element={<Home />} />
+              <Route
+                path='/planification'
+                element={
+                  <TpiSchedule toggleArrow={toggleArrow} isArrowUp={isArrowUp} />
+                }
+              />
+              <Route
+                path='/configuration'
+                element={<PlanningConfiguration />}
+              />
+              <Route
+                path='/gestionTPI'
+                element={
+                  <TpiManagement
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path='/partiesPrenantes'
+                element={
+                  <PartiesPrenantes
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path='/suiviEtudiants'
+                element={
+                  <TpiTracker
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path='/genTokens'
+                element={
+                  <TokenGenerator
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path='/tpi/:year/:ref'
+                element={
+                  <TpiDetailPage
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route path='*' element={<Navigate to='/' replace />} />
+            </>
+          )}
 
-        {/* Routes toujours accessibles, authentifié ou non */}
-        <Route
-          path='/planning/:year'
-          element={
-            <PlanningVotesRoute
-              isAuthenticated={isAuthenticated}
-              toggleArrow={toggleArrow}
-              isArrowUp={isArrowUp}
-            />
-          }
-        />
-        <Route
-          path='/planification-votes/:year'
-          element={
-            <PlanningVotesRoute
-              isAuthenticated={isAuthenticated}
-              toggleArrow={toggleArrow}
-              isArrowUp={isArrowUp}
-            />
-          }
-        />
-        <Route path='/Soutenances/:year' element={<TpiSoutenance />} />
-        <Route
-          path='/TpiEval'
-          element={<TpiEval toggleArrow={toggleArrow} isArrowUp={isArrowUp} />}
-        />
-      </Routes>
+          {/* Routes toujours accessibles, authentifié ou non */}
+          <Route
+            path='/planning/:year'
+            element={
+              <PlanningVotesRoute
+                isAuthenticated={isAuthenticated}
+                toggleArrow={toggleArrow}
+                isArrowUp={isArrowUp}
+              />
+            }
+          />
+          <Route
+            path='/planification-votes/:year'
+            element={
+              <PlanningVotesRoute
+                isAuthenticated={isAuthenticated}
+                toggleArrow={toggleArrow}
+                isArrowUp={isArrowUp}
+              />
+            }
+          />
+          <Route path='/Soutenances/:year' element={<TpiSoutenance />} />
+          <Route
+            path='/TpiEval'
+            element={<TpiEval toggleArrow={toggleArrow} isArrowUp={isArrowUp} />}
+          />
+        </Routes>
+      </Suspense>
 
       {/* Pied de page */}
       <Footer />

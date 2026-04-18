@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import TpiForm from './TpiForm.jsx'
+import { buildTpiDetailsLink } from '../tpiDetail/tpiDetailUtils.js'
 import { getPlanningClassDisplayInfo } from '../tpiPlanning/planningClassUtils.js'
 import {
   buildTpiTagProfile,
@@ -114,12 +115,19 @@ const getEffectiveCardColumns = (containerWidth, preferredColumns) => {
   return Math.max(1, Math.min(preferredColumns, availableColumns))
 }
 
+const normalizeManagedRef = (value) =>
+  String(value || '')
+    .trim()
+    .replace(/^TPI-\d{4}-/i, '')
+
 const TpiList = ({
   tpiList,
   onSave,
   year,
   searchTerm = '',
   onSearchTermChange = () => {},
+  focusedTpiRef = '',
+  requestedEditRef = '',
   planningCatalogSites = [],
   planningClassTypes = []
 }) => {
@@ -130,7 +138,6 @@ const TpiList = ({
   )
   const [displayMode, setDisplayMode] = useState('cards')
   const [cardColumns, setCardColumns] = useState(4)
-  const [expandedTpiId, setExpandedTpiId] = useState(null)
   const [cardGridWidth, setCardGridWidth] = useState(0)
   const [displayOptions, setDisplayOptions] = useState(DEFAULT_DISPLAY_OPTIONS)
   const cardGridRef = useRef(null)
@@ -294,15 +301,10 @@ const TpiList = ({
 
   const handleEdit = (tpiRef) => {
     setEditingTpiId(tpiRef)
-    setExpandedTpiId(tpiRef)
   }
 
   const handleFormClose = () => {
     setEditingTpiId(null)
-  }
-
-  const toggleExpandedCard = (tpiRef) => {
-    setExpandedTpiId((current) => (current === tpiRef ? null : tpiRef))
   }
 
   const clearFilters = () => {
@@ -331,6 +333,30 @@ const TpiList = ({
       ? formatTagCountLabel(profile.previewTags.length)
       : formatTagCountLabel(profile.totalTags)
   }
+
+  useEffect(() => {
+    const normalizedRequestedRef = normalizeManagedRef(requestedEditRef)
+
+    if (!normalizedRequestedRef) {
+      return
+    }
+
+    const matchingTpi = tpiList.find((tpi) => normalizeManagedRef(tpi?.refTpi) === normalizedRequestedRef)
+
+    if (!matchingTpi) {
+      return
+    }
+
+    setEditingTpiId((currentEditingRef) => {
+      if (normalizeManagedRef(currentEditingRef) === normalizedRequestedRef) {
+        return currentEditingRef
+      }
+
+      return normalizedRequestedRef
+    })
+  }, [requestedEditRef, tpiList])
+
+  const normalizedFocusedRef = normalizeManagedRef(focusedTpiRef)
   return (
     <div className='tpi-list-shell'>
       <div className='tpi-toolbar-row'>
@@ -491,12 +517,12 @@ const TpiList = ({
             ]
               .filter(Boolean)
               .join(' · ')
-            const isExpanded = expandedTpiId === tpi.refTpi
             const missingStakeholders = stakeholderIssues.missingStakeholders
             const missingStakeholderLinks = stakeholderIssues.missingLinks
+            const isFocused = normalizedFocusedRef && normalizeManagedRef(tpi.refTpi) === normalizedFocusedRef
 
             return (
-              <article key={tpi.refTpi} className={`tpi-card ${isExpanded ? 'expanded' : ''}`}>
+              <article key={tpi.refTpi} className={`tpi-card ${isFocused ? 'is-focused' : ''}`.trim()}>
                 <div className='tpi-card-header'>
                   <div className='tpi-card-header-main'>
                     <div className='tpi-card-badges'>
@@ -521,13 +547,21 @@ const TpiList = ({
                     <div className='tpi-ref-badge'>#{tpi.refTpi}</div>
                   </div>
 
-                  <button
-                    type='button'
-                    className='tpi-card-edit'
-                    onClick={() => handleEdit(tpi.refTpi)}
-                  >
-                    Modifier
-                  </button>
+                  <div className='tpi-card-actions'>
+                    <Link
+                      to={buildTpiDetailsLink(year, tpi.refTpi)}
+                      className='tpi-card-open'
+                    >
+                      Ouvrir la fiche
+                    </Link>
+                    <button
+                      type='button'
+                      className='tpi-card-edit'
+                      onClick={() => handleEdit(tpi.refTpi)}
+                    >
+                      Modifier
+                    </button>
+                  </div>
                 </div>
 
                 <h3 className='tpi-card-candidate'>
@@ -572,6 +606,12 @@ const TpiList = ({
                       Liaison PP à compléter
                     </span>
                   ) : null}
+
+                  {isFocused ? (
+                    <span className='tpi-tag tpi-tag-focus'>
+                      Fiche ciblée
+                    </span>
+                  ) : null}
                 </div>
 
                 <dl className='tpi-card-meta'>
@@ -614,107 +654,10 @@ const TpiList = ({
                 </dl>
 
                 <div className='tpi-card-footer'>
-                  <button
-                    type='button'
-                    className='tpi-card-details-toggle'
-                    aria-expanded={isExpanded}
-                    onClick={() => toggleExpandedCard(tpi.refTpi)}
-                  >
-                    {isExpanded ? 'Masquer les détails' : 'Détails'}
-                  </button>
+                  <span className='tpi-card-footer-hint'>
+                    {stakeholderIssues.summary}
+                  </span>
                 </div>
-
-                {isExpanded && (
-                  <div className='tpi-card-details' aria-live='polite'>
-                    <div className='tpi-detail-grid'>
-                      <article>
-                        <span>Classe</span>
-                        <strong>{classCode || 'Non renseignée'}</strong>
-                      </article>
-                      {classResolution?.hasSpecificClass ? (
-                        <article>
-                          <span>Type de base</span>
-                          <strong>{classTypeLabel || 'Non renseigné'}</strong>
-                        </article>
-                      ) : null}
-                      <article>
-                        <span>Site</span>
-                        <strong>{classResolution?.siteLabel || tpi.site || tpi.lieu?.site || 'Non renseigné'}</strong>
-                      </article>
-                      <article>
-                        <span>Domaine détecté</span>
-                        <strong>{profile.domainLabel || 'Non renseigné'}</strong>
-                      </article>
-                      <article>
-                        <span>Lieu complet</span>
-                        <strong>{getTpiLocationLabel(tpi)}</strong>
-                      </article>
-                      <article>
-                        <span>Période</span>
-                        <strong>{getTpiTimelineLabel(tpi)}</strong>
-                      </article>
-                      <article>
-                        <span>Évaluation</span>
-                        <strong>{getEvaluationLabel(tpi)}</strong>
-                      </article>
-                      <article>
-                        <span>Dépôt</span>
-                        <strong>{tpi.lienDepot ? 'Lien disponible' : 'Aucun lien'}</strong>
-                      </article>
-                      <article>
-                        <span>Etat PP</span>
-                        <strong>
-                          {stakeholderIssues.summary}
-                        </strong>
-                      </article>
-                    </div>
-
-                    <div className='tpi-detail-section'>
-                      <h4>Experts</h4>
-                      <div className='tpi-inline-values'>
-                        <span>
-                          Expert 1:{' '}
-                          <StakeholderLink tpi={tpi} field={stakeholderFields.expert1}>
-                            {tpi?.experts?.['1'] || 'Non renseigné'}
-                          </StakeholderLink>
-                        </span>
-                        <span>
-                          Expert 2:{' '}
-                          <StakeholderLink tpi={tpi} field={stakeholderFields.expert2}>
-                            {tpi?.experts?.['2'] || 'Non renseigné'}
-                          </StakeholderLink>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className='tpi-detail-section'>
-                      <h4>Axes techniques</h4>
-                      <div className='tpi-tag-groups'>
-                        {profile.groupedTags.length > 0 ? (
-                          profile.groupedTags.map((group) => (
-                            <section key={group.key} className='tpi-tag-group'>
-                              <div className='tpi-tag-group-header'>
-                                <span className={getCategoryChipClass(group.key)}>
-                                  {group.label}
-                                </span>
-                                <small>{group.count} tag{group.count > 1 ? 's' : ''}</small>
-                              </div>
-                              <div className='tpi-tag-row'>
-                                {group.tags.map((entry) => (
-                                  <span key={`${tpi.refTpi}-${group.key}-${entry.label}`} className='tpi-tag'>
-                                    {entry.label}
-                                  </span>
-                                ))}
-                              </div>
-                            </section>
-                          ))
-                        ) : (
-                          <p>Aucun tag saisi pour cette fiche.</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </article>
             )
           })}
@@ -740,9 +683,10 @@ const TpiList = ({
                 const classDisplay = classResolution?.displayLabel || String(tpi.classe || '').trim() || 'Non renseignée'
                 const missingStakeholders = stakeholderIssues.missingStakeholders
                 const missingStakeholderLinks = stakeholderIssues.missingLinks
+                const isFocused = normalizedFocusedRef && normalizeManagedRef(tpi.refTpi) === normalizedFocusedRef
 
                 return (
-                  <tr key={tpi.refTpi}>
+                  <tr key={tpi.refTpi} className={isFocused ? 'is-focused' : ''}>
                     <td>{tpi.refTpi}</td>
                     <td>
                       <StakeholderLink tpi={tpi} field={stakeholderFields.candidat}>
@@ -776,6 +720,12 @@ const TpiList = ({
                           A completer
                         </span>
                       ) : null}
+                      <Link
+                        to={buildTpiDetailsLink(year, tpi.refTpi)}
+                        className='tpi-table-open'
+                      >
+                        Ouvrir
+                      </Link>
                       <button
                         type='button'
                         className='tpi-table-edit'

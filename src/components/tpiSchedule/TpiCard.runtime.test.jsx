@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import TpiCard from './TpiCard'
 
 jest.mock('react-dnd', () => ({
@@ -34,6 +35,12 @@ function TpiCardHarness({ initialTpi = baseTpi }) {
   )
 }
 
+const renderWithRouter = (ui) => render(
+  <MemoryRouter>
+    {ui}
+  </MemoryRouter>
+)
+
 describe('TpiCard editing overlay', () => {
   beforeEach(() => {
     global.fetch = jest.fn(async () => ({
@@ -65,7 +72,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   it('opens the selector without crashing and starts loading models', async () => {
-    render(
+    renderWithRouter(
       <TpiCard
         tpi={baseTpi}
         onUpdateTpi={jest.fn()}
@@ -83,7 +90,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   it('retire un TPI de la liste après attribution', async () => {
-    render(<TpiCardHarness />)
+    renderWithRouter(<TpiCardHarness />)
 
     await screen.findByRole('button', { name: /⌕/ })
 
@@ -106,7 +113,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   it('affiche un cadre rouge quand la carte porte une erreur de validation', async () => {
-    render(
+    renderWithRouter(
       <TpiCard
         tpi={baseTpi}
         onUpdateTpi={jest.fn()}
@@ -122,7 +129,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   it('affiche les identifiants des parties prenantes dans la vue 0', async () => {
-    render(
+    renderWithRouter(
       <TpiCard
         tpi={{
           ...baseTpi,
@@ -181,7 +188,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   it('résout les identifiants manquants depuis le référentiel parties prenantes', async () => {
-    render(
+    renderWithRouter(
       <TpiCard
         tpi={baseTpi}
         onUpdateTpi={jest.fn()}
@@ -232,7 +239,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   it('utilise la seconde passe quand un numéro PP a déjà été résolu ailleurs', async () => {
-    render(
+    renderWithRouter(
       <TpiCard
         tpi={baseTpi}
         onUpdateTpi={jest.fn()}
@@ -270,5 +277,21 @@ describe('TpiCard editing overlay', () => {
     expect(screen.getByText('E-021')).toBeInTheDocument()
     expect(screen.getByText('E-022')).toBeInTheDocument()
     expect(screen.getByText('P-031')).toBeInTheDocument()
+  })
+
+  it('expose un lien discret vers la fiche TPI dans la vue de planification', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={baseTpi}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+      />
+    )
+
+    expect(await screen.findByRole('link', { name: /ouvrir la fiche tpi-000/i })).toHaveAttribute(
+      'href',
+      '/tpi/2026/TPI-000'
+    )
   })
 })

@@ -9,6 +9,7 @@ import { formatDate, getRoomSchedule } from "./TpiSoutenanceParts"
 const defaultFilters = {
   site: "",
   date: "",
+  reference: "",
   candidate: "",
   experts: "",
   projectManagerButton: "",
@@ -21,7 +22,8 @@ const useToken = () => {
   const queryParams = new URLSearchParams(location.search)
   return {
     legacyToken: queryParams.get("token"),
-    magicLinkToken: queryParams.get("ml")
+    magicLinkToken: queryParams.get("ml"),
+    focusReference: queryParams.get("focus") || ""
   }
 }
 
@@ -100,6 +102,22 @@ export const createSchedule = (roomData) => {
 
 const normalizeText = (value) => String(value || "").toLowerCase()
 
+const normalizeReference = (value) =>
+  normalizeText(value).replace(/^tpi-\d{4}-/i, "")
+
+export const matchesReferenceFilter = (referenceFilter, tpiReference) => {
+  const normalizedFilter = normalizeReference(referenceFilter)
+  const normalizedReference = normalizeReference(tpiReference)
+  const rawFilter = normalizeText(referenceFilter)
+  const rawReference = normalizeText(tpiReference)
+
+  if (!normalizedFilter || !normalizedReference) {
+    return false
+  }
+
+  return normalizedFilter === normalizedReference || rawFilter === rawReference
+}
+
 const doesTpiMatchViewer = (tpi, viewer = null) => {
   if (!viewer?.personId && !viewer?.name) {
     return true
@@ -140,6 +158,7 @@ const filterRooms = (rooms, filters, magicLinkViewer = null) =>
         (!filters.nameRoom || room.name === filters.nameRoom) &&
         (!filters.site || room.site === filters.site) &&
         (!filters.date || formatDate(room.date) === filters.date) &&
+        (!filters.reference || matchesReferenceFilter(filters.reference, tpi.refTpi)) &&
         (!filters.candidate ||
           tpi.candidat.toLowerCase().includes(filters.candidate.toLowerCase())) &&
         (!filters.experts ||
@@ -175,6 +194,7 @@ const filterRooms = (rooms, filters, magicLinkViewer = null) =>
 export const isFilterApplied = (filters) =>
   filters.site !== "" ||
   filters.date !== "" ||
+  filters.reference !== "" ||
   filters.nameRoom !== "" ||
   filters.experts !== "" ||
   filters.candidate !== "" ||
@@ -182,7 +202,7 @@ export const isFilterApplied = (filters) =>
   filters.projectManagerButton !== ""
 
 export const useSoutenanceData = (year) => {
-  const { legacyToken: token, magicLinkToken } = useToken()
+  const { legacyToken: token, magicLinkToken, focusReference } = useToken()
   const [soutenanceData, setSoutenanceData] = useState([])
   const [expertOrBoss, setExpertOrBoss] = useState(null)
   const [listOfExpertsOrBoss, setListOfExpertsOrBoss] = useState([])
@@ -344,6 +364,19 @@ export const useSoutenanceData = (year) => {
           : previousFilters.projectManagerButton
     }))
   }, [listOfExpertsOrBoss, token])
+
+  useEffect(() => {
+    setFilters((previousFilters) => {
+      if (previousFilters.reference === focusReference) {
+        return previousFilters
+      }
+
+      return {
+        ...previousFilters,
+        reference: focusReference
+      }
+    })
+  }, [focusReference])
 
   const updateFilter = useCallback((filterName, value) => {
     setFilters((previousFilters) => ({

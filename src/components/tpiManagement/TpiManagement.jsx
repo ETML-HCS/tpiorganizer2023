@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 
 import { saveTpiToServer, getTpiFromServer } from './TpiData.jsx'
 import TpiForm from './TpiForm.jsx'
 import TpiList from './TpiList.jsx'
 import TpiManagementButtons from './TpiManagementButtons.jsx'
+import { extractLegacyRefFromWorkflowReference } from '../tpiDetail/tpiDetailUtils.js'
+import { getPlanningClassPeriod } from '../tpiPlanning/planningClassUtils.js'
 import { YEARS_CONFIG } from '../../config/appConfig'
 import { planningCatalogService, planningConfigService } from '../../services/planningService'
 import {
@@ -17,6 +20,7 @@ import '../../css/tpiManagement/tpiManagementStyle.css'
 const generateAvailableYears = () => YEARS_CONFIG.getAvailableYears()
 
 const TpiManagement = ({ toggleArrow, isArrowUp }) => {
+  const location = useLocation()
   const [newTpi, setNewTpi] = useState(false)
   const [tpiList, setTpiList] = useState([])
   const [planningCatalogSites, setPlanningCatalogSites] = useState([])
@@ -30,6 +34,58 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     () => generateAvailableYears().slice().sort((left, right) => right - left),
     []
   )
+  const requestedYear = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const value = Number.parseInt(params.get('year'), 10)
+
+    return Number.isInteger(value) ? value : null
+  }, [location.search])
+  const requestedFocus = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return extractLegacyRefFromWorkflowReference(params.get('focus'), requestedYear || year)
+  }, [location.search, requestedYear, year])
+  const requestedEditRef = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const editFlag = String(params.get('edit') || '').trim().toLowerCase()
+
+    if (!requestedFocus || !['1', 'true', 'yes'].includes(editFlag)) {
+      return ''
+    }
+
+    return requestedFocus
+  }, [location.search, requestedFocus])
+  const requestedCreate = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const createFlag = String(params.get('new') || '').trim().toLowerCase()
+
+    return ['1', 'true', 'yes'].includes(createFlag)
+  }, [location.search])
+  const requestedPrefillTpi = useMemo(() => {
+    if (!requestedCreate) {
+      return null
+    }
+
+    const prefillTpi = location.state?.prefillTpi
+    return prefillTpi && typeof prefillTpi === 'object' ? prefillTpi : null
+  }, [location.state, requestedCreate])
+  const enrichedRequestedPrefillTpi = useMemo(() => {
+    if (!requestedPrefillTpi) {
+      return null
+    }
+
+    const classPeriod = getPlanningClassPeriod(
+      requestedPrefillTpi?.classe,
+      planningClassTypes,
+      planningCatalogSites,
+      requestedPrefillTpi?.site || requestedPrefillTpi?.lieu?.site
+    )
+
+    return {
+      ...requestedPrefillTpi,
+      dateDepart: requestedPrefillTpi?.dateDepart || classPeriod.startDate || '',
+      dateFin: requestedPrefillTpi?.dateFin || classPeriod.endDate || ''
+    }
+  }, [planningCatalogSites, planningClassTypes, requestedPrefillTpi])
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -68,6 +124,27 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     void fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    if (!requestedYear || !availableYears.includes(requestedYear) || requestedYear === year) {
+      return
+    }
+
+    setYear(requestedYear)
+    setNewTpi(false)
+  }, [availableYears, requestedYear, year])
+
+  useEffect(() => {
+    setSearchTerm(requestedFocus)
+  }, [requestedFocus])
+
+  useEffect(() => {
+    if (!requestedCreate) {
+      return
+    }
+
+    setNewTpi(true)
+  }, [requestedCreate])
 
   const handleSaveTpi = useCallback(
     async (tpiDetails) => {
@@ -160,6 +237,12 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
                   <span>{chip.label}</span>
                 </span>
               ))}
+              {requestedFocus ? (
+                <span className='tpi-management-chip tpi-management-chip-focus'>
+                  <strong>{requestedFocus}</strong>
+                  <span>{requestedEditRef ? 'Édition ciblée' : requestedCreate ? 'Création ciblée' : 'Focus'}</span>
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -201,7 +284,12 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
               <p>Les quatre parties prenantes sont requises: candidat, expert 1, expert 2 et chef de projet.</p>
             </div>
 
-            <TpiForm onSave={handleSaveTpi} onClose={handleOnClose} year={year} />
+            <TpiForm
+              onSave={handleSaveTpi}
+              onClose={handleOnClose}
+              year={year}
+              initialTpi={requestedCreate ? enrichedRequestedPrefillTpi : null}
+            />
           </section>
         )}
 
@@ -227,6 +315,8 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
             year={year}
             searchTerm={searchTerm}
             onSearchTermChange={setSearchTerm}
+            focusedTpiRef={requestedFocus}
+            requestedEditRef={requestedEditRef}
             planningCatalogSites={planningCatalogSites}
             planningClassTypes={planningClassTypes}
           />

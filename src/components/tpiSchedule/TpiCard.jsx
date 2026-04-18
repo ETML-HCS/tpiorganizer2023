@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useDrag } from "react-dnd";
+import { Link } from "react-router-dom";
 import { ItemTypes } from "./Constants";
 import { getTpiModels } from "../tpiControllers/TpiController";
 import { normalizeTpi } from "./tpiScheduleData";
+import { buildTpiDetailsLink } from "../tpiDetail/tpiDetailUtils";
 import {
   inferRoomClassMode,
   matchesClassFilterForRoom
@@ -557,6 +559,7 @@ const TpiCard = ({
   const validationErrorTitle = Array.isArray(validationErrorMessages) && validationErrorMessages.length > 0
     ? validationErrorMessages.join("\n")
     : undefined;
+  const tpiDetailLink = buildTpiDetailsLink(roomYear, displayRef);
   const showHeaderMeta =
     !isEmptyCard &&
     normalizedDetailLevel >= 3 &&
@@ -714,6 +717,19 @@ const TpiCard = ({
       }`}
       title={!isEmptyCard && hasValidationError ? validationErrorTitle : undefined}
     >
+      {!isEditingTpiCard && displayRef && normalizedDetailLevel >= 2 ? (
+        <Link
+          className="tpi-card-dossier-link"
+          to={tpiDetailLink}
+          draggable={false}
+          title={`Ouvrir la fiche ${displayRef}`}
+          aria-label={`Ouvrir la fiche ${displayRef}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          Fiche
+        </Link>
+      ) : null}
+
       {showHeaderMeta ? (
         <div className="tpi-card-head">
           <div className="tpi-card-head-copy">

@@ -42,6 +42,7 @@ const legacyExpertsRoutes = require('./routes/legacyExpertsRoutes')
 const legacySoutenanceRoutes = require('./routes/legacySoutenanceRoutes') // Backward compatibility for legacy tokens
 const magicLinkRoutes = require('./routes/magicLinkRoutes')
 const planningRoutes = require('./routes/planningRoutes')
+const tpiDossierRoutes = require('./routes/tpiDossierRoutes')
 const workflowRoutes = require('./routes/workflowRoutes')
 const importRoutes = require('./routes/importRoutes')
 
@@ -85,6 +86,7 @@ app.use('/api/auth', legacyAuthRoutes)
 app.use('/api', legacyUsersRoutes)
 app.use('/api', legacyAdminRoutes)
 app.use('/api', legacyExpertsRoutes)
+app.use('/api', tpiDossierRoutes)
 
 // Auth via magic links (v2)
 app.use('/api/magic-link', magicLinkRoutes)

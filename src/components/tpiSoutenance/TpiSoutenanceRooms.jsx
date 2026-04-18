@@ -1,7 +1,9 @@
 import React, { Fragment, useState } from "react"
+import { Link } from "react-router-dom"
 
 import CreneauPropositionPopup from "./CreneauPropositionPopup"
 import TpiSoutenanceActionButtons from "./TpiSoutenanceActionButtons"
+import { buildTpiDetailsLink } from "../tpiDetail/tpiDetailUtils"
 import {
   TruncatedText,
   formatDate,
@@ -205,6 +207,16 @@ END:VCALENDAR`
                         iCal &#x1F4E5;
                       </button>
                     )}
+
+                    {tpiData?.refTpi ? (
+                      <Link
+                        className='btnTpiDossier'
+                        to={buildTpiDetailsLink(year, tpiData.refTpi)}
+                        title={`Ouvrir la fiche ${tpiData.refTpi}`}
+                      >
+                        Fiche
+                      </Link>
+                    ) : null}
 
                     <div className='tpi-entry tpi-candidat'>
                       <div className='tpi-entry'>

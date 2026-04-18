@@ -79,7 +79,7 @@ const resolveUniquePerson = (people = [], value = '') => {
   return matches.length === 1 ? matches[0] : null
 }
 
-const TpiForm = ({ onSave, tpiToLoad, onClose, year }) => {
+const TpiForm = ({ onSave, tpiToLoad, initialTpi = null, onClose, year }) => {
   const [formData, setFormData] = useState(emptyFormState)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [people, setPeople] = useState([])
@@ -159,8 +159,8 @@ const TpiForm = ({ onSave, tpiToLoad, onClose, year }) => {
   const getPeopleForRole = (role) => peopleByRole[role] || []
 
   useEffect(() => {
-    setFormData(normalizeTpiForForm(tpiToLoad))
-  }, [tpiToLoad])
+    setFormData(normalizeTpiForForm(tpiToLoad || initialTpi))
+  }, [initialTpi, tpiToLoad])
 
   useEffect(() => {
     if (people.length === 0) {
@@ -195,7 +195,7 @@ const TpiForm = ({ onSave, tpiToLoad, onClose, year }) => {
   }, [people, peopleByRole])
 
   const resetForm = () => {
-    setFormData(emptyFormState)
+    setFormData(normalizeTpiForForm(initialTpi))
   }
 
   const handleSubmit = async (event) => {
@@ -293,6 +293,7 @@ const TpiForm = ({ onSave, tpiToLoad, onClose, year }) => {
   }
 
   const isEditing = Boolean(tpiToLoad)
+  const isPrefilledCreate = Boolean(!isEditing && initialTpi)
 
   return (
     <div className='containerForm'>
@@ -306,7 +307,9 @@ const TpiForm = ({ onSave, tpiToLoad, onClose, year }) => {
           </div>
 
           <p>
-            Structure normalisee pour les experts, lieux, dates et evaluation.
+            {isPrefilledCreate
+              ? 'Prérempli depuis la fiche Planning. Vérifie puis complète les champs manquants avant enregistrement.'
+              : 'Structure normalisee pour les experts, lieux, dates et evaluation.'}
           </p>
         </div>
 

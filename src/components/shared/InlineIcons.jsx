@@ -22,6 +22,13 @@ export const RoomIcon = (props) => (
   </svg>
 )
 
+export const PinIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M12 21s6-4.2 6-10a6 6 0 0 0-12 0c0 5.8 6 10 6 10z' />
+    <path d='M9.8 10.8h4.4' />
+  </svg>
+)
+
 export const WrapIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M4 7h10a3 3 0 0 1 3 3v2' />
@@ -44,10 +51,33 @@ export const DocumentIcon = (props) => (
   </svg>
 )
 
+export const FileTextIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M7 3h7l4 4v14H7z' />
+    <path d='M14 3v5h5' />
+    <path d='M9 12h6M9 16h4' />
+  </svg>
+)
+
+export const FolderIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z' />
+  </svg>
+)
+
 export const UserIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <circle cx='12' cy='8' r='3' />
     <path d='M5 19a7 7 0 0 1 14 0' />
+  </svg>
+)
+
+export const UsersIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <circle cx='9' cy='8.5' r='2.5' />
+    <circle cx='16' cy='9.5' r='2' />
+    <path d='M4.5 18.5a5.5 5.5 0 0 1 9 0' />
+    <path d='M14 18.5a4.5 4.5 0 0 1 5 0' />
   </svg>
 )
 
@@ -76,6 +106,57 @@ export const ProjectLeadIcon = (props) => (
   </svg>
 )
 
+export const DashboardIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='3' y='4' width='7' height='7' rx='2' />
+    <rect x='14' y='4' width='7' height='5' rx='2' />
+    <rect x='3' y='13' width='5' height='7' rx='2' />
+    <rect x='10' y='12' width='11' height='8' rx='2' />
+  </svg>
+)
+
+export const WorkflowIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <circle cx='5' cy='6' r='2' />
+    <circle cx='12' cy='12' r='2' />
+    <circle cx='19' cy='18' r='2' />
+    <path d='M7 6h3.5a1.5 1.5 0 0 1 1.5 1.5V10' />
+    <path d='M14.5 14h1a2.5 2.5 0 0 1 2.5 2.5V16' />
+  </svg>
+)
+
+export const ClipboardIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='6' y='4' width='12' height='16' rx='2' />
+    <path d='M9 4.5h6a1 1 0 0 1 1 1V7H8V5.5a1 1 0 0 1 1-1z' />
+    <path d='M9 12h6M9 16h4' />
+  </svg>
+)
+
+export const BriefcaseIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='3' y='7' width='18' height='12' rx='2' />
+    <path d='M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7' />
+    <path d='M3 12h18' />
+  </svg>
+)
+
+export const KeyIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <circle cx='8' cy='11' r='3' />
+    <path d='M11 11h10l-2 2 2 2' />
+    <path d='M18 11v3' />
+  </svg>
+)
+
+export const TestTubeIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M9 3h6' />
+    <path d='M10 3v6l-4.5 7.5A3 3 0 0 0 8.1 21h7.8a3 3 0 0 0 2.6-4.5L14 9V3' />
+    <path d='M9.5 14h5' />
+  </svg>
+)
+
 export const TimeIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <circle cx='12' cy='12' r='8.5' />
@@ -89,11 +170,68 @@ export const CheckIcon = (props) => (
   </svg>
 )
 
+export const CloseIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='m6 6 12 12M18 6 6 18' />
+  </svg>
+)
+
 export const AlertIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M10.3 4.8 2.6 18a1.6 1.6 0 0 0 1.4 2.4h16a1.6 1.6 0 0 0 1.4-2.4L13.7 4.8a1.6 1.6 0 0 0-3.4 0z' />
     <path d='M12 9v5' />
     <path d='M12 17h.01' />
+  </svg>
+)
+
+export const BanIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <circle cx='12' cy='12' r='8.5' />
+    <path d='m8.5 8.5 7 7' />
+  </svg>
+)
+
+export const QuestionIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <circle cx='12' cy='12' r='8.5' />
+    <path d='M9.7 9.2a2.6 2.6 0 0 1 4.9 1.1c0 1.5-1 2.1-1.9 2.8-.7.5-1.2 1-1.2 1.9' />
+    <path d='M12 17h.01' />
+  </svg>
+)
+
+export const SearchIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <circle cx='11' cy='11' r='6.5' />
+    <path d='m16 16 4 4' />
+  </svg>
+)
+
+export const RefreshIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M20 11a8 8 0 1 0 1.2 4.3' />
+    <path d='M20 4v7h-7' />
+  </svg>
+)
+
+export const SendIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='m21 3-9 9' />
+    <path d='m21 3-6 18-3-9-9-3 18-6Z' />
+  </svg>
+)
+
+export const MailIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='3' y='5' width='18' height='14' rx='2.5' />
+    <path d='m4.5 7.5 7.5 6 7.5-6' />
+  </svg>
+)
+
+export const MailOffIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='3' y='5' width='18' height='14' rx='2.5' />
+    <path d='m4.5 7.5 7.5 6 7.5-6' />
+    <path d='m4 4 16 16' />
   </svg>
 )
 
@@ -114,6 +252,70 @@ export const PencilIcon = (props) => (
   </svg>
 )
 
+export const DownloadIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M12 4v10' />
+    <path d='m8.5 10.5 3.5 3.5 3.5-3.5' />
+    <path d='M4 18.5h16' />
+  </svg>
+)
+
+export const UploadIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M12 20V10' />
+    <path d='m8.5 13.5 3.5-3.5 3.5 3.5' />
+    <path d='M4 5.5h16' />
+  </svg>
+)
+
+export const SaveIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M5 4h11l3 3v13H5z' />
+    <path d='M8 4v5h8V4' />
+    <path d='M9 18h6' />
+  </svg>
+)
+
+export const SnowflakeIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M12 3v18M5.6 6.7l12.8 10.6M18.4 6.7 5.6 17.3' />
+    <path d='m9.5 3 2.5 2 2.5-2M9.5 21l2.5-2 2.5 2M3.8 8.5l3.2.4-.7 3M20.2 8.5l-3.2.4.7 3M3.8 15.5l3.2-.4-.7-3M20.2 15.5l-3.2-.4.7-3' />
+  </svg>
+)
+
+export const ArrowRightIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M5 12h14' />
+    <path d='m13 7 6 5-6 5' />
+  </svg>
+)
+
+export const ChevronDownIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='m6 9 6 6 6-6' />
+  </svg>
+)
+
+export const ChevronRightIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='m9 6 6 6-6 6' />
+  </svg>
+)
+
+export const ExpandIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M9 4H4v5M15 4h5v5M9 20H4v-5M20 15v5h-5' />
+    <path d='m4 9 5-5M15 4l5 5M4 15l5 5M20 15l-5 5' />
+  </svg>
+)
+
+export const CollapseIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M9 4H4v5M20 4h-5v5M4 20h5v-5M15 20h5v-5' />
+    <path d='m9 9-5-5M15 9l5-5M9 15l-5 5M15 15l5 5' />
+  </svg>
+)
+
 export const InboxIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M4 5h16v10H4z' />
@@ -130,12 +332,25 @@ export const VoteIcon = (props) => (
   </svg>
 )
 
+export const ChartIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M5 19V9M12 19V5M19 19v-7M4 19h16' />
+  </svg>
+)
+
 export const ListIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M8 6h12M8 12h12M8 18h12' />
     <circle cx='4' cy='6' r='0.8' fill='currentColor' stroke='none' />
     <circle cx='4' cy='12' r='0.8' fill='currentColor' stroke='none' />
     <circle cx='4' cy='18' r='0.8' fill='currentColor' stroke='none' />
+  </svg>
+)
+
+export const RulerIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M4 16 16 4l4 4-12 12H4z' />
+    <path d='M11 5.5 13 7.5M8 8.5l2 2M5 11.5l2 2' />
   </svg>
 )
 

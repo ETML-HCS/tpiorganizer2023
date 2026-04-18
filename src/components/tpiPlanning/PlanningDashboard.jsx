@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { authPlanningService, planningCatalogService, planningConfigService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
+import { tpiDossierService } from '../../services/tpiDossierService'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
 import PlanningCalendar from './PlanningCalendar'
 import TpiPlanningList from './TpiPlanningList'
@@ -9,14 +10,29 @@ import VotingPanel from './VotingPanel'
 import ConflictResolver from './ConflictResolver'
 import ImportPanel from './ImportPanel'
 import PageToolbar from '../shared/PageToolbar'
-import { ListIcon, VoteIcon, WrenchIcon } from '../shared/InlineIcons'
+import {
+  AlertIcon,
+  ArrowRightIcon,
+  CalendarIcon,
+  CheckIcon,
+  CloseIcon,
+  FileTextIcon,
+  ListIcon,
+  MailIcon,
+  PinIcon,
+  RefreshIcon,
+  SearchIcon,
+  VoteIcon,
+  WrenchIcon
+} from '../shared/InlineIcons'
+import TpiDetailSections from '../tpiDetail/TpiDetailSections'
+import { buildPlanningOnlyDossier, buildTpiDetailsLink } from '../tpiDetail/tpiDetailUtils'
 import {
   MANUAL_REQUIRED_STATUSES,
   normalizePlanningStatus,
   PLANNING_STATUS
 } from '../../constants/planningStatus'
 import { buildValidationToast } from '../../utils/workflowFeedback'
-import { getPlanningClassDisplayInfo } from './planningClassUtils'
 import './PlanningDashboard.css'
 
 const WORKFLOW_LABELS = {
@@ -35,8 +51,28 @@ const WORKFLOW_ACTION_LABELS = {
   sendLinks: 'Envoyer liens soutenance'
 }
 
+const VALIDATION_ISSUE_LABELS = {
+  person_overlap: 'Conflit de personne',
+  room_overlap: 'Conflit de salle',
+  consecutive_limit: 'TPI consécutifs',
+  room_class_mismatch: 'Salle incompatible',
+  unplanned_tpi: 'Sans créneau',
+  legacy_tpi_missing_reference: 'Référence GestionTPI manquante',
+  legacy_tpi_missing_stakeholders: 'Parties prenantes incomplètes',
+  legacy_tpi_unresolved_stakeholders: 'Parties prenantes non validées',
+  legacy_tpi_not_imported: 'Absent de Planning'
+}
+
 function getApiErrorMessage(err, fallbackMessage) {
   return err?.data?.error || err?.message || fallbackMessage
+}
+
+function getValidationIssueLabel(issue) {
+  if (!issue?.type) {
+    return 'Anomalie de planification'
+  }
+
+  return VALIDATION_ISSUE_LABELS[issue.type] || issue.type
 }
 
 function getPersonId(value) {
@@ -73,20 +109,67 @@ function isTpiVisibleForViewer(tpi, viewerPersonId) {
   return relatedIds.includes(viewerPersonId)
 }
 
-function getPlannedSlot(tpi) {
-  return (
-    tpi?.confirmedSlot ||
-    tpi?.proposedSlots?.find(proposedSlot => proposedSlot?.slot)?.slot ||
-    null
-  )
-}
-
 function compactText(value) {
   if (value === null || value === undefined) {
     return ""
   }
 
   return String(value).trim()
+}
+
+function normalizeFocusReference(value) {
+  return compactText(value)
+    .toLowerCase()
+    .replace(/^tpi-\d{4}-/i, '')
+}
+
+function matchesFocusReference(reference, focus) {
+  const normalizedReference = normalizeFocusReference(reference)
+  const normalizedFocus = normalizeFocusReference(focus)
+
+  if (!normalizedReference || !normalizedFocus) {
+    return false
+  }
+
+  return normalizedReference === normalizedFocus ||
+    compactText(reference).toLowerCase() === compactText(focus).toLowerCase()
+}
+
+function getValidationIssueReferences(issue) {
+  const references = new Set()
+
+  const directReference = compactText(issue?.reference)
+  if (directReference) {
+    references.add(directReference)
+  }
+
+  if (Array.isArray(issue?.references)) {
+    issue.references
+      .map(reference => compactText(reference))
+      .filter(Boolean)
+      .forEach(reference => references.add(reference))
+  }
+
+  return Array.from(references)
+}
+
+function formatValidationCheckedAt(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toLocaleString('fr-CH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 function normalizeSiteValue(value) {
@@ -99,22 +182,6 @@ function normalizeSiteValue(value) {
 
 function isExternalPlanningSite(value) {
   return normalizeSiteValue(value).includes('horsetml')
-}
-
-function formatPersonName(person) {
-  if (!person) {
-    return ""
-  }
-
-  if (typeof person === "object") {
-    return [
-      person.firstName,
-      person.lastName,
-      person.name
-    ].filter(Boolean).join(" ").trim()
-  }
-
-  return compactText(person)
 }
 
 function getVoterRoleLabel(role) {
@@ -154,6 +221,11 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     const tab = params.get('tab')
     return typeof tab === 'string' ? tab.trim() : ''
   }, [location.search])
+  const requestedFocus = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const focus = params.get('focus')
+    return typeof focus === 'string' ? focus.trim() : ''
+  }, [location.search])
 
   // États principaux
   const [tpis, setTpis] = useState([])
@@ -167,6 +239,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
   const [planningClassTypes, setPlanningClassTypes] = useState([])
   const [planningCatalogSites, setPlanningCatalogSites] = useState([])
+  const [validationResult, setValidationResult] = useState(null)
   
   // États de l'interface
   const [activeTab, setActiveTab] = useState(() => requestedTab || 'calendar')
@@ -176,6 +249,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [pendingWorkflowAction, setPendingWorkflowAction] = useState('')
   const [error, setError] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
+  const [selectedTpiDossier, setSelectedTpiDossier] = useState(null)
+  const [selectedTpiDossierLoading, setSelectedTpiDossierLoading] = useState(false)
+  const [selectedTpiDossierError, setSelectedTpiDossierError] = useState('')
+  const [appliedFocus, setAppliedFocus] = useState('')
 
   // Filtres
   const [statusFilter, setStatusFilter] = useState('all')
@@ -187,11 +264,11 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const loadData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+    setValidationResult(null)
     
     try {
       const snapshotRequest = isAdmin
-        ? workflowPlanningService
-          .getActiveSnapshot(year)
+        ? Promise.resolve(workflowPlanningService.getActiveSnapshot(year))
           .catch(err => {
             if (err?.status === 404) {
               return null
@@ -204,20 +281,20 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ? workflowPlanningService.getYearState(year)
         : Promise.resolve(null)
 
-      const planningConfigRequest = planningConfigService.getByYear(year).catch(err => {
+      const planningConfigRequest = Promise.resolve(planningConfigService.getByYear(year)).catch(err => {
         if (err?.status === 404) {
           return null
         }
         throw err
       })
 
-      const planningCatalogRequest = planningCatalogService.getGlobal().catch(err => {
+      const planningCatalogRequest = Promise.resolve(planningCatalogService.getGlobal()).catch(err => {
         console.error('Erreur lors du chargement du catalogue central:', err)
         return null
       })
 
       const legacyTpisRequest = isAdmin
-        ? getTpiModels(year).catch(err => {
+        ? Promise.resolve(getTpiModels(year)).catch(err => {
           if (err?.status === 404) {
             return []
           }
@@ -417,29 +494,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     })
   }, [visibleTpis, isAdmin])
 
-  const selectedClassType = useMemo(
-    () => getPlanningClassDisplayInfo(
-      selectedTpi?.classe,
-      planningClassTypes,
-      planningCatalogSites,
-      selectedTpi?.site || selectedTpi?.lieu?.site
-    ),
-    [planningCatalogSites, planningClassTypes, selectedTpi?.classe, selectedTpi?.site, selectedTpi?.lieu?.site]
-  )
-  const selectedClassTypePeriodLabel = [
-    selectedClassType?.startDate,
-    selectedClassType?.endDate
-  ].filter(Boolean).join(' → ')
-  const selectedClassDisplayLabel = selectedClassType?.displayClassLabel || compactText(selectedTpi?.classe)
-  const selectedClassTypeTitle = selectedClassDisplayLabel
-    ? [
-        selectedClassDisplayLabel ? `Classe ${selectedClassDisplayLabel}` : '',
-        selectedClassType?.hasSpecificClass && selectedClassType?.displayTypeLabel ? `Type ${selectedClassType.displayTypeLabel}` : '',
-        selectedClassType.siteLabel || selectedTpi?.site || selectedTpi?.lieu?.site ? `Site ${selectedClassType.siteLabel || selectedTpi?.site || selectedTpi?.lieu?.site}` : '',
-        selectedClassTypePeriodLabel || ''
-      ].filter(Boolean).join(' · ')
-    : ''
-
   // TPI legacy non importés (dans le legacy mais pas dans tpiPlannings)
   const notImportedLegacyTpis = useMemo(() => {
     if (!isAdmin || !legacyTpis.length) return []
@@ -466,6 +520,96 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const legacyTpiCount = legacyTpis.length
   const hasLegacyPlanningData = isAdmin && stats.total === 0 && legacyTpiCount > 0
   const hasLegacyImportGap = notImportedLegacyTpis.length > 0
+  const validationAnnotations = useMemo(() => {
+    const issues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
+
+    if (issues.length === 0) {
+      return {
+        byTpiId: {},
+        impactedTpiCount: 0,
+        orphanIssues: [],
+        totalIssues: 0,
+        checkedAtLabel: formatValidationCheckedAt(validationResult?.checkedAt)
+      }
+    }
+
+    const byTpiId = {}
+    const knownTpiIds = new Set(
+      tpis
+        .map((tpi) => compactText(tpi?._id))
+        .filter(Boolean)
+    )
+    const referenceToTpiId = new Map(
+      tpis
+        .map((tpi) => [compactText(tpi?.reference), compactText(tpi?._id)])
+        .filter(([reference, tpiId]) => reference && tpiId)
+    )
+    const orphanIssues = []
+
+    issues.forEach((issue) => {
+      const matchedTpiIds = new Set()
+      const directTpiId = compactText(issue?.tpiId)
+
+      if (directTpiId && knownTpiIds.has(directTpiId)) {
+        matchedTpiIds.add(directTpiId)
+      }
+
+      getValidationIssueReferences(issue).forEach((reference) => {
+        const matchedTpiId = referenceToTpiId.get(reference)
+        if (matchedTpiId) {
+          matchedTpiIds.add(matchedTpiId)
+        }
+      })
+
+      if (matchedTpiIds.size === 0) {
+        orphanIssues.push({
+          ...issue,
+          label: getValidationIssueLabel(issue)
+        })
+        return
+      }
+
+      matchedTpiIds.forEach((tpiId) => {
+        if (!byTpiId[tpiId]) {
+          byTpiId[tpiId] = {
+            count: 0,
+            issues: [],
+            labels: [],
+            messages: []
+          }
+        }
+
+        const target = byTpiId[tpiId]
+        const label = getValidationIssueLabel(issue)
+        const message = compactText(issue?.message)
+
+        target.count += 1
+        target.issues.push(issue)
+
+        if (label && !target.labels.includes(label)) {
+          target.labels.push(label)
+        }
+
+        if (message && !target.messages.includes(message)) {
+          target.messages.push(message)
+        }
+      })
+    })
+
+    orphanIssues.sort((left, right) => {
+      const leftKey = `${compactText(left?.reference || left?.legacyRef)}|${compactText(left?.type)}`
+      const rightKey = `${compactText(right?.reference || right?.legacyRef)}|${compactText(right?.type)}`
+      return leftKey.localeCompare(rightKey)
+    })
+
+    return {
+      byTpiId,
+      impactedTpiCount: Object.keys(byTpiId).length,
+      orphanIssues,
+      totalIssues: issues.length,
+      checkedAtLabel: formatValidationCheckedAt(validationResult?.checkedAt)
+    }
+  }, [tpis, validationResult])
 
   const workflowState = workflow?.state || 'planning'
   const workflowLabel = WORKFLOW_LABELS[workflowState] || workflowState
@@ -476,6 +620,172 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const isScopedVoteViewer = Boolean(!isAdmin && magicLinkViewer?.personId)
   const canStartVotes = isPlanningState && hasActiveSnapshot
   const canPublish = isVotingState || isPublishedState
+
+  const selectedTpiValidationMessages = useMemo(() => {
+    if (!selectedTpi) {
+      return []
+    }
+
+    return validationAnnotations.byTpiId[compactText(selectedTpi._id)]?.messages || []
+  }, [selectedTpi, validationAnnotations.byTpiId])
+
+  const selectedTpiFallbackDossier = useMemo(() => {
+    if (!selectedTpi) {
+      return null
+    }
+
+    return buildPlanningOnlyDossier({
+      year,
+      planningTpi: selectedTpi
+    })
+  }, [selectedTpi, year])
+
+  const selectedTpiDetailLink = useMemo(() => {
+    if (!selectedTpi) {
+      return '/gestionTPI'
+    }
+
+    return buildTpiDetailsLink(
+      year,
+      compactText(selectedTpi.reference) || compactText(selectedTpi._id)
+    )
+  }, [selectedTpi, year])
+
+  const selectedTpiDisplayDossier = useMemo(() => {
+    const selectedWorkflowId = compactText(selectedTpi?._id)
+    const dossierWorkflowId = compactText(selectedTpiDossier?.planning?.data?._id)
+
+    if (selectedWorkflowId && dossierWorkflowId && selectedWorkflowId === dossierWorkflowId) {
+      return selectedTpiDossier
+    }
+
+    return selectedTpiFallbackDossier
+  }, [selectedTpi, selectedTpiDossier, selectedTpiFallbackDossier])
+  const focusedTpiMatch = useMemo(() => {
+    if (!requestedFocus) {
+      return null
+    }
+
+    return visibleTpis.find((tpi) => matchesFocusReference(tpi?.reference, requestedFocus)) || null
+  }, [requestedFocus, visibleTpis])
+  const hasFocusWithoutMatch = Boolean(requestedFocus) && !focusedTpiMatch
+
+  useEffect(() => {
+    if (!selectedTpi || !isAdmin) {
+      setSelectedTpiDossier(null)
+      setSelectedTpiDossierLoading(false)
+      setSelectedTpiDossierError('')
+      return
+    }
+
+    const selectedReference = compactText(selectedTpi.reference)
+
+    if (!selectedReference) {
+      setSelectedTpiDossier(null)
+      setSelectedTpiDossierLoading(false)
+      setSelectedTpiDossierError('Référence Planning introuvable pour cette fiche.')
+      return
+    }
+
+    let isCancelled = false
+
+    const loadSelectedTpiDossier = async () => {
+      setSelectedTpiDossier(null)
+      setSelectedTpiDossierLoading(true)
+      setSelectedTpiDossierError('')
+
+      try {
+        const response = await tpiDossierService.getByRef(year, selectedReference)
+
+        if (!isCancelled) {
+          setSelectedTpiDossier(response)
+        }
+      } catch (loadError) {
+        if (!isCancelled) {
+          setSelectedTpiDossier(null)
+          setSelectedTpiDossierError(
+            getApiErrorMessage(loadError, 'Impossible de charger la lecture croisée de ce TPI.')
+          )
+        }
+      } finally {
+        if (!isCancelled) {
+          setSelectedTpiDossierLoading(false)
+        }
+      }
+    }
+
+    void loadSelectedTpiDossier()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isAdmin, selectedTpi, year])
+
+  useEffect(() => {
+    if (!requestedFocus) {
+      setAppliedFocus('')
+      return
+    }
+
+    if (appliedFocus === requestedFocus || isLoading) {
+      return
+    }
+
+    if (activeTab !== 'list') {
+      setActiveTab('list')
+    }
+
+    if (statusFilter !== 'all') {
+      setStatusFilter('all')
+    }
+
+    if (searchQuery !== requestedFocus) {
+      setSearchQuery(requestedFocus)
+    }
+
+    const matchedTpi = visibleTpis.find((tpi) =>
+      matchesFocusReference(tpi?.reference, requestedFocus)
+    )
+
+    if (matchedTpi) {
+      setSelectedTpi((currentSelection) => {
+        if (compactText(currentSelection?._id) === compactText(matchedTpi?._id)) {
+          return currentSelection
+        }
+
+        return matchedTpi
+      })
+    }
+
+    setAppliedFocus(requestedFocus)
+  }, [
+    requestedFocus,
+    appliedFocus,
+    isLoading,
+    activeTab,
+    searchQuery,
+    statusFilter,
+    visibleTpis
+  ])
+
+  const clearFocusedSearch = useCallback(() => {
+    const params = new URLSearchParams(location.search)
+    params.delete('focus')
+    params.delete('tab')
+
+    setAppliedFocus('')
+    setSearchQuery('')
+    setSelectedTpi(null)
+    setStatusFilter('all')
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : ''
+      },
+      { replace: true }
+    )
+  }, [location.pathname, location.search, navigate])
 
   /**
    * Lance le processus de vote pour un TPI
@@ -599,6 +909,13 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       successBuilder: null,
       errorFallback: 'Erreur lors de la validation de la planification.',
       onSuccess: (validationResult) => {
+        setValidationResult(validationResult)
+        if (Number(validationResult?.summary?.issueCount || 0) > 0) {
+          setStatusFilter('all')
+          setSearchQuery('')
+          setActiveTab('list')
+        }
+
         const validationToast = buildValidationToast(year, validationResult)
         toast.update(loadingToastId, {
           render: validationToast.message,
@@ -610,6 +927,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         })
       },
       onError: (errorMsg) => {
+        setValidationResult(null)
         toast.update(loadingToastId, {
           render: errorMsg,
           type: 'error',
@@ -875,7 +1193,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 className="page-tools-chip planning-dashboard-votes-link"
                 title="Ouvrir le suivi des votes de cette année."
               >
-                🗳️ Suivre votes
+                <VoteIcon className="inline-icon" />
+                Suivre votes
               </Link>
             )}
             <span className="page-tools-chip">Année {year}</span>
@@ -924,7 +1243,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   key={step.id}
                   className={`workflow-step ${step.done ? 'done' : ''} ${step.warning ? 'warning' : ''}`}
                 >
-                  <span className="workflow-step-icon">{step.done ? '✓' : '•'}</span>
+                  <span className="workflow-step-icon">
+                    {step.done ? <CheckIcon /> : <CalendarIcon />}
+                  </span>
                   <span className="workflow-step-label">{step.label}</span>
                   {step.warning && <span className="workflow-step-warning">{step.warning}</span>}
                 </div>
@@ -939,7 +1260,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               {/* Section Planification - visible uniquement en état Planification */}
               {isPlanningState && (
                 <div className="workflow-section">
-                  <h4 className="section-title">📅 Planification</h4>
+                  <h4 className="section-title">
+                    <CalendarIcon className="section-title-icon" />
+                    Planification
+                  </h4>
                   <div className="section-buttons">
                     <button
                       className="workflow-btn secondary"
@@ -947,7 +1271,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       disabled={workflowActionLoading}
                       title="Verifier les conflits dans la planification actuelle."
                     >
-                      {isActionRunning('validate') ? 'Verification...' : '🔍 Verifier conflits'}
+                      <SearchIcon className="button-icon" />
+                      {isActionRunning('validate') ? 'Verification...' : 'Verifier conflits'}
                     </button>
                     <button
                       className="workflow-btn primary"
@@ -957,7 +1282,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                         ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning. Corriger avant le gel.'
                         : 'Figer la version de planification a soumettre au vote.'}
                     >
-                      {isActionRunning('freeze') ? 'Gel en cours...' : '➡️ Geler snapshot'}
+                      <ArrowRightIcon className="button-icon" />
+                      {isActionRunning('freeze') ? 'Gel en cours...' : 'Geler snapshot'}
                     </button>
                     <button
                       className="workflow-btn primary"
@@ -971,7 +1297,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                           ? 'Lancer la campagne de votes.'
                           : 'Proposer des creneaux aux TPI d\'abord.'}
                     >
-                      {isActionRunning('startVotes') ? 'Ouverture...' : '➡️ Ouvrir votes'}
+                      <ArrowRightIcon className="button-icon" />
+                      {isActionRunning('startVotes') ? 'Ouverture...' : 'Ouvrir votes'}
                     </button>
                   </div>
                 </div>
@@ -980,14 +1307,18 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               {/* Section Votes - visible uniquement en état Votes */}
               {isVotingState && (
                 <div className="workflow-section">
-                  <h4 className="section-title">🗳️ Votes</h4>
+                  <h4 className="section-title">
+                    <VoteIcon className="section-title-icon" />
+                    Votes
+                  </h4>
                   <div className="section-buttons">
                     <Link
                       to={`/planning/${year}?tab=votes`}
                       className="workflow-btn open workflow-link-btn"
                       title="Ouvrir le suivi des votes."
                     >
-                      🗳️ Suivre votes
+                      <VoteIcon className="button-icon" />
+                      Suivre votes
                     </Link>
                     <button
                       className="workflow-btn neutral"
@@ -995,7 +1326,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       disabled={workflowActionLoading}
                       title="Renvoyer les liens magiques aux personnes qui n'ont pas encore voté."
                     >
-                      {isActionRunning('remindVotes') ? 'Relance...' : '📧 Renvoyer liens'}
+                      <MailIcon className="button-icon" />
+                      {isActionRunning('remindVotes') ? 'Relance...' : 'Renvoyer liens'}
                     </button>
                     <button
                       className="workflow-btn primary"
@@ -1003,7 +1335,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       disabled={workflowActionLoading}
                       title="Clore la campagne et classer confirmed/manual_required."
                     >
-                      {isActionRunning('closeVotes') ? 'Cloture...' : '➡️ Clore votes'}
+                      <ArrowRightIcon className="button-icon" />
+                      {isActionRunning('closeVotes') ? 'Cloture...' : 'Clore votes'}
                     </button>
                   </div>
                 </div>
@@ -1012,7 +1345,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               {/* Section Publication - visible en états Votes ou Publication */}
               {(isVotingState || isPublishedState) && (
                 <div className="workflow-section">
-                  <h4 className="section-title">✅ Publication</h4>
+                  <h4 className="section-title">
+                    <CheckIcon className="section-title-icon" />
+                    Publication
+                  </h4>
                   <div className="section-buttons">
                     <button
                       className="workflow-btn success"
@@ -1020,7 +1356,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       disabled={workflowActionLoading || !canPublish}
                       title="Publier la version definitive vers Soutenances."
                     >
-                      {isActionRunning('publish') ? 'Publication...' : '✅ Publier definitif'}
+                      <CheckIcon className="button-icon" />
+                      {isActionRunning('publish') ? 'Publication...' : 'Publier definitif'}
                     </button>
                     <button
                       className="workflow-btn neutral"
@@ -1028,14 +1365,16 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       disabled={workflowActionLoading}
                       title="Renvoyer les liens de soutenance par email."
                     >
-                      {isActionRunning('sendLinks') ? 'Envoi...' : '📧 Envoyer liens soutenance'}
+                      <MailIcon className="button-icon" />
+                      {isActionRunning('sendLinks') ? 'Envoi...' : 'Envoyer liens soutenance'}
                     </button>
                     <button
                       className="workflow-btn open"
                       onClick={handleOpenPublishedView}
                       disabled={workflowActionLoading}
                     >
-                      📍 Ouvrir Soutenances
+                      <PinIcon className="button-icon" />
+                      Ouvrir Soutenances
                     </button>
                   </div>
                 </div>
@@ -1048,14 +1387,20 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       {/* Message d'erreur */}
       {error && (
         <div className="error-banner">
-          <span>⚠️ {error}</span>
+          <span className="banner-copy">
+            <AlertIcon className="banner-icon" />
+            {error}
+          </span>
           <button onClick={() => setError(null)}>×</button>
         </div>
       )}
 
       {successMessage && (
         <div className="success-banner">
-          <span>✅ {successMessage}</span>
+          <span className="banner-copy">
+            <CheckIcon className="banner-icon" />
+            {successMessage}
+          </span>
           <button onClick={() => setSuccessMessage(null)}>×</button>
         </div>
       )}
@@ -1099,7 +1444,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       {/* Barre de filtres */}
       <div className="filters-bar">
         <div className="search-input">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon">
+            <SearchIcon />
+          </span>
           <input
             type="text"
             placeholder="Rechercher par référence, candidat, sujet..."
@@ -1133,29 +1480,135 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             className="btn-refresh"
             onClick={loadData}
           >
-            🔄 Actualiser
+            <RefreshIcon className="button-icon" />
+            Actualiser
           </button>
         )}
       </div>
 
+      {requestedFocus && (
+        <section className={`planning-focus-banner ${hasFocusWithoutMatch ? 'is-missing' : 'is-ready'}`}>
+          <div className="planning-focus-banner-copy">
+            <strong>Focus actif: {requestedFocus}</strong>
+            <p>
+              {hasFocusWithoutMatch
+                ? `Aucun TPI visible ne correspond à ${requestedFocus} pour l'année ${year}.`
+                : `La liste et le panneau détail sont centrés sur ${focusedTpiMatch?.reference || requestedFocus}.`}
+            </p>
+          </div>
+
+          <div className="planning-focus-banner-actions">
+            {focusedTpiMatch && compactText(selectedTpi?._id) !== compactText(focusedTpiMatch?._id) ? (
+              <button
+                type="button"
+                className="planning-focus-banner-btn"
+                onClick={() => setSelectedTpi(focusedTpiMatch)}
+              >
+                Ouvrir le TPI ciblé
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="planning-focus-banner-btn secondary"
+              onClick={clearFocusedSearch}
+            >
+              Effacer le focus
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Contenu principal - Dashboard suivi de votes */}
       <main className="dashboard-content">
         {activeTab === 'list' && (
-          <TpiPlanningList
-            tpis={filteredTpis}
-            selectedTpi={selectedTpi}
-            onSelectTpi={setSelectedTpi}
-            onProposeSlots={handleProposeSlots}
-            isAdmin={isAdmin}
-            classTypes={planningClassTypes}
-            planningCatalogSites={planningCatalogSites}
-          />
+          <>
+            {validationResult && (
+              <section className={`validation-feedback-panel ${validationAnnotations.totalIssues > 0 ? 'has-issues' : 'is-valid'}`}>
+                <div className="validation-feedback-main">
+                  <div>
+                    <strong>
+                      {validationAnnotations.totalIssues > 0
+                        ? 'Dernière vérification: des corrections sont nécessaires.'
+                        : 'Dernière vérification: aucune anomalie bloquante.'}
+                    </strong>
+                    <p>
+                      {validationAnnotations.totalIssues > 0
+                        ? validationAnnotations.impactedTpiCount > 0
+                          ? `${validationAnnotations.impactedTpiCount} TPI sont marqués dans la liste${validationAnnotations.checkedAtLabel ? ` depuis le ${validationAnnotations.checkedAtLabel}` : ''}.`
+                          : `${validationAnnotations.orphanIssues.length} TPI doivent être corrigés dans GestionTPI${validationAnnotations.checkedAtLabel ? ` depuis le ${validationAnnotations.checkedAtLabel}` : ''}.`
+                        : `Le planning est valide${validationAnnotations.checkedAtLabel ? ` au ${validationAnnotations.checkedAtLabel}` : ''}.`}
+                    </p>
+                  </div>
+                  <div className="validation-feedback-summary">
+                    <span className={`validation-feedback-badge ${validationAnnotations.totalIssues > 0 ? 'critical' : 'success'}`}>
+                      {validationAnnotations.totalIssues} anomalie{validationAnnotations.totalIssues > 1 ? 's' : ''}
+                    </span>
+                    <span className="validation-feedback-badge">
+                      {validationAnnotations.impactedTpiCount} TPI marqué{validationAnnotations.impactedTpiCount > 1 ? 's' : ''}
+                    </span>
+                    {validationAnnotations.orphanIssues.length > 0 && (
+                      <span className="validation-feedback-badge warning">
+                        {validationAnnotations.orphanIssues.length} TPI à corriger dans GestionTPI
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {validationAnnotations.orphanIssues.length > 0 && (
+                  <div className="validation-feedback-orphans">
+                    <div className="validation-feedback-orphans-head">
+                      <strong>TPI absents de la liste Planning</strong>
+                      <button
+                        type="button"
+                        className="validation-feedback-link"
+                        onClick={() => navigate('/gestionTPI')}
+                      >
+                        Ouvrir Gestion TPI
+                      </button>
+                    </div>
+                    <div className="validation-feedback-orphan-list">
+                      {validationAnnotations.orphanIssues.map((issue, index) => {
+                        const issueReference = compactText(issue?.reference || issue?.legacyRef) || 'TPI sans référence'
+                        const issueMessage = compactText(issue?.message)
+
+                        return (
+                          <div
+                            key={`${issueReference}-${issue.type || 'issue'}-${index}`}
+                            className="validation-feedback-orphan-item"
+                            title={issueMessage || undefined}
+                          >
+                            <span className="validation-feedback-orphan-ref">{issueReference}</span>
+                            <span className="validation-feedback-orphan-label">{issue.label}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            <TpiPlanningList
+              tpis={filteredTpis}
+              selectedTpi={selectedTpi}
+              onSelectTpi={setSelectedTpi}
+              onProposeSlots={handleProposeSlots}
+              isAdmin={isAdmin}
+              classTypes={planningClassTypes}
+              planningCatalogSites={planningCatalogSites}
+              validationIssuesByTpiId={validationAnnotations.byTpiId}
+              prioritizeValidationIssues={validationAnnotations.impactedTpiCount > 0}
+            />
+          </>
         )}
 
         {activeTab === 'votes' && isAdmin && (
           <section className="vote-tracking-panel">
             <div className="vote-tracking-header">
-              <h2>🗳️ Dashboard de suivi des votes - {year}</h2>
+              <h2>
+                <VoteIcon className="section-title-icon" />
+                Dashboard de suivi des votes - {year}
+              </h2>
               <p>
                 Visualisez l'avancement des votes, relancez les non-répondants, et validez manuellement les TPI en attente.
                 Une fois tous les votes clôturés, vous pourrez publier l'agenda officiel des soutenances.
@@ -1181,12 +1634,16 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   showVoteRoleDetails
                   classTypes={planningClassTypes}
                   planningCatalogSites={planningCatalogSites}
+                  validationIssuesByTpiId={validationAnnotations.byTpiId}
                 />
 
                 {/* Section TPI non importés */}
                 {notImportedLegacyTpis.length > 0 && (
                   <div className="not-imported-section">
-                    <h3>❌ TPI non importés ({notImportedLegacyTpis.length})</h3>
+                    <h3>
+                      <CloseIcon className="section-title-icon" />
+                      TPI non importés ({notImportedLegacyTpis.length})
+                    </h3>
                     <p className="not-imported-hint">
                       Ces TPI existent dans GestionTPI mais n'ont pas pu être importés lors du gel.
                       Vérifiez que toutes les parties prenantes (candidat, 2 experts, chef de projet) sont renseignées.
@@ -1203,10 +1660,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
                         return (
                           <div key={ref} className="not-imported-item">
-                            <span className="not-imported-ref">❌ TPI-{year}-{ref}</span>
+                            <span className="not-imported-ref">
+                              <CloseIcon className="inline-icon" />
+                              TPI-{year}-{ref}
+                            </span>
                             <span className="not-imported-candidat">{candidat}</span>
                             <span className="not-imported-reason" title={reasons.join(', ')}>
-                              ⚠️ {reasons[0]}{reasons.length > 1 ? ` +${reasons.length - 1}` : ''}
+                              <AlertIcon className="inline-icon" />
+                              {reasons[0]}{reasons.length > 1 ? ` +${reasons.length - 1}` : ''}
                             </span>
                           </div>
                         )
@@ -1229,7 +1690,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         {activeTab === 'conflicts' && isAdmin && (
           <section className="manual-intervention-panel">
             <div className="manual-header">
-              <h2>🔧 TPI nécessitant une action manuelle</h2>
+              <h2>
+                <WrenchIcon className="section-title-icon" />
+                TPI nécessitant une action manuelle
+              </h2>
               <p>
                 Ces TPI n'ont pas pu être clôturés automatiquement après les votes.
                 Vous devez forcer un créneau ou marquer comme validé manuellement.
@@ -1249,7 +1713,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       {selectedTpi && (
         <aside className="tpi-detail-panel">
           <div className="panel-header">
-            <h3>{compactText(selectedTpi.reference) ? `📄 ${selectedTpi.reference}` : 'Détails TPI'}</h3>
+            <h3>
+              <FileTextIcon className="section-title-icon" />
+              {compactText(selectedTpi.reference) ? selectedTpi.reference : 'Détails TPI'}
+            </h3>
             <button 
               className="close-panel"
               onClick={() => setSelectedTpi(null)}
@@ -1259,112 +1726,46 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           </div>
           
           <div className="panel-content">
-            {formatPersonName(selectedTpi.candidat) ? (
-              <div className="detail-group">
-                <label>Candidat</label>
-                <p>{formatPersonName(selectedTpi.candidat)}</p>
+            {selectedTpiDossierLoading ? (
+              <div className="tpi-detail-panel-state">
+                Chargement de la lecture croisée GestionTPI / Planning.
               </div>
             ) : null}
 
-            {compactText(selectedTpi.sujet) ? (
-              <div className="detail-group">
-                <label>Sujet</label>
-                <p>{selectedTpi.sujet}</p>
+            {selectedTpiDossierError ? (
+              <div className="tpi-detail-panel-state error">
+                {selectedTpiDossierError}
               </div>
             ) : null}
 
-            {formatPersonName(selectedTpi.expert1) ? (
-              <div className="detail-group">
-                <label>Expert 1</label>
-                <p>{formatPersonName(selectedTpi.expert1)}</p>
-              </div>
-            ) : null}
-
-            {formatPersonName(selectedTpi.expert2) ? (
-              <div className="detail-group">
-                <label>Expert 2</label>
-                <p>{formatPersonName(selectedTpi.expert2)}</p>
-              </div>
-            ) : null}
-
-            {formatPersonName(selectedTpi.chefProjet) ? (
-              <div className="detail-group">
-                <label>Chef de projet</label>
-                <p>{formatPersonName(selectedTpi.chefProjet)}</p>
-              </div>
-            ) : null}
-
-            {compactText(selectedTpi.classe) ? (
-              <div className="detail-group">
-                <label>Classe</label>
-                <div className="detail-inline-tags">
-                  <span className="detail-value">{selectedClassDisplayLabel || selectedTpi.classe}</span>
-                  {selectedClassType?.hasSpecificClass && selectedClassType?.displayTypeLabel ? (
-                    <span
-                      className="detail-badge is-matu"
-                      title={selectedClassTypeTitle || `Type ${selectedClassType.displayTypeLabel}`.trim()}
-                      aria-label={selectedClassTypeTitle || `Type ${selectedClassType.displayTypeLabel}`.trim()}
-                    >
-                      {selectedClassType.displayTypeLabel}
-                    </span>
-                  ) : null}
-                </div>
-                {selectedClassTypePeriodLabel ? (
-                  <p className="detail-helper">
-                    Période: {selectedClassTypePeriodLabel}
-                  </p>
-                ) : null}
-                {selectedClassType?.siteLabel || selectedTpi?.site || selectedTpi?.lieu?.site ? (
-                  <p className="detail-helper">
-                    Site: {selectedClassType.siteLabel || selectedTpi?.site || selectedTpi?.lieu?.site}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            
-            <div className="detail-group">
-              <label>Statut</label>
-              <span className={`status-badge status-${selectedTpi.status}`}>
-                {selectedTpi.status}
-              </span>
-            </div>
-
-            {getPlannedSlot(selectedTpi) && (
-              <div className="detail-group confirmed-slot">
-                <label>{selectedTpi.confirmedSlot ? 'Date confirmée' : 'Date fixée / alternatives'}</label>
-                {compactText(getPlannedSlot(selectedTpi).date) || compactText(getPlannedSlot(selectedTpi).startTime) || compactText(getPlannedSlot(selectedTpi).room?.name) ? (
-                <p>
-                  {compactText(getPlannedSlot(selectedTpi).date) ? (
-                    <>
-                      📅 {new Date(getPlannedSlot(selectedTpi).date).toLocaleDateString('fr-CH')}
-                      <br />
-                    </>
-                  ) : null}
-                  {compactText(getPlannedSlot(selectedTpi).startTime) ? (
-                    <>
-                      🕐 {getPlannedSlot(selectedTpi).startTime}
-                      <br />
-                    </>
-                  ) : null}
-                  {compactText(getPlannedSlot(selectedTpi).room?.name) ? (
-                    <>📍 {getPlannedSlot(selectedTpi).room?.name}</>
-                  ) : null}
-                </p>
-                ) : null}
-              </div>
-            )}
+            <TpiDetailSections
+              dossier={selectedTpiDisplayDossier}
+              supplementalIssues={selectedTpiValidationMessages}
+              showSummary={false}
+              showOverview={false}
+              className='is-panel'
+            />
           </div>
 
-          {isAdmin && selectedTpi.status === 'draft' && (
-            <div className="panel-actions">
+          <div className="panel-actions">
+            {isAdmin ? (
+              <Link
+                className="btn-secondary"
+                to={selectedTpiDetailLink}
+              >
+                Ouvrir la fiche
+              </Link>
+            ) : null}
+            {isAdmin && selectedTpi.status === 'draft' ? (
               <button
                 className="btn-primary"
                 onClick={() => handleProposeSlots(selectedTpi._id)}
               >
-                🗳️ Lancer le vote
+                <VoteIcon className="button-icon" />
+                Lancer le vote
               </button>
-            </div>
-          )}
+            ) : null}
+          </div>
         </aside>
       )}
     </div>

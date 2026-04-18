@@ -31,6 +31,47 @@
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.soutenance-focus-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 32, 62, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.96));
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.soutenance-focus-banner.is-missing {
+  border-color: rgba(194, 65, 12, 0.18);
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.96));
+}
+
+.soutenance-focus-banner strong {
+  display: block;
+  color: #10203e;
+}
+
+.soutenance-focus-banner p {
+  margin-top: 4px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.soutenance-focus-banner button {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 32, 62, 0.12);
+  background: white;
+  color: #10203e;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .hidden {
   opacity: 0;
   transition: opacity 0.3s ease-in-out;
@@ -216,6 +257,24 @@
   align-content: center;
   /* le zoom n'est pas pris en compte dans firefox */
   /* zoom: 0.477; */
+}
+
+.soutenance-empty-state {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 420px);
+  padding: 20px;
+  border-radius: 18px;
+  border: 1px dashed rgba(16, 32, 62, 0.16);
+  background: rgba(255, 255, 255, 0.94);
+  color: #10203e;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.soutenance-empty-state p {
+  color: #475569;
+  line-height: 1.5;
 }
 
 .horairesBox {
@@ -412,6 +471,12 @@
   height: 26px;
 }
 
+.action-buttons button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.2;
+}
+
 /* Styles pour les boutons validés */
 .button-true {
   color: #00ff08;
@@ -424,6 +489,10 @@
   color: #f44336;
   /* Texte rouge pour bouton non validé */
   font-weight: bold;
+}
+
+.button-null {
+  color: #1c2033;
 }
 
 /* Styles pour les boutons de proposition avec des valeurs */
@@ -655,12 +724,16 @@ button.smartphone:nth-child(even) {
   /* Couleur de fond pour les boutons pairs */
 }
 
-.filters-smartphone {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-}
+  .filters-smartphone {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .soutenance-focus-banner {
+    margin-top: 12px;
+  }
 
 /*#endregion*/
 
@@ -711,6 +784,7 @@ button.smartphone:nth-child(even) {
   .demo,
   .welcom,
   .btniCal,
+  .btnTpiDossier,
   footer {
     display: none;
   }
@@ -866,4 +940,28 @@ button.smartphone:nth-child(even) {
   background-color: transparent;
   border: none;
   z-index: 1;
+}
+
+.mobile-tpi-data {
+  height: auto;
+  min-height: 122px;
+}
+
+.btnTpiDossier {
+  position: absolute;
+  top: 30px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  color: #10203e;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
 }

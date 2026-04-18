@@ -154,4 +154,44 @@ describe('TpiList', () => {
     expect(screen.getByText('CID4A')).toBeInTheDocument()
     expect(screen.getByText('CFC')).toBeInTheDocument()
   })
+
+  it('links each card to the dedicated TPI dossier page', () => {
+    renderWithRouter(
+      <TpiList
+        tpiList={[
+          buildTpi({
+            refTpi: '2163',
+            candidat: 'Chasi Sanchez Dario Jhesuanj',
+            expert1: 'Alain Pittet',
+            expert2: 'Karim Bourahla'
+          })
+        ]}
+        onSave={() => {}}
+        year={2026}
+      />
+    )
+
+    expect(screen.getByRole('link', { name: /ouvrir la fiche/i })).toHaveAttribute('href', '/tpi/2026/2163')
+  })
+
+  it('highlights the focused TPI card coming from the detail page', () => {
+    renderWithRouter(
+      <TpiList
+        tpiList={[
+          buildTpi({
+            refTpi: '2163',
+            candidat: 'Chasi Sanchez Dario Jhesuanj',
+            expert1: 'Alain Pittet',
+            expert2: 'Karim Bourahla'
+          })
+        ]}
+        onSave={() => {}}
+        year={2026}
+        focusedTpiRef='2163'
+      />
+    )
+
+    expect(screen.getByText(/fiche ciblée/i)).toBeInTheDocument()
+    expect(screen.getByText('Sujet test').closest('article')).toHaveClass('is-focused')
+  })
 })

@@ -1,4 +1,4 @@
-import { createSchedule, isFilterApplied } from './useSoutenanceData'
+import { createSchedule, isFilterApplied, matchesReferenceFilter } from './useSoutenanceData'
 
 jest.mock('../../services/apiService', () => ({
   soutenancesService: {
@@ -53,6 +53,7 @@ describe('useSoutenanceData helpers', () => {
     const baseFilters = {
       site: '',
       date: '',
+      reference: '',
       candidate: '',
       experts: '',
       projectManagerButton: '',
@@ -64,5 +65,14 @@ describe('useSoutenanceData helpers', () => {
     expect(isFilterApplied({ ...baseFilters, site: 'ETML' })).toBe(true)
     expect(isFilterApplied({ ...baseFilters, date: '10 juin 2026' })).toBe(true)
     expect(isFilterApplied({ ...baseFilters, nameRoom: 'A101' })).toBe(true)
+    expect(isFilterApplied({ ...baseFilters, reference: 'TPI-2026-2163' })).toBe(true)
+  })
+
+  test('matchesReferenceFilter accepte les références workflow et legacy', () => {
+    expect(matchesReferenceFilter('2163', '2163')).toBe(true)
+    expect(matchesReferenceFilter('2163', 'TPI-2026-2163')).toBe(true)
+    expect(matchesReferenceFilter('TPI-2026-2163', '2163')).toBe(true)
+    expect(matchesReferenceFilter('TPI-2026-2163', 'TPI-2026-2163')).toBe(true)
+    expect(matchesReferenceFilter('9999', 'TPI-2026-2163')).toBe(false)
   })
 })

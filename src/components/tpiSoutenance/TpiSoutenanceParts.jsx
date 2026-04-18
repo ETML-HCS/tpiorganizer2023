@@ -1,4 +1,7 @@
 import React, { Fragment, useEffect, useState } from "react"
+import { Link } from "react-router-dom"
+
+import { buildTpiDetailsLink } from "../tpiDetail/tpiDetailUtils"
 
 function TruncatedText({ text = "", maxLength }) {
   const isTruncated = text.length > maxLength
@@ -74,7 +77,7 @@ function getRoomSchedule(room, schedule) {
   return room.tpiDatas.map((tpiData, index) => getDisplayedSlot(tpiData, schedule, index))
 }
 
-const MobileMesTpiFilter = ({ mesTpi, hasToken }) => {
+const MobileMesTpiFilter = ({ mesTpi, hasToken, year }) => {
   useEffect(() => {
     const msgClass = document.querySelector(".message-smartphone")
     const filtersClass = document.querySelector(".filters-smartphone")
@@ -106,22 +109,34 @@ const MobileMesTpiFilter = ({ mesTpi, hasToken }) => {
               const { candidat, expert1, expert2, boss } = tpi || {}
               return (
                 <Fragment key={`${indexSalle}-${indexTpi}`}>
-                  <div className='tpi-container'>
-                    <div className='tpi-entry'>
-                      <div className='tpi-candidat'>{candidat}</div>
-                    </div>
-                    <div className='tpi-entry'>
-                      <div className='tpi-expert1'>{expert1.name}</div>
-                    </div>
-                    <div className='tpi-entry'>
-                      <div className='tpi-expert2'>{expert2.name}</div>
-                    </div>
+                  <div className='tpi-data mobile-tpi-data' id={tpi?.id}>
+                    {tpi?.refTpi ? (
+                      <Link
+                        className='btnTpiDossier'
+                        to={buildTpiDetailsLink(year, tpi.refTpi)}
+                        title={`Ouvrir la fiche ${tpi.refTpi}`}
+                      >
+                        Fiche
+                      </Link>
+                    ) : null}
 
-                    <div className='tpi-entry'>
-                      <div className='tpi-boss'>
-                        {" "}
-                        cdp {" > "}
-                        {boss.name}
+                    <div className='tpi-container'>
+                      <div className='tpi-entry'>
+                        <div className='tpi-candidat'>{candidat}</div>
+                      </div>
+                      <div className='tpi-entry'>
+                        <div className='tpi-expert1'>{expert1.name}</div>
+                      </div>
+                      <div className='tpi-entry'>
+                        <div className='tpi-expert2'>{expert2.name}</div>
+                      </div>
+
+                      <div className='tpi-entry'>
+                        <div className='tpi-boss'>
+                          {" "}
+                          cdp {" > "}
+                          {boss.name}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -135,7 +150,7 @@ const MobileMesTpiFilter = ({ mesTpi, hasToken }) => {
   )
 }
 
-const MobileRoomFilter = ({ rooms, schedule }) => {
+const MobileRoomFilter = ({ rooms, schedule, year }) => {
   const [roomIndex, setRoomIndex] = useState(0)
 
   useEffect(() => {
@@ -202,6 +217,16 @@ const MobileRoomFilter = ({ rooms, schedule }) => {
           return (
             <React.Fragment key={index}>
               <div className='tpi-data' id={tpiData.id}>
+                {tpiData?.refTpi ? (
+                  <Link
+                    className='btnTpiDossier'
+                    to={buildTpiDetailsLink(year, tpiData.refTpi)}
+                    title={`Ouvrir la fiche ${tpiData.refTpi}`}
+                  >
+                    Fiche
+                  </Link>
+                ) : null}
+
                 <div className='time-label'>
                   {formatTimeRange(displayedSlot.startTime, displayedSlot.endTime)}
                 </div>
