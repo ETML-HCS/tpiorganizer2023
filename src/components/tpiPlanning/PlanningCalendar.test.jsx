@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import PlanningCalendar from './PlanningCalendar'
 
 jest.mock('../shared/InlineIcons', () => {
@@ -93,5 +93,55 @@ describe('PlanningCalendar', () => {
     expect(global.fetch.mock.calls[0][0]).toContain(
       '/planning/availability/2026/tpi-1'
     )
+  })
+
+  test('affiche la couleur et le badge du site pour une room du calendrier', () => {
+    const calendarData = [
+      {
+        date: '2026-06-10',
+        rooms: {
+          A101: [
+            {
+              id: 'slot-1',
+              period: 'matin',
+              status: 'available',
+              startTime: '08:00'
+            }
+          ]
+        }
+      }
+    ]
+
+    render(
+      <PlanningCalendar
+        calendarData={calendarData}
+        tpis={[]}
+        selectedTpi={null}
+        onSelectTpi={jest.fn()}
+        onDragDrop={jest.fn()}
+        isAdmin={false}
+        year="2026"
+        planningCatalogSites={[
+          {
+            id: 'site-etml',
+            code: 'ETML',
+            label: 'ETML',
+            planningColor: '#14532d',
+            roomDetails: [
+              {
+                id: 'room-a101',
+                code: 'A101',
+                label: 'A101'
+              }
+            ]
+          }
+        ]}
+      />
+    )
+
+    const rowHeader = screen.getAllByText('A101')[0].closest('.row-header')
+    expect(rowHeader).not.toBeNull()
+    expect(within(rowHeader).getByText('ETML')).toBeInTheDocument()
+    expect(rowHeader.style.getPropertyValue('--planning-room-accent')).toBe('#14532D')
   })
 })

@@ -6,11 +6,20 @@ import {
 } from '../../constants/planningStatus'
 import {
   AlertIcon,
+  BriefcaseIcon,
   CalendarIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
   DocumentIcon,
+  InboxIcon,
+  ListIcon,
+  PinIcon,
   RoomIcon,
-  TimeIcon
+  TimeIcon,
+  VoteIcon,
+  WrenchIcon
 } from '../shared/InlineIcons'
 import { getPlanningClassDisplayInfo, getPlanningClassPeriod } from './planningClassUtils'
 import './TpiPlanningList.css'
@@ -70,6 +79,22 @@ const STATUS_META = {
   [PLANNING_STATUS.MANUAL_REQUIRED]: { label: 'Intervention requise', Icon: AlertIcon }
 }
 
+function getValidationIssueDetail(annotation) {
+  if (!annotation?.count) {
+    return ''
+  }
+
+  const countLabel = `${annotation.count} anomalie${annotation.count > 1 ? 's' : ''}`
+  const firstLabel = annotation.labels?.[0]
+  const extraLabelCount = Math.max((annotation.labels?.length || 0) - 1, 0)
+
+  if (!firstLabel) {
+    return countLabel
+  }
+
+  return `${countLabel} · ${firstLabel}${extraLabelCount > 0 ? ` +${extraLabelCount}` : ''}`
+}
+
 const getStatusMeta = (status) => {
   if (!status) {
     return {
@@ -126,7 +151,9 @@ const TpiPlanningList = ({
   isAdmin,
   showVoteRoleDetails = false,
   classTypes = [],
-  planningCatalogSites = []
+  planningCatalogSites = [],
+  validationIssuesByTpiId = {},
+  prioritizeValidationIssues = false
 }) => {
   const [sortField, setSortField] = useState('reference')
   const [sortDirection, setSortDirection] = useState('asc')
@@ -137,6 +164,13 @@ const TpiPlanningList = ({
    */
   const sortedTpis = useMemo(() => {
     return [...tpis].sort((a, b) => {
+      const validationCountA = Number(validationIssuesByTpiId?.[String(a?._id || '')]?.count || 0)
+      const validationCountB = Number(validationIssuesByTpiId?.[String(b?._id || '')]?.count || 0)
+
+      if (prioritizeValidationIssues && validationCountA !== validationCountB) {
+        return validationCountB - validationCountA
+      }
+
       let valueA, valueB
       const normalizedStatusA = normalizePlanningStatus(a.status)
       const normalizedStatusB = normalizePlanningStatus(b.status)
@@ -166,7 +200,7 @@ const TpiPlanningList = ({
       const comparison = valueA.localeCompare(valueB)
       return sortDirection === 'asc' ? comparison : -comparison
     })
-  }, [tpis, sortField, sortDirection])
+  }, [tpis, sortField, sortDirection, prioritizeValidationIssues, validationIssuesByTpiId])
 
   /**
    * Gère le changement de tri
@@ -243,13 +277,16 @@ const TpiPlanningList = ({
         {(voteStats.totalVotes || 0) > 0 && (
           <div className="votes-breakdown">
             <span className="votes-accepted">
-              ✅ {acceptedVotes} acceptés
+              <CheckIcon className="vote-metric-icon" />
+              {acceptedVotes} acceptés
             </span>
             <span className="votes-pending">
-              ⏳ {voteStats.pendingVotes} en attente
+              <TimeIcon className="vote-metric-icon" />
+              {voteStats.pendingVotes} en attente
             </span>
             <span className="votes-rejected">
-              ❌ {voteStats.rejectedVotes} refusés
+              <CloseIcon className="vote-metric-icon" />
+              {voteStats.rejectedVotes} refusés
             </span>
           </div>
         )}
@@ -273,11 +310,15 @@ const TpiPlanningList = ({
         )}
         {deadline && (
           <span className="voting-deadline">
-            ⏰ Deadline: {new Date(deadline).toLocaleDateString('fr-CH')}
+            <TimeIcon className="vote-metric-icon" />
+            Deadline: {new Date(deadline).toLocaleDateString('fr-CH')}
           </span>
         )}
         {hasConflicts && (
-          <span className="voting-conflict">⚠️ Conflit détecté</span>
+          <span className="voting-conflict">
+            <AlertIcon className="vote-metric-icon" />
+            Conflit détecté
+          </span>
         )}
       </div>
     )
@@ -286,7 +327,10 @@ const TpiPlanningList = ({
   return (
     <div className="tpi-planning-list">
       <div className="list-header">
-        <h2>📋 Liste des TPI ({tpis.length})</h2>
+        <h2 className="list-title">
+          <ListIcon className="list-title-icon" />
+          Liste des TPI ({tpis.length})
+        </h2>
       </div>
 
       <div className="table-container">
@@ -340,6 +384,10 @@ const TpiPlanningList = ({
                   const pendingVotes = Number(tpi.voteStats?.pendingVotes || 0)
                   const rejectedVotes = Number(tpi.voteStats?.rejectedVotes || 0)
                   const voteRoleStatus = tpi.voteRoleStatus || {}
+                  const validationAnnotation = validationIssuesByTpiId?.[String(tpi?._id || '')] || null
+                  const hasValidationIssues = Boolean(validationAnnotation?.count)
+                  const validationSummary = getValidationIssueDetail(validationAnnotation)
+                  const validationTitle = validationAnnotation?.messages?.join('\n') || undefined
 
                   return (
                 <tr 
@@ -348,6 +396,7 @@ const TpiPlanningList = ({
                     ${selectedTpi?._id === tpi._id ? 'selected' : ''}
                     ${expandedTpi === tpi._id ? 'expanded' : ''}
                     status-${normalizedStatus}
+                    ${hasValidationIssues ? 'has-validation-issues' : ''}
                   `}
                   onClick={() => onSelectTpi(tpi)}
                 >
@@ -359,9 +408,23 @@ const TpiPlanningList = ({
                         toggleExpand(tpi._id)
                       }}
                     >
-                      {expandedTpi === tpi._id ? '▼' : '▶'}
+                      {expandedTpi === tpi._id ? <ChevronDownIcon /> : <ChevronRightIcon />}
                     </button>
-                    {compactText(tpi.reference) ? <span>{tpi.reference}</span> : null}
+                    <div className="reference-content">
+                      <div className="reference-main">
+                        {compactText(tpi.reference) ? <span>{tpi.reference}</span> : null}
+                        {hasValidationIssues ? (
+                          <span className="validation-badge" title={validationTitle}>
+                            À corriger
+                          </span>
+                        ) : null}
+                      </div>
+                      {hasValidationIssues && validationSummary ? (
+                        <span className="validation-hint" title={validationTitle}>
+                          {validationSummary}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="cell-candidat">
                     {candidateName || classDisplayLabel ? (
@@ -411,14 +474,17 @@ const TpiPlanningList = ({
                     {(tpi.voteStats?.totalVotes || 0) > 0 && normalizedStatus === PLANNING_STATUS.VOTING && (
                       <div className="vote-mini-summary">
                         <span className="vote-mini-ok">
-                          ✅ {acceptedVotes}
+                          <CheckIcon className="vote-metric-icon" />
+                          {acceptedVotes}
                         </span>
                         <span className="vote-mini-pending">
-                          ⏳ {pendingVotes}
+                          <TimeIcon className="vote-metric-icon" />
+                          {pendingVotes}
                         </span>
                         {rejectedVotes > 0 && (
                           <span className="vote-mini-rejected">
-                            ❌ {rejectedVotes}
+                            <CloseIcon className="vote-metric-icon" />
+                            {rejectedVotes}
                           </span>
                         )}
                       </div>
@@ -458,26 +524,30 @@ const TpiPlanningList = ({
                     <td className="cell-actions">
                       {normalizedStatus === PLANNING_STATUS.DRAFT && (
                         <button
-                          className="btn-action btn-vote"
+                          className="btn-action btn-vote btn-icon-only"
                           onClick={(e) => {
                             e.stopPropagation()
                             onProposeSlots(tpi._id)
                           }}
                           title="Lancer le processus de vote"
+                          aria-label="Lancer le processus de vote"
                         >
-                          🗳️ Voter
+                          <VoteIcon />
+                          <span className="sr-only">Voter</span>
                         </button>
                       )}
                       {MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(tpi.status)) && (
                         <button
-                          className="btn-action btn-resolve"
+                          className="btn-action btn-resolve btn-icon-only"
                           onClick={(e) => {
                             e.stopPropagation()
                             onSelectTpi(tpi)
                           }}
                           title="Résoudre le conflit"
+                          aria-label="Résoudre le conflit"
                         >
-                          🔧 Résoudre
+                          <WrenchIcon />
+                          <span className="sr-only">Résoudre</span>
                         </button>
                       )}
                     </td>
@@ -493,35 +563,50 @@ const TpiPlanningList = ({
                       <div className="tpi-details">
                         {compactText(tpi.sujet) ? (
                           <div className="detail-section">
-                            <h4>📚 Sujet</h4>
+                            <h4 className="detail-section-title">
+                              <DocumentIcon className="detail-section-icon" />
+                              Sujet
+                            </h4>
                             <p>{tpi.sujet}</p>
                           </div>
                         ) : null}
                         
                         {compactText(tpi.entreprise) ? (
                           <div className="detail-section">
-                            <h4>🏢 Entreprise</h4>
+                            <h4 className="detail-section-title">
+                              <BriefcaseIcon className="detail-section-icon" />
+                              Entreprise
+                            </h4>
                             <p>{tpi.entreprise}</p>
                           </div>
                         ) : null}
 
                         {compactText(tpi.site || tpi.lieu?.site) ? (
                           <div className="detail-section">
-                            <h4>📍 Site</h4>
+                            <h4 className="detail-section-title">
+                              <PinIcon className="detail-section-icon" />
+                              Site
+                            </h4>
                             <p>{tpi.site || tpi.lieu?.site}</p>
                           </div>
                         ) : null}
 
                         {tpi.status === 'voting' && (
                           <div className="detail-section voting-section">
-                            <h4>🗳️ Statut du vote</h4>
+                            <h4 className="detail-section-title">
+                              <VoteIcon className="detail-section-icon" />
+                              Statut du vote
+                            </h4>
                             {renderVotingInfo(tpi)}
                           </div>
                         )}
 
                         {tpi.proposedSlots && tpi.proposedSlots.length > 0 && (
                           <div className="detail-section">
-                            <h4>📅 Date fixée + alternatives</h4>
+                            <h4 className="detail-section-title">
+                              <CalendarIcon className="detail-section-icon" />
+                              Date fixée + alternatives
+                            </h4>
                             <div className="proposed-slots">
                               {tpi.proposedSlots.map((ps, idx) => {
                                 const slot = ps.slot || {}
@@ -591,7 +676,9 @@ const TpiPlanningList = ({
 
       {tpis.length === 0 && (
         <div className="empty-list">
-          <span className="empty-icon">📭</span>
+          <span className="empty-icon" aria-hidden="true">
+            <InboxIcon />
+          </span>
           <p>Aucun TPI trouvé</p>
         </div>
       )}

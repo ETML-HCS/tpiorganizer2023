@@ -25,6 +25,10 @@ const {
   savePlanningConfig
 } = require('../services/planningConfigService')
 const {
+  buildVoteProposalContext,
+  filterSlotDocumentsForVoteProposal
+} = require('../services/voteProposalOptionsService')
+const {
   getSharedPlanningCatalog,
   saveSharedPlanningCatalog
 } = require('../services/planningCatalogService')
@@ -315,7 +319,38 @@ function buildVoteResponseMode(roleStatus) {
 async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
   const tpiId = String(tpi?._id || '')
   if (!tpiId) {
-    return []
+    return {
+      options: [],
+      context: {
+        candidateClass: '',
+        candidateClassLabel: '',
+        classCode: '',
+        isMatu: false,
+        allowedDateKeys: [],
+        allowedDateLabels: [],
+        source: 'planning_slots'
+      }
+    }
+  }
+
+  let planningConfig = null
+  let proposalContext = {
+    candidateClass: String(tpi?.classe || '').trim(),
+    candidateClassLabel: String(tpi?.classe || '').trim(),
+    classCode: '',
+    isMatu: false,
+    allowedDateKeys: [],
+    allowedDateLabels: [],
+    source: 'planning_slots'
+  }
+
+  try {
+    if (mongoose.connection?.readyState === 1) {
+      planningConfig = await getPlanningConfig(tpi?.year)
+      proposalContext = buildVoteProposalContext(tpi, planningConfig)
+    }
+  } catch (error) {
+    console.warn(`Impossible de charger la configuration de vote ${tpi?.year}:`, error?.message || error)
   }
 
   const fixedSlotId = getFixedSlotIdFromTpi(tpi)
@@ -348,16 +383,21 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
     .filter(Boolean)
 
   if (availableSlotIds.length === 0) {
-    return Array.from(optionsBySlotId.values())
-      .sort((left, right) => buildSlotSortKey(left.slot).localeCompare(buildSlotSortKey(right.slot)))
+    return {
+      options: Array.from(optionsBySlotId.values())
+        .sort((left, right) => buildSlotSortKey(left.slot).localeCompare(buildSlotSortKey(right.slot))),
+      context: proposalContext
+    }
   }
 
   const slotDocuments = await Slot.find({ _id: { $in: availableSlotIds } })
     .select('date period startTime endTime room status')
     .lean()
 
+  const filteredSlotDocuments = filterSlotDocumentsForVoteProposal(slotDocuments, proposalContext)
+
   const slotById = new Map(
-    slotDocuments.map(slotDocument => [String(slotDocument._id), slotDocument])
+    filteredSlotDocuments.map(slotDocument => [String(slotDocument._id), slotDocument])
   )
 
   for (const slotInfo of availableSlots) {
@@ -381,8 +421,11 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
     })
   }
 
-  return Array.from(optionsBySlotId.values())
-    .sort((left, right) => buildSlotSortKey(left.slot).localeCompare(buildSlotSortKey(right.slot)))
+  return {
+    options: Array.from(optionsBySlotId.values())
+      .sort((left, right) => buildSlotSortKey(left.slot).localeCompare(buildSlotSortKey(right.slot))),
+    context: proposalContext
+  }
 }
 
 // ============================================
@@ -1345,7 +1388,9 @@ router.get('/votes/pending', authMiddleware, async (req, res) => {
 
     await Promise.all(
       groupedVotes.map(async (group) => {
-        group.proposalOptions = await buildVoteProposalOptionsForTpi(group.tpi, group.slots)
+        const proposalData = await buildVoteProposalOptionsForTpi(group.tpi, group.slots)
+        group.proposalOptions = proposalData.options
+        group.proposalContext = proposalData.context
       })
     )
     
@@ -1471,8 +1516,8 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
         .filter(slotId => slotId !== fixedSlotId)
     )
 
-    const additionalProposalOptions = await buildVoteProposalOptionsForTpi(tpi, [])
-    for (const option of additionalProposalOptions) {
+    const additionalProposalData = await buildVoteProposalOptionsForTpi(tpi, [])
+    for (const option of additionalProposalData.options) {
       if (option?.slotId && option.slotId !== fixedSlotId) {
         allowedProposalSlotIds.add(option.slotId)
       }

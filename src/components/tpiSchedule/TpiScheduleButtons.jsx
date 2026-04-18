@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { Link, useLocation } from "react-router-dom"
 import PageToolbar from "../shared/PageToolbar"
 import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
-import { WrapIcon } from "../shared/InlineIcons"
+import { CollapseIcon, ExpandIcon, WrapIcon } from "../shared/InlineIcons"
 import {
   getSoutenanceDateBadgeLabel,
   getSoutenanceDateBadgeTone,
@@ -377,7 +377,7 @@ const TpiScheduleButtons = ({
               data-testid="planning-room-focus-toggle"
             >
               <span className="planning-room-focus-toggle-icon" aria-hidden="true">
-                {isRoomsFocusMode ? "⤡" : "⛶"}
+                {isRoomsFocusMode ? <CollapseIcon /> : <ExpandIcon />}
               </span>
             </button>
           ) : null}

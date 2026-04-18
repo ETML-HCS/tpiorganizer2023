@@ -3,6 +3,7 @@ const PublicationVersion = require('../models/publicationVersionModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const TpiModelsYear = require('../models/tpiModels')
 const { inferTpiClassMode } = require('./roomClassCompatibilityService')
+const { buildLegacyRefFilter } = require('./legacyTpiDateEnrichmentService')
 
 function getSoutenanceModel(year) {
   return createCustomTpiRoomModel(`tpiSoutenance_${year}`)
@@ -314,7 +315,7 @@ async function syncPublishedSoutenancesToTpiCatalog(year, rooms, modelFactory = 
 
       updates.push({
         updateOne: {
-          filter: { refTpi: tpiData.refTpi },
+          filter: buildLegacyRefFilter('refTpi', tpiData.refTpi, year),
           update: {
             $set: {
               'dates.soutenance': soutenanceDate,

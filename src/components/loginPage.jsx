@@ -27,72 +27,58 @@ const LoginPage = ({ login }) => {
   }
 
   return (
-    <div className='login-page'>
-      <div className='login-hero'>
-        <p className='badge'>Portail TPI</p>
-        <h1>Connexion sécurisée</h1>
-        <p className='subtitle'>Accédez au suivi des soutenances, votes experts et réservations de salles.</p>
-      </div>
-
-      <div className='login-card'>
-        <div className='card-header'>
-          <div className='brand'>TPI Organizer</div>
-          <div className='hint'>Identifiez-vous pour continuer</div>
-        </div>
+    <main className='login-page' aria-labelledby='login-title'>
+      <section className='login-card'>
+        <header className='card-header'>
+          <h1 id='login-title'>Connexion</h1>
+          <p className='hint'>Entrez vos identifiants pour continuer.</p>
+        </header>
 
         <form className='login-form' onSubmit={handleSubmit}>
           <div className='form-group'>
-            <label htmlFor='username'>Nom d'utilisateur</label>
-            <div className='input-wrapper'>
-              <span className='input-icon'>👤</span>
-              <input
-                type='text'
-                id='username'
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder='prenom.nom@domaine.ch'
-                autoComplete='username'
-                required
-              />
-            </div>
+            <label htmlFor='username'>Identifiant</label>
+            <input
+              type='text'
+              id='username'
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder='prenom.nom@domaine.ch'
+              autoComplete='username'
+              required
+            />
           </div>
 
           <div className='form-group'>
-            <label htmlFor='password'>Mot de passe</label>
-            <div className='input-wrapper'>
-              <span className='input-icon'>🔒</span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                id='password'
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder='••••••••'
-                autoComplete='current-password'
-                required
-              />
+            <div className='password-label-row'>
+              <label htmlFor='password'>Mot de passe</label>
               <button
                 type='button'
                 className='toggle-visibility'
                 onClick={() => setShowPassword(prev => !prev)}
                 aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
               >
-                {showPassword ? '🙈' : '👁️'}
+                {showPassword ? 'Masquer' : 'Afficher'}
               </button>
             </div>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id='password'
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder='Mot de passe'
+              autoComplete='current-password'
+              required
+            />
           </div>
 
-          {error && <div className='error-message'>⚠️ {error}</div>}
+          {error ? <div className='error-message'>{error}</div> : null}
 
           <button className='button-login' type='submit' disabled={loading}>
-            {loading ? 'Connexion…' : 'Se connecter'}
+            {loading ? 'Connexion...' : 'Se connecter'}
           </button>
-
-          <p className='helper-text'>
-            Besoin d'aide ? Contactez l'administration ou utilisez le lien magique reçu par email.
-          </p>
         </form>
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }
 

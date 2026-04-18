@@ -2,13 +2,12 @@ import React, { useCallback, useEffect, useState } from "react"
 import { toast } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import {
-  faSave,
-  faSnowflake,
-  faTrash,
-  faDownload,
-} from "@fortawesome/free-solid-svg-icons"
+  DownloadIcon,
+  SaveIcon,
+  SnowflakeIcon,
+  TrashIcon
+} from "../shared/InlineIcons"
 
 import { PDFDocument } from "pdf-lib"
 import { STORAGE_KEYS } from "../../config/appConfig"
@@ -1146,7 +1145,7 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
           className='freeze-button'
         >
           <span>Clôturer </span>
-          <FontAwesomeIcon icon={faSnowflake} />
+          <SnowflakeIcon />
         </button>
 
         <button
@@ -1156,7 +1155,7 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
           className='save-button'
         >
           <span>Enregistrer </span>
-          <FontAwesomeIcon icon={faSave} />
+          <SaveIcon />
         </button>
 
         {showDownloadButton && (
@@ -1167,7 +1166,7 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
             className='download-button'
           >
             <span>Télécharger</span>
-            <FontAwesomeIcon icon={faDownload} />
+            <DownloadIcon />
           </button>
         )}
 
@@ -1178,7 +1177,7 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
           className='reset-button'
         >
           <span>Réinitialiser </span>
-          <FontAwesomeIcon icon={faTrash} />
+          <TrashIcon />
         </button>
         <button type='button' onClick={() => handleClickDeleteEval(data?.id)}>
           Supprimer l'éval ID : {`${data?.id}`}

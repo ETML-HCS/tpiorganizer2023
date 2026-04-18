@@ -1,10 +1,16 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { voteService } from '../../services/planningService'
+import BinaryToggle from '../shared/BinaryToggle'
 import {
+  AlertIcon,
   CalendarIcon,
   CandidateIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
   RoomIcon,
+  SendIcon,
   TimeIcon
 } from '../shared/InlineIcons'
 import './VotingPanel.css'
@@ -95,6 +101,29 @@ function getModeSummary(state) {
   }
 
   return 'Réponse à saisir'
+}
+
+function buildProposalContextSummary(group) {
+  const candidateClass = compactText(group?.proposalContext?.candidateClassLabel || group?.tpi?.classe)
+  const source = group?.proposalContext?.source
+
+  if (!candidateClass && source !== 'planning_config') {
+    return ''
+  }
+
+  if (source === 'planning_config' && candidateClass) {
+    return `Créneaux filtrés selon la configuration ${candidateClass}.`
+  }
+
+  if (source === 'planning_config') {
+    return 'Créneaux filtrés selon la configuration annuelle.'
+  }
+
+  if (candidateClass) {
+    return `Classe ${candidateClass}.`
+  }
+
+  return ''
 }
 
 const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
@@ -220,8 +249,8 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
 
       setSubmitSuccess(
         state.mode === 'ok'
-          ? '✅ Vote enregistré: date fixée validée.'
-          : '✅ Vote enregistré: proposition transmise.'
+          ? 'Vote enregistré: date fixée validée.'
+          : 'Vote enregistré: proposition transmise.'
       )
 
       setTimeout(() => {
@@ -279,14 +308,20 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
 
       {submitError && (
         <div className="alert alert-error">
-          <span>⚠️ {submitError}</span>
+          <span className="alert-copy">
+            <AlertIcon className="alert-icon" />
+            {submitError}
+          </span>
           <button onClick={() => setSubmitError(null)}>×</button>
         </div>
       )}
 
       {submitSuccess && (
         <div className="alert alert-success">
-          <span>{submitSuccess}</span>
+          <span className="alert-copy">
+            <CheckIcon className="alert-icon" />
+            {submitSuccess}
+          </span>
         </div>
       )}
 
@@ -296,6 +331,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
           const tpiId = String(tpi._id || '')
           const fixedSlot = group.fixedSlot || group.slots?.[0] || null
           const proposalOptions = normalizeProposalOptions(group)
+          const proposalContextSummary = buildProposalContextSummary(group)
           const state = responses[tpiId] || {
             mode: '',
             selectedSlotIds: [],
@@ -330,7 +366,9 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                   <span className={`preferred-count ${state.mode ? 'full' : ''}`}>
                     {summaryEntry?.summary || 'Réponse à saisir'}
                   </span>
-                  <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+                  <span className="expand-icon">
+                    {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                  </span>
                 </div>
               </div>
 
@@ -397,6 +435,11 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                             Choisissez jusqu&apos;à {MAX_PROPOSALS_PER_TPI} créneaux du planning.
                             Les propositions sélectionnées seront transmises à l&apos;administration.
                           </p>
+                          {proposalContextSummary ? (
+                            <p className="proposal-context-note">
+                              {proposalContextSummary}
+                            </p>
+                          ) : null}
                         </div>
                         <span className="slot-group-badge alternatives">
                           {state.selectedSlotIds.length}/{MAX_PROPOSALS_PER_TPI} sélectionnés
@@ -450,14 +493,21 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                       </div>
 
                       <div className="special-request-box">
-                        <label className="special-request-toggle">
-                          <input
-                            type="checkbox"
-                            checked={state.specialEnabled}
-                            onChange={(event) => toggleSpecialRequest(tpiId, event.target.checked)}
+                        <div className="special-request-toggle-row">
+                          <span className="special-request-toggle-label">Ajouter une demande spéciale</span>
+                          <BinaryToggle
+                            value={Boolean(state.specialEnabled)}
+                            onChange={(nextValue) => toggleSpecialRequest(tpiId, nextValue)}
+                            name={`special-request-${tpiId}`}
+                            className="special-request-toggle"
+                            ariaLabel="Ajouter une demande spéciale"
+                            iconOnly
+                            trueLabel="Demande spéciale activée"
+                            falseLabel="Demande spéciale désactivée"
+                            trueIcon={AlertIcon}
+                            falseIcon={CloseIcon}
                           />
-                          <span>Ajouter une demande spéciale</span>
-                        </label>
+                        </div>
                         <p className="special-request-help">
                           Utilisez cette option si vous devez sortir des créneaux disponibles
                           et transmettre une contrainte précise à l&apos;administration.
@@ -507,7 +557,10 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                           Envoi en cours...
                         </>
                       ) : (
-                        <>📤 Envoyer ma réponse</>
+                        <>
+                          <SendIcon className="button-icon" />
+                          Envoyer ma réponse
+                        </>
                       )}
                     </button>
                   </div>

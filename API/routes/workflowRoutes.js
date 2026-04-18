@@ -12,6 +12,7 @@ const {
 const planningValidationService = require('../services/planningValidationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
+const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
 const {
   rebuildWorkflowFromLegacyPlanning
 } = require('../services/legacyPlanningBridgeService')
@@ -573,6 +574,36 @@ router.post(
   authMiddleware,
   requireRole('admin'),
   handleDevVoteLinks
+)
+
+router.post(
+  '/:year/access-links/preview',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const workflow = await workflowService.getWorkflowYearState(year)
+      const baseUrl = getFrontendBaseUrl(req)
+      const preview = await buildAccessLinkPreview({
+        year,
+        baseUrl
+      })
+
+      return res.status(200).json({
+        success: true,
+        workflowState: workflow?.state || 'planning',
+        ...preview
+      })
+    } catch (error) {
+      console.error('Erreur generation apercu liens d acces:', error)
+      return res.status(500).json({
+        error: 'Erreur lors de la generation des liens d acces.'
+      })
+    }
+  }
 )
 
 router.post(

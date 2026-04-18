@@ -142,6 +142,10 @@ const siteCatalogSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    planningColor: {
+      type: String,
+      default: ''
+    },
     address: {
       type: siteAddressSchema,
       default: () => ({})

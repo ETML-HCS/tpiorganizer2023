@@ -10,6 +10,7 @@ import {
 } from "../../services/planningService"
 import { buildPlanningRoomSizingOverview } from "../../utils/planningCapacityUtils"
 import { normalizeSoutenanceDateEntries } from "../tpiSchedule/soutenanceDateUtils"
+import BinaryToggle from "../shared/BinaryToggle"
 import { CalendarIcon, RoomIcon, SettingsIcon, TimeIcon } from "../shared/InlineIcons"
 
 import "../../css/planningConfiguration.css"
@@ -39,12 +40,56 @@ const DEFAULT_ADDRESS = {
   country: ""
 }
 
+const DEFAULT_SITE_PLANNING_COLORS = [
+  "#1D4ED8",
+  "#0F766E",
+  "#BE185D",
+  "#7C3AED",
+  "#C2410C",
+  "#0891B2",
+  "#4F46E5",
+  "#65A30D"
+]
+
 const compactText = (value) => {
   if (value === null || value === undefined) {
     return ""
   }
 
   return String(value).trim()
+}
+
+const normalizePlanningColor = (value) => {
+  const hex = compactText(value).replace(/^#/, "")
+
+  if (/^[\da-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split("")
+      .map((char) => `${char}${char}`)
+      .join("")
+      .toUpperCase()}`
+  }
+
+  if (/^[\da-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`
+  }
+
+  return ""
+}
+
+const getDefaultPlanningColor = (seed = "", fallbackIndex = 0) => {
+  const normalizedSeed = compactText(seed).toUpperCase()
+
+  if (!normalizedSeed) {
+    return DEFAULT_SITE_PLANNING_COLORS[Math.abs(Number(fallbackIndex) || 0) % DEFAULT_SITE_PLANNING_COLORS.length]
+  }
+
+  let hash = 0
+  for (const character of normalizedSeed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  }
+
+  return DEFAULT_SITE_PLANNING_COLORS[hash % DEFAULT_SITE_PLANNING_COLORS.length]
 }
 
 const generateLocalId = (prefix) => {
@@ -467,6 +512,10 @@ const normalizeCatalogSites = (values) => {
     .map((site, index) => {
       const code = compactText(site?.code || site?.name || site?.label || `SITE${index + 1}`).toUpperCase()
       const id = compactText(site?.id) || makeStableId("site", code || site?.label || site?.name || index + 1)
+      const label = compactText(site?.label || site?.name || code || `Site ${index + 1}`)
+      const planningColor = normalizePlanningColor(
+        site?.planningColor || site?.color || getDefaultPlanningColor(code || label, index)
+      )
       const roomSource = Array.isArray(site?.roomDetails)
         ? site.roomDetails
         : Array.isArray(site?.rooms)
@@ -487,7 +536,8 @@ const normalizeCatalogSites = (values) => {
       return {
         id,
         code,
-        label: compactText(site?.label || site?.name || code || `Site ${index + 1}`),
+        label,
+        planningColor,
         address: {
           line1: compactText(site?.address?.line1 || site?.address?.street || ""),
           line2: compactText(site?.address?.line2 || site?.address?.street2 || ""),
@@ -639,6 +689,9 @@ const buildCatalogPayload = (draft) => {
         id: compactText(site.id) || generateLocalId("site"),
         code: compactText(site.code).toUpperCase(),
         label: compactText(site.label || site.code),
+        planningColor: normalizePlanningColor(
+          site.planningColor || getDefaultPlanningColor(site.code || site.label)
+        ),
         address: {
           line1: compactText(site.address?.line1),
           line2: compactText(site.address?.line2),
@@ -733,6 +786,7 @@ const createBlankSite = (index = 1) => {
     id,
     code,
     label: `Site ${index}`,
+    planningColor: getDefaultPlanningColor(code, index - 1),
     address: { ...DEFAULT_ADDRESS, country: "Suisse" },
     roomDetails: [],
     rooms: [],
@@ -1014,45 +1068,6 @@ const getSiteStatistics = (site = {}) => {
   }
 }
 
-const BinaryToggle = ({
-  value,
-  onChange,
-  name,
-  className = "",
-  trueLabel,
-  falseLabel,
-  ariaLabel,
-  disabled = false
-}) => (
-  <div
-    className={`page-tools-toggle ${className}`.trim()}
-    role='radiogroup'
-    aria-label={ariaLabel}
-  >
-    <label className={`page-tools-toggle-option ${value === true ? "active" : ""} ${disabled ? "disabled" : ""}`.trim()}>
-      <input
-        type='radio'
-        name={name}
-        checked={value === true}
-        onChange={() => onChange(true)}
-        disabled={disabled}
-      />
-      <span className='page-tools-toggle-label'>{trueLabel}</span>
-    </label>
-
-    <label className={`page-tools-toggle-option ${value === false ? "active" : ""} ${disabled ? "disabled" : ""}`.trim()}>
-      <input
-        type='radio'
-        name={name}
-        checked={value === false}
-        onChange={() => onChange(false)}
-        disabled={disabled}
-      />
-      <span className='page-tools-toggle-label'>{falseLabel}</span>
-    </label>
-  </div>
-)
-
 const SectionToggleButton = ({
   isOpen,
   onClick,
@@ -1135,7 +1150,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
 
       <div id={bodyId} className='configuration-card-body' hidden={!isExpanded}>
         <div className='configuration-card-grid configuration-card-grid--class-type'>
-          <label className='page-tools-field'>
+          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--code'>
             <span className='page-tools-field-label'>Code</span>
             <input
               className='page-tools-field-control'
@@ -1146,7 +1161,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
             />
           </label>
 
-          <label className='page-tools-field'>
+          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--prefix'>
             <span className='page-tools-field-label'>Préfixe</span>
             <input
               className='page-tools-field-control'
@@ -1157,7 +1172,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
             />
           </label>
 
-          <label className='page-tools-field'>
+          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--label'>
             <span className='page-tools-field-label'>Libellé</span>
             <input
               className='page-tools-field-control'
@@ -1168,7 +1183,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
             />
           </label>
 
-          <label className='page-tools-field'>
+          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--date'>
             <span className='page-tools-field-label'>Début</span>
             <input
               className='page-tools-field-control'
@@ -1179,7 +1194,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
             />
           </label>
 
-          <label className='page-tools-field'>
+          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--date'>
             <span className='page-tools-field-label'>Fin</span>
             <input
               className='page-tools-field-control'
@@ -1190,7 +1205,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
             />
           </label>
 
-          <label className='page-tools-field page-tools-field--full'>
+          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--notes'>
             <span className='page-tools-field-label'>Notes</span>
             <input
               className='page-tools-field-control'
@@ -1202,11 +1217,11 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
           </label>
         </div>
 
-        <label className='page-tools-field'>
+        <label className='page-tools-field configuration-class-type-soutenance'>
           <span className='page-tools-field-label'>Soutenance</span>
           <textarea
             className='page-tools-field-control configuration-textarea'
-            rows='5'
+            rows='3'
             value={classType?.soutenanceDatesText || ""}
             onChange={(event) => onChange("soutenanceDatesText", event.target.value)}
             placeholder='2026-06-01 SPECIAL'
@@ -1282,7 +1297,12 @@ const SiteScheduleCard = ({ site, schedule, onChange, disabled = false }) => (
       </label>
 
       <label className='page-tools-field'>
-        <span className='page-tools-field-label'>Rooms / date</span>
+        <span
+          className='page-tools-field-label configuration-help-label'
+          title='Nombre de rooms à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
+        >
+          Rooms / date
+        </span>
         <input
           className='page-tools-field-control'
           type='number'
@@ -1300,7 +1320,7 @@ const SiteScheduleCard = ({ site, schedule, onChange, disabled = false }) => (
         />
       </label>
 
-      <label className='page-tools-field configuration-card-span-2'>
+      <label className='page-tools-field configuration-schedule-field configuration-schedule-field--notes'>
         <span className='page-tools-field-label'>Notes</span>
         <input
           className='page-tools-field-control'
@@ -1329,7 +1349,7 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
     </div>
 
     <div className='configuration-room-grid'>
-      <label className='page-tools-field'>
+      <label className='page-tools-field configuration-room-field configuration-room-field--code'>
         <span className='page-tools-field-label'>Code</span>
         <input
           className='page-tools-field-control'
@@ -1340,7 +1360,7 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
         />
       </label>
 
-      <label className='page-tools-field'>
+      <label className='page-tools-field configuration-room-field configuration-room-field--name'>
         <span className='page-tools-field-label'>Nom</span>
         <input
           className='page-tools-field-control'
@@ -1351,7 +1371,7 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
         />
       </label>
 
-      <label className='page-tools-field'>
+      <label className='page-tools-field configuration-room-field configuration-room-field--capacity'>
         <span className='page-tools-field-label'>Capacité</span>
         <input
           className='page-tools-field-control'
@@ -1364,8 +1384,18 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
         />
       </label>
 
-      <div className='page-tools-field'>
-        <span className='page-tools-field-label'>Actif</span>
+      <label className='page-tools-field configuration-room-field configuration-room-field--notes'>
+        <span className='page-tools-field-label'>Notes</span>
+        <input
+          className='page-tools-field-control'
+          type='text'
+          value={room?.notes || ""}
+          onChange={(event) => onChange("notes", event.target.value)}
+          disabled={disabled}
+        />
+      </label>
+
+      <div className='page-tools-field configuration-room-field configuration-room-field--toggle'>
         <BinaryToggle
           value={room?.active !== false}
           onChange={(nextValue) => onChange("active", nextValue)}
@@ -1377,17 +1407,6 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
           disabled={disabled}
         />
       </div>
-
-      <label className='page-tools-field configuration-card-span-2'>
-        <span className='page-tools-field-label'>Notes</span>
-        <input
-          className='page-tools-field-control'
-          type='text'
-          value={room?.notes || ""}
-          onChange={(event) => onChange("notes", event.target.value)}
-          disabled={disabled}
-        />
-      </label>
     </div>
   </article>
 )
@@ -1407,7 +1426,7 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
     </div>
 
     <div className='configuration-card-grid configuration-card-grid--site-class-entry'>
-      <label className='page-tools-field'>
+      <label className='page-tools-field configuration-site-class-field configuration-site-class-field--code'>
         <span className='page-tools-field-label'>Code</span>
         <input
           className='page-tools-field-control'
@@ -1418,7 +1437,7 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
         />
       </label>
 
-      <label className='page-tools-field'>
+      <label className='page-tools-field configuration-site-class-field configuration-site-class-field--name'>
         <span className='page-tools-field-label'>Nom</span>
         <input
           className='page-tools-field-control'
@@ -1429,7 +1448,7 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
         />
       </label>
 
-      <label className='page-tools-field page-tools-field--full'>
+      <label className='page-tools-field configuration-site-class-field configuration-site-class-field--description'>
         <span className='page-tools-field-label'>Description</span>
         <input
           className='page-tools-field-control'
@@ -1440,8 +1459,7 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
         />
       </label>
 
-      <div className='page-tools-field'>
-        <span className='page-tools-field-label'>Actif</span>
+      <div className='page-tools-field configuration-site-class-field configuration-site-class-field--toggle'>
         <BinaryToggle
           value={entry?.active !== false}
           onChange={(nextValue) => onChange("active", nextValue)}
@@ -1774,7 +1792,7 @@ const CatalogSiteCard = ({
             </span>
             <h4>{site?.label || site?.code || "Site"}</h4>
             <p className='configuration-section-note'>
-              {site?.code ? `Code ${site.code}` : "Code site"} · {site?.active === false ? "Inactif" : "Actif"}
+              {site?.code ? `Code ${site.code}` : "Code site"}
             </p>
           </div>
 
@@ -1843,23 +1861,26 @@ const CatalogSiteCard = ({
           </label>
 
           <label className='page-tools-field'>
+            <span className='page-tools-field-label'>Couleur planning</span>
+            <input
+              className='page-tools-field-control configuration-color-input'
+              type='color'
+              value={normalizePlanningColor(
+                site?.planningColor || getDefaultPlanningColor(site?.code || site?.label)
+              )}
+              onChange={(event) => onSiteChange("planningColor", event.target.value)}
+              aria-label={`Couleur planning du site ${site?.label || site?.code || "site"}`}
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field'>
             <span className='page-tools-field-label'>Adresse 1</span>
             <input
               className='page-tools-field-control'
               type='text'
               value={site?.address?.line1 || ""}
               onChange={(event) => onAddressChange("line1", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Adresse 2</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.address?.line2 || ""}
-              onChange={(event) => onAddressChange("line2", event.target.value)}
               disabled={disabled}
             />
           </label>
@@ -1986,38 +2007,51 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
   const shortageRooms = Number(totals.shortageRooms || 0)
   const surplusRooms = Number(totals.surplusRooms || 0)
   const manualOverrideCount = Number(totals.manualOverrideCount || 0)
-  const roomGapLabel = shortageRooms > 0 ? "À créer" : surplusRooms > 0 ? "Surplus" : "Équilibre"
-  const roomGapValue = shortageRooms > 0 ? shortageRooms : surplusRooms > 0 ? surplusRooms : 0
-  const balanceNote = shortageRooms > 0 || surplusRooms > 0
+  const netRoomGap = Number(totals.roomGap || 0)
+  const roomGapValue = netRoomGap === 0 ? "OK" : netRoomGap > 0 ? `+${netRoomGap}` : `${netRoomGap}`
+  const roomGapHint = shortageRooms > 0 || surplusRooms > 0
     ? [
         shortageRooms > 0 ? `${shortageRooms} salle${shortageRooms > 1 ? "s" : ""} à créer` : null,
         surplusRooms > 0 ? `${surplusRooms} salle${surplusRooms > 1 ? "s" : ""} en marge` : null
       ]
         .filter(Boolean)
         .join(" · ")
-    : ""
+    : "Équilibre global"
+  const automaticTargetValue = Number(totals.recommendedRooms || 0)
+  const totalTargetHint =
+    manualOverrideCount > 0 && automaticTargetValue !== Number(totals.targetRooms || 0)
+      ? `Auto ${automaticTargetValue}`
+      : ""
   const summaryCards = [
     {
       label: "TPI",
       value: totals.tpiCount || 0
     },
     {
-      label: "Rooms actives / jour",
+      label: "Actives / jour",
       value: totals.activeRoomCount || 0
     },
     {
-      label: "Rooms conseillées / jour",
-      value: totals.recommendedRooms || 0
-    },
-    {
       label: "Cible / jour",
-      value: totals.targetRooms || 0
+      value: totals.targetRooms || 0,
+      hint: totalTargetHint
     },
     {
-      label: roomGapLabel,
-      value: roomGapValue
+      label: "Écart net",
+      value: roomGapValue,
+      hint: roomGapHint,
+      tone: netRoomGap > 0 ? "alert" : netRoomGap < 0 ? "surplus" : "ok"
     }
   ]
+  const panelNotes = [
+    ...notes.map((note) => ({ label: note, tone: "muted" })),
+    manualOverrideCount > 0
+      ? {
+          label: `${manualOverrideCount} cible${manualOverrideCount > 1 ? "s" : ""} manuelle${manualOverrideCount > 1 ? "s" : ""}`,
+          tone: "manual"
+        }
+      : null
+  ].filter(Boolean)
 
   return (
     <section className='configuration-panel configuration-panel--capacity'>
@@ -2044,29 +2078,30 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
         <>
           <div className='configuration-capacity-summary'>
             {summaryCards.map((card) => (
-              <article key={card.label} className='configuration-summary-card'>
-                <span className='configuration-summary-label'>{card.label}</span>
+              <article
+                key={card.label}
+                className={`configuration-summary-card ${card.tone ? `configuration-summary-card--${card.tone}` : ""}`.trim()}
+              >
+                <div className='configuration-summary-copy'>
+                  <span className='configuration-summary-label'>{card.label}</span>
+                  {card.hint ? <span className='configuration-summary-hint'>{card.hint}</span> : null}
+                </div>
                 <strong className='configuration-summary-value'>{card.value}</strong>
               </article>
             ))}
           </div>
 
-          {notes.length > 0 ? (
-            <p className='configuration-card-note configuration-capacity-note'>
-              {notes.join(" · ")}
-            </p>
-          ) : null}
-
-          {balanceNote ? (
-            <p className='configuration-card-note configuration-capacity-note'>
-              {balanceNote}
-            </p>
-          ) : null}
-
-          {manualOverrideCount > 0 ? (
-            <p className='configuration-card-note configuration-capacity-note'>
-              {manualOverrideCount} site{manualOverrideCount > 1 ? "s" : ""} avec cible manuelle.
-            </p>
+          {panelNotes.length > 0 ? (
+            <div className='configuration-capacity-note-list'>
+              {panelNotes.map((note) => (
+                <span
+                  key={note.label}
+                  className={`configuration-capacity-note configuration-capacity-note--${note.tone}`.trim()}
+                >
+                  {note.label}
+                </span>
+              ))}
+            </div>
           ) : null}
 
           <div className='configuration-capacity-list'>
@@ -2080,6 +2115,57 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                   : site.roomGap < 0
                     ? "is-surplus"
                     : "is-ok"
+                const siteStats = [
+                  {
+                    label: "TPI",
+                    value: site.tpiCount,
+                    tone: "neutral"
+                  },
+                  {
+                    label: "Actives",
+                    value: site.activeRoomCount,
+                    tone: "neutral"
+                  },
+                  site.usesManualRoomTarget && site.recommendedRooms !== site.targetRooms
+                    ? {
+                        label: "Auto",
+                        value: site.recommendedRooms,
+                        tone: "muted"
+                      }
+                    : null,
+                  {
+                    label: site.usesManualRoomTarget ? "Manuel" : "Cible",
+                    value: site.targetRooms,
+                    tone: site.usesManualRoomTarget ? "manual" : "neutral"
+                  },
+                  site.roomGap > 0
+                    ? {
+                        label: "À créer",
+                        value: site.roomGap,
+                        tone: "alert"
+                      }
+                    : site.roomGap < 0
+                      ? {
+                          label: "Marge",
+                          value: Math.abs(site.roomGap),
+                          tone: "surplus"
+                        }
+                      : {
+                          label: "Écart",
+                          value: "OK",
+                          tone: "ok"
+                        },
+                  site.undatedTpiCount > 0
+                    ? {
+                        label: "Sans date",
+                        value: site.undatedTpiCount,
+                        tone: "muted"
+                      }
+                    : null
+                ].filter(Boolean)
+                const siteMeta = site.tpiCount > 0
+                  ? `Pression ${site.pressureLabel.toLowerCase()}`
+                  : "Aucun TPI affecté"
                 return (
                   <article
                     key={site.key}
@@ -2093,13 +2179,17 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                       </div>
                     </div>
 
-                    <p className='configuration-card-note configuration-capacity-site-summary'>
-                      {site.tpiCount > 0
-                        ? site.usesManualRoomTarget
-                          ? `Théorique ${site.theoreticalRooms} · Opérationnel ${site.operationalRooms} · Conseillé ${site.recommendedRooms} · Manuel ${site.targetRooms} · Actives ${site.activeRoomCount}`
-                          : `Théorique ${site.theoreticalRooms} · Opérationnel ${site.operationalRooms} · Conseillé ${site.recommendedRooms} · Actives ${site.activeRoomCount}`
-                        : `Aucun TPI. Salles actives ${site.activeRoomCount}.`}
-                    </p>
+                    <div className='configuration-capacity-site-stats'>
+                      {siteStats.map((stat) => (
+                        <span
+                          key={`${site.key}-${stat.label}`}
+                          className={`configuration-capacity-site-stat is-${stat.tone}`.trim()}
+                        >
+                          <span className='configuration-capacity-site-stat-label'>{stat.label}</span>
+                          <strong className='configuration-capacity-site-stat-value'>{stat.value}</strong>
+                        </span>
+                      ))}
+                    </div>
 
                     {site.targetRooms > 0 ? (
                       <div className='configuration-capacity-meter'>
@@ -2128,7 +2218,7 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                       </div>
                     ) : null}
 
-                    <p className='configuration-card-note'>{site.pressureNote}</p>
+                    <p className='configuration-card-note configuration-capacity-site-meta'>{siteMeta}</p>
                   </article>
                 )
               })

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
+
+import { ArrowRightIcon } from "../../shared/InlineIcons";
 
 // Pour accéder à la variable d'environnement REACT_APP_DEBUG
 const debugMode = process.env.REACT_APP_DEBUG === "true";
@@ -239,7 +239,7 @@ const HeaderLine = ({ isVisible, searchCandidat }) => {
           />
 
           <button id="searchCandidat" onClick={handleSearchClick}>
-            <FontAwesomeIcon icon={faArrowRight} /> Importer ce candidat
+            <ArrowRightIcon /> Importer ce candidat
           </button>
         </span>
       </div>

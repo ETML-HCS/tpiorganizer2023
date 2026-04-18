@@ -1,4 +1,5 @@
 const { defineConfig, loadEnv } = require('vite')
+const path = require('path')
 const react = require('@vitejs/plugin-react')
 
 module.exports = defineConfig(({ mode }) => {
@@ -18,7 +19,48 @@ module.exports = defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'build',
-      emptyOutDir: true
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              return undefined
+            }
+
+            if (
+              id.includes('react-dom') ||
+              id.includes(`${path.sep}react${path.sep}`) ||
+              id.includes('/react/') ||
+              id.includes('\\react\\') ||
+              id.includes('scheduler')
+            ) {
+              return 'react-vendor'
+            }
+
+            if (id.includes('react-router')) {
+              return 'router-vendor'
+            }
+
+            if (id.includes('react-toastify')) {
+              return 'toastify-vendor'
+            }
+
+            if (id.includes('react-dnd')) {
+              return 'dnd-vendor'
+            }
+
+            if (id.includes('@fortawesome')) {
+              return 'icons-vendor'
+            }
+
+            if (id.includes('pdf-lib')) {
+              return 'pdf-vendor'
+            }
+
+            return 'vendor'
+          }
+        }
+      }
     },
     server: {
       port: 3000

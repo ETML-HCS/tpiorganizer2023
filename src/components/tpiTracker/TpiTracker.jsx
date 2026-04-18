@@ -16,39 +16,6 @@ import {
 
 import "../../css/tpiTracker/tpiTrackerStyle.css"
 
-const TRACKER_HERO_METRICS = [
-  {
-    value: "4",
-    label: "rôles couverts",
-    detail: "Étudiant, chef de projet, doyen, expert"
-  },
-  {
-    value: "1",
-    label: "porte d’entrée",
-    detail: "Connexion, inscription et suivi"
-  },
-  {
-    value: "3",
-    label: "raccourcis actifs",
-    detail: "Mes TPI, planification et compte"
-  }
-]
-
-const TRACKER_GUIDE_STEPS = [
-  {
-    title: "Se connecter",
-    text: "Utilisez un compte existant pour ouvrir l’espace qui correspond à votre rôle."
-  },
-  {
-    title: "Créer ou vérifier",
-    text: "L’inscription reste disponible pour les comptes manquants ou à compléter."
-  },
-  {
-    title: "Continuer dans le module",
-    text: "La suite du suivi se fait ensuite dans les écrans métiers du projet."
-  }
-]
-
 const TRACKER_ACTIONS = [
   {
     title: "Mes TPI",
@@ -63,66 +30,6 @@ const TRACKER_ACTIONS = [
     text: "Vérifier l’identité et les informations principales."
   }
 ]
-
-const TrackerHero = () => {
-  return (
-    <section className='tracker-panel tracker-hero-card'>
-      <div className='tracker-hero-copy'>
-        <span className='tracker-panel-eyebrow'>Vue d’ensemble</span>
-        <h1>Une entrée claire vers le suivi des profils</h1>
-        <p>
-          Le module rassemble la connexion, la création de compte et les
-          raccourcis utiles autour des TPI, avec une lecture plus directe du
-          rôle connecté.
-        </p>
-        <div className='tracker-badge-row' aria-label='Profils pris en charge'>
-          {["Étudiant", "Chef de projet", "Doyen", "Expert"].map((label) => (
-            <span key={label} className='tracker-badge'>
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className='tracker-hero-metrics' aria-label='Résumé du module'>
-        {TRACKER_HERO_METRICS.map((metric) => (
-          <article key={metric.label} className='tracker-metric-card'>
-            <span className='tracker-metric-value'>{metric.value}</span>
-            <span className='tracker-metric-label'>{metric.label}</span>
-            <p className='tracker-metric-detail'>{metric.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-const TrackerGuide = () => {
-  return (
-    <aside className='tracker-panel tracker-guide-card'>
-      <div className='tracker-card-head'>
-        <span className='tracker-panel-eyebrow'>Mode d’emploi</span>
-        <span className='tracker-card-status'>3 étapes</span>
-      </div>
-      <h2>Ce que fait cette page</h2>
-      <div className='tracker-step-list'>
-        {TRACKER_GUIDE_STEPS.map((step, index) => (
-          <article key={step.title} className='tracker-step-item'>
-            <span className='tracker-step-index'>0{index + 1}</span>
-            <div>
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
-            </div>
-          </article>
-        ))}
-      </div>
-      <p className='tracker-guide-note'>
-        Les comptes hérités restent compatibles avec les nouveaux rôles du
-        module.
-      </p>
-    </aside>
-  )
-}
 
 const TrackerSessionCard = ({ user }) => {
   const roleConfig = getTrackerRoleConfig(user?.role)
@@ -329,22 +236,21 @@ const Login = ({ onLogin }) => {
         <span className='tracker-panel-eyebrow'>Connexion</span>
         <span className='tracker-card-status'>
           {isLoadingUsers
-            ? "Synchronisation en cours"
-            : `${users.length} comptes synchronisés`}
+            ? "Chargement"
+            : `${users.length} comptes`}
         </span>
       </div>
 
-      <h2>Accéder au suivi</h2>
+      <h2>Connexion</h2>
       <p className='tracker-card-copy'>
-        Utilisez votre identifiant et votre mot de passe pour afficher le
-        parcours associé à votre rôle.
+        Entrez vos identifiants.
       </p>
 
       <div className='tracker-field-grid'>
         <InputField
           className='tracker-field--full'
           type='text'
-          placeholder="Nom d'utilisateur"
+          placeholder='Identifiant'
           value={username}
           autoComplete='username'
           onChange={(e) => setUsername(e.target.value)}
@@ -362,7 +268,7 @@ const Login = ({ onLogin }) => {
       {loadError ? <p className='tracker-inline-error'>{loadError}</p> : null}
 
       <button type='submit' className='tracker-primary-button' disabled={isLoadingUsers}>
-        {isLoadingUsers ? "Chargement..." : "Se connecter"}
+        {isLoadingUsers ? "Chargement..." : "Connexion"}
       </button>
     </form>
   )
@@ -400,11 +306,8 @@ const TpiTracker = ({ toggleArrow, isArrowUp }) => {
       />
 
       <div className='tracker-page-shell'>
-        <TrackerHero />
-
         {!user ? (
-          <div className='tracker-auth-grid'>
-            <TrackerGuide />
+          <div className='tracker-auth-grid tracker-auth-grid--compact'>
             <Login onLogin={handleOnLogin} />
             <Register secret={TPI_TRACKER_SECRET} />
           </div>

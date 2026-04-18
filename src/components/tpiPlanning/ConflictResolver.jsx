@@ -2,13 +2,20 @@ import React, { useState, useCallback } from 'react'
 import { getStoredAuthToken } from '../../utils/storage'
 import {
   AlertIcon,
+  BanIcon,
   CalendarIcon,
   CandidateIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
   DocumentIcon,
   ExpertIcon,
   ProjectLeadIcon,
-  RoomIcon
+  QuestionIcon,
+  RoomIcon,
+  TimeIcon,
+  WrenchIcon
 } from '../shared/InlineIcons'
 import './ConflictResolver.css'
 
@@ -148,7 +155,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
       const data = await response.json()
       
       // Afficher un message de succès
-      alert(`✅ Demandes de vote renvoyées avec succès (${data.emailsSent} emails envoyés)`)
+      alert(`Demandes de vote renvoyées avec succès (${data.emailsSent} emails envoyés)`)
       
     } catch (error) {
       setResendVotesError('Erreur lors de l\'envoi des demandes de vote: ' + error.message)
@@ -163,12 +170,12 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
    */
   const getConflictIcon = (type) => {
     const icons = {
-      'incomplete': '⏳',
-      'all_rejected': '🚫',
-      'no_consensus': '🤔',
-      'unknown': '❓'
+      'incomplete': TimeIcon,
+      'all_rejected': BanIcon,
+      'no_consensus': AlertIcon,
+      'unknown': QuestionIcon
     }
-    return icons[type] || '⚠️'
+    return icons[type] || AlertIcon
   }
 
   /**
@@ -215,7 +222,10 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
 
       {resolveError && (
         <div className="alert alert-error">
-          <span>⚠️ {resolveError}</span>
+          <span className="alert-copy">
+            <AlertIcon className="alert-icon" />
+            {resolveError}
+          </span>
           <button onClick={() => setResolveError(null)}>×</button>
         </div>
       )}
@@ -224,6 +234,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
         {conflicts.map(tpi => {
           const analysis = analyzeConflict(tpi)
           const isSelected = selectedConflict?._id === tpi._id
+          const ConflictTypeIcon = getConflictIcon(analysis.type)
 
           return (
             <div 
@@ -235,18 +246,22 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                 onClick={() => setSelectedConflict(isSelected ? null : tpi)}
               >
                 <div className="conflict-info">
-                  <span className="conflict-icon">{getConflictIcon(analysis.type)}</span>
+                  <span className="conflict-icon">
+                    <ConflictTypeIcon />
+                  </span>
                   <div className="conflict-title">
                     <span className="tpi-ref">{tpi.reference}</span>
                     <span className="conflict-type">{analysis.description}</span>
                   </div>
                 </div>
                 <div className="conflict-meta">
-                  <span className="conflict-candidate">
-                    <CandidateIcon className="conflict-candidate-icon" />
-                    <span>{tpi.candidat?.firstName} {tpi.candidat?.lastName}</span>
+                    <span className="conflict-candidate">
+                      <CandidateIcon className="conflict-candidate-icon" />
+                      <span>{tpi.candidat?.firstName} {tpi.candidat?.lastName}</span>
+                    </span>
+                  <span className="expand-icon">
+                    {isSelected ? <ChevronDownIcon /> : <ChevronRightIcon />}
                   </span>
-                  <span className="expand-icon">{isSelected ? '▼' : '▶'}</span>
                 </div>
               </div>
 
@@ -315,22 +330,26 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                           <div className="votes-bars">
                             {sv.preferred > 0 && (
                               <span className="vote-badge preferred">
-                                ⭐ {sv.preferred}
+                                <CheckIcon className="vote-badge-icon" />
+                                {sv.preferred}
                               </span>
                             )}
                             {sv.accepted > 0 && (
                               <span className="vote-badge accepted">
-                                ✅ {sv.accepted}
+                                <CheckIcon className="vote-badge-icon" />
+                                {sv.accepted}
                               </span>
                             )}
                             {sv.rejected > 0 && (
                               <span className="vote-badge rejected">
-                                ❌ {sv.rejected}
+                                <CloseIcon className="vote-badge-icon" />
+                                {sv.rejected}
                               </span>
                             )}
                             {sv.pending > 0 && (
                               <span className="vote-badge pending">
-                                ⏳ {sv.pending}
+                                <TimeIcon className="vote-badge-icon" />
+                                {sv.pending}
                               </span>
                             )}
                           </div>
@@ -353,7 +372,10 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                           </div>
 
                           {selectedSlot === sv.slot?._id && (
-                            <div className="select-indicator">✓ Sélectionné</div>
+                            <div className="select-indicator">
+                              <CheckIcon className="select-indicator-icon" />
+                              Sélectionné
+                            </div>
                           )}
                         </div>
                       ))}
@@ -401,7 +423,10 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                                 Résolution en cours...
                               </>
                             ) : (
-                              <>🔧 Forcer l'attribution</>
+                              <>
+                                <WrenchIcon className="button-icon" />
+                                Forcer l'attribution
+                              </>
                             )}
                           </button>
                         </div>
@@ -419,7 +444,8 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                       className="btn-secondary"
                       onClick={() => setShowAvailableSlots(!showAvailableSlots)}
                     >
-                      📅 {showAvailableSlots ? 'Masquer' : 'Voir'} autres créneaux disponibles
+                      <CalendarIcon className="button-icon" />
+                      {showAvailableSlots ? 'Masquer' : 'Voir'} autres créneaux disponibles
                     </button>
                     <button
                       className="btn-secondary"

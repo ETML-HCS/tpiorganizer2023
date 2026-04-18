@@ -89,10 +89,10 @@ router.get('/soutenances/:year', requireYearParam('year'), async (req, res) => {
 
     let accessOptions = {}
 
-    if (adminSession) {
-      accessOptions = {}
-    } else if (magicLinkToken) {
+    if (magicLinkToken) {
       accessOptions = await resolveSoutenanceViewer(magicLinkToken, req.params.year)
+    } else if (adminSession) {
+      accessOptions = {}
     } else if (legacyToken) {
       const legacyViewer = await resolveLegacyViewer(legacyToken)
       if (!legacyViewer) {

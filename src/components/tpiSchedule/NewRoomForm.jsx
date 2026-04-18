@@ -7,7 +7,30 @@ import {
   normalizeSoutenanceDateEntries
 } from "./soutenanceDateUtils";
 
-const NewRoomForm = ({ onNewRoom, setShowForm, configData, soutenanceDates = [], roomCatalogBySite = {}, selectedYear = null }) => {
+const normalizeRoomNameKey = (value) => String(value || "").trim().toLowerCase();
+const normalizeDateInputValue = (value) => {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text.slice(0, 10);
+  }
+
+  return date.toISOString().slice(0, 10);
+};
+
+const NewRoomForm = ({
+  onNewRoom,
+  setShowForm,
+  configData,
+  soutenanceDates = [],
+  roomCatalogBySite = {},
+  existingRooms = [],
+  selectedYear = null
+}) => {
   const availableDates = useMemo(() => normalizeSoutenanceDateEntries(soutenanceDates), [soutenanceDates])
   const availableSites = useMemo(() => {
     const source = roomCatalogBySite && typeof roomCatalogBySite === "object" ? roomCatalogBySite : {}
@@ -19,12 +42,47 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData, soutenanceDates = [],
   const [date, setDate] = useState("")
   const [nameRoom, setNameRoom] = useState("");
   const [site, setSite] = useState("");
+  const usedRoomNameKeys = useMemo(() => {
+    const selectedSite = String(site || "").trim().toUpperCase();
+    const selectedDate = normalizeDateInputValue(date);
+
+    if (!selectedSite || !selectedDate) {
+      return new Set();
+    }
+
+    const usedKeys = new Set();
+
+    (Array.isArray(existingRooms) ? existingRooms : []).forEach((room) => {
+      const roomSite = String(room?.site || "").trim().toUpperCase();
+      const roomDate = normalizeDateInputValue(room?.date);
+      const roomNameKey = normalizeRoomNameKey(room?.name || room?.nameRoom);
+
+      if (!roomNameKey) {
+        return;
+      }
+
+      if (roomSite === selectedSite && roomDate === selectedDate) {
+        usedKeys.add(roomNameKey);
+      }
+    });
+
+    return usedKeys;
+  }, [date, existingRooms, site]);
 
   const availableRooms = useMemo(() => {
     const hasCatalogRooms = Object.prototype.hasOwnProperty.call(roomCatalogBySite || {}, site)
     const catalogRooms = hasCatalogRooms ? roomCatalogBySite?.[site] || [] : []
-    return hasCatalogRooms ? catalogRooms : []
-  }, [roomCatalogBySite, site]);
+    const normalizedCatalogRooms = Array.from(
+      new Set(catalogRooms.map((room) => String(room || "").trim()).filter(Boolean))
+    );
+    if (!hasCatalogRooms) {
+      return [];
+    }
+
+    return normalizedCatalogRooms.filter(
+      (roomName) => !usedRoomNameKeys.has(normalizeRoomNameKey(roomName))
+    );
+  }, [roomCatalogBySite, site, usedRoomNameKeys]);
 
   useEffect(() => {
     if (availableDates.length === 0) {
@@ -57,6 +115,21 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData, soutenanceDates = [],
       setSite(availableSites[0])
     }
   }, [availableSites, site])
+
+  useEffect(() => {
+    if (!nameRoom) {
+      return;
+    }
+
+    const selectedNameKey = normalizeRoomNameKey(nameRoom);
+    const isAvailable = availableRooms.some(
+      (roomName) => normalizeRoomNameKey(roomName) === selectedNameKey
+    );
+
+    if (!isAvailable) {
+      setNameRoom("");
+    }
+  }, [availableRooms, nameRoom]);
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
@@ -94,7 +167,7 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData, soutenanceDates = [],
       : availableSites.length === 0
         ? "Ajoute d'abord des sites"
       : availableRooms.length === 0
-        ? "Ajoute d'abord des noms de salles"
+        ? "Aucune salle disponible pour cette date et ce site"
         : undefined
 
   return (
@@ -149,12 +222,12 @@ const NewRoomForm = ({ onNewRoom, setShowForm, configData, soutenanceDates = [],
             value={nameRoom}
             onChange={(e) => setNameRoom(e.target.value)}
             required
-            disabled={!site || availableRooms.length === 0}
+            disabled={!site || !date || availableRooms.length === 0}
           >
             <option value="">
-              {site
+              {site && date
                 ? (availableRooms.length > 0 ? 'Sélectionner une salle' : 'Ajoute des noms de salles')
-                : 'Choisir un site'}
+                : 'Choisir un site et une date'}
             </option>
             {availableRooms.map((availableRoom) => (
               <option key={availableRoom} value={availableRoom}>

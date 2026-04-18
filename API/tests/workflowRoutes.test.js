@@ -178,6 +178,60 @@ test('POST /api/workflow/:year/votes/start enforces admin role', async () => {
   }
 })
 
+test('POST /api/workflow/:year/access-links/preview requires authentication', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/preview`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    })
+
+    assert.equal(response.status, 401)
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/access-links/preview enforces admin role', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['expert1'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/preview`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    })
+
+    assert.equal(response.status, 403)
+    const body = await response.json()
+    assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/votes/close requires authentication', async () => {
   const jwtSecret = 'test-jwt-secret'
   const { app, restoreEnv } = loadTestApp({

@@ -112,6 +112,16 @@
   font-size: 0.95rem;
 }
 
+.tpi-management-chip-focus {
+  border-color: rgba(23, 86, 214, 0.16);
+  background: rgba(23, 86, 214, 0.08);
+  color: var(--tpi-accent);
+}
+
+.tpi-management-chip-focus strong {
+  color: var(--tpi-accent);
+}
+
 .tpi-management-hero-copy h1 {
   font-size: clamp(1.85rem, 2.55vw, 2.8rem);
 }
@@ -233,6 +243,8 @@
 .tpi-filter-strip button.active,
 .tpi-card-edit:hover,
 .tpi-table-edit:hover,
+.tpi-card-open:hover,
+.tpi-table-open:hover,
 .tpi-import-actions button:hover,
 .save button:hover {
   transform: translateY(-1px);
@@ -319,7 +331,9 @@
 .tpi-display-toggle button,
 .tpi-filter-strip button,
 .tpi-card-edit,
+.tpi-card-open,
 .tpi-table-edit,
+.tpi-table-open,
 .tpi-import-actions button,
 .save button {
   min-height: 42px;
@@ -355,6 +369,7 @@
 
 .tpi-display-toggle button.active,
 .tpi-card-edit,
+.tpi-card-open,
 .save button[type="submit"],
 .tpi-import-actions button[type="submit"] {
   background: var(--tpi-accent);
@@ -418,6 +433,11 @@
   border-color: rgba(23, 86, 214, 0.16);
 }
 
+.tpi-card.is-focused {
+  border-color: rgba(23, 86, 214, 0.34);
+  box-shadow: 0 20px 44px rgba(23, 86, 214, 0.12);
+}
+
 .tpi-card-header {
   display: flex;
   justify-content: space-between;
@@ -431,6 +451,13 @@
   gap: 12px;
   align-items: start;
   flex: 1;
+}
+
+.tpi-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
 }
 
 .tpi-card-badges {
@@ -595,6 +622,11 @@
   color: #b91c1c;
 }
 
+.tpi-tag.tpi-tag-focus {
+  background: rgba(23, 86, 214, 0.12);
+  color: var(--tpi-accent);
+}
+
 .tpi-tag.muted {
   background: rgba(23, 32, 51, 0.07);
   color: var(--tpi-muted);
@@ -651,6 +683,12 @@
 .tpi-card-footer-hint {
   color: var(--tpi-muted);
   font-size: 0.8rem;
+}
+
+.tpi-card-open,
+.tpi-table-open {
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .tpi-card-details {
@@ -990,6 +1028,10 @@
 
 .tpiTable tr:nth-child(even) {
   background: rgba(23, 86, 214, 0.03);
+}
+
+.tpiTable tr.is-focused {
+  background: rgba(23, 86, 214, 0.08);
 }
 
 .tpi-form-card {

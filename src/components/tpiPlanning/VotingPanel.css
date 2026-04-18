@@ -97,6 +97,20 @@
   align-items: center;
 }
 
+.alert-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-icon,
+.button-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.1;
+  flex: 0 0 auto;
+}
+
 .alert-error {
   background: #ffebee;
   color: #c62828;
@@ -243,8 +257,16 @@
 }
 
 .expand-icon {
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #64748b;
+}
+
+.expand-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
 }
 
 /* Card Content */
@@ -273,6 +295,12 @@
   color: #64748b;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.proposal-context-note {
+  margin-top: 6px;
+  color: #475569;
+  font-size: 0.8rem;
 }
 
 .slot-group-badge {
@@ -877,18 +905,25 @@
   background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
 }
 
-.special-request-toggle {
-  display: inline-flex;
+.special-request-toggle-row {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.special-request-toggle-label {
   font-weight: 700;
   color: #1d4ed8;
 }
 
-.special-request-toggle input {
-  width: 15px;
-  height: 15px;
-  accent-color: #2563eb;
+.special-request-toggle {
+  flex: 0 0 auto;
+}
+
+.special-request-toggle .page-tools-toggle-icon {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .special-request-help {

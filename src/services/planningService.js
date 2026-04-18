@@ -359,6 +359,16 @@ export const workflowPlanningService = {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/dev-links`, body)
   },
 
+  previewAccessLinks: async (year, baseUrl = null) => {
+    const body = {}
+
+    if (baseUrl) {
+      body.baseUrl = baseUrl
+    }
+
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/preview`, body)
+  },
+
   remindVotes: async (year) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/remind`, {})
   },

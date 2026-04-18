@@ -19,6 +19,7 @@ import {
 import {
   buildPlanningSlotKey
 } from './tpiScheduleValidationMarkers'
+import { CheckIcon, PencilIcon } from '../shared/InlineIcons'
 
 import '../../css/tpiShedule/tpiSheduleStyle.css'
 
@@ -40,6 +41,46 @@ function toDateInputValue(dateValue) {
   return date.toISOString().slice(0, 10)
 }
 
+function normalizeRoomNameKey(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function resolveMinutes(value, legacyHoursValue, fallbackMinutes) {
+  const normalizedMinutes = String(value ?? '').trim()
+  const directMinutes = normalizedMinutes === '' ? Number.NaN : Number(normalizedMinutes)
+  if (Number.isFinite(directMinutes) && directMinutes >= 0) {
+    return directMinutes
+  }
+
+  const normalizedLegacyHours = String(legacyHoursValue ?? '').trim()
+  const legacyHours = normalizedLegacyHours === '' ? Number.NaN : Number(normalizedLegacyHours)
+  if (Number.isFinite(legacyHours) && legacyHours >= 0) {
+    return Math.round(legacyHours * 60)
+  }
+
+  return fallbackMinutes
+}
+
+function resolveStartTimeMinutes(timeValue, legacyHourValue, fallbackMinutes) {
+  const normalizedTime = String(timeValue || '').trim()
+  if (/^\d{1,2}:\d{2}$/.test(normalizedTime)) {
+    const [hoursPart, minutesPart] = normalizedTime.split(':')
+    const hours = Number.parseInt(hoursPart, 10)
+    const minutes = Number.parseInt(minutesPart, 10)
+
+    if (Number.isInteger(hours) && Number.isInteger(minutes) && hours >= 0 && minutes >= 0 && minutes < 60) {
+      return hours * 60 + minutes
+    }
+  }
+
+  const legacyHours = Number(legacyHourValue)
+  if (Number.isFinite(legacyHours) && legacyHours >= 0) {
+    return Math.round(legacyHours * 60)
+  }
+
+  return fallbackMinutes
+}
+
 const DateRoom = ({
   roomData,
   roomIndex,
@@ -53,6 +94,7 @@ const DateRoom = ({
   stakeholderShortIdHints = {},
   soutenanceDates = [],
   roomCatalogBySite = {},
+  allRooms = [],
   validationMarkersBySlotKey = {}
 }) => {
   // Fonction pour générer l'ID TPI en fonction de la position (site, room et slots)
@@ -62,6 +104,9 @@ const DateRoom = ({
 
   const safeRoomData = roomData || {}
   const safeConfigSite = safeRoomData.configSite || {
+    breaklineMinutes: 10,
+    tpiTimeMinutes: 60,
+    firstTpiStartTime: '08:00',
     breakline: 0.1667,
     tpiTime: 1,
     firstTpiStart: 8,
@@ -73,11 +118,21 @@ const DateRoom = ({
       : 8
   const slots = Array(numSlots).fill(null)
 
-  const breakDurationMinutes = Math.floor(
-    Number(safeConfigSite.breakline) * 60
-  ) // Durée de la pause en minutes
-  const tpiDurationMinutes = Number(safeConfigSite.tpiTime) * 60 // Durée du TPI en minutes
-  const firstTpiStartHour = Number(safeConfigSite.firstTpiStart) // Heure de début du premier TPI en heures décimales
+  const breakDurationMinutes = resolveMinutes(
+    safeConfigSite.breaklineMinutes,
+    safeConfigSite.breakline,
+    10
+  )
+  const tpiDurationMinutes = resolveMinutes(
+    safeConfigSite.tpiTimeMinutes,
+    safeConfigSite.tpiTime,
+    60
+  )
+  const firstTpiStartMinutes = resolveStartTimeMinutes(
+    safeConfigSite.firstTpiStartTime,
+    safeConfigSite.firstTpiStart,
+    8 * 60
+  )
 
   const parsedDate = new Date(safeRoomData.date)
   const formattedDate = Number.isNaN(parsedDate.getTime())
@@ -115,6 +170,40 @@ const DateRoom = ({
     () => (roomClassMode === 'matu' ? 'MATU' : ''),
     [roomClassMode]
   )
+  const selectedDateKey = toDateInputValue(draftDate || safeRoomData.date)
+  const occupiedRoomNameKeys = useMemo(() => {
+    const siteKey = String(safeRoomData.site || '').trim().toUpperCase()
+    if (!siteKey || !selectedDateKey) {
+      return new Set()
+    }
+
+    const rooms = Array.isArray(allRooms) ? allRooms : []
+    const usedNames = new Set()
+
+    rooms.forEach((room, index) => {
+      const sameRoom =
+        (safeRoomData.idRoom !== undefined && room?.idRoom === safeRoomData.idRoom) ||
+        (safeRoomData.idRoom === undefined && index === roomIndex)
+
+      if (sameRoom) {
+        return
+      }
+
+      const roomSiteKey = String(room?.site || '').trim().toUpperCase()
+      const roomDateKey = toDateInputValue(room?.date)
+      const roomNameKey = normalizeRoomNameKey(room?.name || room?.nameRoom)
+
+      if (!roomNameKey) {
+        return
+      }
+
+      if (roomSiteKey === siteKey && roomDateKey === selectedDateKey) {
+        usedNames.add(roomNameKey)
+      }
+    })
+
+    return usedNames
+  }, [allRooms, roomIndex, safeRoomData.date, safeRoomData.idRoom, safeRoomData.site, selectedDateKey])
 
   const availableRoomNames = useMemo(() => {
     const siteKey = String(safeRoomData.site || '').trim().toUpperCase()
@@ -122,14 +211,31 @@ const DateRoom = ({
     const normalizedRooms = Array.from(
       new Set(rooms.map((room) => String(room || '').trim()).filter(Boolean))
     )
+    const filteredRooms = normalizedRooms.filter(
+      (roomName) => !occupiedRoomNameKeys.has(normalizeRoomNameKey(roomName))
+    )
 
     const currentName = String(draftName || safeRoomData.name || '').trim()
-    if (currentName && !normalizedRooms.includes(currentName)) {
-      return [currentName, ...normalizedRooms]
+    if (!currentName) {
+      return filteredRooms
     }
 
-    return normalizedRooms
-  }, [draftName, roomCatalogBySite, safeRoomData.name, safeRoomData.site])
+    const availableNames = [currentName, ...filteredRooms]
+    const dedupedNames = []
+    const seen = new Set()
+
+    availableNames.forEach((roomName) => {
+      const key = normalizeRoomNameKey(roomName)
+      if (!key || seen.has(key)) {
+        return
+      }
+
+      seen.add(key)
+      dedupedNames.push(roomName)
+    })
+
+    return dedupedNames
+  }, [draftName, occupiedRoomNameKeys, roomCatalogBySite, safeRoomData.name, safeRoomData.site])
 
   useEffect(() => {
     setDraftName(safeRoomData.name || '')
@@ -182,6 +288,25 @@ const DateRoom = ({
 
     return () => window.clearTimeout(focusTimer)
   }, [isEditingRoom])
+
+  useEffect(() => {
+    if (!isEditingRoom) {
+      return
+    }
+
+    const currentName = String(draftName || '').trim()
+    if (!currentName) {
+      return
+    }
+
+    const isAvailable = availableRoomNames.some(
+      (roomName) => normalizeRoomNameKey(roomName) === normalizeRoomNameKey(currentName)
+    )
+
+    if (!isAvailable) {
+      setDraftName('')
+    }
+  }, [availableRoomNames, draftName, isEditingRoom])
 
   const handleSaveRoom = () => {
     if (typeof onUpdateRoom === 'function') {
@@ -304,7 +429,8 @@ const DateRoom = ({
                         onClick={handleSaveRoom}
                         title='Enregistrer les modifications de la salle'
                       >
-                        ✓ Valider
+                        <CheckIcon className='date-room-action-icon' />
+                        Valider
                       </button>
                       <button
                         type='button'
@@ -344,7 +470,8 @@ const DateRoom = ({
                             }}
                             role='menuitem'
                           >
-                            ✏ Modifier
+                            <PencilIcon className='date-room-action-icon' />
+                            Modifier
                           </button>
                           <button
                             type='button'
@@ -378,7 +505,7 @@ const DateRoom = ({
 
             const startTimeMinutes = Math.floor(
               iSlot * (tpiDurationMinutes + breakDurationMinutes) +
-              firstTpiStartHour * 60
+              firstTpiStartMinutes
             )
             const endTimeMinutes = startTimeMinutes + tpiDurationMinutes
 

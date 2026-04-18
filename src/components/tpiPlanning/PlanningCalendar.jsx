@@ -13,6 +13,90 @@ import {
 import { getPlanningClassDisplayInfo, getPlanningClassPeriod } from './planningClassUtils'
 import './PlanningCalendar.css'
 
+const DEFAULT_SITE_PLANNING_COLORS = [
+  '#1D4ED8',
+  '#0F766E',
+  '#BE185D',
+  '#7C3AED',
+  '#C2410C',
+  '#0891B2',
+  '#4F46E5',
+  '#65A30D'
+]
+
+const compactPlanningText = (value) => {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim()
+}
+
+const normalizePlanningLookup = (value) =>
+  compactPlanningText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
+
+const normalizePlanningColor = (value) => {
+  const hex = compactPlanningText(value).replace(/^#/, '')
+
+  if (/^[\da-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toUpperCase()}`
+  }
+
+  if (/^[\da-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`
+  }
+
+  return ''
+}
+
+const getDefaultPlanningColor = (seed = '', fallbackIndex = 0) => {
+  const normalizedSeed = compactPlanningText(seed).toUpperCase()
+
+  if (!normalizedSeed) {
+    return DEFAULT_SITE_PLANNING_COLORS[Math.abs(Number(fallbackIndex) || 0) % DEFAULT_SITE_PLANNING_COLORS.length]
+  }
+
+  let hash = 0
+  for (const character of normalizedSeed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  }
+
+  return DEFAULT_SITE_PLANNING_COLORS[hash % DEFAULT_SITE_PLANNING_COLORS.length]
+}
+
+const hexToRgba = (color, alpha = 1) => {
+  const normalizedColor = normalizePlanningColor(color)
+  if (!normalizedColor) {
+    return `rgba(37, 99, 235, ${alpha})`
+  }
+
+  const hex = normalizedColor.slice(1)
+  const red = Number.parseInt(hex.slice(0, 2), 16)
+  const green = Number.parseInt(hex.slice(2, 4), 16)
+  const blue = Number.parseInt(hex.slice(4, 6), 16)
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
+const buildRoomAccentStyle = (color) => {
+  const accent = normalizePlanningColor(color) || getDefaultPlanningColor(color)
+
+  return {
+    '--planning-room-accent': accent,
+    '--planning-room-accent-soft': hexToRgba(accent, 0.12),
+    '--planning-room-accent-softer': hexToRgba(accent, 0.07),
+    '--planning-room-accent-border': hexToRgba(accent, 0.26)
+  }
+}
+
 /**
  * Composant calendrier avec drag & drop pour la planification des TPI
  * Affiche les créneaux et permet l'attribution visuelle
@@ -342,6 +426,51 @@ const PlanningCalendar = ({
     return Array.from(rooms).sort()
   }, [calendarData])
 
+  const roomSiteMetaByName = useMemo(() => {
+    const map = new Map()
+    const catalogSites = Array.isArray(planningCatalogSites) ? planningCatalogSites : []
+
+    catalogSites.forEach((site, siteIndex) => {
+      const siteLabel = compactText(site?.label || site?.code || '')
+      const siteCode = compactText(site?.code || siteLabel).toUpperCase()
+      const siteColor = normalizePlanningColor(
+        site?.planningColor || site?.color || getDefaultPlanningColor(siteCode || siteLabel, siteIndex)
+      )
+      const roomDetails = Array.isArray(site?.roomDetails)
+        ? site.roomDetails
+        : Array.isArray(site?.rooms)
+          ? site.rooms.map((room) =>
+              typeof room === 'object'
+                ? room
+                : { code: room, label: room }
+            )
+          : []
+
+      roomDetails.forEach((room) => {
+        const roomTokens = [
+          room?.label,
+          room?.code,
+          typeof room === 'string' ? room : ''
+        ]
+
+        roomTokens.forEach((token) => {
+          const lookupKey = normalizePlanningLookup(token)
+          if (!lookupKey || map.has(lookupKey)) {
+            return
+          }
+
+          map.set(lookupKey, {
+            siteLabel: siteLabel || siteCode,
+            siteCode,
+            siteColor
+          })
+        })
+      })
+    })
+
+    return map
+  }, [compactText, planningCatalogSites])
+
   // Format de date pour l'en-tête
   const formatDate = (date) => {
     return date.toLocaleDateString('fr-CH', { 
@@ -497,26 +626,40 @@ const PlanningCalendar = ({
 
         {/* Corps du calendrier */}
         <div className="calendar-body">
-          {allRooms.map(room => (
-            <React.Fragment key={room}>
-              {periods.map(period => (
-                <div key={`${room}-${period.id}`} className="calendar-row">
-                  <div className="row-header">
-                    <span className="room-name">
-                      <RoomIcon className="room-icon" />
-                      {room}
-                    </span>
-                    <span className="period-name">{period.label}</span>
-                  </div>
-                  {weekDays.map(day => (
-                    <div key={`${room}-${period.id}-${day.toISOString()}`} className="cell-wrapper">
-                      {renderSlotCell(getDayData(day), period.id, room)}
+          {allRooms.map(room => {
+            const roomSiteMeta = roomSiteMetaByName.get(normalizePlanningLookup(room)) || null
+
+            return (
+              <React.Fragment key={room}>
+                {periods.map(period => (
+                  <div key={`${room}-${period.id}`} className="calendar-row">
+                    <div
+                      className="row-header"
+                      style={roomSiteMeta ? buildRoomAccentStyle(roomSiteMeta.siteColor) : undefined}
+                    >
+                      <span className="room-name">
+                        <RoomIcon className="room-icon" />
+                        {room}
+                      </span>
+                      <div className="row-header-tags">
+                        {roomSiteMeta?.siteLabel ? (
+                          <span className="room-site-badge">
+                            {roomSiteMeta.siteLabel}
+                          </span>
+                        ) : null}
+                        <span className="period-name">{period.label}</span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              ))}
-            </React.Fragment>
-          ))}
+                    {weekDays.map(day => (
+                      <div key={`${room}-${period.id}-${day.toISOString()}`} className="cell-wrapper">
+                        {renderSlotCell(getDayData(day), period.id, room)}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </React.Fragment>
+            )
+          })}
         </div>
       </div>
 

@@ -19,12 +19,31 @@ const {
 } = require('../services/personIdentityService')
 const { resolveUniquePersonForRole } = require('../services/personRegistryService')
 const { linkLegacyTpiStakeholders, validateLegacyTpiStakeholders } = require('../services/tpiStakeholderService')
+const { enrichLegacyTpisWithDerivedDates } = require('../services/legacyTpiDateEnrichmentService')
 
 const router = express.Router()
 const TpiRooms = createCustomTpiRoomModel('tpiRooms')
+const LEGACY_TPI_PERSON_ID_FIELDS = Object.freeze([
+  'candidatPersonId',
+  'expert1PersonId',
+  'expert2PersonId',
+  'bossPersonId'
+])
 
 function normalizeCandidateQuery(value = '') {
   return normalizeText(value).toLowerCase()
+}
+
+function normalizeLinkedPersonId(value) {
+  if (!value) {
+    return ''
+  }
+
+  if (value?._id) {
+    return String(value._id)
+  }
+
+  return String(value).trim()
 }
 
 async function linkTpiParticipantsFromPeopleRegistry(payload, options = {}) {
@@ -32,6 +51,60 @@ async function linkTpiParticipantsFromPeopleRegistry(payload, options = {}) {
     .select('firstName lastName email roles candidateYears')
     .lean()
   return linkLegacyTpiStakeholders(payload, people, options).tpi
+}
+
+function extractLegacyTpiParticipantLinkUpdates(previousTpi = {}, nextTpi = {}) {
+  const updates = {}
+
+  for (const fieldName of LEGACY_TPI_PERSON_ID_FIELDS) {
+    const previousValue = normalizeLinkedPersonId(previousTpi?.[fieldName])
+    const nextValue = normalizeLinkedPersonId(nextTpi?.[fieldName])
+
+    if (!previousValue && nextValue) {
+      updates[fieldName] = nextValue
+    }
+  }
+
+  return updates
+}
+
+async function hydrateLegacyTpisFromPeopleRegistry(year, models = []) {
+  const sourceModels = Array.isArray(models) ? models : []
+
+  if (sourceModels.length === 0) {
+    return []
+  }
+
+  const people = await Person.find({ isActive: true })
+    .select('firstName lastName email roles candidateYears')
+    .lean()
+  const TpiModel = TpiModelsYear(year)
+  const bulkOperations = []
+  const hydratedModels = sourceModels.map((model) => {
+    const plainModel =
+      model && typeof model.toObject === 'function'
+        ? model.toObject({ depopulate: true, minimize: false, versionKey: false })
+        : { ...model }
+    const linkedModel = linkLegacyTpiStakeholders(plainModel, people, { year }).tpi
+    const linkUpdates = extractLegacyTpiParticipantLinkUpdates(plainModel, linkedModel)
+
+    if (plainModel?._id && Object.keys(linkUpdates).length > 0) {
+      bulkOperations.push({
+        updateOne: {
+          filter: { _id: plainModel._id },
+          update: { $set: linkUpdates }
+        }
+      })
+    }
+
+    return linkedModel
+  })
+
+  if (bulkOperations.length > 0) {
+    await TpiModel.bulkWrite(bulkOperations)
+  }
+
+  return hydratedModels
 }
 
 router.post(
@@ -140,7 +213,9 @@ router.get('/get-tpi', requireAppAuth, async (req, res) => {
     }
 
     const models = await TpiModelsYear(yearNumber).find()
-    return res.json(models)
+    const hydratedModels = await hydrateLegacyTpisFromPeopleRegistry(yearNumber, models)
+    const enrichedModels = await enrichLegacyTpisWithDerivedDates(yearNumber, hydratedModels)
+    return res.json(enrichedModels)
   } catch (error) {
     console.error('Error retrieving TPI models:', error)
     return res.status(500).json({ error: 'Error retrieving TPI models' })

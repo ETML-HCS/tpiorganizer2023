@@ -15,6 +15,7 @@ import {
 } from "../tpiControllers/TpiRoomsController"
 
 import DateRoom from "./DateRoom"
+import { AlertIcon, TimeIcon } from "../shared/InlineIcons"
 import {
   combinedScheduleConfig,
   buildPlanningConfigForYear,
@@ -755,6 +756,24 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [configData, defaultSoutenanceDates])
 
   useEffect(() => {
+    if (!configData || roomEntries.length === 0) {
+      return
+    }
+
+    const normalizedRooms = roomEntries.map((room, index) =>
+      normalizeRoom(room, index, configData)
+    )
+
+    const currentSnapshot = JSON.stringify(roomEntries)
+    const normalizedSnapshot = JSON.stringify(normalizedRooms)
+
+    if (currentSnapshot !== normalizedSnapshot) {
+      setNewRooms(normalizedRooms)
+      writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, normalizedRooms)
+    }
+  }, [configData, roomEntries])
+
+  useEffect(() => {
     let isCancelled = false
 
     const loadPlanningCatalog = async () => {
@@ -1443,25 +1462,42 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     try {
       clearValidationState()
 
-      setNewRooms((prevRooms) => {
-        if (!Array.isArray(prevRooms) || !prevRooms[roomIndex]) {
-          return prevRooms
-        }
+      if (!Array.isArray(roomEntries) || !roomEntries[roomIndex]) {
+        return
+      }
 
-        const updatedRooms = [...prevRooms]
-        updatedRooms[roomIndex] = normalizeRoom(
-          {
-            ...updatedRooms[roomIndex],
-            ...updates,
-            lastUpdate: Date.now()
-          },
-          roomIndex,
-          configData
-        )
+      const updatedRoom = normalizeRoom(
+        {
+          ...roomEntries[roomIndex],
+          ...updates,
+          lastUpdate: Date.now()
+        },
+        roomIndex,
+        configData
+      )
+      const updatedRoomKey = buildPlanningRoomKey(
+        updatedRoom?.site,
+        updatedRoom?.date,
+        updatedRoom?.name || updatedRoom?.nameRoom
+      )
+      const duplicateRoom = roomEntries.find(
+        (room, index) =>
+          index !== roomIndex &&
+          buildPlanningRoomKey(room?.site, room?.date, room?.name || room?.nameRoom) === updatedRoomKey
+      )
 
-        writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, updatedRooms)
-        return updatedRooms
-      })
+      if (duplicateRoom) {
+        const roomLabel = compactText(updatedRoom?.name || updatedRoom?.nameRoom) || "sans nom"
+        const siteLabel = compactText(updatedRoom?.site).toUpperCase() || "site inconnu"
+        const dateLabel = formatRoomDateLabel(updatedRoom?.date) || compactText(updatedRoom?.date) || "date inconnue"
+        notify(`La salle ${roomLabel} est déjà utilisée le ${dateLabel} (${siteLabel}).`, "error")
+        return
+      }
+
+      const updatedRooms = [...roomEntries]
+      updatedRooms[roomIndex] = updatedRoom
+      setNewRooms(updatedRooms)
+      writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, updatedRooms)
 
       notify("Salle mise à jour.", "success")
     } catch (error) {
@@ -1917,7 +1953,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                   ×
                 </button>
                 <div className="planning-year-change-icon" aria-hidden="true">
-                  ⚠️
+                  <AlertIcon />
                 </div>
                 <div className="planning-year-change-copy">
                   <h3 id="planning-year-change-title">Remplacer la planification ?</h3>
@@ -1958,7 +1994,14 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                     onClick={confirmYearChange}
                     disabled={isReplacingPlanningYear}
                   >
-                    {isReplacingPlanningYear ? "⏳ Chargement..." : "Planifier et remplacer"}
+                    {isReplacingPlanningYear ? (
+                      <>
+                        <TimeIcon className="button-icon" />
+                        Chargement...
+                      </>
+                    ) : (
+                      "Planifier et remplacer"
+                    )}
                   </button>
                 </div>
               </div>
@@ -2002,6 +2045,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                 stakeholderShortIdHints={stakeholderShortIdHints}
                 soutenanceDates={soutenanceDates}
                 roomCatalogBySite={roomCatalogBySite}
+                allRooms={roomEntries}
                 onUpdateTpi={(tpiIndex, updatedTpi) =>
                   handleUpdateTpi(originalIndex >= 0 ? originalIndex : 0, tpiIndex, updatedTpi)
                 }

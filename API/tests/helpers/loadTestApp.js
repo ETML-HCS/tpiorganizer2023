@@ -28,7 +28,10 @@ function loadTestApp(env = {}) {
     path.resolve(__dirname, '../../routes/legacySoutenanceRoutes.js'), // Backward compat
     path.resolve(__dirname, '../../routes/magicLinkRoutes.js'),
     path.resolve(__dirname, '../../routes/legacyAdminRoutes.js'),
+    path.resolve(__dirname, '../../routes/tpiDossierRoutes.js'),
+    path.resolve(__dirname, '../../services/legacyTpiDateEnrichmentService.js'),
     path.resolve(__dirname, '../../services/legacyPlanningBridgeService.js'),
+    path.resolve(__dirname, '../../services/tpiDossierService.js'),
     path.resolve(__dirname, '../../services/tpiPlanningVisibility.js'),
     path.resolve(__dirname, '../../services/workflowService.js'),
     path.resolve(__dirname, '../../services/planningValidationService.js'),

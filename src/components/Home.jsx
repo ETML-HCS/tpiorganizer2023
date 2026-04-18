@@ -9,91 +9,27 @@ import { Link, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
 import { IS_DEBUG, YEARS_CONFIG } from "../config/appConfig"
 import { authPlanningService, workflowPlanningService } from "../services/planningService"
-import { SettingsIcon } from "./shared/InlineIcons"
+import {
+  CalendarIcon,
+  ClipboardIcon,
+  DashboardIcon,
+  FileTextIcon,
+  KeyIcon,
+  SettingsIcon,
+  TestTubeIcon,
+  UsersIcon,
+  WorkflowIcon
+} from "./shared/InlineIcons"
 
 import "../css/home.css"
 
 const generateYears = () => YEARS_CONFIG.getAvailableYears()
 
-const iconStrokeProps = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "1.8",
-  strokeLinecap: "round",
-  strokeLinejoin: "round"
-}
-
-const DashboardIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <rect x='3' y='4' width='7' height='7' rx='2' />
-    <rect x='14' y='4' width='7' height='5' rx='2' />
-    <rect x='3' y='13' width='5' height='7' rx='2' />
-    <rect x='10' y='12' width='11' height='8' rx='2' />
-  </svg>
-)
-
-const WorkflowIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <circle cx='5' cy='6' r='2' />
-    <circle cx='12' cy='12' r='2' />
-    <circle cx='19' cy='18' r='2' />
-    <path d='M7 6h3.5a1.5 1.5 0 0 1 1.5 1.5V10' />
-    <path d='M14.5 14h1a2.5 2.5 0 0 1 2.5 2.5V16' />
-  </svg>
-)
-
-const CalendarIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <rect x='3' y='5' width='18' height='16' rx='3' />
-    <path d='M8 3v4M16 3v4M3 10h18' />
-    <path d='M8 14h.01M12 14h.01M16 14h.01' />
-  </svg>
-)
-
-const FileIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <path d='M7 3h7l4 4v14H7z' />
-    <path d='M14 3v5h5' />
-    <path d='M9 12h6M9 16h4' />
-  </svg>
-)
-
-const UsersIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <circle cx='12' cy='8' r='3' />
-    <path d='M5 19a7 7 0 0 1 14 0' />
-  </svg>
-)
-
-const ClipboardIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <rect x='6' y='4' width='12' height='16' rx='2' />
-    <path d='M9 4.5h6a1 1 0 0 1 1 1V7H8V5.5a1 1 0 0 1 1-1z' />
-    <path d='M9 12l1.5 1.5L14 10' />
-  </svg>
-)
-
-const KeyIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <circle cx='8' cy='11' r='3' />
-    <path d='M11 11h10l-2 2 2 2' />
-    <path d='M18 11v3' />
-  </svg>
-)
-
-const TestTubeIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconStrokeProps} {...props}>
-    <path d='M9 3h6' />
-    <path d='M10 3v6l-4.5 7.5A3 3 0 0 0 8.1 21h7.8a3 3 0 0 0 2.6-4.5L14 9V3' />
-    <path d='M9.5 14h5' />
-  </svg>
-)
-
 const HOME_ICONS = {
   dashboard: DashboardIcon,
   workflow: WorkflowIcon,
   calendar: CalendarIcon,
-  file: FileIcon,
+  file: FileTextIcon,
   users: UsersIcon,
   clipboard: ClipboardIcon,
   key: KeyIcon,
@@ -175,11 +111,11 @@ const ADMIN_ITEMS = [
     actionLabel: "Ouvrir"
   },
   {
-    name: "Jetons d'accès",
+    name: "Liens d'accès",
     link: "/genTokens",
     icon: "key",
     tone: "neutral",
-    description: "Générer des liens ou des jetons d'accès.",
+    description: "Préparer les magic links vote et soutenance par personne.",
     actionLabel: "Ouvrir"
   }
 ]

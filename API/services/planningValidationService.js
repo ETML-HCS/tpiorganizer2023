@@ -351,7 +351,8 @@ function detectSequenceViolations(slots) {
           personId,
           personName: getPersonDisplayName(participant),
           roles: new Set(),
-          slotLabels: new Map()
+          slotLabels: new Map(),
+          slotReferences: new Map()
         })
       }
 
@@ -361,6 +362,15 @@ function detectSequenceViolations(slots) {
         current.personName = getPersonDisplayName(participant)
       }
       current.slotLabels.set(key, formatSlotLabel(slot))
+
+      const slotReference = normalizeText(slot?.assignedTpi?.reference)
+      if (slotReference) {
+        if (!current.slotReferences.has(key)) {
+          current.slotReferences.set(key, new Set())
+        }
+
+        current.slotReferences.get(key).add(slotReference)
+      }
     }
   }
 
@@ -394,6 +404,11 @@ function detectSequenceViolations(slots) {
         const slotLabels = runKeys
           .map((key) => participant.slotLabels.get(key))
           .filter(Boolean)
+        const references = Array.from(
+          new Set(
+            runKeys.flatMap((key) => Array.from(participant.slotReferences.get(key) || []))
+          )
+        ).sort()
 
         issues.push({
           type: 'consecutive_limit',
@@ -401,6 +416,7 @@ function detectSequenceViolations(slots) {
           personName: participant.personName,
           consecutiveCount: runLength,
           slotLabels,
+          references,
           message: `${participant.personName} a ${runLength} TPI consécutifs. Une pause d'un créneau est obligatoire avant de reprendre.`
         })
       }
@@ -415,6 +431,11 @@ function detectSequenceViolations(slots) {
       const slotLabels = runKeys
         .map((key) => participant.slotLabels.get(key))
         .filter(Boolean)
+      const references = Array.from(
+        new Set(
+          runKeys.flatMap((key) => Array.from(participant.slotReferences.get(key) || []))
+        )
+      ).sort()
 
       issues.push({
         type: 'consecutive_limit',
@@ -422,6 +443,7 @@ function detectSequenceViolations(slots) {
         personName: participant.personName,
         consecutiveCount: finalRunLength,
         slotLabels,
+        references,
         message: `${participant.personName} a ${finalRunLength} TPI consécutifs. Une pause d'un créneau est obligatoire avant de reprendre.`
       })
     }
@@ -655,6 +677,7 @@ async function loadPlanningSlots(year) {
     .populate('assignments.expert1', 'firstName lastName email')
     .populate('assignments.expert2', 'firstName lastName email')
     .populate('assignments.chefProjet', 'firstName lastName email')
+    .populate('assignedTpi', 'reference')
     .lean()
 }
 

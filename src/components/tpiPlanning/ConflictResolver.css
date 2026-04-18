@@ -38,6 +38,45 @@
   line-height: 1.5;
 }
 
+.alert {
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.18);
+  background: #fff5f5;
+  color: #b91c1c;
+}
+
+.alert-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-icon,
+.button-icon,
+.vote-badge-icon,
+.select-indicator-icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.1;
+  flex: 0 0 auto;
+}
+
+.alert button {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.alert button:hover {
+  opacity: 1;
+}
+
 /* Conflicts Grid */
 .conflicts-grid {
   padding: 16px 18px 18px;
@@ -128,6 +167,19 @@
   color: #1d4ed8;
   font-size: 0.84rem;
   font-weight: 600;
+}
+
+.expand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+
+.expand-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
 }
 
 .conflict-candidate-icon,
@@ -260,7 +312,7 @@
 .vote-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 4px 10px;
   border-radius: 12px;
   font-size: 0.8rem;
@@ -323,7 +375,10 @@
 
 .select-indicator {
   margin-top: 10px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   color: #4caf50;
   font-weight: 600;
   font-size: 0.9rem;
@@ -442,6 +497,9 @@
 }
 
 .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 15px;
   background: white;
   border: 1px solid #ddd;

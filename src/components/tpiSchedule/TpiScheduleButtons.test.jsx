@@ -315,7 +315,7 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('button', { name: /Salles\s+4/i }))
 
     const focusButton = screen.getByTestId('planning-room-focus-toggle')
-    expect(focusButton).toHaveTextContent('⛶')
+    expect(focusButton.querySelector('svg')).not.toBeNull()
 
     fireEvent.click(focusButton)
 

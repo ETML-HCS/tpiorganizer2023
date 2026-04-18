@@ -338,6 +338,20 @@
   cursor: pointer;
 }
 
+.date-room-action,
+.date-room-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-room-action-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+  flex: 0 0 auto;
+}
+
 .date-room-action.primary {
   background: rgba(255, 255, 255, 0.96);
   color: #0f172a;
@@ -407,9 +421,9 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin: 1px 0 2px;
+  margin: 4px 0 6px;
   padding: 0 8px;
-  min-height: 16px;
+  min-height: 24px;
   color: var(--breakLine-TextColor);
   border: 0;
   border-radius: 999px;
@@ -423,11 +437,11 @@
   );
   overflow: hidden;
   white-space: nowrap;
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  opacity: 0.92;
+  opacity: 0.98;
 }
 
 .breakLine::before,
@@ -447,6 +461,46 @@
 .site_etml .breakLine::before,
 .site_etml .breakLine::after {
   background: linear-gradient(90deg, rgba(67, 56, 202, 0.08), rgba(67, 56, 202, 0.28));
+}
+
+.breakLine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.06);
+}
+
+.site_etml .breakLine-badge {
+  border-color: rgba(67, 56, 202, 0.22);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.site_cfpv .breakLine-badge {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.breakLine-icon {
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.breakLine-label,
+.breakLine-unit {
+  color: var(--breakLine-TextColor);
+}
+
+.breakLine-duration {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .breakLine p {
@@ -624,6 +678,7 @@
 
 /* Styles pour la carte TpiCard */
 .tpiCard {
+  position: relative;
   color: var(--site-textColor);
   text-align: left;
   font-size: 0.96rem;
@@ -861,6 +916,32 @@
   align-items: stretch;
   gap: 3px;
   padding: 8px 8px 2px;
+}
+
+.tpi-card-dossier-link {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  color: #1d4ed8;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.tpiCard.detail-level-2 .tpi-card-dossier-link {
+  top: 6px;
+  right: 6px;
 }
 
 .tpi-card-head-copy {
@@ -1656,8 +1737,14 @@
   border-radius: 14px;
   background: #fff7ed;
   border: 1px solid #fed7aa;
-  font-size: 1.3rem;
   margin-bottom: 12px;
+}
+
+.planning-year-change-icon svg,
+.planning-year-change-btn .button-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.1;
 }
 
 .planning-year-change-copy h3 {
@@ -1717,6 +1804,10 @@
 }
 
 .planning-year-change-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-width: 148px;
   height: 38px;
   padding: 0 14px;

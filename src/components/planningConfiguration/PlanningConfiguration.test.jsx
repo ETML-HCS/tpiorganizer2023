@@ -30,6 +30,7 @@ const mockCatalog = {
       id: 'site-etml',
       code: 'ETML',
       label: 'ETML',
+      planningColor: '#1D4ED8',
       address: {
         line1: '',
         line2: '',
@@ -198,6 +199,14 @@ describe('PlanningConfiguration', () => {
     expect(within(siteCard).getByText('ETML · A101')).toBeInTheDocument()
   })
 
+  test("n'affiche plus le champ Adresse 2 dans un site", async () => {
+    render(<PlanningConfiguration />)
+
+    await screen.findByRole('button', { name: 'Supprimer le site' })
+
+    expect(screen.queryByLabelText('Adresse 2')).not.toBeInTheDocument()
+  })
+
   test('replie une famille de classes en masquant son contenu', async () => {
     render(<PlanningConfiguration />)
 
@@ -272,7 +281,13 @@ describe('PlanningConfiguration', () => {
     fireEvent.change(manualTargetInput, { target: { value: '4' } })
 
     await waitFor(() => {
-      expect(within(sizingSection).getByText(/Manuel 4/i)).toBeInTheDocument()
+      expect(
+        within(sizingSection).getByText(
+          (_, node) =>
+            node?.classList?.contains('configuration-capacity-site-stat') &&
+            /Manuel\s*4/i.test(node.textContent || '')
+        )
+      ).toBeInTheDocument()
     })
     expect(within(sizingSection).getByText(/4 manuelles/i)).toBeInTheDocument()
   })
@@ -311,6 +326,17 @@ describe('PlanningConfiguration', () => {
     expect(screen.getByDisplayValue('ETML 01')).toBeInTheDocument()
     expect(screen.getByDisplayValue('ETML 02')).toBeInTheDocument()
     expect(screen.getAllByDisplayValue('A101').length).toBeGreaterThan(0)
+  })
+
+  test("affiche une aide hover sur le champ Rooms / date", async () => {
+    render(<PlanningConfiguration />)
+
+    const roomDateLabel = await screen.findByText('Rooms / date')
+
+    expect(roomDateLabel).toHaveAttribute(
+      'title',
+      'Nombre de rooms à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
+    )
   })
 
   test("enregistre un paramètre annuel modifié depuis le bouton principal", async () => {
@@ -373,6 +399,29 @@ describe('PlanningConfiguration', () => {
           expect.objectContaining({
             siteId: 'site-etml',
             numSlots: 9
+          })
+        ])
+      })
+    )
+  })
+
+  test('enregistre la couleur planning du site dans le catalogue', async () => {
+    render(<PlanningConfiguration />)
+
+    const colorInput = await screen.findByLabelText('Couleur planning')
+    fireEvent.change(colorInput, { target: { value: '#14532d' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+    })
+
+    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sites: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'site-etml',
+            planningColor: '#14532D'
           })
         ])
       })

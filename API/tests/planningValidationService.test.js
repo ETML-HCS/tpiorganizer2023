@@ -55,6 +55,9 @@ test('buildValidationIssues reports a sequence overflow after 4 consecutive TPI'
     period: index + 1,
     status: 'confirmed',
     room: { site: 'ETML', name: `A10${index + 1}` },
+    assignedTpi: {
+      reference: `TPI-10${index + 1}`
+    },
     assignments: {
       expert1: person
     }
@@ -67,6 +70,13 @@ test('buildValidationIssues reports a sequence overflow after 4 consecutive TPI'
   assert.equal(result.issues[0].consecutiveCount, 5)
   assert.match(result.issues[0].message, /5 TPI consécutifs/)
   assert.ok(result.issues[0].slotLabels.length >= 5)
+  assert.deepEqual(result.issues[0].references, [
+    'TPI-101',
+    'TPI-102',
+    'TPI-103',
+    'TPI-104',
+    'TPI-105'
+  ])
 })
 
 test('buildValidationIssues returns no issue when planning is valid', () => {

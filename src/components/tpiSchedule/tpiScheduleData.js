@@ -121,14 +121,18 @@ function normalizeTimeValue(value, fallback = DEFAULT_SITE_SCHEDULE.firstTpiStar
 }
 
 function normalizeMinuteValue(value, fallbackMinutes, legacyHoursFallback = null) {
-  const numeric = Number(value)
+  const normalizedValue = compactText(value)
+  const numeric = normalizedValue === "" ? Number.NaN : Number(normalizedValue)
 
   if (Number.isFinite(numeric)) {
     return numeric
   }
 
-  if (Number.isFinite(Number(legacyHoursFallback))) {
-    return Math.round(Number(legacyHoursFallback) * 60)
+  const normalizedLegacyValue = compactText(legacyHoursFallback)
+  const legacyNumeric = normalizedLegacyValue === "" ? Number.NaN : Number(normalizedLegacyValue)
+
+  if (Number.isFinite(legacyNumeric)) {
+    return Math.round(legacyNumeric * 60)
   }
 
   return fallbackMinutes

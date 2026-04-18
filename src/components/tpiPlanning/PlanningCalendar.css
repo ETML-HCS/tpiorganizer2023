@@ -328,11 +328,15 @@
 }
 
 .row-header {
+  --planning-room-accent: #2563eb;
+  --planning-room-accent-soft: rgba(37, 99, 235, 0.12);
+  --planning-room-accent-softer: rgba(37, 99, 235, 0.07);
+  --planning-room-accent-border: rgba(37, 99, 235, 0.26);
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 7px 10px;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef3f9 100%);
+  background: linear-gradient(180deg, var(--planning-room-accent-softer) 0%, rgba(255, 255, 255, 0.92) 100%);
   border-right: 1px solid rgba(148, 163, 184, 0.16);
   gap: 4px;
   position: relative;
@@ -345,7 +349,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  background: linear-gradient(180deg, var(--planning-room-accent) 0%, var(--planning-room-accent) 100%);
   opacity: 0.7;
 }
 
@@ -356,11 +360,34 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.72);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, var(--planning-room-accent-soft) 100%);
   padding: 4px 8px;
   border-radius: 999px;
   width: fit-content;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--planning-room-accent-border);
+}
+
+.row-header-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.room-site-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--planning-room-accent-soft);
+  border: 1px solid var(--planning-room-accent-border);
+  color: var(--planning-room-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .period-name {

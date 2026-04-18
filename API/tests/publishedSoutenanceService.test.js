@@ -120,9 +120,45 @@ test('syncPublishedSoutenancesToTpiCatalog updates soutenance dates in the TPI c
   )
 
   assert.equal(bulkWrites.length, 2)
-  assert.equal(bulkWrites[0].updateOne.filter.refTpi, 'TPI-1')
+  assert.deepEqual(bulkWrites[0].updateOne.filter, {
+    refTpi: 'TPI-1'
+  })
   assert.equal(bulkWrites[0].updateOne.update.$set.salle, 'A101')
   assert.equal(bulkWrites[0].updateOne.update.$set['lieu.site'], 'ETML')
   assert.equal(bulkWrites[0].updateOne.update.$set['dates.soutenance'] instanceof Date, true)
   assert.equal(result.matchedCount, 2)
+})
+
+test('syncPublishedSoutenancesToTpiCatalog matches legacy references from workflow references', async () => {
+  const bulkWrites = []
+  const modelFactory = () => ({
+    bulkWrite: async (operations) => {
+      bulkWrites.push(...operations)
+      return { matchedCount: operations.length, modifiedCount: operations.length }
+    }
+  })
+
+  await syncPublishedSoutenancesToTpiCatalog(
+    2026,
+    [
+      {
+        name: 'B204',
+        site: 'CFPV',
+        date: '2026-06-11',
+        tpiDatas: [
+          { refTpi: 'TPI-2026-042' }
+        ]
+      }
+    ],
+    modelFactory
+  )
+
+  assert.equal(bulkWrites.length, 1)
+  assert.deepEqual(bulkWrites[0].updateOne.filter, {
+    refTpi: {
+      $in: ['TPI-2026-042', '042']
+    }
+  })
+  assert.equal(bulkWrites[0].updateOne.update.$set.salle, 'B204')
+  assert.equal(bulkWrites[0].updateOne.update.$set['lieu.site'], 'CFPV')
 })

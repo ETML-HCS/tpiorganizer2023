@@ -2,7 +2,19 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import { useLocation } from 'react-router-dom'
 
-import { UserIcon } from '../shared/InlineIcons'
+import BinaryToggle from '../shared/BinaryToggle'
+import {
+  BanIcon as DisableIcon,
+  CandidateIcon as CandidateRoleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ExpertIcon as ExpertRoleIcon,
+  MailIcon,
+  MailOffIcon as NoEmailIcon,
+  PencilIcon as EditIcon,
+  ProjectLeadIcon as ChefProjetRoleIcon,
+  UserIcon
+} from '../shared/InlineIcons'
 import { personService } from '../../services/planningService'
 import { STORAGE_KEYS, YEARS_CONFIG } from '../../config/appConfig'
 import { readJSONListValue, writeJSONValue } from '../../utils/storage'
@@ -249,69 +261,6 @@ const INITIAL_FORM = {
 }
 
 const INITIAL_IMPORT_ROLES = ['expert']
-
-/* ============================================
-   ROLE SVG ICONS
-   ============================================ */
-
-function CandidateRoleIcon(props) {
-  return (
-    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' {...props}>
-      <circle cx='12' cy='7' r='3.5' />
-      <path d='M5.5 20.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5' />
-      <path d='M9 3.5 12 1.5l3 2' />
-    </svg>
-  )
-}
-
-function ExpertRoleIcon(props) {
-  return (
-    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' {...props}>
-      <path d='M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 14.3 7.2 16.9l.9-5.4-3.9-3.8 5.4-.8z' />
-    </svg>
-  )
-}
-
-function ChefProjetRoleIcon(props) {
-  return (
-    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' {...props}>
-      <rect x='3' y='8' rx='1.5' width='18' height='12' />
-      <path d='M7 8V6.5A2.5 2.5 0 0 1 9.5 4h5A2.5 2.5 0 0 1 17 6.5V8' />
-      <path d='M8 13h8' />
-      <path d='M8 16h5' />
-    </svg>
-  )
-}
-
-function NoEmailIcon(props) {
-  return (
-    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' {...props}>
-      <path d='M4 4l16 16' />
-      <path d='M22 8.5V16a2 2 0 0 1-2 2H9.5' />
-      <path d='M2 7.5V6a2 2 0 0 1 2-2h8.5' />
-      <path d='M2 17l5-5' />
-      <path d='M2 12.5V16a2 2 0 0 0 2 2h2.5' />
-    </svg>
-  )
-}
-
-function DisableIcon(props) {
-  return (
-    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' fill='none' stroke='currentColor' strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' {...props}>
-      <circle cx='12' cy='12' r='8.5' />
-      <path d='M8.5 8.5 15.5 15.5' />
-    </svg>
-  )
-}
-
-function EditIcon(props) {
-  return (
-    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' fill='none' stroke='currentColor' strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' {...props}>
-      <path d='M4 16.5V20h3.5L19 8.5 15.5 5 4 16.5Z' />
-      <path d='M13.5 6.5 17 10' />
-    </svg>
-  )
-}
 
 function normalizeRoles(roles) {
   return new Set((Array.isArray(roles) ? roles : []).map((role) => String(role || '').trim().toLowerCase()).filter(Boolean))
@@ -908,14 +857,11 @@ function getRoleVisual(roles) {
 
 function CollapseChevronIcon({ expanded }) {
   return (
-    <svg
+    <ChevronDownIcon
       className={`stakeholders-collapse-icon${expanded ? ' is-open' : ''}`}
-      viewBox='0 0 20 20'
       aria-hidden='true'
       focusable='false'
-    >
-      <path d='M5.25 7.5 10 12.25 14.75 7.5' />
-    </svg>
+    />
   )
 }
 
@@ -1052,7 +998,7 @@ function StakeholderEditorPanel({
                   >
                     <role.Icon className='stakeholders-role-chip-icon' />
                     <span className='stakeholders-role-chip-label'>{role.label}</span>
-                    {isActive && <span className='stakeholders-role-chip-check'>✓</span>}
+                    {isActive ? <CheckIcon className='stakeholders-role-chip-check' /> : null}
                   </button>
                 )
               })}
@@ -1063,32 +1009,34 @@ function StakeholderEditorPanel({
         <div className='stakeholders-toggle-row'>
           <label className='stakeholders-active-toggle'>
             <span className='stakeholders-active-label'>Personne active</span>
-            <span className='stakeholders-active-switch'>
-              <input
-                type='checkbox'
-                checked={form.isActive}
-                onChange={(event) => handleChange('isActive', event.target.checked)}
-                aria-label='Personne active'
-              />
-              <span className='stakeholders-active-track' aria-hidden='true'>
-                <span className='stakeholders-active-thumb' />
-              </span>
-            </span>
+            <BinaryToggle
+              value={Boolean(form.isActive)}
+              onChange={(nextValue) => handleChange('isActive', nextValue)}
+              name='stakeholder-is-active'
+              className='stakeholders-binary-toggle'
+              ariaLabel='Personne active'
+              iconOnly
+              trueLabel='Active'
+              falseLabel='Inactive'
+              trueIcon={CheckIcon}
+              falseIcon={DisableIcon}
+            />
           </label>
 
           <label className='stakeholders-email-toggle'>
             <span className='stakeholders-email-label'>Reçoit les emails</span>
-            <span className='stakeholders-email-switch'>
-              <input
-                type='checkbox'
-                checked={form.sendEmails}
-                onChange={(event) => handleChange('sendEmails', event.target.checked)}
-                aria-label='Reçoit les emails automatiques'
-              />
-              <span className='stakeholders-email-track' aria-hidden='true'>
-                <span className='stakeholders-email-thumb' />
-              </span>
-            </span>
+            <BinaryToggle
+              value={Boolean(form.sendEmails)}
+              onChange={(nextValue) => handleChange('sendEmails', nextValue)}
+              name='stakeholder-send-emails'
+              className='stakeholders-binary-toggle'
+              ariaLabel='Reçoit les emails automatiques'
+              iconOnly
+              trueLabel='Emails activés'
+              falseLabel='Emails désactivés'
+              trueIcon={MailIcon}
+              falseIcon={NoEmailIcon}
+            />
           </label>
         </div>
 
@@ -1118,7 +1066,7 @@ function StakeholderEditorPanel({
                       }}
                     >
                       {y}
-                      {isSelected && <span>✓</span>}
+                      {isSelected ? <CheckIcon className='stakeholders-candidate-year-icon' /> : null}
                     </button>
                   )
                 })}

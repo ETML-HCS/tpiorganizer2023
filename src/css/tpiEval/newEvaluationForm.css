@@ -18,10 +18,21 @@
   padding: 4px;
   background-color: #fdfcfc;
   font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 #searchCandidat:hover {
   background-color: #fbebeb;
+}
+
+#searchCandidat svg,
+.btn_validation button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.1;
+  flex: 0 0 auto;
 }
 
 #refPage input {
@@ -323,6 +334,9 @@ input[type='number']:focus {
   border: none;
   border-radius: 5px;
   margin-left: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .btn_validation button:hover {

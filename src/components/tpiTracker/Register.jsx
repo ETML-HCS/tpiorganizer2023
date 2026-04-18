@@ -45,12 +45,7 @@ const RoleOption = ({ roleOption, isActive, onSelect }) => {
       aria-pressed={isActive}
       onClick={() => onSelect(roleOption.value)}
     >
-      <span className='tracker-role-option-topline'>
-        <span className='tracker-role-option-label'>{roleOption.label}</span>
-        <span className='tracker-role-option-chip'>
-          {roleOption.highlights?.length || 0} repères
-        </span>
-      </span>
+      <span className='tracker-role-option-label'>{roleOption.label}</span>
       <span className='tracker-role-option-summary'>{roleOption.summary}</span>
     </button>
   )
@@ -61,7 +56,6 @@ const Register = ({ secret }) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState(() => ({ ...EMPTY_FORM_DATA }))
   const activeRoleConfig = activeForm ? getTrackerRoleConfig(activeForm) : null
-  const activeRoleHighlights = activeRoleConfig?.highlights || []
 
   const handleFormSelection = (formType) => {
     setActiveForm(formType)
@@ -161,15 +155,14 @@ const Register = ({ secret }) => {
         <span className='tracker-card-status'>
           {activeForm
             ? `${getTrackerRoleLabel(activeForm)} sélectionné`
-            : `${TRACKER_ROLE_OPTIONS.length} profils disponibles`}
+            : `${TRACKER_ROLE_OPTIONS.length} profils`}
         </span>
       </div>
 
       <div className='tracker-register-intro'>
-        <h2>Créer un compte de suivi</h2>
+        <h2>Créer un compte</h2>
         <p className='tracker-card-copy'>
-          Choisissez un rôle, complétez les informations de base, puis
-          enregistrez un compte chiffré pour l’espace de suivi.
+          Choisissez un profil puis complétez les champs obligatoires.
         </p>
       </div>
 
@@ -190,22 +183,10 @@ const Register = ({ secret }) => {
           onSubmit={handleRegistration}
         >
           <div className='tracker-registration-summary'>
-            <div>
-              <span className='tracker-panel-eyebrow'>Profil sélectionné</span>
-              <h3>{getTrackerRoleLabel(activeForm)}</h3>
-              <p>
-                {activeRoleConfig?.summary ||
-                  "Le formulaire adapte l'inscription au rôle choisi."}
-              </p>
-            </div>
-
-            {activeRoleHighlights.length > 0 ? (
-              <ul className='tracker-mini-list' aria-label='Repères du profil'>
-                {activeRoleHighlights.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : null}
+            <p>
+              <strong>Profil:</strong> {getTrackerRoleLabel(activeForm)}.{" "}
+              {activeRoleConfig?.summary || "Renseignez les informations du compte."}
+            </p>
           </div>
 
           <div className='tracker-field-grid'>
@@ -279,10 +260,7 @@ const Register = ({ secret }) => {
         </form>
       ) : (
         <div className='tracker-register-empty'>
-          <p>
-            Choisissez un profil ci-dessus pour afficher le formulaire
-            correspondant.
-          </p>
+          <p>Sélectionnez un profil pour afficher le formulaire.</p>
         </div>
       )}
     </section>

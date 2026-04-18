@@ -1419,8 +1419,9 @@
 }
 
 .stakeholders-role-chip-check {
-  font-size: 14px;
-  font-weight: 700;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -1524,53 +1525,6 @@
 
 .stakeholders-active-label { color: var(--sp-text); }
 
-.stakeholders-active-switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.stakeholders-active-switch input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.stakeholders-active-track {
-  position: relative;
-  width: 48px;
-  height: 28px;
-  border-radius: 999px;
-  background: var(--sp-border-strong);
-  transition: background 0.16s ease;
-}
-
-.stakeholders-active-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--sp-surface);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
-  transition: transform 0.16s ease;
-}
-
-.stakeholders-active-switch input:checked + .stakeholders-active-track {
-  background: var(--sp-primary);
-}
-
-.stakeholders-active-switch input:checked + .stakeholders-active-track .stakeholders-active-thumb {
-  transform: translateX(20px);
-}
-
-.stakeholders-active-switch input:focus-visible + .stakeholders-active-track {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-}
-
 /* Email toggle - vert */
 .stakeholders-email-toggle {
   display: flex;
@@ -1588,51 +1542,26 @@
 
 .stakeholders-email-label { color: var(--sp-success); }
 
-.stakeholders-email-switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+.stakeholders-binary-toggle {
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
-.stakeholders-email-switch input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
+.stakeholders-binary-toggle .page-tools-toggle-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  stroke-width: 2.1;
 }
 
-.stakeholders-email-track {
-  position: relative;
-  width: 48px;
-  height: 28px;
-  border-radius: 999px;
-  background: var(--sp-border-strong);
-  transition: background 0.16s ease;
+.stakeholders-email-toggle .stakeholders-binary-toggle .page-tools-toggle-option.active {
+  border-color: rgba(16, 185, 129, 0.22);
+  color: #065f46;
 }
 
-.stakeholders-email-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--sp-surface);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
-  transition: transform 0.16s ease;
-}
-
-.stakeholders-email-switch input:checked + .stakeholders-email-track {
-  background: var(--sp-success);
-}
-
-.stakeholders-email-switch input:checked + .stakeholders-email-track .stakeholders-email-thumb {
-  transform: translateX(20px);
-}
-
-.stakeholders-email-switch input:focus-visible + .stakeholders-email-track {
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+.stakeholders-email-toggle .stakeholders-binary-toggle .page-tools-toggle-option--true.active {
+  background: linear-gradient(180deg, #10b981 0%, #047857 100%);
+  border-color: rgba(4, 120, 87, 0.3);
+  color: #ecfdf5;
 }
 
 /* === Annees candidat === */
@@ -1681,9 +1610,10 @@
   transition: all 0.15s ease;
 }
 
-.stakeholders-candidate-year-chip span {
-  font-size: 12px;
-  font-weight: 700;
+.stakeholders-candidate-year-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
 }
 
 .stakeholders-candidate-year-chip:hover {
@@ -1697,7 +1627,7 @@
   color: #ffffff;
 }
 
-.stakeholders-candidate-year-chip.is-active span {
+.stakeholders-candidate-year-chip.is-active .stakeholders-candidate-year-icon {
   color: #ffffff;
 }
 

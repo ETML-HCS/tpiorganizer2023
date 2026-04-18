@@ -1,5 +1,20 @@
 import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { API_URL } from '../../config/appConfig'
+import BinaryToggle from '../shared/BinaryToggle'
+import {
+  AlertIcon,
+  CalendarIcon,
+  ChartIcon,
+  CheckIcon,
+  CloseIcon,
+  FolderIcon,
+  ListIcon,
+  RefreshIcon,
+  RulerIcon,
+  SettingsIcon,
+  TimeIcon,
+  UploadIcon
+} from '../shared/InlineIcons'
 import './ImportPanel.css'
 
 const API_BASE = API_URL
@@ -190,20 +205,29 @@ const ImportPanel = ({ year, onImportComplete }) => {
   return (
     <div className="import-panel">
       <div className="panel-header">
-        <h2>📥 Import des données</h2>
+        <h2>
+          <UploadIcon className="panel-title-icon" />
+          Import des données
+        </h2>
         <p>Importez la liste des TPI au format CSV. Les parties prenantes se gèrent dans le module dédié.</p>
       </div>
 
       {error && (
         <div className="alert alert-error">
-          <span>⚠️ {error}</span>
+          <span className="alert-copy">
+            <AlertIcon className="alert-icon" />
+            {error}
+          </span>
           <button onClick={() => setError(null)}>×</button>
         </div>
       )}
 
       {/* Configuration période */}
       <div className="config-section">
-        <h3>⚙️ Configuration</h3>
+        <h3>
+          <SettingsIcon className="section-title-icon" />
+          Configuration
+        </h3>
         {debugInfo && (
           <div className="debug-box">
             <strong>Debug CSV</strong>
@@ -258,14 +282,21 @@ const ImportPanel = ({ year, onImportComplete }) => {
         {availableWorkDays.length > 0 && (
           <div className="dates-selection">
             <div className="dates-header">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={useSpecificDates}
-                  onChange={(e) => setUseSpecificDates(e.target.checked)}
-                />
-                <span>Sélectionner les jours spécifiques des soutenances</span>
-              </label>
+              <div className="dates-toggle-copy">
+                <span className="dates-toggle-label">Sélectionner les jours spécifiques des soutenances</span>
+              </div>
+              <BinaryToggle
+                value={useSpecificDates}
+                onChange={setUseSpecificDates}
+                name="import-specific-dates"
+                className="import-binary-toggle"
+                ariaLabel="Sélectionner les jours spécifiques des soutenances"
+                iconOnly
+                trueLabel="Jours spécifiques"
+                falseLabel="Tous les jours ouvrés"
+                trueIcon={CalendarIcon}
+                falseIcon={ListIcon}
+              />
               {useSpecificDates && (
                 <button 
                   type="button" 
@@ -305,13 +336,15 @@ const ImportPanel = ({ year, onImportComplete }) => {
             
             {useSpecificDates && selectedDates.length > 0 && (
               <p className="dates-summary">
-                📅 {selectedDates.length} jour{selectedDates.length > 1 ? 's' : ''} de soutenance sélectionné{selectedDates.length > 1 ? 's' : ''}
+                <CalendarIcon className="dates-summary-icon" />
+                {selectedDates.length} jour{selectedDates.length > 1 ? 's' : ''} de soutenance sélectionné{selectedDates.length > 1 ? 's' : ''}
               </p>
             )}
             
             {!useSpecificDates && (
               <p className="dates-summary">
-                📅 Tous les jours ouvrés ({availableWorkDays.length} jours) seront analysés
+                <CalendarIcon className="dates-summary-icon" />
+                Tous les jours ouvrés ({availableWorkDays.length} jours) seront analysés
               </p>
             )}
           </div>
@@ -320,7 +353,10 @@ const ImportPanel = ({ year, onImportComplete }) => {
 
       <div className="import-sections">
         <div className="import-section csv-section">
-          <h3>📋 Liste des TPI (CSV)</h3>
+          <h3>
+            <ListIcon className="section-title-icon" />
+            Liste des TPI (CSV)
+          </h3>
           <p className="section-description">
             Importez un fichier CSV avec les colonnes : Candidat, Expert1, Expert2, 
             ChefProjet (optionnel), Titre, Sujet, Entreprise
@@ -335,7 +371,8 @@ const ImportPanel = ({ year, onImportComplete }) => {
               id="csv-input"
             />
             <label htmlFor="csv-input" className="file-input-label">
-              📁 Sélectionner le fichier CSV
+              <FolderIcon className="file-input-icon" />
+              Sélectionner le fichier CSV
             </label>
           </div>
 
@@ -343,10 +380,19 @@ const ImportPanel = ({ year, onImportComplete }) => {
             <div className={`validation-result ${csvValidation.valid ? 'valid' : 'invalid'}`}>
               {csvValidation.valid ? (
                 <>
-                  <h4>✅ Fichier valide</h4>
+                  <h4>
+                    <CheckIcon className="status-icon" />
+                    Fichier valide
+                  </h4>
                   <div className="validation-stats">
-                    <span>📊 {csvValidation.rowCount} TPI détectés</span>
-                    <span>📏 Délimiteur: "{csvValidation.delimiter}"</span>
+                    <span>
+                      <ChartIcon className="stat-icon" />
+                      {csvValidation.rowCount} TPI détectés
+                    </span>
+                    <span>
+                      <RulerIcon className="stat-icon" />
+                      Délimiteur: "{csvValidation.delimiter}"
+                    </span>
                   </div>
                   
                   <h5>Colonnes mappées :</h5>
@@ -395,13 +441,26 @@ const ImportPanel = ({ year, onImportComplete }) => {
                       onClick={handleCsvImport}
                       disabled={csvLoading}
                     >
-                      {csvLoading ? '⏳ Import en cours...' : `📥 Importer ${csvValidation.rowCount} TPI`}
+                      {csvLoading ? (
+                        <>
+                          <TimeIcon className="button-icon" />
+                          Import en cours...
+                        </>
+                      ) : (
+                        <>
+                          <UploadIcon className="button-icon" />
+                          {`Importer ${csvValidation.rowCount} TPI`}
+                        </>
+                      )}
                     </button>
                   </div>
                 </>
               ) : (
                 <>
-                  <h4>❌ Fichier invalide</h4>
+                  <h4>
+                    <CloseIcon className="status-icon" />
+                    Fichier invalide
+                  </h4>
                   <p className="error-msg">{csvValidation.error}</p>
                   <button className="btn-secondary" onClick={resetCsv}>
                     Réessayer
@@ -413,11 +472,23 @@ const ImportPanel = ({ year, onImportComplete }) => {
 
           {csvResults && (
             <div className="import-results">
-              <h4>✅ Import terminé</h4>
+              <h4>
+                <CheckIcon className="status-icon" />
+                Import terminé
+              </h4>
               <div className="results-stats">
-                <span className="stat success">✓ {csvResults.created} créés</span>
-                <span className="stat info">↻ {csvResults.updated} mis à jour</span>
-                <span className="stat error">✗ {csvResults.skipped} ignorés</span>
+                <span className="stat success">
+                  <CheckIcon className="stat-icon" />
+                  {csvResults.created} créés
+                </span>
+                <span className="stat info">
+                  <RefreshIcon className="stat-icon" />
+                  {csvResults.updated} mis à jour
+                </span>
+                <span className="stat error">
+                  <CloseIcon className="stat-icon" />
+                  {csvResults.skipped} ignorés
+                </span>
               </div>
               
               {csvResults.errors?.length > 0 && (
