@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 
 import { personService } from '../../services/planningService'
 import {
+  getTpiPlanningSelectOptions,
   normalizeTpiForForm,
   normalizeTpiForSave
 } from './tpiManagementUtils.js'
@@ -79,7 +80,16 @@ const resolveUniquePerson = (people = [], value = '') => {
   return matches.length === 1 ? matches[0] : null
 }
 
-const TpiForm = ({ onSave, tpiToLoad, initialTpi = null, onClose, year }) => {
+const TpiForm = ({
+  onSave,
+  tpiToLoad,
+  initialTpi = null,
+  onClose,
+  year,
+  planningCatalogSites = [],
+  planningClassTypes = [],
+  planningSoutenanceDates = []
+}) => {
   const [formData, setFormData] = useState(emptyFormState)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [people, setPeople] = useState([])
@@ -294,6 +304,35 @@ const TpiForm = ({ onSave, tpiToLoad, initialTpi = null, onClose, year }) => {
 
   const isEditing = Boolean(tpiToLoad)
   const isPrefilledCreate = Boolean(!isEditing && initialTpi)
+  const planningSelectOptions = useMemo(
+    () =>
+      getTpiPlanningSelectOptions(
+        {
+          classe: formData.classe,
+          lieu: {
+            site: formData.lieuSite
+          },
+          salle: formData.salle,
+          dateSoutenance: formData.dateSoutenance
+        },
+        {
+          planningCatalogSites,
+          planningClassTypes,
+          planningSoutenanceDates
+        }
+      ),
+    [
+      formData.classe,
+      formData.dateSoutenance,
+      formData.lieuSite,
+      formData.salle,
+      planningCatalogSites,
+      planningClassTypes,
+      planningSoutenanceDates
+    ]
+  )
+  const roomOptions = planningSelectOptions.roomOptions || []
+  const soutenanceDateOptions = planningSelectOptions.soutenanceDateOptions || []
 
   return (
     <div className='containerForm'>
@@ -496,13 +535,19 @@ const TpiForm = ({ onSave, tpiToLoad, initialTpi = null, onClose, year }) => {
 
             <div className='form-row'>
               <label htmlFor='salle'>Salle</label>
-              <input
+              <select
                 id='salle'
-                type='text'
                 name='salle'
                 value={formData.salle}
                 onChange={handleInputChange}
-              />
+              >
+                <option value=''>Aucune salle</option>
+                {roomOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </section>
 
@@ -567,13 +612,19 @@ const TpiForm = ({ onSave, tpiToLoad, initialTpi = null, onClose, year }) => {
 
               <div className='form-row stacked'>
                 <label htmlFor='dateSoutenance'>Soutenance</label>
-                <input
+                <select
                   id='dateSoutenance'
-                  type='date'
                   name='dateSoutenance'
                   value={formData.dateSoutenance}
                   onChange={handleInputChange}
-                />
+                >
+                  <option value=''>Aucune date</option>
+                  {soutenanceDateOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </section>

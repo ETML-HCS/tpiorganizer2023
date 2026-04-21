@@ -44,13 +44,27 @@ const {
 const ALLOWED_VOTE_DECISIONS = new Set(['accepted', 'rejected', 'preferred'])
 const ALLOWED_VOTE_RESPONSE_MODES = new Set(['ok', 'proposal'])
 
+function getRouteErrorResponse(error, fallbackMessage) {
+  const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500
+
+  return {
+    statusCode,
+    payload: {
+      error: statusCode === 503
+        ? (error?.message || fallbackMessage)
+        : fallbackMessage
+    }
+  }
+}
+
 router.get('/catalog', async (req, res) => {
   try {
     const catalog = await getSharedPlanningCatalog()
     return res.json(catalog)
   } catch (error) {
     console.error('Erreur lors du chargement du catalogue partagé:', error)
-    return res.status(500).json({ error: 'Erreur lors du chargement du catalogue partagé.' })
+    const response = getRouteErrorResponse(error, 'Erreur lors du chargement du catalogue partagé.')
+    return res.status(response.statusCode).json(response.payload)
   }
 })
 
@@ -65,7 +79,8 @@ router.put(
       return res.json(savedCatalog)
     } catch (error) {
       console.error('Erreur lors de la sauvegarde du catalogue partagé:', error)
-      return res.status(500).json({ error: 'Erreur lors de la sauvegarde du catalogue partagé.' })
+      const response = getRouteErrorResponse(error, 'Erreur lors de la sauvegarde du catalogue partagé.')
+      return res.status(response.statusCode).json(response.payload)
     }
   }
 )
@@ -82,7 +97,8 @@ router.get('/config/:year', requireYearParam('year'), async (req, res) => {
     return res.json(config)
   } catch (error) {
     console.error(`Erreur lors du chargement de la configuration ${req.params.year}:`, error)
-    return res.status(500).json({ error: 'Erreur lors du chargement de la configuration.' })
+    const response = getRouteErrorResponse(error, 'Erreur lors du chargement de la configuration.')
+    return res.status(response.statusCode).json(response.payload)
   }
 })
 
@@ -100,7 +116,8 @@ router.put(
       return res.json(savedConfig)
     } catch (error) {
       console.error(`Erreur lors de la sauvegarde de la configuration ${req.params.year}:`, error)
-      return res.status(500).json({ error: 'Erreur lors de la sauvegarde de la configuration.' })
+      const response = getRouteErrorResponse(error, 'Erreur lors de la sauvegarde de la configuration.')
+      return res.status(response.statusCode).json(response.payload)
     }
   }
 )
@@ -625,7 +642,9 @@ router.put('/persons/:id', authMiddleware, requireRole('admin'), requireObjectId
       'unavailableDates',
       'isActive',
       'sendEmails',
-      'candidateYears'
+      'candidateYears',
+      'preferredSoutenanceDates',
+      'preferredSoutenanceChoices'
     ]
     const normalizedUpdate = {}
 
@@ -963,13 +982,16 @@ router.get('/tpi/:year', authMiddleware, requireYearParam('year'), async (req, r
       filter.status = status
     }
     
-    const tpis = filterPlanifiableTpis(
-      await TpiPlanning.find(filter)
-      .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email')
-      .populate('proposedSlots.slot', 'date period startTime endTime room status')
-      .populate('confirmedSlot', 'date period startTime room')
-      .sort({ reference: 1 })
-    )
+    const [planningConfig, rawTpis] = await Promise.all([
+      getPlanningConfig(year),
+      TpiPlanning.find(filter)
+        .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email')
+        .populate('proposedSlots.slot', 'date period startTime endTime room status')
+        .populate('confirmedSlot', 'date period startTime room')
+        .sort({ reference: 1 })
+    ])
+
+    const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
 
     if (tpis.length > 0) {
       const tpiIds = tpis.map(tpi => tpi._id)

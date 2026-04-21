@@ -28,6 +28,17 @@ function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
 }
 
+const DEFAULT_SITE_PLANNING_COLORS = [
+  '#1D4ED8',
+  '#0F766E',
+  '#BE185D',
+  '#7C3AED',
+  '#C2410C',
+  '#0891B2',
+  '#4F46E5',
+  '#65A30D'
+]
+
 function toDateInputValue(dateValue) {
   if (!dateValue) {
     return ''
@@ -79,6 +90,99 @@ function resolveStartTimeMinutes(timeValue, legacyHourValue, fallbackMinutes) {
   }
 
   return fallbackMinutes
+}
+
+function normalizePlanningColor(value) {
+  const hex = String(value || '').trim().replace(/^#/, '')
+
+  if (/^[\da-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toUpperCase()}`
+  }
+
+  if (/^[\da-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`
+  }
+
+  return ''
+}
+
+function getDefaultPlanningColor(seed = '', fallbackIndex = 0) {
+  const normalizedSeed = String(seed || '').trim().toUpperCase()
+
+  if (!normalizedSeed) {
+    return DEFAULT_SITE_PLANNING_COLORS[Math.abs(Number(fallbackIndex) || 0) % DEFAULT_SITE_PLANNING_COLORS.length]
+  }
+
+  let hash = 0
+  for (const character of normalizedSeed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  }
+
+  return DEFAULT_SITE_PLANNING_COLORS[hash % DEFAULT_SITE_PLANNING_COLORS.length]
+}
+
+function hexToRgba(color, alpha = 1) {
+  const normalizedColor = normalizePlanningColor(color)
+  if (!normalizedColor) {
+    return `rgba(37, 99, 235, ${alpha})`
+  }
+
+  const hex = normalizedColor.slice(1)
+  const red = Number.parseInt(hex.slice(0, 2), 16)
+  const green = Number.parseInt(hex.slice(2, 4), 16)
+  const blue = Number.parseInt(hex.slice(4, 6), 16)
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
+function getRoomThemeTextColor(color) {
+  const normalizedColor = normalizePlanningColor(color)
+  if (!normalizedColor) {
+    return '#FFFFFF'
+  }
+
+  const hex = normalizedColor.slice(1)
+  const red = Number.parseInt(hex.slice(0, 2), 16)
+  const green = Number.parseInt(hex.slice(2, 4), 16)
+  const blue = Number.parseInt(hex.slice(4, 6), 16)
+  const brightness = red * 0.299 + green * 0.587 + blue * 0.114
+
+  return brightness >= 170 ? '#0F172A' : '#FFFFFF'
+}
+
+function buildRoomThemeStyle(siteCode, planningColor) {
+  const normalizedSiteCode = String(siteCode || '').trim().toUpperCase()
+  const explicitColor = normalizePlanningColor(planningColor)
+
+  if (!explicitColor && ['ETML', 'CFPV'].includes(normalizedSiteCode)) {
+    return undefined
+  }
+
+  const accent = explicitColor || getDefaultPlanningColor(normalizedSiteCode)
+  const textColor = getRoomThemeTextColor(accent)
+  const metaTextColor =
+    textColor === '#0F172A'
+      ? 'rgba(15, 23, 42, 0.72)'
+      : 'rgba(255, 255, 255, 0.82)'
+
+  return {
+    '--dateRoom-bgColor': accent,
+    '--dateRoom-textColor': textColor,
+    '--dateRoom-metaTextColor': metaTextColor,
+    '--breakLine-TextColor': accent,
+    '--breakLine-lineColorStart': hexToRgba(accent, 0.08),
+    '--breakLine-lineColorEnd': hexToRgba(accent, 0.28),
+    '--breakLine-badgeBorderColor': hexToRgba(accent, 0.22),
+    '--breakLine-badgeBgColor': 'rgba(255, 255, 255, 0.94)',
+    '--tpi-timeSlot-textColor': '#0F172A',
+    '--tpi-card-candidat-bgColor': hexToRgba(accent, 0.10),
+    '--tpi-card-experts-bgColor': hexToRgba(accent, 0.16),
+    '--tpi-card-boss-bgColor': hexToRgba(accent, 0.22)
+  }
 }
 
 const DateRoom = ({
@@ -169,6 +273,10 @@ const DateRoom = ({
   const roomClassBadgeLabel = useMemo(
     () => (roomClassMode === 'matu' ? 'MATU' : ''),
     [roomClassMode]
+  )
+  const roomThemeStyle = useMemo(
+    () => buildRoomThemeStyle(safeRoomData.site, safeConfigSite.planningColor),
+    [safeConfigSite.planningColor, safeRoomData.site]
   )
   const selectedDateKey = toDateInputValue(draftDate || safeRoomData.date)
   const occupiedRoomNameKeys = useMemo(() => {
@@ -365,6 +473,7 @@ const DateRoom = ({
         <div
           ref={menuRef}
           className={`date-room site_${String(safeRoomData.site || 'etml').toLowerCase()} detail-level-${tpiCardDetailLevel}`}
+          style={roomThemeStyle}
         >
           <div className='date-room-topbar'>
             <div className='date-room-copy'>
@@ -544,6 +653,11 @@ const DateRoom = ({
                   roomSite={safeRoomData.site}
                   roomName={safeRoomData.name}
                   roomDate={safeRoomData.date}
+                  roomScheduleContext={{
+                    firstTpiStartMinutes,
+                    tpiDurationMinutes,
+                    breakDurationMinutes
+                  }}
                   peopleRegistry={peopleRegistry}
                   stakeholderShortIdHints={stakeholderShortIdHints}
                   soutenanceDates={soutenanceDates}

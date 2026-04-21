@@ -213,3 +213,53 @@ test('Database connection should use secure config', async () => {
 
   restoreEnv()
 })
+
+test('GET /api/planning/catalog returns 503 when database config is unavailable', async () => {
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: 'test-jwt-secret',
+    DB_URI: '',
+    DB_CLUSTER: '',
+    DB_NAME: '',
+    DB_USERNAME: '',
+    DB_PASSWORD: ''
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/catalog`)
+
+    assert.equal(response.status, 503)
+    const error = await response.json()
+    assert.equal(error.error, 'Catalogue partagé indisponible: connexion MongoDB impossible.')
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('GET /api/planning/config/:year returns 503 when database config is unavailable', async () => {
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: 'test-jwt-secret',
+    DB_URI: '',
+    DB_CLUSTER: '',
+    DB_NAME: '',
+    DB_USERNAME: '',
+    DB_PASSWORD: ''
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/config/2026`)
+
+    assert.equal(response.status, 503)
+    const error = await response.json()
+    assert.equal(error.error, 'Configuration de planification indisponible: connexion MongoDB impossible.')
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})

@@ -6,6 +6,36 @@
   isolation: isolate;
 }
 
+#tools.token-generator-tools {
+  padding: 8px 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 249, 229, 0.94) 0%, rgba(236, 245, 255, 0.94) 100%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+}
+
+#tools.token-generator-tools .page-tools-shell {
+  gap: 6px;
+}
+
+#tools.token-generator-tools .page-tools-header {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.85fr) auto;
+  gap: 4px 8px;
+}
+
+#tools.token-generator-tools .page-tools-title,
+#tools.token-generator-tools .page-tools-description {
+  grid-column: 1;
+}
+
+#tools.token-generator-tools .page-tools-title {
+  font-size: 1rem;
+}
+
+#tools.token-generator-tools .page-tools-description {
+  max-width: 58ch;
+}
+
 .token-generator-page::before,
 .token-generator-page::after {
   content: "";
@@ -49,23 +79,25 @@
 
 .token-access-toolbar-grid {
   align-items: end;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .token-access-toolbar-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .token-access-toolbar-note {
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid rgba(14, 116, 144, 0.18);
   background: rgba(236, 253, 255, 0.88);
   color: #0f4c5c;
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: 0.78rem;
+  line-height: 1.42;
 }
 
 .token-generator-page .token-generator-alert,

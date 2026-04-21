@@ -1,6 +1,14 @@
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema
 
+const preferredSoutenanceChoiceSchema = new Schema(
+  {
+    date: { type: Date, required: true },
+    period: { type: Number, min: 1, default: null }
+  },
+  { _id: false }
+)
+
 /**
  * Schéma Personne - Base commune pour candidat, expert, chef de projet
  * Utilisé pour gérer les disponibilités et les conflits
@@ -98,7 +106,25 @@ const personSchema = new Schema({
 
   // Années où la personne est candidate (pour le suivi des redoublements)
   // Un candidat est lié à une année précise. En cas de redoublement, ajouter l'année manuellement.
-  candidateYears: [{ type: Number }]
+  candidateYears: [{ type: Number }],
+
+  // Dates idéales de soutenance à considérer lors de la planification automatique
+  preferredSoutenanceDates: {
+    type: [{ type: Date }],
+    default: [],
+    validate: {
+      validator: (value) => Array.isArray(value) && value.length <= 3,
+      message: 'Maximum 3 dates de preference de soutenance.'
+    }
+  },
+  preferredSoutenanceChoices: {
+    type: [preferredSoutenanceChoiceSchema],
+    default: [],
+    validate: {
+      validator: (value) => Array.isArray(value) && value.length <= 3,
+      message: 'Maximum 3 preferences precises de soutenance.'
+    }
+  }
 })
 
 // Index pour recherche rapide
@@ -125,6 +151,12 @@ personSchema.methods.isAvailableOn = function(date, period) {
   })
   
   if (exception) return false
+
+  const hasImportedPresenceData =
+    this.importedPresences instanceof Map
+      ? this.importedPresences.size > 0
+      : Boolean(this.importedPresences && Object.keys(this.importedPresences).length > 0)
+  const hasDefaultAvailability = Array.isArray(this.defaultAvailability) && this.defaultAvailability.length > 0
   
   // Vérifier d'abord les présences importées (par date spécifique)
   const dateStr = new Date(date).toISOString().split('T')[0]
@@ -139,7 +171,10 @@ personSchema.methods.isAvailableOn = function(date, period) {
   const dayOfWeek = new Date(date).getDay()
   const defaultAvail = this.defaultAvailability.find(d => d.dayOfWeek === dayOfWeek)
   
-  if (!defaultAvail) return false
+  if (!defaultAvail) {
+    return !hasImportedPresenceData && !hasDefaultAvailability
+  }
+
   return defaultAvail.periods.includes(period)
 }
 

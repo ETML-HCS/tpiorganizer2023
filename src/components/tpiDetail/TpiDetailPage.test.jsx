@@ -105,6 +105,7 @@ describe('TpiDetailPage', () => {
 
     expect(await screen.findByText(/dossier tpi-2026-2163/i)).toBeInTheDocument()
     expect(screen.getByText(/santé du dossier/i)).toBeInTheDocument()
+    expect(screen.getByText(/lecture croisée gestiontpi \/ planning/i)).toBeInTheDocument()
     expect(screen.getByText(/dossier prêt/i)).toBeInTheDocument()
     expect(screen.getAllByText('Alice Martin').length).toBeGreaterThan(0)
     expect(screen.getByText('Sujet legacy', { selector: 'strong' })).toBeInTheDocument()
@@ -252,10 +253,18 @@ describe('TpiDetailPage', () => {
     )
 
     expect(await screen.findAllByText(/lier au référentiel parties prenantes/i)).toHaveLength(3)
-    expect(screen.getAllByRole('link', { name: /ouvrir expert 1/i })[0]).toHaveAttribute(
-      'href',
-      '/partiesPrenantes?name=Bob+Expert&role=expert'
-    )
+    expect(
+      screen.getAllByRole('link', { name: /ouvrir expert 1/i }).some((link) =>
+        link.getAttribute('href') ===
+          '/partiesPrenantes?name=Bob+Expert&role=expert&tab=create&year=2026&returnTo=%2Ftpi%2F2026%2FTPI-2026-2164'
+      )
+    ).toBe(true)
+    expect(
+      screen.getAllByRole('link', { name: /ouvrir candidat/i }).some((link) =>
+        link.getAttribute('href') ===
+          '/partiesPrenantes?name=Alice+Martin&role=candidat&tab=create&year=2026&returnTo=%2Ftpi%2F2026%2FTPI-2026-2164'
+      )
+    ).toBe(true)
   })
 
   it('permet de créer directement une fiche legacy de base depuis la fiche détail', async () => {
@@ -536,5 +545,93 @@ describe('TpiDetailPage', () => {
     })
 
     expect(await screen.findByText(/fiche gestiontpi mise à jour depuis la vue détail/i)).toBeInTheDocument()
+  })
+
+  it('propose de reprendre les valeurs planning dans l édition rapide', async () => {
+    tpiDossierService.getByRef.mockResolvedValue({
+      year: 2026,
+      identifiers: {
+        legacyRef: '2166',
+        workflowReference: 'TPI-2026-2166',
+        legacyId: 'legacy-2166'
+      },
+      legacy: {
+        exists: true,
+        data: {
+          _id: 'legacy-2166',
+          refTpi: '2166',
+          candidat: 'Alice Martin',
+          candidatPersonId: 'candidate-1',
+          classe: '',
+          lienDepot: '',
+          lieu: {
+            site: '',
+            entreprise: ''
+          },
+          boss: 'Diane Boss',
+          bossPersonId: 'boss-1',
+          experts: {
+            1: 'Bob Expert',
+            2: 'Carla Expert'
+          },
+          expert1PersonId: 'expert-1',
+          expert2PersonId: 'expert-2',
+          sujet: 'Sujet legacy'
+        },
+        stakeholderState: {
+          isComplete: true,
+          isResolved: true,
+          missingRoles: [],
+          unresolvedRoles: []
+        }
+      },
+      planning: {
+        exists: true,
+        data: {
+          status: 'draft',
+          sujet: 'Sujet planning',
+          classe: 'CID4A',
+          site: 'ETML',
+          entreprise: {
+            nom: 'Entreprise'
+          }
+        },
+        votes: [],
+        voteSummary: {
+          totalVotes: 0,
+          pendingVotes: 0,
+          acceptedVotes: 0,
+          preferredVotes: 0,
+          rejectedVotes: 0,
+          respondedVotes: 0
+        },
+        workflowVoteSummary: null,
+        plannedSlot: null
+      },
+      consistency: {
+        importedToPlanning: true,
+        issues: []
+      }
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/tpi/2026/2166']}>
+        <Routes>
+          <Route path='/tpi/:year/:ref' element={<TpiDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    const quickEditForm = await screen.findByTestId('tpi-detail-quick-edit-form')
+    const quickEditFormQueries = within(quickEditForm)
+
+    fireEvent.click(screen.getByRole('button', { name: /reprendre toutes les valeurs planning/i }))
+
+    await waitFor(() => {
+      expect(quickEditFormQueries.getByLabelText('Classe')).toHaveValue('CID4A')
+      expect(quickEditFormQueries.getByLabelText('Entreprise')).toHaveValue('Entreprise')
+      expect(quickEditFormQueries.getByLabelText('Site')).toHaveValue('ETML')
+      expect(quickEditFormQueries.getByLabelText('Sujet')).toHaveValue('Sujet planning')
+    })
   })
 })

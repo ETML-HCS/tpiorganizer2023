@@ -20,6 +20,7 @@ const roomProps = {
   roomSite: 'ETML',
   roomName: 'Sébeillon-N501',
   roomDate: '2026-06-10',
+  roomPeriod: 1,
   soutenanceDates: [{ date: '2026-06-10', classes: ['MATU', 'M'] }]
 }
 
@@ -279,19 +280,204 @@ describe('TpiCard editing overlay', () => {
     expect(screen.getByText('P-031')).toBeInTheDocument()
   })
 
-  it('expose un lien discret vers la fiche TPI dans la vue de planification', async () => {
+  it('remplace le raccourci fiche par un triangle vert quand une préférence unique est respectée', async () => {
     renderWithRouter(
       <TpiCard
-        tpi={baseTpi}
+        tpi={{
+          ...baseTpi,
+          candidatPersonId: 'cand-001'
+        }}
         onUpdateTpi={jest.fn()}
         {...roomProps}
         isEditingTpiCard={false}
+        peopleRegistry={[
+          {
+            _id: 'cand-001',
+            shortId: 1,
+            firstName: 'Candidat',
+            lastName: 'courant',
+            roles: ['candidat'],
+            candidateYears: [2026],
+            preferredSoutenanceDates: ['2026-06-10'],
+            isActive: true
+          }
+        ]}
       />
     )
 
-    expect(await screen.findByRole('link', { name: /ouvrir la fiche tpi-000/i })).toHaveAttribute(
-      'href',
-      '/tpi/2026/TPI-000'
+    expect(screen.queryByRole('link', { name: /ouvrir la fiche/i })).not.toBeInTheDocument()
+    const indicator = await screen.findByRole('img', { name: /préférence respectée/i })
+    expect(indicator.tabIndex).toBe(0)
+    expect(indicator).toHaveAttribute(
+      'title',
+      expect.stringContaining('date préférée retenue')
+    )
+  })
+
+  it('affiche un triangle vert quand toutes les préférences connues sont respectées', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={{
+          ...baseTpi,
+          candidatPersonId: 'cand-002'
+        }}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        peopleRegistry={[
+          {
+            _id: 'cand-002',
+            shortId: 2,
+            firstName: 'Candidat',
+            lastName: 'courant',
+            roles: ['candidat'],
+            candidateYears: [2026],
+            preferredSoutenanceDates: ['2026-06-10', '2026-06-12'],
+            isActive: true
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /préférence respectée/i })).toHaveAttribute(
+      'title',
+      expect.stringContaining('une date préférée est retenue')
+    )
+  })
+
+  it('affiche un triangle orange quand une préférence est respectée mais pas toutes', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={{
+          ...baseTpi,
+          candidatPersonId: 'cand-005',
+          expert1: { name: 'Exp 1', personId: 'exp-005', offres: { submit: [] } }
+        }}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        peopleRegistry={[
+          {
+            _id: 'cand-005',
+            shortId: 5,
+            firstName: 'Candidat',
+            lastName: 'courant',
+            roles: ['candidat'],
+            candidateYears: [2026],
+            preferredSoutenanceDates: ['2026-06-10'],
+            isActive: true
+          },
+          {
+            _id: 'exp-005',
+            shortId: 6,
+            firstName: 'Exp',
+            lastName: '1',
+            roles: ['expert'],
+            preferredSoutenanceDates: ['2026-06-11'],
+            isActive: true
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /préférences compatibles/i })).toHaveAttribute(
+      'title',
+      expect.stringContaining('aucune préférence retenue')
+    )
+  })
+
+  it('affiche un triangle rouge quand aucune préférence n est respectée', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={{
+          ...baseTpi,
+          candidatPersonId: 'cand-003'
+        }}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        peopleRegistry={[
+          {
+            _id: 'cand-003',
+            shortId: 3,
+            firstName: 'Candidat',
+            lastName: 'courant',
+            roles: ['candidat'],
+            candidateYears: [2026],
+            preferredSoutenanceDates: ['2026-06-11'],
+            isActive: true
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /préférence non respectée/i })).toHaveAttribute(
+      'title',
+      expect.stringContaining('aucune préférence retenue')
+    )
+  })
+
+  it('affiche un triangle orange quand le créneau préféré tombe dans la même demi-journée', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={{
+          ...baseTpi,
+          candidatPersonId: 'cand-004'
+        }}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        peopleRegistry={[
+          {
+            _id: 'cand-004',
+            shortId: 4,
+            firstName: 'Candidat',
+            lastName: 'courant',
+            roles: ['candidat'],
+            candidateYears: [2026],
+            preferredSoutenanceChoices: [{ date: '2026-06-10', period: 2 }],
+            preferredSoutenanceDates: ['2026-06-10'],
+            isActive: true
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /préférences compatibles/i })).toHaveAttribute(
+      'title',
+      expect.stringContaining('même demi-journée retenue')
+    )
+  })
+
+  it('garde le triangle rouge quand la date est bonne mais pas la demi-journée', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={{
+          ...baseTpi,
+          candidatPersonId: 'cand-006'
+        }}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        peopleRegistry={[
+          {
+            _id: 'cand-006',
+            shortId: 6,
+            firstName: 'Candidat',
+            lastName: 'courant',
+            roles: ['candidat'],
+            candidateYears: [2026],
+            preferredSoutenanceChoices: [{ date: '2026-06-10', period: 5 }],
+            preferredSoutenanceDates: ['2026-06-10'],
+            isActive: true
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /préférence non respectée/i })).toHaveAttribute(
+      'title',
+      expect.stringContaining('demi-journée préférée non respectée')
     )
   })
 })

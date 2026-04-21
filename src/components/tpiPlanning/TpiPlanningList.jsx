@@ -84,15 +84,25 @@ function getValidationIssueDetail(annotation) {
     return ''
   }
 
-  const countLabel = `${annotation.count} anomalie${annotation.count > 1 ? 's' : ''}`
-  const firstLabel = annotation.labels?.[0]
-  const extraLabelCount = Math.max((annotation.labels?.length || 0) - 1, 0)
+  return `${annotation.count} anomalie${annotation.count > 1 ? 's' : ''}`
+}
 
-  if (!firstLabel) {
-    return countLabel
+function getValidationIssueReason(annotation) {
+  const firstReason = compactText(annotation?.reasons?.[0])
+  const extraReasonCount = Math.max((annotation?.reasons?.length || 0) - 1, 0)
+
+  if (firstReason) {
+    return `${firstReason}${extraReasonCount > 0 ? ` +${extraReasonCount}` : ''}`
   }
 
-  return `${countLabel} · ${firstLabel}${extraLabelCount > 0 ? ` +${extraLabelCount}` : ''}`
+  const firstLabel = compactText(annotation?.labels?.[0])
+  const extraLabelCount = Math.max((annotation?.labels?.length || 0) - 1, 0)
+
+  if (!firstLabel) {
+    return ''
+  }
+
+  return `${firstLabel}${extraLabelCount > 0 ? ` +${extraLabelCount}` : ''}`
 }
 
 const getStatusMeta = (status) => {
@@ -387,6 +397,7 @@ const TpiPlanningList = ({
                   const validationAnnotation = validationIssuesByTpiId?.[String(tpi?._id || '')] || null
                   const hasValidationIssues = Boolean(validationAnnotation?.count)
                   const validationSummary = getValidationIssueDetail(validationAnnotation)
+                  const validationReason = getValidationIssueReason(validationAnnotation)
                   const validationTitle = validationAnnotation?.messages?.join('\n') || undefined
 
                   return (
@@ -422,6 +433,11 @@ const TpiPlanningList = ({
                       {hasValidationIssues && validationSummary ? (
                         <span className="validation-hint" title={validationTitle}>
                           {validationSummary}
+                        </span>
+                      ) : null}
+                      {hasValidationIssues && validationReason ? (
+                        <span className="validation-reason" title={validationTitle}>
+                          {validationReason}
                         </span>
                       ) : null}
                     </div>

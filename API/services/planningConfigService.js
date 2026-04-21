@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto')
+const { ensureDatabaseConnection } = require('../config/dbConfig')
 const PlanningConfig = require('../models/planningConfigModel')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
 
@@ -11,6 +12,16 @@ const DEFAULT_SITE_SCHEDULE = {
   manualRoomTarget: null,
   active: true
 }
+const DEFAULT_SITE_PLANNING_COLORS = [
+  '#1D4ED8',
+  '#0F766E',
+  '#BE185D',
+  '#7C3AED',
+  '#C2410C',
+  '#0891B2',
+  '#4F46E5',
+  '#65A30D'
+]
 const DEFAULT_CLASS_TYPES = [
   { code: 'CFC', prefix: 'C', label: 'CFC', startDate: '', endDate: '' },
   { code: 'FPA', prefix: 'F', label: 'FPA', startDate: '', endDate: '' },
@@ -23,6 +34,39 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizePlanningColor(value) {
+  const hex = compactText(value).replace(/^#/, '')
+
+  if (/^[\da-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toUpperCase()}`
+  }
+
+  if (/^[\da-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`
+  }
+
+  return ''
+}
+
+function getDefaultPlanningColor(seed = '', fallbackIndex = 0) {
+  const normalizedSeed = compactText(seed).toUpperCase()
+
+  if (!normalizedSeed) {
+    return DEFAULT_SITE_PLANNING_COLORS[Math.abs(Number(fallbackIndex) || 0) % DEFAULT_SITE_PLANNING_COLORS.length]
+  }
+
+  let hash = 0
+  for (const character of normalizedSeed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  }
+
+  return DEFAULT_SITE_PLANNING_COLORS[hash % DEFAULT_SITE_PLANNING_COLORS.length]
 }
 
 function normalizeIdSegment(value) {
@@ -376,6 +420,13 @@ function normalizeSiteScheduleDefinition(value, fallback = {}) {
     siteId,
     siteCode,
     label: label || siteCode,
+    planningColor: normalizePlanningColor(
+      source.planningColor ||
+      source.color ||
+      fallbackSource.planningColor ||
+      fallbackSource.color ||
+      getDefaultPlanningColor(siteCode || label)
+    ),
     breaklineMinutes: normalizeMinuteValue(
       source.breaklineMinutes,
       Number.isFinite(Number(fallbackSource.breaklineMinutes)) ? Number(fallbackSource.breaklineMinutes) : DEFAULT_SITE_SCHEDULE.breaklineMinutes,
@@ -521,13 +572,21 @@ function normalizeSiteScheduleEntries(values, fallbackSiteConfigs = [], catalogS
         existing || {
           siteId,
           siteCode,
-          label: compactText(site?.label || site?.name || siteCode)
+          label: compactText(site?.label || site?.name || siteCode),
+          planningColor: compactText(site?.planningColor || site?.color || '')
         },
         {
           ...fallbackEntry,
           siteId,
           siteCode,
-          label: compactText(site?.label || site?.name || siteCode)
+          label: compactText(site?.label || site?.name || siteCode),
+          planningColor: compactText(
+            site?.planningColor ||
+            site?.color ||
+            fallbackEntry?.planningColor ||
+            fallbackEntry?.color ||
+            ''
+          )
         }
       )
 
@@ -619,7 +678,7 @@ function buildDefaultPlanningConfig(year, catalogSites = []) {
   })
 }
 
-function normalizeStoredConfig(document, year, fallbackConfig = buildDefaultPlanningConfig(year), catalogSites = []) {
+function normalizeStoredConfig(document, year, fallbackConfig = null, catalogSites = []) {
   const source = document && typeof document === 'object' ? document : {}
   const fallback = fallbackConfig && typeof fallbackConfig === 'object'
     ? fallbackConfig
@@ -663,6 +722,10 @@ function normalizeYearConfigPayload(payload, year, fallbackConfig = null, catalo
 }
 
 async function getPlanningConfig(year) {
+  await ensureDatabaseConnection({
+    errorMessage: 'Configuration de planification indisponible: connexion MongoDB impossible.'
+  })
+
   const requestedYear = toIntegerYear(year)
 
   if (!Number.isInteger(requestedYear)) {
@@ -700,6 +763,10 @@ async function getPlanningConfig(year) {
 }
 
 async function savePlanningConfig(year, payload = {}) {
+  await ensureDatabaseConnection({
+    errorMessage: 'Configuration de planification indisponible: connexion MongoDB impossible.'
+  })
+
   const requestedYear = toIntegerYear(year)
 
   if (!Number.isInteger(requestedYear)) {

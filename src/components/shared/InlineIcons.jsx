@@ -1,12 +1,14 @@
 import React from 'react'
 
-const iconProps = {
+export const buttonIconProps = Object.freeze({
   fill: 'none',
   stroke: 'currentColor',
-  strokeWidth: '1.8',
+  strokeWidth: '1.95',
   strokeLinecap: 'round',
   strokeLinejoin: 'round'
-}
+})
+
+const iconProps = buttonIconProps
 
 export const CalendarIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
@@ -19,6 +21,14 @@ export const RoomIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M12 21s6-4.2 6-10a6 6 0 0 0-12 0c0 5.8 6 10 6 10z' />
     <circle cx='12' cy='11' r='2.2' />
+  </svg>
+)
+
+export const RoomAddIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='4' y='5' width='10' height='14' rx='2' />
+    <path d='M9 12h.01' />
+    <path d='M18 9v6M15 12h6' />
   </svg>
 )
 
@@ -56,6 +66,15 @@ export const FileTextIcon = (props) => (
     <path d='M7 3h7l4 4v14H7z' />
     <path d='M14 3v5h5' />
     <path d='M9 12h6M9 16h4' />
+  </svg>
+)
+
+export const GestionTpiIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M7 3h7l4 4v14H7z' />
+    <path d='M14 3v5h5' />
+    <path d='M9 3.8v4.7l2-1.2 2 1.2V3.8' />
+    <path d='M9 12h6M9 16h5' />
   </svg>
 )
 
@@ -268,11 +287,24 @@ export const UploadIcon = (props) => (
   </svg>
 )
 
+export const PlusIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M12 5v14M5 12h14' />
+  </svg>
+)
+
 export const SaveIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
-    <path d='M5 4h11l3 3v13H5z' />
-    <path d='M8 4v5h8V4' />
-    <path d='M9 18h6' />
+    <path
+      d='M6.2 4.5h9.3l2.5 2.5v10.8a1.7 1.7 0 0 1-1.7 1.7H7.7A1.7 1.7 0 0 1 6 17.8V6.2a1.7 1.7 0 0 1 .2-.8z'
+      fill='currentColor'
+      opacity='0.12'
+      stroke='none'
+    />
+    <path d='M6.5 4.5h9.1l2.9 2.9v10.4A1.7 1.7 0 0 1 16.8 19.5H7.2A1.7 1.7 0 0 1 5.5 17.8V6.2A1.7 1.7 0 0 1 7.2 4.5z' />
+    <path d='M8.4 4.5v4.2a1 1 0 0 0 1 1h4.8a1 1 0 0 0 1-1V5.3' />
+    <rect x='8.2' y='13.2' width='7.6' height='4.3' rx='1.2' />
+    <path d='M10 15.4h4' />
   </svg>
 )
 
@@ -332,6 +364,14 @@ export const VoteIcon = (props) => (
   </svg>
 )
 
+export const StarsIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='m12 4 1.4 2.9 3.2.5-2.3 2.3.5 3.3-2.8-1.5-2.8 1.5.5-3.3-2.3-2.3 3.2-.5z' />
+    <path d='m5.5 11 1 2 2.2.3-1.6 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.6-1.6 2.2-.3z' />
+    <path d='m18.5 11 1 2 2.2.3-1.6 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.6-1.6 2.2-.3z' />
+  </svg>
+)
+
 export const ChartIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M5 19V9M12 19V5M19 19v-7M4 19h16' />
@@ -357,6 +397,16 @@ export const RulerIcon = (props) => (
 export const WrenchIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M14.5 6.5a4 4 0 0 0-5.7 5.4L4 16.7 7.3 20l4.8-4.8a4 4 0 0 0 5.4-5.7l-2.3 2.3-2.5-.2-.2-2.5 2.3-2.3Z' />
+  </svg>
+)
+
+export const ConfigurationIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='3' y='5' width='18' height='14' rx='3' />
+    <path d='M7 9h10M7 12h10M7 15h10' />
+    <circle cx='10' cy='9' r='1.2' fill='currentColor' stroke='none' />
+    <circle cx='15' cy='12' r='1.2' fill='currentColor' stroke='none' />
+    <circle cx='9' cy='15' r='1.2' fill='currentColor' stroke='none' />
   </svg>
 )
 

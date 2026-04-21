@@ -1,17 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { toast } from "react-toastify"
 
 import { YEARS_CONFIG, STORAGE_KEYS } from "../../config/appConfig"
 import { readStorageValue, writeStorageValue } from "../../utils/storage"
 import {
   planningCatalogService,
-  planningConfigService,
-  tpiPlanningService
+  planningConfigService
 } from "../../services/planningService"
 import { buildPlanningRoomSizingOverview } from "../../utils/planningCapacityUtils"
+import { getPlanningPerimeterState } from "../../utils/planningScopeUtils"
+import { getTpiModels } from "../tpiControllers/TpiController.jsx"
 import { normalizeSoutenanceDateEntries } from "../tpiSchedule/soutenanceDateUtils"
 import BinaryToggle from "../shared/BinaryToggle"
-import { CalendarIcon, RoomIcon, SettingsIcon, TimeIcon } from "../shared/InlineIcons"
+import IconButtonContent from "../shared/IconButtonContent"
+import PageToolbar from "../shared/PageToolbar"
+import {
+  CalendarIcon,
+  ChevronDownIcon,
+  ClipboardIcon,
+  ConfigurationIcon,
+  PlusIcon,
+  RoomIcon,
+  SaveIcon,
+  TimeIcon,
+  TrashIcon
+} from "../shared/InlineIcons"
+import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
 
 import "../../css/planningConfiguration.css"
 
@@ -1076,7 +1091,8 @@ const SectionToggleButton = ({
   className = "",
   iconOnly = false,
   openLabel = "Ouvrir",
-  closeLabel = "Réduire"
+  closeLabel = "Réduire",
+  disabled = false
 }) => {
   const label = isOpen ? closeLabel : openLabel
   const ariaLabel = subject ? `${label} ${subject}` : label
@@ -1090,15 +1106,24 @@ const SectionToggleButton = ({
       aria-controls={controlsId}
       aria-label={ariaLabel}
       title={ariaLabel}
+      disabled={disabled}
     >
       {!iconOnly ? <span className='collapse-toggle-label'>{label}</span> : null}
-      <span className='collapse-toggle-icon' aria-hidden='true'></span>
+      <span className='collapse-toggle-icon' aria-hidden='true'>
+        <ChevronDownIcon />
+      </span>
     </button>
   )
 }
 
-const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
-  const [isExpanded, setIsExpanded] = useState(true)
+const ClassTypeCard = ({
+  classType,
+  isExpanded = true,
+  onToggle,
+  onChange,
+  onRemove,
+  disabled = false
+}) => {
   const locked = classType?.locked === true
   const bodyId = `configuration-class-type-body-${classType?.id || classType?.code || "item"}`
   const summaryLine = formatClassTypeSummaryLine(classType)
@@ -1117,19 +1142,22 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
             {locked ? <span className='page-tools-chip'>Base</span> : null}
             <SectionToggleButton
               isOpen={isExpanded}
-              onClick={() => setIsExpanded((current) => !current)}
+              onClick={onToggle}
               controlsId={bodyId}
               subject={`le type ${classType?.label || classType?.code || ""}`.trim()}
-              className='configuration-collapse-toggle--compact'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
             />
             {!locked ? (
               <button
                 type='button'
-                className='page-tools-action-btn ghost'
+                className='page-tools-action-btn ghost icon-button'
                 onClick={onRemove}
                 disabled={disabled}
+                aria-label='Supprimer'
+                title='Supprimer'
               >
-                Supprimer
+                <IconButtonContent label='Supprimer' icon={TrashIcon} />
               </button>
             ) : null}
           </div>
@@ -1139,7 +1167,7 @@ const ClassTypeCard = ({ classType, onChange, onRemove, disabled = false }) => {
           <p className='configuration-collapsed-line'>{summaryLine}</p>
           <SectionToggleButton
             isOpen={isExpanded}
-            onClick={() => setIsExpanded((current) => !current)}
+            onClick={onToggle}
             controlsId={bodyId}
             subject={`le type ${classType?.label || classType?.code || ""}`.trim()}
             iconOnly={true}
@@ -1284,7 +1312,7 @@ const SiteScheduleCard = ({ site, schedule, onChange, disabled = false }) => (
       </label>
 
       <label className='page-tools-field'>
-        <span className='page-tools-field-label'>Créneaux / room</span>
+        <span className='page-tools-field-label'>Créneaux / salle</span>
         <input
           className='page-tools-field-control'
           type='number'
@@ -1299,9 +1327,9 @@ const SiteScheduleCard = ({ site, schedule, onChange, disabled = false }) => (
       <label className='page-tools-field'>
         <span
           className='page-tools-field-label configuration-help-label'
-          title='Nombre de rooms à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
+          title='Nombre de salles à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
         >
-          Rooms / date
+          Salles / date
         </span>
         <input
           className='page-tools-field-control'
@@ -1338,14 +1366,32 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
   <article className='configuration-room-row'>
     <div className='configuration-room-row-head'>
       <strong>{room?.label || room?.code || "Salle"}</strong>
-      <button
-        type='button'
-        className='page-tools-action-btn ghost'
-        onClick={onRemove}
-        disabled={disabled}
-      >
-        Supprimer
-      </button>
+      <div className='configuration-room-row-head-actions'>
+        <div className='configuration-room-field configuration-room-field--toggle'>
+        <BinaryToggle
+          value={room?.active !== false}
+          onChange={(nextValue) => onChange("active", nextValue)}
+          name={`configuration-room-active-${siteId || "site"}-${room?.id || room?.code || room?.label || "room"}`}
+          className='configuration-toggle-switch'
+          compact={true}
+          trueLabel='Oui'
+          falseLabel='Non'
+          ariaLabel={`Salle ${room?.label || room?.code || "salle"} active ou inactive`}
+          disabled={disabled}
+          />
+        </div>
+
+        <button
+          type='button'
+          className='page-tools-action-btn ghost icon-button'
+          onClick={onRemove}
+          disabled={disabled}
+          aria-label='Supprimer'
+          title='Supprimer'
+        >
+          <IconButtonContent label='Supprimer' icon={TrashIcon} />
+        </button>
+      </div>
     </div>
 
     <div className='configuration-room-grid'>
@@ -1394,19 +1440,6 @@ const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) =>
           disabled={disabled}
         />
       </label>
-
-      <div className='page-tools-field configuration-room-field configuration-room-field--toggle'>
-        <BinaryToggle
-          value={room?.active !== false}
-          onChange={(nextValue) => onChange("active", nextValue)}
-          name={`configuration-room-active-${siteId || "site"}-${room?.id || room?.code || room?.label || "room"}`}
-          className='configuration-toggle-switch'
-          trueLabel='Oui'
-          falseLabel='Non'
-          ariaLabel={`Salle ${room?.label || room?.code || "salle"} active ou inactive`}
-          disabled={disabled}
-        />
-      </div>
     </div>
   </article>
 )
@@ -1417,11 +1450,13 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
       <strong>{entry?.label || entry?.code || "Classe"}</strong>
       <button
         type='button'
-        className='page-tools-action-btn ghost'
+        className='page-tools-action-btn ghost icon-button'
         onClick={onRemove}
         disabled={disabled}
+        aria-label='Supprimer'
+        title='Supprimer'
       >
-        Supprimer
+        <IconButtonContent label='Supprimer' icon={TrashIcon} />
       </button>
     </div>
 
@@ -1465,6 +1500,7 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
           onChange={(nextValue) => onChange("active", nextValue)}
           name={`configuration-site-class-entry-active-${siteId || "site"}-${entry?.id || entry?.code || "entry"}`}
           className='configuration-toggle-switch'
+          compact={true}
           trueLabel='Oui'
           falseLabel='Non'
           ariaLabel={`Classe ${entry?.label || entry?.code || "classe"} active ou inactive`}
@@ -1499,18 +1535,21 @@ const SiteClassGroupCard = ({ siteId = "", group, onAddClass, onClassChange, onC
           <div className='configuration-card-head-actions configuration-site-class-group-head-actions'>
             <button
               type='button'
-              className='page-tools-action-btn ghost'
+              className='page-tools-action-btn ghost icon-button'
               onClick={onAddClass}
               disabled={disabled}
+              aria-label='Ajouter'
+              title='Ajouter'
             >
-              Ajouter
+              <IconButtonContent label='Ajouter' icon={PlusIcon} />
             </button>
             <SectionToggleButton
               isOpen={isExpanded}
               onClick={() => setIsExpanded((current) => !current)}
               controlsId={bodyId}
               subject={`le groupe ${group?.label || group?.baseType || ""}`.trim()}
-              className='configuration-collapse-toggle--compact'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
             />
           </div>
         </div>
@@ -1529,7 +1568,11 @@ const SiteClassGroupCard = ({ siteId = "", group, onAddClass, onClassChange, onC
       )}
 
       <div id={bodyId} className='configuration-site-class-group-body' hidden={!isExpanded}>
-        <div className='configuration-site-class-list'>
+        <div
+          className={`configuration-site-class-list${
+            classCount > 1 ? " configuration-site-class-list--multi" : ""
+          }`}
+        >
           {Array.isArray(group?.classes) && group.classes.length > 0 ? (
             group.classes.map((entry, entryIndex) => (
               <SiteClassEntryRow
@@ -1656,18 +1699,20 @@ const SiteClassCatalogCard = ({
         </div>
       </div>
 
-      <p className='configuration-section-note'>
-        Les familles sont organisées en onglets. Chaque groupe peut ensuite être replié individuellement.
-      </p>
+      <div className='configuration-site-class-toolbar'>
+        <p className='configuration-section-note'>
+          Les familles sont organisées en onglets. Chaque groupe peut ensuite être replié individuellement.
+        </p>
 
-      <div className='configuration-site-copybar'>
-        <label className='page-tools-field configuration-site-copybar-field'>
-          <span className='page-tools-field-label'>Copier depuis</span>
+        <div className='configuration-site-copybar'>
+          <label className='configuration-site-copybar-field'>
+            <span className='configuration-site-copybar-label'>Copier depuis</span>
           <select
             className='page-tools-field-control'
             value={copySourceSiteId}
             onChange={(event) => setCopySourceSiteId(event.target.value)}
             disabled={disabled || allSiteOptions.length === 0}
+            aria-label='Copier depuis un site'
           >
             <option value=''>Choisir un site</option>
             {allSiteOptions.map((entry) => (
@@ -1676,23 +1721,26 @@ const SiteClassCatalogCard = ({
               </option>
             ))}
           </select>
-        </label>
+          </label>
 
-        <button
-          type='button'
-          className='page-tools-action-btn ghost'
-          onClick={() => {
-            if (!copySourceSiteId) {
-              return
-            }
+          <button
+            type='button'
+            className='page-tools-action-btn ghost icon-button'
+            onClick={() => {
+              if (!copySourceSiteId) {
+                return
+              }
 
-            onCopyClassesFromSite(copySourceSiteId)
-            setCopySourceSiteId("")
-          }}
-          disabled={disabled || !copySourceSiteId || allSiteOptions.length === 0}
-        >
-          Copier
-        </button>
+              onCopyClassesFromSite(copySourceSiteId)
+              setCopySourceSiteId("")
+            }}
+            disabled={disabled || !copySourceSiteId || allSiteOptions.length === 0}
+            aria-label='Copier'
+            title='Copier'
+          >
+            <IconButtonContent label='Copier' icon={ClipboardIcon} />
+          </button>
+        </div>
       </div>
 
       {groupTabs.length > 1 ? (
@@ -1799,26 +1847,31 @@ const CatalogSiteCard = ({
           <div className='configuration-card-head-actions configuration-site-stack-head-actions'>
             <button
               type='button'
-              className='page-tools-action-btn ghost'
+              className='page-tools-action-btn ghost icon-button'
               onClick={onAddRoom}
               disabled={disabled}
+              aria-label='Ajouter'
+              title='Ajouter'
             >
-              Ajouter
+              <IconButtonContent label='Ajouter' icon={PlusIcon} />
             </button>
             <button
               type='button'
-              className='page-tools-action-btn ghost'
+              className='page-tools-action-btn ghost icon-button'
               onClick={onRemoveSite}
               disabled={disabled}
+              aria-label='Supprimer le site'
+              title='Supprimer le site'
             >
-              Supprimer le site
+              <IconButtonContent label='Supprimer le site' icon={TrashIcon} />
             </button>
             <SectionToggleButton
               isOpen={isExpanded}
               onClick={() => setIsExpanded((current) => !current)}
               controlsId={bodyId}
               subject={`le site ${site?.label || site?.code || ""}`.trim()}
-              className='configuration-collapse-toggle--compact'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
             />
           </div>
         </div>
@@ -1943,21 +1996,27 @@ const CatalogSiteCard = ({
 
         <div className='configuration-room-list-head'>
           <div className='configuration-room-list-copy'>
-            <strong>Rooms du site</strong>
+            <strong>Salles du site</strong>
             <p className='configuration-empty-hint'>
               {manualRoomTarget === null
-                ? `Définis ici les noms. Planification créera ensuite 1 room par date avec ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`
-                : `${roomCount}/${manualRoomTarget} room${manualRoomTarget > 1 ? "s" : ""} définie${manualRoomTarget > 1 ? "s" : ""}. Planification créera ensuite 1 room par date avec ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`}
+                ? `Définis ici les noms. Planification créera ensuite 1 salle par date avec ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`
+                : `${roomCount}/${manualRoomTarget} salle${manualRoomTarget > 1 ? "s" : ""} définie${manualRoomTarget > 1 ? "s" : ""}. Planification créera ensuite 1 salle par date avec ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`}
             </p>
           </div>
           {missingRoomCount > 0 ? (
             <button
               type='button'
-              className='page-tools-action-btn secondary'
+              className='page-tools-action-btn secondary icon-button icon-button--with-badge'
               onClick={() => onGenerateRooms(missingRoomCount)}
               disabled={disabled}
+              aria-label={`Créer ${missingRoomCount}`}
+              title={`Créer ${missingRoomCount}`}
             >
-              Créer {missingRoomCount}
+              <IconButtonContent
+                label={`Créer ${missingRoomCount}`}
+                icon={RoomIcon}
+                badge={missingRoomCount}
+              />
             </button>
           ) : null}
         </div>
@@ -2000,72 +2059,63 @@ const CatalogSiteCard = ({
   )
 }
 
+const formatCountLabel = (value, singularLabel, pluralLabel = `${singularLabel}s`) => {
+  const count = Number(value || 0)
+  return `${count} ${count === 1 ? singularLabel : pluralLabel}`
+}
+
+const formatPlanningLoadValue = (value) => {
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return "0"
+  }
+
+  if (Number.isInteger(numeric)) {
+    return String(numeric)
+  }
+
+  return numeric.toLocaleString("fr-CH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  })
+}
+
+const formatTypeBreakdownDates = (typeBreakdown) => {
+  if (Array.isArray(typeBreakdown?.dateLabels) && typeBreakdown.dateLabels.length > 0) {
+    return typeBreakdown.dateLabels.join(" · ")
+  }
+
+  if (typeBreakdown?.datesSource === "planned") {
+    return "Dates planifiées"
+  }
+
+  return "Dates à définir"
+}
+
 const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
   const totals = overview?.totals || {}
   const sites = Array.isArray(overview?.sites) ? overview.sites : []
   const notes = Array.isArray(overview?.notes) ? overview.notes.filter(Boolean) : []
-  const shortageRooms = Number(totals.shortageRooms || 0)
-  const surplusRooms = Number(totals.surplusRooms || 0)
-  const manualOverrideCount = Number(totals.manualOverrideCount || 0)
-  const netRoomGap = Number(totals.roomGap || 0)
-  const roomGapValue = netRoomGap === 0 ? "OK" : netRoomGap > 0 ? `+${netRoomGap}` : `${netRoomGap}`
-  const roomGapHint = shortageRooms > 0 || surplusRooms > 0
-    ? [
-        shortageRooms > 0 ? `${shortageRooms} salle${shortageRooms > 1 ? "s" : ""} à créer` : null,
-        surplusRooms > 0 ? `${surplusRooms} salle${surplusRooms > 1 ? "s" : ""} en marge` : null
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "Équilibre global"
-  const automaticTargetValue = Number(totals.recommendedRooms || 0)
-  const totalTargetHint =
-    manualOverrideCount > 0 && automaticTargetValue !== Number(totals.targetRooms || 0)
-      ? `Auto ${automaticTargetValue}`
-      : ""
-  const summaryCards = [
-    {
-      label: "TPI",
-      value: totals.tpiCount || 0
-    },
-    {
-      label: "Actives / jour",
-      value: totals.activeRoomCount || 0
-    },
-    {
-      label: "Cible / jour",
-      value: totals.targetRooms || 0,
-      hint: totalTargetHint
-    },
-    {
-      label: "Écart net",
-      value: roomGapValue,
-      hint: roomGapHint,
-      tone: netRoomGap > 0 ? "alert" : netRoomGap < 0 ? "surplus" : "ok"
-    }
-  ]
-  const panelNotes = [
-    ...notes.map((note) => ({ label: note, tone: "muted" })),
-    manualOverrideCount > 0
-      ? {
-          label: `${manualOverrideCount} cible${manualOverrideCount > 1 ? "s" : ""} manuelle${manualOverrideCount > 1 ? "s" : ""}`,
-          tone: "manual"
-        }
-      : null
-  ].filter(Boolean)
+  const globalOptimalRooms = Number(totals.recommendedRooms || 0)
+  const globalIntro = totals.tpiCount > 0
+    ? `${formatCountLabel(totals.tpiCount, "TPI")} pris en compte. Optimum théorique global: ${formatCountLabel(globalOptimalRooms, "salle")} par jour de soutenance.`
+    : "Aucun TPI pris en compte pour le calcul théorique."
+  const panelNotes = notes.map((note) => ({ label: note, tone: "muted" }))
 
   return (
     <section className='configuration-panel configuration-panel--capacity'>
       <div className='configuration-panel-head'>
         <div className='configuration-panel-head-copy'>
-          <span className='page-tools-chip'>
-            <SettingsIcon className='configuration-panel-icon' />
-            Dimensionnement
-          </span>
           <h3>Salles à prévoir</h3>
           <p className='configuration-section-note'>
-            Basé sur les TPI de GestionTPI, les dates de soutenance et les salles disponibles le même jour.
+            Calcul théorique basé sur les types de classe, leurs dates de soutenance et les créneaux par salle.
           </p>
         </div>
+        <span className='page-tools-chip configuration-panel-head-chip'>
+          <ConfigurationIcon className='configuration-panel-icon' />
+          Dimensionnement
+        </span>
       </div>
 
       {error ? <p className='configuration-field-hint'>{error}</p> : null}
@@ -2076,19 +2126,16 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
         </div>
       ) : (
         <>
-          <div className='configuration-capacity-summary'>
-            {summaryCards.map((card) => (
-              <article
-                key={card.label}
-                className={`configuration-summary-card ${card.tone ? `configuration-summary-card--${card.tone}` : ""}`.trim()}
-              >
-                <div className='configuration-summary-copy'>
-                  <span className='configuration-summary-label'>{card.label}</span>
-                  {card.hint ? <span className='configuration-summary-hint'>{card.hint}</span> : null}
-                </div>
-                <strong className='configuration-summary-value'>{card.value}</strong>
-              </article>
-            ))}
+          <div className='configuration-capacity-explainer'>
+            <p className='configuration-card-note'>
+              {globalIntro}
+            </p>
+            <p className='configuration-card-note'>
+              Formule utilisée: TPI d&apos;un type ÷ dates de soutenance disponibles ÷ créneaux par salle = nombre de salles optimales.
+            </p>
+            <p className='configuration-card-note'>
+              Cet optimum ne tient pas encore compte des arbitrages de planification: parties prenantes sur 2 salles au même moment, règle des 4 TPI consécutifs, préférences individuelles.
+            </p>
           </div>
 
           {panelNotes.length > 0 ? (
@@ -2122,22 +2169,22 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                     tone: "neutral"
                   },
                   {
-                    label: "Actives",
+                    label: "Salles définies",
                     value: site.activeRoomCount,
                     tone: "neutral"
                   },
-                  site.usesManualRoomTarget && site.recommendedRooms !== site.targetRooms
+                  {
+                    label: "Optimum",
+                    value: site.recommendedRooms,
+                    tone: "ok"
+                  },
+                  site.usesManualRoomTarget && site.targetRooms !== site.recommendedRooms
                     ? {
-                        label: "Auto",
-                        value: site.recommendedRooms,
-                        tone: "muted"
+                        label: "Manuel",
+                        value: site.targetRooms,
+                        tone: "manual"
                       }
                     : null,
-                  {
-                    label: site.usesManualRoomTarget ? "Manuel" : "Cible",
-                    value: site.targetRooms,
-                    tone: site.usesManualRoomTarget ? "manual" : "neutral"
-                  },
                   site.roomGap > 0
                     ? {
                         label: "À créer",
@@ -2154,22 +2201,13 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                           label: "Écart",
                           value: "OK",
                           tone: "ok"
-                        },
-                  site.undatedTpiCount > 0
-                    ? {
-                        label: "Sans date",
-                        value: site.undatedTpiCount,
-                        tone: "muted"
-                      }
-                    : null
+                        }
                 ].filter(Boolean)
-                const siteMeta = site.tpiCount > 0
-                  ? `Pression ${site.pressureLabel.toLowerCase()}`
-                  : "Aucun TPI affecté"
+
                 return (
                   <article
                     key={site.key}
-                    className={`configuration-card configuration-capacity-site configuration-capacity-site--${site.pressureLevel} configuration-capacity-site--${site.siteKind}`.trim()}
+                    className={`configuration-card configuration-capacity-site configuration-capacity-site--${site.sizingStatus || "ok"} configuration-capacity-site--${site.siteKind}`.trim()}
                   >
                     <div className='configuration-capacity-site-head'>
                       <div className='configuration-capacity-site-copy'>
@@ -2200,25 +2238,59 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                           />
                         </div>
                         <div className='configuration-capacity-meter-labels'>
-                          <span>{site.activeRoomCount} actives</span>
+                          <span>{formatCountLabel(site.activeRoomCount, "salle", "salles")} définie{site.activeRoomCount > 1 ? "s" : ""}</span>
                           <span>
-                            {site.targetRooms} {site.usesManualRoomTarget ? "manuelles" : "conseillées"}
+                            {site.targetRooms} {site.usesManualRoomTarget ? "manuelles" : "optimales"}
                           </span>
                         </div>
                       </div>
                     ) : null}
 
-                    {site.classTypeSummary ? (
-                      <div className='configuration-capacity-types'>
-                        {site.classTypeCounts.map((entry) => (
-                          <span key={`${site.key}-${entry.code}`} className='page-tools-chip'>
-                            {entry.code} {entry.count}
-                          </span>
+                    {Array.isArray(site.typeBreakdowns) && site.typeBreakdowns.length > 0 ? (
+                      <div className='configuration-capacity-breakdown'>
+                        {site.typeBreakdowns.map((typeBreakdown) => (
+                          <div
+                            key={`${site.key}-${typeBreakdown.code}`}
+                            className='configuration-capacity-breakdown-row'
+                          >
+                            <div className='configuration-capacity-breakdown-head'>
+                              <strong className='configuration-capacity-breakdown-code'>{typeBreakdown.code}</strong>
+                              <span className='configuration-capacity-breakdown-meta'>
+                                {typeBreakdown.tpiCount} TPI · {typeBreakdown.dateCount > 0
+                                  ? `${typeBreakdown.dateCount} date${typeBreakdown.dateCount > 1 ? "s" : ""}`
+                                  : "dates à définir"}
+                              </span>
+                            </div>
+                            <div className='configuration-capacity-breakdown-values'>
+                              <span>
+                                {typeBreakdown.dateCount > 0
+                                  ? `${formatPlanningLoadValue(typeBreakdown.averageLoadPerDate)} / date`
+                                  : `${typeBreakdown.undatedTpiCount} sans date`}
+                              </span>
+                              <strong>
+                                {formatCountLabel(typeBreakdown.optimalRooms, "salle")} optimale{typeBreakdown.optimalRooms > 1 ? "s" : ""}
+                              </strong>
+                            </div>
+                            <p className='configuration-capacity-breakdown-dates'>
+                              {formatTypeBreakdownDates(typeBreakdown)}
+                            </p>
+                          </div>
                         ))}
                       </div>
                     ) : null}
 
-                    <p className='configuration-card-note configuration-capacity-site-meta'>{siteMeta}</p>
+                    {Array.isArray(site.constraintHints) && site.constraintHints.length > 0 ? (
+                      <div className='configuration-capacity-site-notes'>
+                        {site.constraintHints.map((hint) => (
+                          <span
+                            key={`${site.key}-${hint}`}
+                            className='configuration-capacity-note configuration-capacity-note--muted'
+                          >
+                            {hint}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 )
               })
@@ -2239,13 +2311,14 @@ const PlanningConfiguration = () => {
   const [selectedYear, setSelectedYear] = useState(initialYear)
   const [yearDraft, setYearDraft] = useState(() => normalizeYearDraft({}, initialYear, []))
   const [catalogDraft, setCatalogDraft] = useState(() => normalizeCatalogDraft({}))
+  const [collapsedClassTypeIds, setCollapsedClassTypeIds] = useState([])
   const [isYearReady, setIsYearReady] = useState(false)
   const [isCatalogReady, setIsCatalogReady] = useState(false)
   const [isPlanningReady, setIsPlanningReady] = useState(false)
   const [isYearSaving, setIsYearSaving] = useState(false)
   const [isCatalogSaving, setIsCatalogSaving] = useState(false)
-  const [planningTpis, setPlanningTpis] = useState([])
-  const [planningTpiError, setPlanningTpiError] = useState("")
+  const [legacyTpis, setLegacyTpis] = useState([])
+  const [legacyTpiError, setLegacyTpiError] = useState("")
   const yearBaselineRef = useRef("")
   const catalogBaselineRef = useRef("")
 
@@ -2262,16 +2335,23 @@ const PlanningConfiguration = () => {
     () => buildCatalogPayload(catalogDraft),
     [catalogDraft]
   )
+  const planifiableLegacyTpis = useMemo(
+    () =>
+      (Array.isArray(legacyTpis) ? legacyTpis : []).filter((tpi) =>
+        getPlanningPerimeterState(tpi, yearDraft.siteConfigs, selectedYear).isPlanifiable
+      ),
+    [legacyTpis, selectedYear, yearDraft.siteConfigs]
+  )
   const roomSizingOverview = useMemo(
     () =>
       buildPlanningRoomSizingOverview({
-        tpis: planningTpis,
+        tpis: planifiableLegacyTpis,
         catalogSites: catalogDraft.sites,
         siteConfigs: yearDraft.siteConfigs,
         classTypes: currentYearPayload.classTypes,
         catalogOnly: true
       }),
-    [catalogDraft.sites, currentYearPayload.classTypes, planningTpis, yearDraft.siteConfigs]
+    [catalogDraft.sites, currentYearPayload.classTypes, planifiableLegacyTpis, yearDraft.siteConfigs]
   )
 
   const isYearDirty = useMemo(
@@ -2298,14 +2378,24 @@ const PlanningConfiguration = () => {
   }, [yearDraft?.siteConfigs])
 
   useEffect(() => {
+    const availableIds = new Set(
+      (Array.isArray(yearDraft?.classTypes) ? yearDraft.classTypes : [])
+        .map((classType) => classType?.id)
+        .filter(Boolean)
+    )
+
+    setCollapsedClassTypeIds((current) => current.filter((id) => availableIds.has(id)))
+  }, [yearDraft?.classTypes])
+
+  useEffect(() => {
     let isCancelled = false
 
     const bootstrap = async () => {
       setIsCatalogReady(false)
       setIsYearReady(false)
       setIsPlanningReady(false)
-      setPlanningTpis([])
-      setPlanningTpiError("")
+      setLegacyTpis([])
+      setLegacyTpiError("")
 
       let loadedCatalog = normalizeCatalogDraft({})
       try {
@@ -2326,8 +2416,8 @@ const PlanningConfiguration = () => {
       try {
         const [config, tpis] = await Promise.all([
           planningConfigService.getByYear(selectedYear),
-          tpiPlanningService.getByYear(selectedYear).catch((error) => {
-            console.error(`Erreur lors du chargement des TPI ${selectedYear} :`, error)
+          Promise.resolve(getTpiModels(selectedYear)).catch((error) => {
+            console.error(`Erreur lors du chargement des TPI GestionTPI ${selectedYear} :`, error)
             return null
           })
         ])
@@ -2341,8 +2431,8 @@ const PlanningConfiguration = () => {
         yearBaselineRef.current = JSON.stringify(
           buildYearPayload(normalized, selectedYear, loadedCatalog.sites)
         )
-        setPlanningTpis(Array.isArray(tpis) ? tpis : [])
-        setPlanningTpiError(Array.isArray(tpis) ? "" : `Impossible de charger les TPI ${selectedYear}.`)
+        setLegacyTpis(Array.isArray(tpis) ? tpis : [])
+        setLegacyTpiError(Array.isArray(tpis) ? "" : `Impossible de charger les TPI GestionTPI ${selectedYear}.`)
       } catch (error) {
         console.error(`Erreur lors du chargement de la configuration ${selectedYear} :`, error)
         const fallback = normalizeYearDraft({}, selectedYear, loadedCatalog.sites)
@@ -2350,8 +2440,8 @@ const PlanningConfiguration = () => {
         yearBaselineRef.current = JSON.stringify(
           buildYearPayload(fallback, selectedYear, loadedCatalog.sites)
         )
-        setPlanningTpis([])
-        setPlanningTpiError(`Impossible de charger les TPI ${selectedYear}.`)
+        setLegacyTpis([])
+        setLegacyTpiError(`Impossible de charger les TPI GestionTPI ${selectedYear}.`)
         toast.error(`Impossible de charger la configuration ${selectedYear}.`)
       }
 
@@ -2524,6 +2614,38 @@ const PlanningConfiguration = () => {
       )
     }))
   }, [])
+
+  const yearClassTypeIds = useMemo(
+    () =>
+      (Array.isArray(yearDraft?.classTypes) ? yearDraft.classTypes : [])
+        .map((classType) => classType?.id)
+        .filter(Boolean),
+    [yearDraft?.classTypes]
+  )
+  const areAllYearClassTypesCollapsed = useMemo(
+    () =>
+      yearClassTypeIds.length > 0 &&
+      yearClassTypeIds.every((classTypeId) => collapsedClassTypeIds.includes(classTypeId)),
+    [collapsedClassTypeIds, yearClassTypeIds]
+  )
+
+  const toggleClassTypeExpanded = useCallback((classTypeId) => {
+    if (!classTypeId) {
+      return
+    }
+
+    setCollapsedClassTypeIds((current) =>
+      current.includes(classTypeId)
+        ? current.filter((id) => id !== classTypeId)
+        : [...current, classTypeId]
+    )
+  }, [])
+
+  const toggleAllYearClassTypes = useCallback(() => {
+    setCollapsedClassTypeIds((current) => (
+      current.length === yearClassTypeIds.length ? [] : [...yearClassTypeIds]
+    ))
+  }, [yearClassTypeIds])
 
   const addSite = useCallback(() => {
     const nextSite = createBlankSite((catalogDraft.sites || []).length + 1)
@@ -2775,16 +2897,42 @@ const PlanningConfiguration = () => {
   }, [catalogDraft.sites])
 
   const siteCards = Array.isArray(catalogDraft?.sites) ? catalogDraft.sites : []
+  const [headerStatusSlot, setHeaderStatusSlot] = useState(null)
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined
+    }
+
+    setHeaderStatusSlot(document.getElementById("page-header-center-slot"))
+
+    return undefined
+  }, [])
+
+  const toolbarNavigationLinks = useMemo(
+    () => MAIN_NAVIGATION_LINKS.filter((link) => link?.to !== "/configuration"),
+    []
+  )
+  const headerStatusPortal = headerStatusSlot
+    ? createPortal(
+        <span
+          className={`app-header-status-chip ${isAnyDirty ? "is-dirty" : "is-clean"}`.trim()}
+        >
+          {isAnyDirty ? "Modifications en attente" : "Configuration à jour"}
+        </span>,
+        headerStatusSlot
+      )
+    : null
 
   const actions = (
     <div className='configuration-page-actions'>
-      <label className='page-tools-field configuration-year-field'>
-        <span className='page-tools-field-label'>Année</span>
+      <div className='configuration-year-field'>
         <select
           className='page-tools-field-control'
           value={selectedYear}
           onChange={handleYearChange}
           disabled={!isYearReady || isYearSaving}
+          aria-label='Année'
         >
           {yearOptions.map((year) => (
             <option key={year} value={year}>
@@ -2792,57 +2940,53 @@ const PlanningConfiguration = () => {
             </option>
           ))}
         </select>
-      </label>
+      </div>
 
       <button
         type='button'
-        className='page-tools-action-btn primary'
+        className='page-tools-action-btn primary icon-button'
         onClick={() => {
           void handleSaveAll()
         }}
         disabled={!isYearReady || !isCatalogReady || isYearSaving || isCatalogSaving || !isAnyDirty}
+        aria-label={isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
+        title={isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
       >
-        {isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
+        <IconButtonContent
+          label={isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
+          icon={SaveIcon}
+        />
       </button>
     </div>
   )
 
   return (
-    <div className='configuration-page'>
-      <section id='configuration-hero' className='page-tools configuration-hero'>
-        <div className='configuration-hero-shell'>
-          <div className='configuration-hero-copy'>
-            <span className='configuration-eyebrow'>
-              <SettingsIcon className='configuration-eyebrow-icon' />
-              Paramètres partagés
-            </span>
-            <h2>Configuration</h2>
-            <p>
-              Réglez l'année et le catalogue des sites, salles et familles de classes.
-            </p>
-          </div>
+    <>
+      {headerStatusPortal}
+      <div className='configuration-page'>
+        <PageToolbar
+          id='configuration-hero'
+          className='configuration-hero'
+          eyebrow='Paramètres partagés'
+          title='Configuration'
+          description='Réglez l année, le catalogue des sites, les salles et les familles de classes depuis une barre commune.'
+          actions={actions}
+          navigationLinks={toolbarNavigationLinks}
+          navigationMode='floating'
+          ariaLabel='Outils de configuration'
+        />
 
-          <div className='configuration-hero-side'>
-            {actions}
-          </div>
-        </div>
-      </section>
+        <RoomSizingPanel
+          year={selectedYear}
+          overview={roomSizingOverview}
+          isLoading={!isPlanningReady}
+          error={legacyTpiError}
+        />
 
-      <RoomSizingPanel
-        year={selectedYear}
-        overview={roomSizingOverview}
-        isLoading={!isPlanningReady}
-        error={planningTpiError}
-      />
-
-      <div className='configuration-grid'>
+        <div className='configuration-grid'>
         <section className='configuration-panel configuration-panel--year'>
           <div className='configuration-panel-head'>
             <div className='configuration-panel-head-copy'>
-              <span className='page-tools-chip'>
-                <CalendarIcon className='configuration-panel-icon' />
-                {selectedYear}
-              </span>
               <h3>Année</h3>
               <p className='configuration-section-note'>
                 Types de classe, dates de soutenance et configuration annuelle.
@@ -2851,12 +2995,24 @@ const PlanningConfiguration = () => {
             <div className='configuration-card-head-actions'>
               <button
                 type='button'
-                className='page-tools-action-btn ghost'
+                className='page-tools-action-btn ghost icon-button'
                 onClick={addClassType}
                 disabled={!isYearReady}
+                aria-label='Ajouter'
+                title='Ajouter'
               >
-                Ajouter
+                <IconButtonContent label='Ajouter' icon={PlusIcon} />
               </button>
+              <SectionToggleButton
+                isOpen={!areAllYearClassTypesCollapsed}
+                onClick={toggleAllYearClassTypes}
+                subject="tous les types de l'année"
+                iconOnly={true}
+                className='configuration-collapse-toggle--icon-only'
+                openLabel='Ouvrir'
+                closeLabel='Réduire'
+                disabled={yearClassTypeIds.length === 0}
+              />
             </div>
           </div>
 
@@ -2867,6 +3023,8 @@ const PlanningConfiguration = () => {
                   <ClassTypeCard
                     key={classType.id}
                     classType={classType}
+                    isExpanded={!collapsedClassTypeIds.includes(classType.id)}
+                    onToggle={() => toggleClassTypeExpanded(classType.id)}
                     onChange={(field, value) => updateClassTypeField(classType.id, field, value)}
                     onRemove={() => removeClassType(classType.id)}
                     disabled={!isYearReady}
@@ -2877,11 +3035,13 @@ const PlanningConfiguration = () => {
                   <p>Aucun type.</p>
                   <button
                     type='button'
-                    className='page-tools-action-btn primary'
+                    className='page-tools-action-btn primary icon-button'
                     onClick={addClassType}
                     disabled={!isYearReady}
+                    aria-label='Ajouter'
+                    title='Ajouter'
                   >
-                    Ajouter
+                    <IconButtonContent label='Ajouter' icon={PlusIcon} />
                   </button>
                 </div>
               )}
@@ -2904,11 +3064,13 @@ const PlanningConfiguration = () => {
             <div className='configuration-card-head-actions'>
               <button
                 type='button'
-                className='page-tools-action-btn ghost'
+                className='page-tools-action-btn ghost icon-button'
                 onClick={addSite}
                 disabled={!isCatalogReady}
+                aria-label='Ajouter'
+                title='Ajouter'
               >
-                Ajouter
+                <IconButtonContent label='Ajouter' icon={PlusIcon} />
               </button>
             </div>
           </div>
@@ -2954,19 +3116,22 @@ const PlanningConfiguration = () => {
                   <p>Aucun site.</p>
                   <button
                     type='button'
-                    className='page-tools-action-btn primary'
+                    className='page-tools-action-btn primary icon-button'
                     onClick={addSite}
                     disabled={!isCatalogReady}
+                    aria-label='Ajouter'
+                    title='Ajouter'
                   >
-                    Ajouter
+                    <IconButtonContent label='Ajouter' icon={PlusIcon} />
                   </button>
                 </div>
               )}
             </div>
           </div>
         </section>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 

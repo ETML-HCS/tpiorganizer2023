@@ -474,7 +474,8 @@
 .action-buttons button svg {
   width: 16px;
   height: 16px;
-  stroke-width: 2.2;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
 }
 
 /* Styles pour les boutons validés */

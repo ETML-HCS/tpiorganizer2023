@@ -130,3 +130,48 @@ test('connectToDatabase uses mongoose.connect when config is valid', async () =>
     clearModule(dbConfigPath)
   }
 })
+
+test('connectToDatabase reuses the same pending connection promise', async () => {
+  const { connectToDatabase } = loadDbConfig()
+  const originalConnect = mongoose.connect
+  let connectCalls = 0
+
+  mongoose.connect = async uri => {
+    connectCalls += 1
+    assert.equal(uri, 'mongodb://localhost:27017/tpiorganizer_test')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    return mongoose
+  }
+
+  try {
+    const [firstResult, secondResult] = await Promise.all([
+      connectToDatabase({
+        env: {
+          DB_CLUSTER: 'localhost:27017',
+          DB_NAME: 'tpiorganizer_test'
+        },
+        logger: {
+          warn: () => {},
+          error: () => {}
+        }
+      }),
+      connectToDatabase({
+        env: {
+          DB_CLUSTER: 'localhost:27017',
+          DB_NAME: 'tpiorganizer_test'
+        },
+        logger: {
+          warn: () => {},
+          error: () => {}
+        }
+      })
+    ])
+
+    assert.equal(firstResult, true)
+    assert.equal(secondResult, true)
+    assert.equal(connectCalls, 1)
+  } finally {
+    mongoose.connect = originalConnect
+    clearModule(dbConfigPath)
+  }
+})

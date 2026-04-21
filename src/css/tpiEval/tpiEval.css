@@ -5,28 +5,73 @@
   overflow-x: clip;
 }
 
+#tools.tpi-eval-tools {
+  padding: 8px 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 249, 229, 0.94) 0%, rgba(236, 245, 255, 0.94) 100%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+}
+
+#tools.tpi-eval-tools .page-tools-shell {
+  gap: 6px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+#tools.tpi-eval-tools .page-tools-header {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) auto auto;
+  gap: 4px 8px;
+}
+
+#tools.tpi-eval-tools .page-tools-title,
+#tools.tpi-eval-tools .page-tools-description {
+  grid-column: 1;
+}
+
+#tools.tpi-eval-tools .page-tools-title {
+  font-size: 1rem;
+}
+
+#tools.tpi-eval-tools .page-tools-description {
+  max-width: 56ch;
+}
+
+#tools.tpi-eval-tools .page-tools-meta {
+  justify-content: center;
+}
+
 #tpiEval .tpi-eval-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
 #tpiEval .tpi-eval-action-btn {
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 14px;
-  font-size: 0.84rem;
-  font-weight: 800;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
   letter-spacing: 0.01em;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: none;
+}
+
+#tpiEval .tpi-eval-action-btn.icon-button {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
 }
 
 #tpiEval .tpi-eval-action-btn .tpi-eval-action-icon {
   width: 0.95rem;
   height: 0.95rem;
+  display: block;
   flex: 0 0 auto;
+  stroke-width: var(--app-button-icon-stroke-width);
 }
 
 #tpiEval .tpi-eval-action-btn.primary {

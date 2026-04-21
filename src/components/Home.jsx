@@ -7,15 +7,21 @@ import React, {
 } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
-import { IS_DEBUG, YEARS_CONFIG } from "../config/appConfig"
+import { IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../config/appConfig"
 import { authPlanningService, workflowPlanningService } from "../services/planningService"
+import { writeStorageValue } from "../utils/storage"
+import IconButtonContent from "./shared/IconButtonContent"
 import {
+  ArrowRightIcon,
   CalendarIcon,
   ClipboardIcon,
+  CloseIcon,
+  ConfigurationIcon,
   DashboardIcon,
-  FileTextIcon,
+  GestionTpiIcon,
   KeyIcon,
   SettingsIcon,
+  StarsIcon,
   TestTubeIcon,
   UsersIcon,
   WorkflowIcon
@@ -29,11 +35,13 @@ const HOME_ICONS = {
   dashboard: DashboardIcon,
   workflow: WorkflowIcon,
   calendar: CalendarIcon,
-  file: FileTextIcon,
+  gestionTpi: GestionTpiIcon,
   users: UsersIcon,
   clipboard: ClipboardIcon,
   key: KeyIcon,
+  stars: StarsIcon,
   test: TestTubeIcon,
+  configuration: ConfigurationIcon,
   settings: SettingsIcon
 }
 
@@ -45,18 +53,18 @@ const HomeIcon = ({ name, className }) => {
 const PRIMARY_ITEMS = [
   {
     name: "Planification",
-    link: "/planification",
+    special: "planningWorkflow",
     icon: "workflow",
     tone: "primary",
-    description: "Construire et ajuster le planning des soutenances.",
-    actionLabel: "Ouvrir"
+    description: "Construire la planification annuelle avant l'ouverture des votes.",
+    actionLabel: "Choisir une année"
   },
   {
-    name: "Suivi votes",
+    name: "Planning",
     special: "planningVotes",
     icon: "clipboard",
     tone: "accent",
-    description: "Ouvrir la vue de votes et choisir l'année à consulter.",
+    description: "Suivre les votes et l'état annuel du planning.",
     actionLabel: "Choisir une année"
   },
   {
@@ -73,7 +81,7 @@ const ADMIN_ITEMS = [
   {
     name: "Gestion TPI",
     link: "/gestionTPI",
-    icon: "file",
+    icon: "gestionTpi",
     tone: "neutral",
     description: "Mettre à jour les fiches, imports et référentiels.",
     actionLabel: "Ouvrir"
@@ -97,7 +105,7 @@ const ADMIN_ITEMS = [
   {
     name: "Évaluation",
     link: "/TpiEval",
-    icon: "clipboard",
+    icon: "stars",
     tone: "neutral",
     description: "Accéder aux formulaires et au suivi des notes.",
     actionLabel: "Ouvrir"
@@ -105,7 +113,7 @@ const ADMIN_ITEMS = [
   {
     name: "Configuration",
     link: "/configuration",
-    icon: "settings",
+    icon: "configuration",
     tone: "primary",
     description: "Régler l'année active, les salles et les paramètres.",
     actionLabel: "Ouvrir"
@@ -117,6 +125,21 @@ const ADMIN_ITEMS = [
     tone: "neutral",
     description: "Préparer les magic links vote et soutenance par personne.",
     actionLabel: "Ouvrir"
+  }
+]
+
+const DEV_ACCESS_ITEMS = [
+  {
+    dialog: "voteTest",
+    title: "Tester les votes",
+    description: "Envoyer les emails de test vote vers une adresse choisie.",
+    meta: "Année + email"
+  },
+  {
+    dialog: "soutenanceTest",
+    title: "Tester les soutenances",
+    description: "Envoyer les emails de test soutenance vers une adresse choisie.",
+    meta: "Année + email"
   }
 ]
 
@@ -182,13 +205,32 @@ const HomeSection = ({ title, description, items, onOpenDialog, delayBase = 0 })
   </section>
 )
 
-const SelectionMenu = ({ title, onClose, onYearSelect }) => {
+const SelectionMenu = ({
+  title,
+  onClose,
+  onYearSelect,
+  initialYear = YEARS_CONFIG.getCurrentYear()
+}) => {
   const selectRef = useRef(null)
   const years = useMemo(() => generateYears().slice().reverse(), [])
+  const defaultYear = useMemo(() => {
+    const normalizedInitialYear = String(initialYear)
+
+    if (years.some((year) => String(year) === normalizedInitialYear)) {
+      return normalizedInitialYear
+    }
+
+    return years.length > 0 ? String(years[0]) : ""
+  }, [initialYear, years])
+  const [selectedYear, setSelectedYear] = useState(defaultYear)
 
   useEffect(() => {
     selectRef.current?.focus()
   }, [])
+
+  useEffect(() => {
+    setSelectedYear(defaultYear)
+  }, [defaultYear])
 
   useEffect(() => {
     const handleEscape = (event) => {
@@ -202,6 +244,16 @@ const SelectionMenu = ({ title, onClose, onYearSelect }) => {
     return () => document.removeEventListener("keydown", handleEscape)
   }, [onClose])
 
+  const handleSubmit = (event) => {
+    event.preventDefault()
+
+    if (!selectedYear) {
+      return
+    }
+
+    onYearSelect(selectedYear)
+  }
+
   return (
     <div className='home-overlay' onClick={onClose}>
       <div
@@ -213,33 +265,191 @@ const SelectionMenu = ({ title, onClose, onYearSelect }) => {
       >
         <div className='home-dialog-head'>
           <h2 id='home-dialog-title'>{title}</h2>
-          <button type='button' className='home-dialog-close' onClick={onClose}>
-            Fermer
+          <button
+            type='button'
+            className='home-dialog-close icon-button'
+            onClick={onClose}
+            aria-label='Fermer'
+            title='Fermer'
+          >
+            <IconButtonContent label='Fermer' icon={CloseIcon} />
           </button>
         </div>
 
-        <select
-          ref={selectRef}
-          className='home-dialog-select'
-          onChange={(event) => onYearSelect(event.target.value)}
-          defaultValue=''
-          aria-label="Sélection de l'année"
-        >
-          <option value='' disabled>
-            Choisir une année
-          </option>
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
+        <form className='home-dialog-form' onSubmit={handleSubmit}>
+          <select
+            ref={selectRef}
+            className='home-dialog-select'
+            value={selectedYear}
+            onChange={(event) => setSelectedYear(event.target.value)}
+            aria-label="Sélection de l'année"
+          >
+            {years.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+
+          <div className='home-dialog-actions'>
+            <button
+              type='submit'
+              className='home-dialog-submit'
+              disabled={!selectedYear}
+            >
+              Ouvrir
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
 }
 
-const VoteLinksMenu = ({ payload, onClose }) => {
+const DevAccessMenu = ({
+  title,
+  description,
+  submitLabel,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  initialYear = YEARS_CONFIG.getCurrentYear()
+}) => {
+  const emailRef = useRef(null)
+  const years = useMemo(() => generateYears().slice().reverse(), [])
+  const defaultYear = useMemo(() => {
+    const normalizedInitialYear = String(initialYear)
+
+    if (years.some((year) => String(year) === normalizedInitialYear)) {
+      return normalizedInitialYear
+    }
+
+    return years.length > 0 ? String(years[0]) : ""
+  }, [initialYear, years])
+  const [selectedYear, setSelectedYear] = useState(defaultYear)
+  const [email, setEmail] = useState("")
+  const [reference, setReference] = useState("")
+
+  useEffect(() => {
+    emailRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    setSelectedYear(defaultYear)
+  }, [defaultYear])
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onClose()
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape)
+    return () => document.removeEventListener("keydown", handleEscape)
+  }, [onClose])
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+
+    if (!selectedYear || !email.trim()) {
+      return
+    }
+
+    onSubmit({
+      year: selectedYear,
+      email: email.trim(),
+      reference: reference.trim()
+    })
+  }
+
+  return (
+    <div className='home-overlay' onClick={onClose}>
+      <div
+        className='home-dialog'
+        role='dialog'
+        aria-modal='true'
+        aria-labelledby='home-dev-access-title'
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className='home-dialog-head'>
+          <h2 id='home-dev-access-title'>{title}</h2>
+          <button
+            type='button'
+            className='home-dialog-close icon-button'
+            onClick={onClose}
+            aria-label='Fermer'
+            title='Fermer'
+          >
+            <IconButtonContent label='Fermer' icon={CloseIcon} />
+          </button>
+        </div>
+
+        <p className='home-dialog-copy'>{description}</p>
+
+        <form className='home-dialog-form' onSubmit={handleSubmit}>
+          <label className='home-dialog-field'>
+            <span>Année</span>
+            <select
+              className='home-dialog-select'
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+              aria-label="Sélection de l'année"
+            >
+              {years.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className='home-dialog-field'>
+            <span>Email de test</span>
+            <input
+              ref={emailRef}
+              type='email'
+              className='home-dialog-input'
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder='prenom.nom@example.test'
+              autoComplete='email'
+              aria-label='Email de test'
+            />
+          </label>
+
+          <label className='home-dialog-field'>
+            <span>Référence ciblée</span>
+            <input
+              type='text'
+              className='home-dialog-input'
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              placeholder='Optionnel: TPI-2026-001'
+              aria-label='Référence ciblée'
+            />
+            <small className='home-dialog-help'>
+              Optionnel. Laisser vide pour prendre le premier dossier disponible.
+            </small>
+          </label>
+
+          <div className='home-dialog-actions'>
+            <button
+              type='submit'
+              className='home-dialog-submit'
+              disabled={!selectedYear || !email.trim() || isSubmitting}
+            >
+              {isSubmitting ? "Envoi..." : submitLabel}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+const DevAccessResultMenu = ({ payload, onClose }) => {
   const links = Array.isArray(payload?.links) ? payload.links : []
 
   useEffect(() => {
@@ -258,6 +468,10 @@ const VoteLinksMenu = ({ payload, onClose }) => {
     return null
   }
 
+  const title = payload?.kind === "soutenance"
+    ? "Emails de test soutenance"
+    : "Emails de test vote"
+
   const handleCopy = async (url) => {
     try {
       await navigator.clipboard.writeText(url)
@@ -273,28 +487,60 @@ const VoteLinksMenu = ({ payload, onClose }) => {
         className='home-dialog home-dialog-wide'
         role='dialog'
         aria-modal='true'
-        aria-labelledby='home-vote-links-title'
+        aria-labelledby='home-dev-links-title'
         onClick={(event) => event.stopPropagation()}
       >
         <div className='home-dialog-head'>
-          <h2 id='home-vote-links-title'>Liens de test votes</h2>
-          <button type='button' className='home-dialog-close' onClick={onClose}>
-            Fermer
+          <h2 id='home-dev-links-title'>{title}</h2>
+          <button
+            type='button'
+            className='home-dialog-close icon-button'
+            onClick={onClose}
+            aria-label='Fermer'
+            title='Fermer'
+          >
+            <IconButtonContent label='Fermer' icon={CloseIcon} />
           </button>
+        </div>
+
+        <div className='home-dialog-summary'>
+          <strong>
+            {payload?.summary?.emailsSucceeded || 0}/{payload?.summary?.emailsSent || 0} email(s)
+            envoyé(s)
+          </strong>
+          <span>{payload?.sentTo || "Adresse inconnue"}</span>
+          {payload?.reference ? <span>{payload.reference}</span> : null}
         </div>
 
         <div className='home-vote-links-grid'>
           {links.map((link) => (
-            <article key={link.role} className='home-vote-link-card'>
-              <strong>{link.role}</strong>
-              <span>{link.voter?.name || link.voter?.email || "Votant inconnu"}</span>
+            <article key={`${link.role || "link"}-${link.url}`} className='home-vote-link-card'>
+              <strong>{link.roleLabel || link.role || "Lien"}</strong>
+              <span>{link.viewer?.name || link.voter?.name || "Personne inconnue"}</span>
+              <span className='home-vote-link-status'>
+                {link.emailDelivery?.success
+                  ? `Envoyé à ${link.emailDelivery.sentTo}`
+                  : link.emailDelivery?.error || "Lien généré sans confirmation d'envoi"}
+              </span>
 
               <div className='home-vote-link-actions'>
-                <button type='button' onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}>
-                  Ouvrir
+                <button
+                  type='button'
+                  className='icon-button'
+                  onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                  aria-label='Ouvrir'
+                  title='Ouvrir'
+                >
+                  <IconButtonContent label='Ouvrir' icon={ArrowRightIcon} />
                 </button>
-                <button type='button' className='secondary' onClick={() => handleCopy(link.url)}>
-                  Copier
+                <button
+                  type='button'
+                  className='secondary icon-button'
+                  onClick={() => handleCopy(link.url)}
+                  aria-label='Copier'
+                  title='Copier'
+                >
+                  <IconButtonContent label='Copier' icon={ClipboardIcon} />
                 </button>
               </div>
             </article>
@@ -308,8 +554,8 @@ const VoteLinksMenu = ({ payload, onClose }) => {
 const Home = () => {
   const navigate = useNavigate()
   const [activeDialog, setActiveDialog] = useState(null)
-  const [isGeneratingVoteTestLink, setIsGeneratingVoteTestLink] = useState(false)
-  const [voteTestPayload, setVoteTestPayload] = useState(null)
+  const [isSendingDevAccess, setIsSendingDevAccess] = useState(false)
+  const [devAccessPayload, setDevAccessPayload] = useState(null)
 
   const currentYear = useMemo(() => new Date().getFullYear(), [])
   const availableYears = useMemo(() => generateYears().slice().reverse(), [])
@@ -335,43 +581,56 @@ const Home = () => {
     setActiveDialog(null)
   }, [])
 
-  const handleCloseVoteLinks = useCallback(() => {
-    setVoteTestPayload(null)
+  const handleCloseDevAccessResult = useCallback(() => {
+    setDevAccessPayload(null)
     setActiveDialog(null)
   }, [])
 
-  const handleVoteTestYearSelect = useCallback(
-    async (year) => {
-      if (!year || isGeneratingVoteTestLink) {
+  const handleSubmitDevAccess = useCallback(
+    async ({ year, email, reference }) => {
+      const dialogType = activeDialog
+
+      if (!year || !email || isSendingDevAccess) {
         return
       }
 
-      setIsGeneratingVoteTestLink(true)
+      setIsSendingDevAccess(true)
       handleCloseDialog()
 
-      const loadingToastId = toast.loading(`Preparation du lien de test ${year}...`, {
-        position: "top-center"
-      })
+      const isVoteTest = dialogType === "voteTest"
+      const loadingToastId = toast.loading(
+        isVoteTest
+          ? `Envoi des emails de test vote ${year}...`
+          : `Envoi des emails de test soutenance ${year}...`,
+        {
+          position: "top-center"
+        }
+      )
 
       try {
-        const result = await workflowPlanningService.createDevVoteLinks(
-          year,
-          window.location.origin
-        )
+        const result = isVoteTest
+          ? await workflowPlanningService.sendDevVoteEmails(year, email, {
+              reference,
+              baseUrl: window.location.origin
+            })
+          : await workflowPlanningService.sendDevSoutenanceEmails(year, email, {
+              reference,
+              baseUrl: window.location.origin
+            })
 
         toast.update(loadingToastId, {
-          render: `3 liens de test prêts pour ${result.reference || year}.`,
+          render: `${result?.summary?.emailsSucceeded || 0}/${result?.summary?.emailsSent || 0} email(s) de test envoyé(s).`,
           type: "success",
           isLoading: false,
-          autoClose: 2500,
+          autoClose: 3500,
           closeOnClick: true,
           closeButton: true
         })
 
-        setVoteTestPayload(result)
-        setActiveDialog("voteLinks")
+        setDevAccessPayload(result)
+        setActiveDialog("devAccessResult")
       } catch (error) {
-        const errorMessage = error?.data?.error || error?.message || "Impossible de generer le lien de test."
+        const errorMessage = error?.data?.error || error?.message || "Impossible d'envoyer les emails de test."
 
         toast.update(loadingToastId, {
           render: errorMessage,
@@ -382,34 +641,37 @@ const Home = () => {
           closeButton: true
         })
       } finally {
-        setIsGeneratingVoteTestLink(false)
+        setIsSendingDevAccess(false)
       }
     },
-    [handleCloseDialog, isGeneratingVoteTestLink]
+    [activeDialog, handleCloseDialog, isSendingDevAccess]
   )
 
   const handleYearSelect = useCallback(
-    async (year) => {
+    (year) => {
       if (!year) {
         return
       }
 
       handleCloseDialog()
 
-      if (activeDialog === "planningVotes") {
+      if (activeDialog === "planningWorkflow") {
         authPlanningService.clearSession()
-        navigate(`/planning/${year}`)
+        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
+        navigate('/planification')
         return
       }
 
-      if (activeDialog === "voteTest") {
-        await handleVoteTestYearSelect(year)
+      if (activeDialog === "planningVotes") {
+        authPlanningService.clearSession()
+        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
+        navigate(`/planning/${year}`)
         return
       }
 
       navigate(`/Soutenances/${year}`)
     },
-    [activeDialog, handleCloseDialog, handleVoteTestYearSelect, navigate]
+    [activeDialog, handleCloseDialog, navigate]
   )
 
   return (
@@ -456,50 +718,75 @@ const Home = () => {
         <section className='home-section home-section-dev' aria-label='Développement'>
           <div className='home-section-head'>
             <h2>Développement</h2>
-            <p>Outil conservé uniquement pour les tests en mode debug.</p>
+            <p>Actions de test réservées au mode debug.</p>
           </div>
 
-          <button
-            type='button'
-            className='home-dev-action'
-            style={{ "--home-card-delay": "320ms" }}
-            onClick={() => handleOpenDialog("voteTest")}
-            disabled={isGeneratingVoteTestLink}
-          >
-            <span className='home-dev-action-icon'>
-              <HomeIcon name='test' className='home-card-svg' />
-            </span>
+          <div className='home-dev-grid'>
+            {DEV_ACCESS_ITEMS.map((item, index) => (
+              <button
+                key={item.dialog}
+                type='button'
+                className='home-dev-action'
+                style={{ "--home-card-delay": `${320 + index * 45}ms` }}
+                onClick={() => handleOpenDialog(item.dialog)}
+                disabled={isSendingDevAccess}
+              >
+                <span className='home-dev-action-icon'>
+                  <HomeIcon name='test' className='home-card-svg' />
+                </span>
 
-            <span className='home-dev-action-copy'>
-              <strong>Tester les votes</strong>
-              <span>Générer trois liens de test pour une année.</span>
-            </span>
+                <span className='home-dev-action-copy'>
+                  <strong>{item.title}</strong>
+                  <span>{item.description}</span>
+                </span>
 
-            <span className='home-dev-action-meta'>
-              {isGeneratingVoteTestLink ? "Préparation..." : "Choisir une année"}
-            </span>
-          </button>
+                <span className='home-dev-action-meta'>{item.meta}</span>
+              </button>
+            ))}
+          </div>
         </section>
       ) : null}
 
       {activeDialog === "planningVotes" && (
         <SelectionMenu
-          title='Planification avec votes'
+          title='Planning annuel'
+          onClose={handleCloseDialog}
+          onYearSelect={handleYearSelect}
+        />
+      )}
+
+      {activeDialog === "planningWorkflow" && (
+        <SelectionMenu
+          title='Planification annuelle'
           onClose={handleCloseDialog}
           onYearSelect={handleYearSelect}
         />
       )}
 
       {activeDialog === "voteTest" && (
-        <SelectionMenu
+        <DevAccessMenu
           title='Test des votes'
+          description="Le système envoie les emails de test vote vers l'adresse choisie et conserve des liens ouvrables/copiables."
+          submitLabel='Envoyer les emails'
           onClose={handleCloseDialog}
-          onYearSelect={handleYearSelect}
+          onSubmit={handleSubmitDevAccess}
+          isSubmitting={isSendingDevAccess}
         />
       )}
 
-      {activeDialog === "voteLinks" && (
-        <VoteLinksMenu payload={voteTestPayload} onClose={handleCloseVoteLinks} />
+      {activeDialog === "soutenanceTest" && (
+        <DevAccessMenu
+          title='Test des soutenances'
+          description="Le système envoie les emails de test soutenance vers l'adresse choisie et cible une soutenance publiée."
+          submitLabel='Envoyer les emails'
+          onClose={handleCloseDialog}
+          onSubmit={handleSubmitDevAccess}
+          isSubmitting={isSendingDevAccess}
+        />
+      )}
+
+      {activeDialog === "devAccessResult" && (
+        <DevAccessResultMenu payload={devAccessPayload} onClose={handleCloseDevAccessResult} />
       )}
 
       {activeDialog === "soutenance" && (

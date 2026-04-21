@@ -3,7 +3,6 @@ import { AES, enc } from "crypto-js"
 
 import Register from "./Register.jsx"
 import RegisterToProjects from "./RegisterToProjects.jsx"
-import TpiTrackerButtons from "./TpiTrackerButtons.jsx"
 import { getUsers } from "../tpiControllers/TpiUsersController.jsx"
 import { showNotification } from "../Tools.jsx"
 import { ERROR_MESSAGES, TPI_TRACKER_SECRET } from "../../config/appConfig"
@@ -290,7 +289,7 @@ const TrackerEmptyState = () => {
   )
 }
 
-const TpiTracker = ({ toggleArrow, isArrowUp }) => {
+const TpiTracker = () => {
   const [user, setUser] = useState(null)
 
   const handleOnLogin = (loggedInUser) => {
@@ -299,12 +298,6 @@ const TpiTracker = ({ toggleArrow, isArrowUp }) => {
 
   return (
     <div className='tpi-tracker-page page-with-toolbar'>
-      <TpiTrackerButtons
-        toggleArrow={toggleArrow}
-        isArrowUp={isArrowUp}
-        user={user}
-      />
-
       <div className='tracker-page-shell'>
         {!user ? (
           <div className='tracker-auth-grid tracker-auth-grid--compact'>

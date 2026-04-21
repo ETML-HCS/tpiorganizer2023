@@ -73,6 +73,90 @@ function normalizeCandidateYears(years = []) {
   ).sort((left, right) => left - right)
 }
 
+function normalizeDateKey(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 10)
+}
+
+function normalizePositiveInteger(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function normalizePreferredSoutenanceChoice(value) {
+  if (!value && value !== 0) {
+    return null
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const date = normalizeDateKey(value.date || value.value || value.label)
+
+    if (!date) {
+      return null
+    }
+
+    const period = normalizePositiveInteger(
+      value.period ?? value.slot ?? value.creneau ?? value.slotNumber
+    )
+
+    return period ? { date, period } : { date }
+  }
+
+  const date = normalizeDateKey(value)
+  return date ? { date } : null
+}
+
+function normalizePreferredSoutenanceChoices(choices = [], fallbackDates = []) {
+  const normalizedChoices = []
+  const choiceIndexByDate = new Map()
+
+  for (const value of [
+    ...(Array.isArray(choices) ? choices : [choices]),
+    ...(Array.isArray(fallbackDates) ? fallbackDates : [fallbackDates])
+  ]) {
+    const choice = normalizePreferredSoutenanceChoice(value)
+
+    if (!choice) {
+      continue
+    }
+
+    const existingIndex = choiceIndexByDate.get(choice.date)
+    if (!Number.isInteger(existingIndex)) {
+      choiceIndexByDate.set(choice.date, normalizedChoices.length)
+      normalizedChoices.push(choice)
+
+      if (normalizedChoices.length >= 3) {
+        break
+      }
+
+      continue
+    }
+
+    const existingChoice = normalizedChoices[existingIndex]
+    if ((existingChoice?.period ?? null) === null && Number.isInteger(choice.period)) {
+      normalizedChoices[existingIndex] = choice
+    }
+  }
+
+  return normalizedChoices
+}
+
+function normalizePreferredSoutenanceDates(dates = [], fallbackChoices = []) {
+  return normalizePreferredSoutenanceChoices(fallbackChoices, dates).map((choice) => choice.date)
+}
+
 function normalizeRoleList(roles = []) {
   return (Array.isArray(roles) ? roles : [roles])
     .map((role) => String(role || '').trim())
@@ -94,6 +178,30 @@ function mergeRoles(existingRoles = [], incomingRoles = ['expert']) {
   }
 
   return merged.length > 0 ? merged : ['expert']
+}
+
+function mergePreferredSoutenanceDates(existingDates = [], incomingDates = []) {
+  return normalizePreferredSoutenanceDates(existingDates, incomingDates)
+}
+
+function mergePreferredSoutenanceChoices(existingChoices = [], incomingChoices = []) {
+  return normalizePreferredSoutenanceChoices([
+    ...(Array.isArray(existingChoices) ? existingChoices : [existingChoices]),
+    ...(Array.isArray(incomingChoices) ? incomingChoices : [incomingChoices])
+  ])
+}
+
+function arePreferredSoutenanceChoicesEqual(leftChoices = [], rightChoices = []) {
+  const left = normalizePreferredSoutenanceChoices(leftChoices)
+  const right = normalizePreferredSoutenanceChoices(rightChoices)
+
+  return (
+    left.length === right.length &&
+    left.every((choice, index) =>
+      choice.date === right[index]?.date &&
+      (choice.period ?? null) === (right[index]?.period ?? null)
+    )
+  )
 }
 
 function mapParticipantRoleToRegistryRole(role = '') {
@@ -187,6 +295,32 @@ function mergePersonRecord(existingPerson, incoming = {}) {
 
   if (mergedYears.length !== existingYears.length || mergedYears.some((year, index) => year !== existingYears[index])) {
     updates.candidateYears = mergedYears
+  }
+
+  const existingPreferredChoices = normalizePreferredSoutenanceChoices(
+    existingPerson?.preferredSoutenanceChoices || [],
+    existingPerson?.preferredSoutenanceDates || []
+  )
+  const incomingPreferredChoices = normalizePreferredSoutenanceChoices(
+    incoming?.preferredSoutenanceChoices || [],
+    incoming?.preferredSoutenanceDates || []
+  )
+  const mergedPreferredChoices = mergePreferredSoutenanceChoices(existingPreferredChoices, incomingPreferredChoices)
+  const existingPreferredDates = normalizePreferredSoutenanceDates(
+    existingPerson?.preferredSoutenanceDates || [],
+    existingPerson?.preferredSoutenanceChoices || []
+  )
+  const mergedPreferredDates = mergePreferredSoutenanceDates([], mergedPreferredChoices)
+
+  if (
+    mergedPreferredDates.length !== existingPreferredDates.length ||
+    mergedPreferredDates.some((date, index) => date !== existingPreferredDates[index])
+  ) {
+    updates.preferredSoutenanceDates = mergedPreferredDates
+  }
+
+  if (!arePreferredSoutenanceChoicesEqual(existingPreferredChoices, mergedPreferredChoices)) {
+    updates.preferredSoutenanceChoices = mergedPreferredChoices
   }
 
   if (
@@ -453,6 +587,19 @@ function normalizePersonPayload(input = {}, options = {}) {
     normalized.candidateYears = normalizeCandidateYears(input?.candidateYears || [])
   }
 
+  if (
+    !partial ||
+    input?.preferredSoutenanceDates !== undefined ||
+    input?.preferredSoutenanceChoices !== undefined
+  ) {
+    const preferredSoutenanceChoices = normalizePreferredSoutenanceChoices(
+      input?.preferredSoutenanceChoices || [],
+      input?.preferredSoutenanceDates || []
+    )
+    normalized.preferredSoutenanceChoices = preferredSoutenanceChoices
+    normalized.preferredSoutenanceDates = normalizePreferredSoutenanceDates([], preferredSoutenanceChoices)
+  }
+
   if (!partial || input?.defaultAvailability !== undefined) {
     normalized.defaultAvailability = Array.isArray(input?.defaultAvailability)
       ? input.defaultAvailability
@@ -614,5 +761,7 @@ module.exports = {
   personHasRole,
   resolveUniquePersonForRole,
   mergePeopleIntoTarget,
+  normalizePreferredSoutenanceDates,
+  normalizePreferredSoutenanceChoices,
   updatePerson
 }

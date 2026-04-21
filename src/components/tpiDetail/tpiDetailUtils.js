@@ -231,12 +231,21 @@ export function isLikelyUrl(value) {
   return /^https?:\/\//i.test(normalizedValue)
 }
 
-export function buildPartiesPrenantesLink({ personId = '', name = '', role = '', tab = '' } = {}) {
+export function buildPartiesPrenantesLink({
+  personId = '',
+  name = '',
+  role = '',
+  tab = '',
+  year = '',
+  returnTo = ''
+} = {}) {
   const params = new URLSearchParams()
   const normalizedPersonId = compactText(personId)
   const normalizedName = compactText(name)
   const normalizedRole = compactText(role)
   const normalizedTab = compactText(tab)
+  const normalizedYear = compactText(year)
+  const normalizedReturnTo = compactText(returnTo)
 
   if (normalizedPersonId) {
     params.set('personId', normalizedPersonId)
@@ -252,6 +261,14 @@ export function buildPartiesPrenantesLink({ personId = '', name = '', role = '',
 
   if (normalizedTab) {
     params.set('tab', normalizedTab)
+  }
+
+  if (normalizedYear) {
+    params.set('year', normalizedYear)
+  }
+
+  if (normalizedReturnTo.startsWith('/')) {
+    params.set('returnTo', normalizedReturnTo)
   }
 
   const queryString = params.toString()

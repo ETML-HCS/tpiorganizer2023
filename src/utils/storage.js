@@ -80,7 +80,7 @@ const shouldPreferPlanningToken = (endpoint = "") => {
     return false
   }
 
-  return currentPathname.startsWith("/planning/")
+  return currentPathname === "/planning" || currentPathname.startsWith("/planning/")
 }
 
 export const decodeJwtPayload = (token) => {

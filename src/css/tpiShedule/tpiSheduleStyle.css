@@ -16,9 +16,14 @@
 .site_cfpv {
   /* DateRoom */
   --dateRoom-textColor: #ffffff;
+  --dateRoom-metaTextColor: rgba(255, 255, 255, 0.82);
 
   --breakLine-TextColor: #333;
   --breakLine-bgColor: #e7e2d8;
+  --breakLine-lineColorStart: rgba(51, 65, 85, 0.08);
+  --breakLine-lineColorEnd: rgba(51, 65, 85, 0.26);
+  --breakLine-badgeBorderColor: rgba(148, 163, 184, 0.28);
+  --breakLine-badgeBgColor: rgba(255, 255, 255, 0.9);
   /* Gris clair */
 
   --deleteButton-textColor: #252525;
@@ -37,6 +42,10 @@
 .site_etml {
   --site-textColor: #1f2937;
   --breakLine-TextColor: #4338ca;
+  --breakLine-lineColorStart: rgba(67, 56, 202, 0.08);
+  --breakLine-lineColorEnd: rgba(67, 56, 202, 0.28);
+  --breakLine-badgeBorderColor: rgba(67, 56, 202, 0.22);
+  --breakLine-badgeBgColor: rgba(255, 255, 255, 0.94);
   --breakLine-bgColor: #eef2ff;
   --deleteButton-bgColor: #c7d2fe;
   --tpi-timeSlot-textColor: #1f2937;
@@ -50,6 +59,10 @@
 .site_cfpv {
   --site-textColor: #0f172a;
   --breakLine-TextColor: #0f766e;
+  --breakLine-lineColorStart: rgba(15, 118, 110, 0.08);
+  --breakLine-lineColorEnd: rgba(15, 118, 110, 0.28);
+  --breakLine-badgeBorderColor: rgba(15, 118, 110, 0.22);
+  --breakLine-badgeBgColor: rgba(255, 255, 255, 0.94);
   --breakLine-bgColor: #ecfeff;
   --deleteButton-bgColor: #99f6e4;
   --tpi-timeSlot-textColor: #0f172a;
@@ -107,6 +120,12 @@
   background: #333;
   color: #fff;
   cursor: pointer;
+}
+
+.planning-empty-state button.icon-button {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
 }
 
 .planning-empty-state button:hover {
@@ -288,7 +307,7 @@
   display: inline-flex;
   width: fit-content;
   padding: 0 2px;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--dateRoom-metaTextColor, rgba(255, 255, 255, 0.82));
 }
 
 .date-room-inline-field input,
@@ -348,7 +367,8 @@
 .date-room-action-icon {
   width: 13px;
   height: 13px;
-  stroke-width: 2.2;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
   flex: 0 0 auto;
 }
 
@@ -450,17 +470,11 @@
   flex: 1 1 0;
   height: 1px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(51, 65, 85, 0.08), rgba(51, 65, 85, 0.26));
-}
-
-.site_cfpv .breakLine::before,
-.site_cfpv .breakLine::after {
-  background: linear-gradient(90deg, rgba(15, 118, 110, 0.08), rgba(15, 118, 110, 0.28));
-}
-
-.site_etml .breakLine::before,
-.site_etml .breakLine::after {
-  background: linear-gradient(90deg, rgba(67, 56, 202, 0.08), rgba(67, 56, 202, 0.28));
+  background: linear-gradient(
+    90deg,
+    var(--breakLine-lineColorStart, rgba(51, 65, 85, 0.08)),
+    var(--breakLine-lineColorEnd, rgba(51, 65, 85, 0.26))
+  );
 }
 
 .breakLine-badge {
@@ -469,20 +483,10 @@
   gap: 5px;
   min-height: 22px;
   padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--breakLine-badgeBorderColor, rgba(148, 163, 184, 0.28));
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--breakLine-badgeBgColor, rgba(255, 255, 255, 0.9));
   box-shadow: 0 3px 8px rgba(15, 23, 42, 0.06);
-}
-
-.site_etml .breakLine-badge {
-  border-color: rgba(67, 56, 202, 0.22);
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.site_cfpv .breakLine-badge {
-  border-color: rgba(15, 118, 110, 0.22);
-  background: rgba(255, 255, 255, 0.94);
 }
 
 .breakLine-icon {
@@ -918,28 +922,63 @@
   padding: 8px 8px 2px;
 }
 
-.tpi-card-dossier-link {
+.tpi-card-preference-indicator {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(37, 99, 235, 0.18);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-  color: #1d4ed8;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-decoration: none;
-  text-transform: uppercase;
+  justify-content: flex-end;
+  gap: 4px;
+  min-height: 18px;
+  pointer-events: auto;
+  cursor: help;
+  filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
 }
 
-.tpiCard.detail-level-2 .tpi-card-dossier-link {
+.tpi-card-preference-indicator svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+.tpi-card-preference-slot-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14);
+}
+
+.tpi-card-preference-indicator:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.72);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.tpi-card-preference-indicator--green {
+  color: #16a34a;
+}
+
+.tpi-card-preference-indicator--orange {
+  color: #f59e0b;
+}
+
+.tpi-card-preference-indicator--red {
+  color: #dc2626;
+}
+
+.tpiCard.detail-level-2 .tpi-card-preference-indicator {
   top: 6px;
   right: 6px;
 }
@@ -1741,10 +1780,11 @@
 }
 
 .planning-year-change-icon svg,
-.planning-year-change-btn .button-icon {
+.planning-year-change-btn .ui-button-icon {
   width: 18px;
   height: 18px;
-  stroke-width: 2.1;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
 }
 
 .planning-year-change-copy h3 {
@@ -1817,6 +1857,12 @@
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.planning-year-change-btn.icon-button {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
 }
 
 .planning-year-change-btn:hover:not(:disabled) {

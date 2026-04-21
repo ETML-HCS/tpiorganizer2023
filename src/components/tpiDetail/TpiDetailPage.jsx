@@ -124,24 +124,14 @@ const TpiDetailPage = ({ toggleArrow, isArrowUp }) => {
   return (
     <div className='tpi-detail-page'>
       <PageToolbar
-        id='tpi-detail-tools'
+        id='tools'
+        className='tpi-detail-tools'
         eyebrow='Fiche TPI'
         title={displayReference ? `Dossier ${displayReference}` : 'Dossier TPI'}
         description='Lecture croisée de la fiche GestionTPI et du workflow Planning.'
         navigationLinks={navigationLinks}
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
-        meta={(
-          <div className='tpi-detail-toolbar-meta'>
-            <span className='tpi-detail-pill'>Année {year}</span>
-            <span className={`tpi-detail-pill ${dossier?.legacy?.exists ? 'is-ready' : 'is-muted'}`}>
-              GestionTPI {dossier?.legacy?.exists ? 'liée' : 'absente'}
-            </span>
-            <span className={`tpi-detail-pill ${dossier?.planning?.exists ? 'is-ready' : 'is-muted'}`}>
-              Planning {dossier?.planning?.exists ? 'lié' : 'absent'}
-            </span>
-          </div>
-        )}
         actions={(
           <div className='tpi-detail-toolbar-actions'>
             <Link className='tpi-detail-toolbar-link' to='/gestionTPI'>

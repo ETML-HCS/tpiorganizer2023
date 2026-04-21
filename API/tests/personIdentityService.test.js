@@ -35,11 +35,26 @@ test('extractEmailFromFilename keeps only actual email identifiers', () => {
   )
 })
 
-test('buildNameVariants returns strict first/last name permutations', () => {
+test('buildNameVariants returns first/last name permutations for every possible split', () => {
   assert.deepEqual(buildNameVariants('Jean Dupont'), [
     { firstName: 'Jean', lastName: 'Dupont' },
     { firstName: 'Dupont', lastName: 'Jean' }
   ])
+})
+
+test('resolveUniquePersonFromList matches multi-part names regardless of the chosen split', () => {
+  const people = [
+    {
+      email: 'dario@example.com',
+      firstName: 'Chasi Sanchez Dario',
+      lastName: 'Jhesuanj',
+      isActive: true
+    }
+  ]
+
+  const result = resolveUniquePersonFromList('Chasi Sanchez Dario Jhesuanj', people)
+  assert.equal(result.person?.email, 'dario@example.com')
+  assert.equal(result.reason, 'matched_name')
 })
 
 test('isValidEmail rejects empty or malformed values', () => {

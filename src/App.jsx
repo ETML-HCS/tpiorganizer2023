@@ -10,6 +10,7 @@ import {
 } from "react-router-dom"
 
 import Footer from "./components/footer/Footer"
+import { ChevronDownIcon, WrenchIcon } from "./components/shared/InlineIcons"
 
 import { toast } from "react-toastify"
 
@@ -19,7 +20,8 @@ import {
   STORAGE_KEYS,
   SUCCESS_MESSAGES,
   ERROR_MESSAGES,
-  IS_ADMIN_UI_ENABLED
+  IS_ADMIN_UI_ENABLED,
+  YEARS_CONFIG
 } from "./config/appConfig"
 import {
   getStoredAuthToken,
@@ -51,13 +53,13 @@ const TOOLBAR_DEFAULT_OPEN_PATHS = [
   '/planification',
   '/gestionTPI',
   '/partiesPrenantes',
-  '/suiviEtudiants',
   '/genTokens',
   '/TpiEval'
 ]
 
 const isToolbarPage = (pathname) =>
   TOOLBAR_DEFAULT_OPEN_PATHS.includes(pathname) ||
+  pathname === '/planning' ||
   pathname.startsWith('/planning/') ||
   pathname.startsWith('/tpi/')
 
@@ -67,60 +69,6 @@ const compactText = (value) => {
   }
 
   return String(value).trim()
-}
-
-const getHeaderContextLabel = (pathname, search = "") => {
-  const params = new URLSearchParams(search)
-
-  if (pathname === "/") {
-    return "Accueil"
-  }
-
-  if (pathname === "/planification") {
-    return "Planification"
-  }
-
-  if (pathname === "/configuration") {
-    return "Configuration"
-  }
-
-  if (pathname === "/gestionTPI") {
-    return "Gestion TPI"
-  }
-
-  if (pathname === "/partiesPrenantes") {
-    return "Parties prenantes"
-  }
-
-  if (pathname === "/suiviEtudiants") {
-    return "Suivi étudiants"
-  }
-
-  if (pathname === "/genTokens") {
-    return "Liens d'accès"
-  }
-
-  if (pathname === "/TpiEval") {
-    return "Évaluation"
-  }
-
-  if (SOUTENANCE_PATH_REGEX.test(pathname)) {
-    const year = pathname.split('/').pop()
-    return `Soutenances ${year}`
-  }
-
-  if (pathname.startsWith('/planning/')) {
-    const year = pathname.split('/').pop()
-    return params.get('tab') === 'votes'
-      ? `Suivi votes ${year}`
-      : `Planning ${year}`
-  }
-
-  if (pathname.startsWith('/tpi/')) {
-    return 'Fiche TPI'
-  }
-
-  return ""
 }
 
 const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessionToken }) => {
@@ -157,9 +105,26 @@ const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessio
   return ""
 }
 
+const getPreferredPlanningYear = () => {
+  const storedYear = Number.parseInt(
+    readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ""),
+    10
+  )
+
+  if (YEARS_CONFIG.isSupportedYear(storedYear)) {
+    return storedYear
+  }
+
+  return YEARS_CONFIG.getCurrentYear()
+}
+
 const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
   const { year } = useParams()
   const location = useLocation()
+  const routeYear = Number.parseInt(year, 10)
+  const normalizedYear = YEARS_CONFIG.isSupportedYear(routeYear)
+    ? routeYear
+    : getPreferredPlanningYear()
   const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const hasMagicLink = queryParams.has('ml')
   const isVotePreview = queryParams.get('previewVote') === '1'
@@ -187,6 +152,12 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
     setIsSessionNormalized(true)
   }, [shouldResetScopedVoteSession])
 
+  useEffect(() => {
+    if (YEARS_CONFIG.isSupportedYear(normalizedYear)) {
+      writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(normalizedYear))
+    }
+  }, [normalizedYear])
+
   if (!isSessionNormalized) {
     return (
       <div className="planning-dashboard loading">
@@ -196,6 +167,10 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
         </div>
       </div>
     )
+  }
+
+  if (!YEARS_CONFIG.isSupportedYear(routeYear)) {
+    return <Navigate to={`/planning/${normalizedYear}`} replace />
   }
 
   const isAdminView = Boolean(
@@ -212,7 +187,7 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
 
   return (
     <PlanningDashboard
-      year={parseInt(year, 10)}
+      year={normalizedYear}
       isAdmin={isAdminView}
       toggleArrow={toggleArrow}
       isArrowUp={isArrowUp}
@@ -245,11 +220,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     }),
     [appSessionToken, isAuthenticated, planningSessionToken]
   )
-  const headerContextLabel = useMemo(
-    () => getHeaderContextLabel(location.pathname, location.search),
-    [location.pathname, location.search]
-  )
-
+  const preferredPlanningYear = getPreferredPlanningYear()
   // Mémoriser la date formatée pour éviter les recalculs
   const dateFormatted = useMemo(() => {
     return new Date().toLocaleDateString('fr-CH')
@@ -264,6 +235,10 @@ const Layout = ({ isAuthenticated, login, logout }) => {
   const isToolbarCollapsed = useMemo(() => {
     return isToolbarRoute && !isArrowUp
   }, [isArrowUp, isToolbarRoute])
+  const getToolbarElement = useCallback(
+    () => document.querySelector("[data-page-toolbar='true']"),
+    []
+  )
 
   // Redirection après authentification
   useEffect(() => {
@@ -301,7 +276,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
       return
     }
 
-    const toolsElement = document.getElementById("tools")
+    const toolsElement = getToolbarElement()
     const upArrowButton = document.getElementById("upArrowButton")
     const downArrowButton = document.getElementById("downArrowButton")
 
@@ -316,12 +291,12 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     if (downArrowButton) {
       downArrowButton.style.display = "inline-flex"
     }
-  }, [isArrowUp, isToolbarRoute, location.pathname])
+  }, [getToolbarElement, isArrowUp, isToolbarRoute, location.pathname])
 
   useLayoutEffect(() => {
     const rootElement = document.documentElement
     const headerElement = document.getElementById("header")
-    const toolsElement = isToolbarRoute ? document.getElementById("tools") : null
+    const toolsElement = isToolbarRoute ? getToolbarElement() : null
 
     if (!rootElement) {
       return undefined
@@ -372,11 +347,11 @@ const Layout = ({ isAuthenticated, login, logout }) => {
       window.removeEventListener("resize", updateLayoutMetrics)
       observers.forEach((observer) => observer.disconnect())
     }
-  }, [isArrowUp, isToolbarRoute, location.pathname])
+  }, [getToolbarElement, isArrowUp, isToolbarRoute, location.pathname])
 
   // Toggle arrow mémorisé avec useCallback
   const toggleArrow = useCallback(() => {
-    const elementTools = document.getElementById("tools")
+    const elementTools = getToolbarElement()
     const downArrowButton = document.getElementById("downArrowButton")
 
     if (!elementTools) {
@@ -392,7 +367,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
       }
       return newState
     })
-  }, [])
+  }, [getToolbarElement])
 
   // Handler de déconnexion
   const handleLogout = useCallback(() => {
@@ -425,10 +400,8 @@ const Layout = ({ isAuthenticated, login, logout }) => {
             </div>
 
             <div className='app-header-center'>
-              {headerContextLabel ? (
-                <span className='app-header-context-label'>{headerContextLabel}</span>
-              ) : null}
               <span className='app-header-date'>{dateFormatted}</span>
+              <div id='page-header-center-slot' className='app-header-page-slot'></div>
             </div>
 
             <div id='right' className='app-header-meta app-header-meta-session'>
@@ -437,9 +410,10 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 <button
                   onClick={toggleArrow}
                   id='downArrowButton'
-                  className={`collapse-toggle collapse-toggle-header app-header-tools-toggle ${
-                    !isArrowUp ? 'active' : ''
+                  className={`collapse-toggle app-header-tools-toggle ${
+                    isArrowUp ? 'active' : ''
                   }`.trim()}
+                  aria-expanded={isArrowUp}
                   aria-label={
                     isArrowUp
                       ? "Masquer les outils"
@@ -451,8 +425,13 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                       : "Afficher les outils"
                   }
                 >
-                  <span className='collapse-toggle-label'>Outils</span>
-                  <span className='collapse-toggle-icon' aria-hidden='true'></span>
+                  <span className='sr-only'>Outils</span>
+                  <span className='app-header-tools-toggle-glyph' aria-hidden='true'>
+                    <WrenchIcon />
+                  </span>
+                  <span className='collapse-toggle-icon' aria-hidden='true'>
+                    <ChevronDownIcon />
+                  </span>
                 </button>
               ) : null}
 
@@ -496,8 +475,15 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               <Route
                 path='/planification'
                 element={
-                  <TpiSchedule toggleArrow={toggleArrow} isArrowUp={isArrowUp} />
+                  <TpiSchedule
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
                 }
+              />
+              <Route
+                path='/planification/legacy'
+                element={<Navigate to='/planification' replace />}
               />
               <Route
                 path='/configuration'
@@ -523,12 +509,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path='/suiviEtudiants'
-                element={
-                  <TpiTracker
-                    toggleArrow={toggleArrow}
-                    isArrowUp={isArrowUp}
-                  />
-                }
+                element={<TpiTracker />}
               />
               <Route
                 path='/genTokens'
@@ -553,6 +534,10 @@ const Layout = ({ isAuthenticated, login, logout }) => {
           )}
 
           {/* Routes toujours accessibles, authentifié ou non */}
+          <Route
+            path='/planning'
+            element={<Navigate to={`/planning/${preferredPlanningYear}`} replace />}
+          />
           <Route
             path='/planning/:year'
             element={

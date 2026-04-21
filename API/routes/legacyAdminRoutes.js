@@ -85,7 +85,7 @@ async function hydrateLegacyTpisFromPeopleRegistry(year, models = []) {
       model && typeof model.toObject === 'function'
         ? model.toObject({ depopulate: true, minimize: false, versionKey: false })
         : { ...model }
-    const linkedModel = linkLegacyTpiStakeholders(plainModel, people, { year }).tpi
+    const { tpi: linkedModel, validation } = linkLegacyTpiStakeholders(plainModel, people, { year })
     const linkUpdates = extractLegacyTpiParticipantLinkUpdates(plainModel, linkedModel)
 
     if (plainModel?._id && Object.keys(linkUpdates).length > 0) {
@@ -97,7 +97,16 @@ async function hydrateLegacyTpisFromPeopleRegistry(year, models = []) {
       })
     }
 
-    return linkedModel
+    return {
+      ...linkedModel,
+      stakeholderState: {
+        isComplete: validation.isComplete,
+        isResolved: validation.unresolvedRoles.length === 0,
+        isValidated: validation.isValidated,
+        missingRoles: validation.missingRoles,
+        unresolvedRoles: validation.unresolvedRoles
+      }
+    }
   })
 
   if (bulkOperations.length > 0) {

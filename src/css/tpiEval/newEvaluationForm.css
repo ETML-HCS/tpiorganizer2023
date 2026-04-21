@@ -31,7 +31,8 @@
 .btn_validation button svg {
   width: 15px;
   height: 15px;
-  stroke-width: 2.1;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
   flex: 0 0 auto;
 }
 
@@ -687,6 +688,17 @@ option {
   box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
 }
 
+#tpiEval .btn_validation button.icon-button:not(.icon-button--with-badge) {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
+#tpiEval .btn_validation button.icon-button.icon-button--with-badge {
+  width: auto;
+  padding: 0 10px;
+}
+
 #tpiEval #popup {
   border: 1px solid rgba(214, 224, 232, 0.86);
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
@@ -714,6 +726,14 @@ option {
 
   #tpiEval .btn_validation button {
     width: 100%;
+  }
+
+  #tpiEval .btn_validation button.icon-button:not(.icon-button--with-badge) {
+    width: 44px;
+  }
+
+  #tpiEval .btn_validation button.icon-button.icon-button--with-badge {
+    width: auto;
   }
 
   #tpiEval table {

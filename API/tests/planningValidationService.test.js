@@ -156,6 +156,30 @@ test('buildUnplannedTpiIssues reports workflow TPI without any slot', () => {
   assert.equal(result.length, 1)
   assert.equal(result[0].type, 'unplanned_tpi')
   assert.match(result[0].message, /aucun créneau proposé ou confirmé/)
+  assert.equal(result[0].reason, "La planification automatique n'a pas encore traite cette fiche.")
+})
+
+test('buildUnplannedTpiIssues exposes the stored manual reason when a TPI is manual_required', () => {
+  const result = buildUnplannedTpiIssues([
+    {
+      _id: 'tpi-2',
+      reference: 'TPI-2026-010',
+      status: 'manual_required',
+      proposedSlots: [],
+      confirmedSlot: null,
+      conflicts: [
+        {
+          type: 'no_common_slot',
+          description: 'Aucune date de soutenance configuree pour cette classe.'
+        }
+      ]
+    }
+  ])
+
+  assert.equal(result.length, 1)
+  assert.equal(result[0].type, 'unplanned_tpi')
+  assert.equal(result[0].reason, 'Aucune date de soutenance configuree pour cette classe.')
+  assert.match(result[0].message, /Raison: Aucune date de soutenance configuree pour cette classe\./)
 })
 
 test('buildLegacyConsistencyIssues reports missing stakeholders from legacy catalog', () => {
@@ -197,7 +221,7 @@ test('buildLegacyConsistencyIssues reports missing workflow import for legacy TP
 
   assert.equal(result.length, 1)
   assert.equal(result[0].type, 'legacy_tpi_not_imported')
-  assert.match(result[0].message, /n'est pas présent dans Planning/)
+  assert.match(result[0].message, /workflow de planification/)
 })
 
 test('buildLegacyConsistencyIssues reports unresolved stakeholders that must be confirmed in Parties prenantes', () => {
@@ -235,4 +259,27 @@ test('buildLegacyConsistencyIssues reports unresolved stakeholders that must be 
   assert.equal(result[0].type, 'legacy_tpi_unresolved_stakeholders')
   assert.deepEqual(result[0].unresolvedStakeholders, ['expert2', 'chef_projet'])
   assert.match(result[0].message, /Parties prenantes/)
+})
+
+test('buildLegacyConsistencyIssues ignores legacy TPI outside configured planning sites', () => {
+  const result = buildLegacyConsistencyIssues({
+    year: 2026,
+    legacyTpis: [
+      {
+        refTpi: '3001',
+        site: 'CFPV',
+        candidat: 'Alice Example',
+        experts: { 1: '', 2: '' },
+        boss: ''
+      }
+    ],
+    workflowTpis: [],
+    planningConfig: {
+      siteConfigs: [
+        { siteCode: 'ETML', active: true }
+      ]
+    }
+  })
+
+  assert.deepEqual(result, [])
 })

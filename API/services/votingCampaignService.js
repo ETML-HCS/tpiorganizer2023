@@ -3,6 +3,7 @@ const Vote = require('../models/voteModel')
 const emailService = require('./emailService')
 const magicLinkV2Service = require('./magicLinkV2Service')
 const { getActivePublicationVersion } = require('./publishedSoutenanceService')
+const { getPlanningConfig } = require('./planningConfigService')
 const schedulingService = require('./schedulingService')
 const { filterPlanifiableTpis } = require('./tpiPlanningVisibility')
 
@@ -24,6 +25,10 @@ function toRoleLabel(role) {
   }
 
   return 'Chef de projet'
+}
+
+function canReceiveAutomaticEmail(person) {
+  return Boolean(person?.email) && person?.sendEmails !== false
 }
 
 function buildSlotsPayloadFromProposedSlots(proposedSlots) {
@@ -82,23 +87,22 @@ function buildTpiVoters(tpi) {
     { person: tpi.chefProjet, role: 'chef_projet' }
   ]
 
-  return rawVoters.filter(voter => {
-    // Filtrer les personnes sans email OU avec sendEmails: false
-    if (!voter.person?.email) return false
-    if (voter.person.sendEmails === false) return false
-    return true
-  })
+  return rawVoters.filter(voter => canReceiveAutomaticEmail(voter.person))
 }
 
 async function loadVotingTpisForYear(year) {
-  return filterPlanifiableTpis(await TpiPlanning.find({
-    year,
-    status: { $in: ['voting', 'pending_slots'] },
-    proposedSlots: { $exists: true, $ne: [] }
-  })
-    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
-    .populate('proposedSlots.slot')
-  )
+  const [planningConfig, tpis] = await Promise.all([
+    getPlanningConfig(year),
+    TpiPlanning.find({
+      year,
+      status: { $in: ['voting', 'pending_slots'] },
+      proposedSlots: { $exists: true, $ne: [] }
+    })
+      .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
+      .populate('proposedSlots.slot')
+  ])
+
+  return filterPlanifiableTpis(tpis, planningConfig)
 }
 
 async function ensureVotesForTpi(tpi) {
@@ -151,7 +155,8 @@ async function ensureVotesForTpi(tpi) {
   return votes
 }
 
-async function startVotesCampaign(year, baseUrl) {
+async function startVotesCampaign(year, baseUrl, options = {}) {
+  const skipEmails = options?.skipEmails === true
   const tpis = await loadVotingTpisForYear(year)
 
   let totalEmails = 0
@@ -160,8 +165,6 @@ async function startVotesCampaign(year, baseUrl) {
 
   for (const tpi of tpis) {
     const voters = buildTpiVoters(tpi)
-    const slots = buildSlotsPayloadFromProposedSlots(tpi.proposedSlots)
-    const magicLinks = []
 
     if (tpi.status !== 'voting') {
       tpi.status = 'voting'
@@ -200,36 +203,46 @@ async function startVotesCampaign(year, baseUrl) {
 
     await ensureVotesForTpi(tpi)
 
-    for (const voter of voters) {
-      const link = await magicLinkV2Service.createVoteMagicLink({
-        year,
-        person: voter.person,
-        role: voter.role,
-        scope: {
-          tpiId: String(tpi._id),
-          reference: tpi.reference
-        },
-        baseUrl
-      })
-      magicLinks.push({
-        ...link,
-        email: voter.person.email,
-        personName: getDisplayName(voter.person),
-        role: voter.role,
-        slots
-      })
-    }
+    let emailsSent = 0
+    let emailsSucceeded = 0
 
-    const mailResults = await emailService.sendVoteRequests(tpi, magicLinks)
-    totalEmails += mailResults.length
-    successfulEmails += mailResults.filter(result => result.success).length
+    if (!skipEmails) {
+      const slots = buildSlotsPayloadFromProposedSlots(tpi.proposedSlots)
+      const magicLinks = []
+
+      for (const voter of voters) {
+        const link = await magicLinkV2Service.createVoteMagicLink({
+          year,
+          person: voter.person,
+          role: voter.role,
+          scope: {
+            tpiId: String(tpi._id),
+            reference: tpi.reference
+          },
+          baseUrl
+        })
+        magicLinks.push({
+          ...link,
+          email: voter.person.email,
+          personName: getDisplayName(voter.person),
+          role: voter.role,
+          slots
+        })
+      }
+
+      const mailResults = await emailService.sendVoteRequests(tpi, magicLinks)
+      emailsSent = mailResults.length
+      emailsSucceeded = mailResults.filter(result => result.success).length
+      totalEmails += emailsSent
+      successfulEmails += emailsSucceeded
+    }
 
     details.push({
       tpiId: String(tpi._id),
       reference: tpi.reference,
       voters: voters.length,
-      emailsSent: mailResults.length,
-      emailsSucceeded: mailResults.filter(result => result.success).length
+      emailsSent,
+      emailsSucceeded
     })
   }
 
@@ -238,14 +251,19 @@ async function startVotesCampaign(year, baseUrl) {
     totalEmails,
     successfulEmails,
     failedEmails: Math.max(totalEmails - successfulEmails, 0),
+    emailsSkipped: skipEmails,
     details
   }
 }
 
 async function remindPendingVotes(year, baseUrl) {
-  const tpis = await TpiPlanning.find({ year, status: 'voting' })
-    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
-    .select('reference sujet votingSession candidat expert1 expert2 chefProjet')
+  const [planningConfig, rawTpis] = await Promise.all([
+    getPlanningConfig(year),
+    TpiPlanning.find({ year, status: 'voting' })
+      .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
+      .select('reference sujet votingSession candidat expert1 expert2 chefProjet site')
+  ])
+  const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
 
   if (tpis.length === 0) {
     return {
@@ -264,7 +282,7 @@ async function remindPendingVotes(year, baseUrl) {
     decision: 'pending'
   })
     .populate('slot', 'date period startTime endTime room')
-    .populate('voter', 'firstName lastName email')
+    .populate('voter', 'firstName lastName email sendEmails')
     .select('tpiPlanning voter voterRole slot')
 
   const groupedByTpiAndVoter = new Map()
@@ -365,10 +383,14 @@ function hasAllVotes(votes) {
 }
 
 async function closeVotesCampaign(year) {
-  const tpis = await TpiPlanning.find({
-    year,
-    status: { $in: ['voting', 'pending_validation'] }
-  })
+  const [planningConfig, rawTpis] = await Promise.all([
+    getPlanningConfig(year),
+    TpiPlanning.find({
+      year,
+      status: { $in: ['voting', 'pending_validation'] }
+    })
+  ])
+  const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
 
   let confirmedCount = 0
   let manualRequiredCount = 0
@@ -428,13 +450,17 @@ function listSoutenanceRecipientsFromTpi(tpi) {
 }
 
 async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = null) {
-  const confirmedTpis = await TpiPlanning.find({
-    year,
-    status: 'confirmed',
-    confirmedSlot: { $ne: null }
-  })
-    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email')
-    .select('reference candidat expert1 expert2 chefProjet')
+  const [planningConfig, rawConfirmedTpis] = await Promise.all([
+    getPlanningConfig(year),
+    TpiPlanning.find({
+      year,
+      status: 'confirmed',
+      confirmedSlot: { $ne: null }
+    })
+      .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
+      .select('reference candidat expert1 expert2 chefProjet site')
+  ])
+  const confirmedTpis = filterPlanifiableTpis(rawConfirmedTpis, planningConfig)
 
   const recipientsById = new Map()
 
@@ -442,7 +468,7 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
     const participants = listSoutenanceRecipientsFromTpi(tpi)
 
     for (const person of participants) {
-      if (!person?._id || !person?.email) {
+      if (!person?._id || !canReceiveAutomaticEmail(person)) {
         continue
       }
 

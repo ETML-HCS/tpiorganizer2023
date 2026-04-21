@@ -1,6 +1,7 @@
 import React from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import PlanningCalendar from './PlanningCalendar'
+import { schedulingService } from '../../services/planningService'
 
 jest.mock('../shared/InlineIcons', () => {
   const React = require('react')
@@ -20,25 +21,18 @@ jest.mock('../shared/InlineIcons', () => {
 
 jest.mock('../../services/planningService', () => ({
   schedulingService: {
+    getAvailability: jest.fn(),
     assignSlot: jest.fn()
   }
 }))
 
-jest.mock('../../utils/storage', () => ({
-  getStoredAuthToken: jest.fn(() => null)
-}))
-
 describe('PlanningCalendar', () => {
   beforeEach(() => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => []
-    })
+    schedulingService.getAvailability.mockResolvedValue([])
   })
 
   afterEach(() => {
     jest.clearAllMocks()
-    delete global.fetch
   })
 
   test('utilise l annee de la route pour charger les disponibilites', async () => {
@@ -87,12 +81,10 @@ describe('PlanningCalendar', () => {
     })
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalled()
+      expect(schedulingService.getAvailability).toHaveBeenCalled()
     })
 
-    expect(global.fetch.mock.calls[0][0]).toContain(
-      '/planning/availability/2026/tpi-1'
-    )
+    expect(schedulingService.getAvailability).toHaveBeenCalledWith(2026, 'tpi-1')
   })
 
   test('affiche la couleur et le badge du site pour une room du calendrier', () => {

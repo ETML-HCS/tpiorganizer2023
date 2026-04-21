@@ -74,6 +74,7 @@ async function createTypedMagicLink({
   baseUrl,
   redirectPath,
   person,
+  recipientEmail = null,
   role = null,
   scope = {},
   maxUses = null,
@@ -83,7 +84,13 @@ async function createTypedMagicLink({
     throw new Error('Type de magic link invalide.')
   }
 
-  if (!person?.email) {
+  const normalizedRecipientEmail = typeof recipientEmail === 'string' && recipientEmail.trim().length > 0
+    ? recipientEmail.trim().toLowerCase()
+    : typeof person?.email === 'string' && person.email.trim().length > 0
+      ? person.email.trim().toLowerCase()
+      : ''
+
+  if (!normalizedRecipientEmail) {
     throw new Error('Personne cible invalide pour magic link.')
   }
 
@@ -110,7 +117,7 @@ async function createTypedMagicLink({
     tokenHash,
     type,
     year,
-    recipientEmail: String(person.email).toLowerCase(),
+    recipientEmail: normalizedRecipientEmail,
     personId: person?._id || null,
     personName: toDisplayName(person),
     role,
@@ -136,7 +143,8 @@ async function createVoteMagicLink({
   role,
   scope = {},
   baseUrl,
-  redirectPath = null
+  redirectPath = null,
+  recipientEmail = null
 }) {
   return await createTypedMagicLink({
     type: 'vote',
@@ -144,18 +152,27 @@ async function createVoteMagicLink({
     baseUrl,
     redirectPath: redirectPath || `/planning/${year}`,
     person,
+    recipientEmail,
     role,
     scope
   })
 }
 
-async function createSoutenanceMagicLink({ year, person, scope = {}, baseUrl }) {
+async function createSoutenanceMagicLink({
+  year,
+  person,
+  scope = {},
+  baseUrl,
+  redirectPath = null,
+  recipientEmail = null
+}) {
   return await createTypedMagicLink({
     type: 'soutenance',
     year,
     baseUrl,
-    redirectPath: `/Soutenances/${year}`,
+    redirectPath: redirectPath || `/Soutenances/${year}`,
     person,
+    recipientEmail,
     role: null,
     scope
   })

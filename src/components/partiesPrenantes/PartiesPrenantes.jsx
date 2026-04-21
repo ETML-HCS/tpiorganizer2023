@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import BinaryToggle from '../shared/BinaryToggle'
 import {
@@ -15,13 +15,22 @@ import {
   ProjectLeadIcon as ChefProjetRoleIcon,
   UserIcon
 } from '../shared/InlineIcons'
-import { personService } from '../../services/planningService'
+import { personService, planningConfigService } from '../../services/planningService'
 import { STORAGE_KEYS, YEARS_CONFIG } from '../../config/appConfig'
-import { readJSONListValue, writeJSONValue } from '../../utils/storage'
+import { readJSONListValue, readStorageValue, writeJSONValue } from '../../utils/storage'
 import {
   getStakeholderRoleLabel,
   splitStakeholderDraftName
 } from '../tpiManagement/tpiStakeholderDraftUtils'
+import { buildSyntheticStakeholderEmail } from './stakeholderDraftEmailUtils'
+import {
+  PREFERRED_SOUTENANCE_CHOICE_FIELDS,
+  buildPreferredSoutenanceChoices,
+  buildPreferredSoutenanceDates,
+  formatPreferredSoutenanceChoicesForPreview as formatPreferredSoutenanceDatesForPreview,
+  getPreferredSoutenanceChoiceInputValues as getPreferredSoutenanceDateInputValues,
+  getPreferredSoutenanceChoicesForPerson
+} from '../../utils/preferredSoutenanceUtils'
 
 import '../../css/partiesPrenantes/partiesPrenantes.css'
 
@@ -254,6 +263,12 @@ const INITIAL_FORM = {
   phone: '',
   site: '',
   entreprise: '',
+  preferredSoutenanceDate1: '',
+  preferredSoutenanceSlot1: '',
+  preferredSoutenanceDate2: '',
+  preferredSoutenanceSlot2: '',
+  preferredSoutenanceDate3: '',
+  preferredSoutenanceSlot3: '',
   roles: ['expert'],
   isActive: true,
   sendEmails: true,
@@ -455,7 +470,7 @@ function getMergePreviewStatus(key, before, after) {
     return 'Complété'
   }
 
-  if (key === 'roles' || key === 'candidateYears') {
+  if (key === 'roles' || key === 'candidateYears' || key === 'preferredSoutenanceDates') {
     return 'Fusionné'
   }
 
@@ -478,7 +493,12 @@ function simulatePersonMergePreview(targetPerson, sourcePeople = []) {
   const merged = {
     ...targetPerson,
     roles: Array.isArray(targetPerson?.roles) ? [...targetPerson.roles] : [],
-    candidateYears: Array.isArray(targetPerson?.candidateYears) ? [...targetPerson.candidateYears] : []
+    candidateYears: Array.isArray(targetPerson?.candidateYears) ? [...targetPerson.candidateYears] : [],
+    preferredSoutenanceChoices: getPreferredSoutenanceChoicesForPerson(targetPerson),
+    preferredSoutenanceDates: buildPreferredSoutenanceDates(
+      targetPerson?.preferredSoutenanceChoices || [],
+      targetPerson?.preferredSoutenanceDates || []
+    )
   }
 
   sourcePeople.forEach((sourcePerson) => {
@@ -501,6 +521,13 @@ function simulatePersonMergePreview(targetPerson, sourcePeople = []) {
 
     merged.roles = mergePreviewRoles(merged.roles, sourcePerson?.roles)
     merged.candidateYears = mergePreviewCandidateYears(merged.candidateYears, sourcePerson?.candidateYears)
+    merged.preferredSoutenanceChoices = buildPreferredSoutenanceChoices(
+      [
+        ...merged.preferredSoutenanceChoices,
+        ...getPreferredSoutenanceChoicesForPerson(sourcePerson)
+      ]
+    )
+    merged.preferredSoutenanceDates = buildPreferredSoutenanceDates(merged.preferredSoutenanceChoices)
 
     const currentEmail = normalizeWhitespace(merged.email)
     const incomingEmail = normalizeWhitespace(sourcePerson?.email).toLowerCase()
@@ -563,6 +590,18 @@ function buildMergePreviewRows(targetPerson, mergedPerson) {
       label: 'Années candidat',
       before: formatMergePreviewYears(targetPerson?.candidateYears),
       after: formatMergePreviewYears(mergedPerson?.candidateYears)
+    },
+    {
+      key: 'preferredSoutenanceDates',
+      label: 'Dates idéales',
+      before: formatPreferredSoutenanceDatesForPreview(
+        targetPerson?.preferredSoutenanceChoices,
+        targetPerson?.preferredSoutenanceDates
+      ),
+      after: formatPreferredSoutenanceDatesForPreview(
+        mergedPerson?.preferredSoutenanceChoices,
+        mergedPerson?.preferredSoutenanceDates
+      )
     },
     {
       key: 'isActive',
@@ -695,6 +734,216 @@ function findPersonByRouteTarget(people, target = {}) {
   return matches.length === 1 ? matches[0] : null
 }
 
+function normalizeLocalReturnPath(value = '') {
+  const normalizedValue = normalizeWhitespace(value)
+  return normalizedValue.startsWith('/') ? normalizedValue : ''
+}
+
+function normalizeSiteLookup(value = '') {
+  return normalizeFold(value).replace(/\s+/g, '')
+}
+
+const AFTERNOON_START_MINUTES = 12 * 60 + 30
+const DEFAULT_PREFERRED_SLOT_SCHEDULE = {
+  breaklineMinutes: 10,
+  tpiTimeMinutes: 60,
+  firstTpiStartTime: '08:00'
+}
+
+function parseTimeToMinutes(value = '', fallbackMinutes = 8 * 60) {
+  const normalizedValue = normalizeWhitespace(value)
+
+  if (/^\d{1,2}:\d{2}$/.test(normalizedValue)) {
+    const [hoursText, minutesText] = normalizedValue.split(':')
+    const hours = Number.parseInt(hoursText, 10)
+    const minutes = Number.parseInt(minutesText, 10)
+
+    if (Number.isInteger(hours) && Number.isInteger(minutes) && hours >= 0 && minutes >= 0 && minutes < 60) {
+      return hours * 60 + minutes
+    }
+  }
+
+  return fallbackMinutes
+}
+
+function buildPreferredSoutenanceSlotSchedule(siteConfig = {}, fallbackSlotCount = 8) {
+  return {
+    breaklineMinutes: Number.isFinite(Number(siteConfig?.breaklineMinutes)) && Number(siteConfig.breaklineMinutes) >= 0
+      ? Number(siteConfig.breaklineMinutes)
+      : DEFAULT_PREFERRED_SLOT_SCHEDULE.breaklineMinutes,
+    tpiTimeMinutes: Number.isFinite(Number(siteConfig?.tpiTimeMinutes)) && Number(siteConfig.tpiTimeMinutes) > 0
+      ? Number(siteConfig.tpiTimeMinutes)
+      : DEFAULT_PREFERRED_SLOT_SCHEDULE.tpiTimeMinutes,
+    firstTpiStartTime: normalizeWhitespace(siteConfig?.firstTpiStartTime) || DEFAULT_PREFERRED_SLOT_SCHEDULE.firstTpiStartTime,
+    numSlots: Number.isInteger(Number(siteConfig?.numSlots)) && Number(siteConfig.numSlots) > 0
+      ? Number(siteConfig.numSlots)
+      : fallbackSlotCount
+  }
+}
+
+function resolvePreferredSoutenanceSlotHalfDay(period, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
+  const normalizedPeriod = Number.parseInt(period, 10)
+
+  if (!Number.isInteger(normalizedPeriod) || normalizedPeriod <= 0) {
+    return ''
+  }
+
+  const firstTpiStartMinutes = parseTimeToMinutes(schedule?.firstTpiStartTime, 8 * 60)
+  const tpiTimeMinutes = Number.isFinite(Number(schedule?.tpiTimeMinutes)) && Number(schedule.tpiTimeMinutes) > 0
+    ? Number(schedule.tpiTimeMinutes)
+    : DEFAULT_PREFERRED_SLOT_SCHEDULE.tpiTimeMinutes
+  const breaklineMinutes = Number.isFinite(Number(schedule?.breaklineMinutes)) && Number(schedule.breaklineMinutes) >= 0
+    ? Number(schedule.breaklineMinutes)
+    : DEFAULT_PREFERRED_SLOT_SCHEDULE.breaklineMinutes
+  const startMinutes = firstTpiStartMinutes + (normalizedPeriod - 1) * (tpiTimeMinutes + breaklineMinutes)
+
+  return startMinutes >= AFTERNOON_START_MINUTES ? 'PM' : 'AM'
+}
+
+function buildPreferredSoutenanceSlotOptions(slotCount, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
+  const normalizedSlotCount = Number.isInteger(Number(slotCount)) && Number(slotCount) > 0 ? Number(slotCount) : 0
+
+  return Array.from({ length: normalizedSlotCount }, (_, index) => {
+    const slotValue = String(index + 1)
+    const halfDayLabel = resolvePreferredSoutenanceSlotHalfDay(index + 1, schedule)
+
+    return {
+      value: slotValue,
+      halfDayLabel,
+      label: halfDayLabel ? `${slotValue} · ${halfDayLabel}` : slotValue
+    }
+  })
+}
+
+function formatPreferredSoutenanceSlotRange(values = []) {
+  const normalizedValues = Array.from(
+    new Set(
+      (Array.isArray(values) ? values : [values])
+        .map((value) => Number.parseInt(value, 10))
+        .filter((value) => Number.isInteger(value) && value > 0)
+        .sort((left, right) => left - right)
+    )
+  )
+
+  if (normalizedValues.length === 0) {
+    return ''
+  }
+
+  const ranges = []
+  let rangeStart = normalizedValues[0]
+  let previousValue = normalizedValues[0]
+
+  for (let index = 1; index < normalizedValues.length; index += 1) {
+    const currentValue = normalizedValues[index]
+
+    if (currentValue === previousValue + 1) {
+      previousValue = currentValue
+      continue
+    }
+
+    ranges.push(rangeStart === previousValue ? String(rangeStart) : `${rangeStart}-${previousValue}`)
+    rangeStart = currentValue
+    previousValue = currentValue
+  }
+
+  ranges.push(rangeStart === previousValue ? String(rangeStart) : `${rangeStart}-${previousValue}`)
+  return ranges.join(', ')
+}
+
+function formatPreferredSoutenanceSlotSummary(slotOptions = []) {
+  const morningSlots = slotOptions
+    .filter((slot) => slot?.halfDayLabel === 'AM')
+    .map((slot) => slot.value)
+  const afternoonSlots = slotOptions
+    .filter((slot) => slot?.halfDayLabel === 'PM')
+    .map((slot) => slot.value)
+
+  return [
+    morningSlots.length > 0 ? `AM: ${formatPreferredSoutenanceSlotRange(morningSlots)}` : '',
+    afternoonSlots.length > 0 ? `PM: ${formatPreferredSoutenanceSlotRange(afternoonSlots)}` : ''
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function resolvePreferredSoutenanceSlotContext(planningConfig, siteValue = '') {
+  const siteConfigs = Array.isArray(planningConfig?.siteConfigs)
+    ? planningConfig.siteConfigs.filter((siteConfig) => siteConfig?.active !== false)
+    : []
+  const fallbackSlotCount = siteConfigs.reduce((maxValue, siteConfig) => {
+    const slotCount = Number.isInteger(Number(siteConfig?.numSlots)) && Number(siteConfig.numSlots) > 0
+      ? Number(siteConfig.numSlots)
+      : 0
+    return Math.max(maxValue, slotCount)
+  }, 8)
+  const normalizedSiteValue = normalizeSiteLookup(siteValue)
+
+  if (!normalizedSiteValue) {
+    const fallbackSchedule = buildPreferredSoutenanceSlotSchedule({}, fallbackSlotCount)
+    const fallbackSlotOptions = buildPreferredSoutenanceSlotOptions(fallbackSlotCount, fallbackSchedule)
+
+    return {
+      slotCount: fallbackSlotCount,
+      label: '',
+      slotSummary: formatPreferredSoutenanceSlotSummary(fallbackSlotOptions),
+      getSlotLabel: (slotValue) => {
+        const normalizedSlot = Number.parseInt(slotValue, 10)
+        const halfDayLabel = resolvePreferredSoutenanceSlotHalfDay(normalizedSlot, fallbackSchedule)
+        return halfDayLabel ? `${normalizedSlot} · ${halfDayLabel}` : String(slotValue)
+      }
+    }
+  }
+
+  const resolvedSiteConfig = siteConfigs.find((siteConfig) => {
+    const candidates = [
+      siteConfig?.label,
+      siteConfig?.siteCode,
+      siteConfig?.siteId
+    ]
+      .map((candidate) => normalizeSiteLookup(candidate))
+      .filter(Boolean)
+
+    return candidates.some((candidate) =>
+      candidate === normalizedSiteValue ||
+      candidate.includes(normalizedSiteValue) ||
+      normalizedSiteValue.includes(candidate)
+    )
+  })
+
+  const resolvedSlotCount = Number.isInteger(Number(resolvedSiteConfig?.numSlots)) && Number(resolvedSiteConfig.numSlots) > 0
+    ? Number(resolvedSiteConfig.numSlots)
+    : fallbackSlotCount
+  const resolvedSchedule = buildPreferredSoutenanceSlotSchedule(resolvedSiteConfig, resolvedSlotCount)
+  const resolvedSlotOptions = buildPreferredSoutenanceSlotOptions(resolvedSlotCount, resolvedSchedule)
+
+  return {
+    slotCount: resolvedSlotCount,
+    label: normalizeWhitespace(resolvedSiteConfig?.label || siteValue),
+    slotSummary: formatPreferredSoutenanceSlotSummary(resolvedSlotOptions),
+    getSlotLabel: (slotValue) => {
+      const normalizedSlot = Number.parseInt(slotValue, 10)
+      const halfDayLabel = resolvePreferredSoutenanceSlotHalfDay(normalizedSlot, resolvedSchedule)
+      return halfDayLabel ? `${normalizedSlot} · ${halfDayLabel}` : String(slotValue)
+    }
+  }
+}
+
+function buildRouteTargetForm(target = {}) {
+  const { firstName, lastName } = splitStakeholderDraftName(target?.name)
+  const roles = getDraftRoles(target?.role)
+  const requestedYear = Number.parseInt(target?.year, 10)
+
+  return {
+    ...INITIAL_FORM,
+    firstName,
+    lastName,
+    roles,
+    candidateYears: roles.includes('candidat') && Number.isInteger(requestedYear)
+      ? [requestedYear]
+      : []
+  }
+}
+
 function doesPersonCoverDraft(person, draft) {
   if (!person || person.isActive === false) {
     return false
@@ -707,6 +956,10 @@ function doesPersonCoverDraft(person, draft) {
   const roleSet = normalizeRoles(person.roles)
 
   if (!roleSet.has(String(draft?.role || '').trim())) {
+    return false
+  }
+
+  if (!normalizeWhitespace(person?.email)) {
     return false
   }
 
@@ -829,6 +1082,61 @@ function getDraftPrimaryActionLabel(statusType) {
   }
 }
 
+function canUseSyntheticCandidateEmailForDraft(draft, existingPerson) {
+  return normalizeWhitespace(draft?.role).toLowerCase() === 'candidat' &&
+    !normalizeWhitespace(existingPerson?.email)
+}
+
+function buildSyntheticCandidateDraftTargets(draftWorkflowItems = []) {
+  const groupedTargets = new Map()
+
+  for (const item of Array.isArray(draftWorkflowItems) ? draftWorkflowItems : []) {
+    const draft = item?.draft
+    const existingPerson = item?.existingPerson
+
+    if (!canUseSyntheticCandidateEmailForDraft(draft, existingPerson)) {
+      continue
+    }
+
+    const { firstName, lastName } = splitStakeholderDraftName(draft?.name)
+    const targetKey = existingPerson?._id
+      ? `person:${String(existingPerson._id)}`
+      : `draft:${normalizeFold(draft?.name)}`
+    const currentTarget = groupedTargets.get(targetKey)
+    const currentCandidateYears = currentTarget?.candidateYears || []
+    const nextCandidateYears = Array.from(
+      new Set([...currentCandidateYears, ...getDraftCandidateYears(draft)])
+    ).sort((left, right) => right - left)
+    const nextRoles = Array.from(
+      new Set([
+        ...(Array.isArray(existingPerson?.roles) ? existingPerson.roles : []),
+        ...(Array.isArray(currentTarget?.roles) ? currentTarget.roles : []),
+        ...getDraftRoles(draft?.role)
+      ].filter(Boolean))
+    )
+
+    groupedTargets.set(targetKey, {
+      key: targetKey,
+      draftIds: Array.from(new Set([...(currentTarget?.draftIds || []), draft.id])),
+      drafts: [...(currentTarget?.drafts || []), draft],
+      displayName: normalizeWhitespace(draft?.name),
+      firstName: normalizeWhitespace(existingPerson?.firstName || currentTarget?.firstName || firstName),
+      lastName: normalizeWhitespace(existingPerson?.lastName || currentTarget?.lastName || lastName),
+      site: normalizeWhitespace(existingPerson?.site || currentTarget?.site || draft?.site),
+      entreprise: normalizeWhitespace(existingPerson?.entreprise || currentTarget?.entreprise || draft?.entreprise),
+      existingPerson: currentTarget?.existingPerson || existingPerson || null,
+      candidateYears: nextCandidateYears,
+      roles: nextRoles
+    })
+  }
+
+  return Array.from(groupedTargets.values()).sort((left, right) =>
+    String(left.displayName || '').localeCompare(String(right.displayName || ''), 'fr', {
+      sensitivity: 'base'
+    })
+  )
+}
+
 function getRoleVisual(roles) {
   const roleSet = normalizeRoles(roles)
 
@@ -877,6 +1185,10 @@ function toForm(person) {
     phone: normalizeWhitespace(person.phone),
     site: normalizeWhitespace(person.site),
     entreprise: normalizeWhitespace(person.entreprise),
+    ...getPreferredSoutenanceDateInputValues(
+      person.preferredSoutenanceChoices,
+      person.preferredSoutenanceDates
+    ),
     roles: Array.isArray(person.roles) && person.roles.length > 0 ? person.roles : ['expert'],
     isActive: person.isActive !== false,
     sendEmails: person.sendEmails !== false,
@@ -885,10 +1197,16 @@ function toForm(person) {
 }
 
 function StakeholderEditorPanel({
+  availablePreferredSlotCount,
   form,
   handleChange,
+  handlePreferredChoiceDateChange,
+  handleAssignCandidateDraftEmail,
   handleReset,
   handleRolePresetChange,
+  preferredSlotContextLabel,
+  preferredSlotLabelResolver,
+  preferredSlotSummary,
   handleSubmit,
   selectedPerson
 }) {
@@ -933,13 +1251,29 @@ function StakeholderEditorPanel({
             </label>
             <label className='full'>
               Email
-              <input
-                type='email'
-                value={form.email}
-                onChange={(event) => handleChange('email', event.target.value)}
-                placeholder='prenom.nom@domaine.ch'
-                autoComplete='email'
-              />
+              <div className='stakeholders-email-field'>
+                <input
+                  type='email'
+                  value={form.email}
+                  onChange={(event) => handleChange('email', event.target.value)}
+                  placeholder='prenom.nom@domaine.ch'
+                  autoComplete='email'
+                />
+                {form.roles.includes('candidat') ? (
+                  <button
+                    type='button'
+                    className='secondary subtle stakeholders-email-draft-button'
+                    onClick={handleAssignCandidateDraftEmail}
+                  >
+                    Email brouillon @tpiorganizer.ch
+                  </button>
+                ) : null}
+              </div>
+              {form.roles.includes('candidat') ? (
+                <small className='stakeholders-email-draft-hint'>
+                  Génère une adresse technique pour avancer dans le workflow et désactive les emails automatiques.
+                </small>
+              ) : null}
             </label>
             <label>
               Téléphone
@@ -961,6 +1295,53 @@ function StakeholderEditorPanel({
               Entreprise
               <input value={form.entreprise} onChange={(event) => handleChange('entreprise', event.target.value)} />
             </label>
+            <div className='stakeholders-preferred-dates full'>
+              <div className='stakeholders-preferred-dates-head'>
+                <span>Dates idéales de soutenance</span>
+                <small>
+                  Optionnel. Jusqu à 3 préférences prises en compte lors de la planification.
+                  {' '}
+                  Créneaux disponibles: 1 à {availablePreferredSlotCount}
+                  {preferredSlotContextLabel ? ` pour ${preferredSlotContextLabel}` : ''}.
+                  {preferredSlotSummary ? ` Repère: ${preferredSlotSummary}.` : ''}
+                </small>
+              </div>
+              <div className='stakeholders-preferred-dates-grid'>
+                {PREFERRED_SOUTENANCE_CHOICE_FIELDS.map(({ dateField, slotField, label }) => (
+                  <div key={dateField} className='stakeholders-preferred-date-choice'>
+                    <span className='stakeholders-preferred-date-choice-title'>{label}</span>
+                    <label>
+                      Date
+                      <input
+                        type='date'
+                        value={form[dateField]}
+                        onChange={(event) => handlePreferredChoiceDateChange(dateField, slotField, event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Créneau
+                      <select
+                        value={form[slotField]}
+                        onChange={(event) => handleChange(slotField, event.target.value)}
+                        disabled={!form[dateField]}
+                      >
+                        <option value=''>Non précisé</option>
+                        {Array.from({
+                          length: Math.max(availablePreferredSlotCount, Number.parseInt(form[slotField], 10) || 0)
+                        }, (_, index) => {
+                          const slotValue = String(index + 1)
+                          return (
+                            <option key={slotValue} value={slotValue}>
+                              {preferredSlotLabelResolver(slotValue)}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className='stakeholders-form-section-head full'>
               <h3>Rôles</h3>
               <span className='stakeholders-role-hint'>Sélectionnez un ou plusieurs rôles</span>
@@ -1085,12 +1466,16 @@ function StakeholderEditorPanel({
 }
 
 function StakeholderDraftPanel({
+  candidateSyntheticDraftCount,
   draftStatusCounts,
   draftStatusFilter,
+  handleBulkAssignCandidateDraftEmails,
   handleClearResolvedDrafts,
   handleDismissDraft,
   handleUseNextDraft,
   handleUseDraft,
+  handleUseDraftWithSyntheticEmail,
+  isAssigningDraftEmails,
   loadPendingDrafts,
   onDraftStatusFilterChange,
   visibleStakeholderDraftStatuses
@@ -1114,6 +1499,19 @@ function StakeholderDraftPanel({
           </p>
         </div>
         <div className='stakeholders-draft-actions-top'>
+          {candidateSyntheticDraftCount > 0 ? (
+            <button
+              type='button'
+              className='secondary subtle'
+              onClick={handleBulkAssignCandidateDraftEmails}
+              disabled={isAssigningDraftEmails}
+              title='Créer ou compléter toutes les fiches candidat sans email avec une adresse brouillon @tpiorganizer.ch'
+            >
+              {isAssigningDraftEmails
+                ? 'Création des emails brouillons…'
+                : `Email brouillon (${candidateSyntheticDraftCount})`}
+            </button>
+          ) : null}
           {draftStatusCounts.actionable > 0 ? (
             <button type='button' className='secondary' onClick={handleUseNextDraft}>
               Traiter le prochain
@@ -1216,6 +1614,16 @@ function StakeholderDraftPanel({
                       <button type='button' className='secondary' onClick={() => handleUseDraft(draft)}>
                         {getDraftPrimaryActionLabel(statusType)}
                       </button>
+                      {canUseSyntheticCandidateEmailForDraft(draft, existingPerson) ? (
+                        <button
+                          type='button'
+                          className='secondary subtle'
+                          onClick={() => handleUseDraftWithSyntheticEmail(draft)}
+                          title='Préremplir un email brouillon candidat @tpiorganizer.ch et couper les emails automatiques'
+                        >
+                          Email brouillon
+                        </button>
+                      ) : null}
                       <button type='button' className='secondary subtle' onClick={() => handleDismissDraft(draft.id)}>
                         Retirer
                       </button>
@@ -1609,11 +2017,13 @@ function MergePreviewModal({
 
 const PartiesPrenantes = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const lastRouteSelectionRef = useRef('')
   const [people, setPeople] = useState([])
   const [pendingDrafts, setPendingDrafts] = useState([])
   const [isLoading, setIsLoading] = useState(false)
+  const [hasAttemptedPeopleLoad, setHasAttemptedPeopleLoad] = useState(false)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
@@ -1643,10 +2053,67 @@ const PartiesPrenantes = () => {
   const [mergePrimaryId, setMergePrimaryId] = useState('')
   const [mergePreview, setMergePreview] = useState(null)
   const [isMergingPeople, setIsMergingPeople] = useState(false)
+  const [isAssigningDraftEmails, setIsAssigningDraftEmails] = useState(false)
+  const [preferredSoutenancePlanningConfig, setPreferredSoutenancePlanningConfig] = useState(null)
+  const routeContext = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+
+    return {
+      personId: params.get('personId') || '',
+      name: params.get('name') || '',
+      role: params.get('role') || '',
+      year: params.get('year') || '',
+      returnTo: normalizeLocalReturnPath(params.get('returnTo') || '')
+    }
+  }, [location.search])
+  const preferredSoutenancePlanningYear = useMemo(() => {
+    const routeYear = Number.parseInt(routeContext.year, 10)
+    if (Number.isInteger(routeYear)) {
+      return routeYear
+    }
+
+    const storedYear = Number.parseInt(readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ''), 10)
+    if (Number.isInteger(storedYear)) {
+      return storedYear
+    }
+
+    const candidateYears = Array.isArray(form.candidateYears)
+      ? form.candidateYears.map((year) => Number.parseInt(year, 10)).filter((year) => Number.isInteger(year))
+      : []
+    if (candidateYears.length > 0) {
+      return Math.max(...candidateYears)
+    }
+
+    return YEARS_CONFIG.getCurrentYear()
+  }, [form.candidateYears, routeContext.year])
+  const preferredSoutenanceSlotContext = useMemo(
+    () => resolvePreferredSoutenanceSlotContext(preferredSoutenancePlanningConfig, form.site),
+    [form.site, preferredSoutenancePlanningConfig]
+  )
 
   const loadPendingDrafts = useCallback(() => {
     setPendingDrafts(readJSONListValue(STORAGE_KEYS.PENDING_STAKEHOLDER_IMPORT, []))
   }, [])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    planningConfigService.getByYear(preferredSoutenancePlanningYear)
+      .then((config) => {
+        if (!isCancelled) {
+          setPreferredSoutenancePlanningConfig(config || null)
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setPreferredSoutenancePlanningConfig(null)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [preferredSoutenancePlanningYear])
 
   const stakeholderDraftStatuses = useMemo(() => {
     return pendingDrafts.map((draft) => {
@@ -1730,6 +2197,11 @@ const PartiesPrenantes = () => {
 
   const nextActionableDraft = useMemo(
     () => draftWorkflowItems.find((item) => item.statusType !== 'resolved') || null,
+    [draftWorkflowItems]
+  )
+
+  const candidateSyntheticDraftTargets = useMemo(
+    () => buildSyntheticCandidateDraftTargets(draftWorkflowItems),
     [draftWorkflowItems]
   )
 
@@ -1832,6 +2304,7 @@ const PartiesPrenantes = () => {
       setPeople([])
     } finally {
       setIsLoading(false)
+      setHasAttemptedPeopleLoad(true)
     }
   }, [emailFilter, roleFilter, search, siteFilter])
 
@@ -1876,6 +2349,14 @@ const PartiesPrenantes = () => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }, [])
 
+  const handlePreferredChoiceDateChange = useCallback((dateField, slotField, value) => {
+    setForm((previousForm) => ({
+      ...previousForm,
+      [dateField]: value,
+      [slotField]: value ? previousForm[slotField] : ''
+    }))
+  }, [])
+
   const handleRolePresetChange = useCallback((roles) => {
     setForm((prev) => ({
       ...prev,
@@ -1915,6 +2396,14 @@ const PartiesPrenantes = () => {
   const handleSelect = useCallback((person) => {
     setSelectedPerson(person)
     setForm(toForm(person))
+    setActiveStakeholderTab('create')
+    setIsPeopleOpen(true)
+    setIsWorkbenchOpen(true)
+  }, [])
+
+  const handleOpenRouteTarget = useCallback((target) => {
+    setSelectedPerson(null)
+    setForm(buildRouteTargetForm(target))
     setActiveStakeholderTab('create')
     setIsPeopleOpen(true)
     setIsWorkbenchOpen(true)
@@ -2063,37 +2552,48 @@ const PartiesPrenantes = () => {
   }, [clearMergeSelection, handleCloseMergePreview, handleExecuteMergeDuplicates, mergePreview])
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const routeTarget = {
-      personId: params.get('personId') || '',
-      name: params.get('name') || '',
-      role: params.get('role') || ''
+    if (!hasAttemptedPeopleLoad) {
+      return
     }
 
-    if (!routeTarget.personId && !routeTarget.name) {
+    if (!routeContext.personId && !routeContext.name) {
       lastRouteSelectionRef.current = ''
       return
     }
 
-    const routeSelectionKey = `${routeTarget.personId}|${routeTarget.name}|${routeTarget.role}`
-    if (lastRouteSelectionRef.current === routeSelectionKey) {
+    const routeSelectionKey = `${routeContext.personId}|${routeContext.name}|${routeContext.role}|${routeContext.year}`
+    const matchedPerson = findPersonByRouteTarget(people, routeContext)
+
+    if (!matchedPerson && !routeContext.name) {
       return
     }
-
-    const matchedPerson = findPersonByRouteTarget(people, routeTarget)
 
     if (!matchedPerson) {
+      const prefillKey = `prefill:${routeSelectionKey}`
+
+      if (lastRouteSelectionRef.current === prefillKey) {
+        return
+      }
+
+      lastRouteSelectionRef.current = prefillKey
+      handleOpenRouteTarget(routeContext)
+      toast.info('Aucune fiche trouvée. Le formulaire a été prérempli pour créer la partie prenante.')
       return
     }
 
-    lastRouteSelectionRef.current = routeSelectionKey
+    const matchKey = `match:${routeSelectionKey}:${matchedPerson._id}`
+    if (lastRouteSelectionRef.current === matchKey) {
+      return
+    }
+
+    lastRouteSelectionRef.current = matchKey
     handleSelect(matchedPerson)
 
     window.requestAnimationFrame(() => {
       const row = document.querySelector(`[data-stakeholder-id="${matchedPerson._id}"]`)
       row?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
-  }, [handleSelect, location.search, people])
+  }, [handleOpenRouteTarget, handleSelect, hasAttemptedPeopleLoad, people, routeContext])
 
   const removePendingDrafts = useCallback((predicate) => {
     setPendingDrafts((currentDrafts) => {
@@ -2141,10 +2641,22 @@ const PartiesPrenantes = () => {
     toast.info('Exemple chargé dans le champ.')
   }, [])
 
-  const handleUseDraft = useCallback((draft) => {
+  const openDraftInEditor = useCallback((draft, options = {}) => {
     const existingPerson = findPersonByDraftName(people, draft)
     const { firstName, lastName } = splitStakeholderDraftName(draft?.name)
     const draftCandidateYears = getDraftCandidateYears(draft)
+    const useSyntheticEmail = options.useSyntheticEmail === true &&
+      normalizeWhitespace(draft?.role).toLowerCase() === 'candidat'
+    const syntheticEmail = useSyntheticEmail
+      ? buildSyntheticStakeholderEmail({
+          firstName: existingPerson?.firstName || firstName,
+          lastName: existingPerson?.lastName || lastName,
+          role: 'candidat',
+          year: draftCandidateYears[0] || draft?.year || new Date().getFullYear(),
+          seed: `${draft?.id || ''}|${existingPerson?._id || ''}`
+        })
+      : ''
+
     setActiveStakeholderTab('create')
     setIsWorkbenchOpen(true)
 
@@ -2155,18 +2667,25 @@ const PartiesPrenantes = () => {
       const mergedCandidateYears = Array.from(
         new Set([...getPersonCandidateYears(existingPerson), ...draftCandidateYears])
       ).sort((left, right) => right - left)
+      const existingEmail = normalizeWhitespace(existingPerson.email)
 
       setSelectedPerson(existingPerson)
       setForm({
         ...toForm(existingPerson),
         firstName: existingPerson.firstName || firstName,
         lastName: existingPerson.lastName || lastName,
+        email: existingEmail || syntheticEmail,
         site: existingPerson.site || draft.site || '',
         entreprise: existingPerson.entreprise || draft.entreprise || '',
         roles: mergedRoles.length > 0 ? mergedRoles : getDraftRoles(draft.role),
-        candidateYears: mergedCandidateYears
+        candidateYears: mergedCandidateYears,
+        sendEmails: useSyntheticEmail ? false : existingPerson.sendEmails !== false
       })
-      toast.info('Fiche existante chargée pour complétion.')
+      toast.info(
+        useSyntheticEmail && !existingEmail
+          ? 'Fiche existante chargée avec un email brouillon candidat et les emails automatiques désactivés.'
+          : 'Fiche existante chargée pour complétion.'
+      )
       return
     }
 
@@ -2175,13 +2694,27 @@ const PartiesPrenantes = () => {
       ...INITIAL_FORM,
       firstName,
       lastName,
+      email: syntheticEmail,
       site: draft.site || '',
       entreprise: draft.entreprise || '',
       roles: getDraftRoles(draft.role),
-      candidateYears: draftCandidateYears
+      candidateYears: draftCandidateYears,
+      sendEmails: useSyntheticEmail ? false : INITIAL_FORM.sendEmails
     })
-    toast.info('Brouillon chargé dans le formulaire.')
+    toast.info(
+      useSyntheticEmail
+        ? 'Brouillon chargé avec un email candidat @tpiorganizer.ch et les emails automatiques désactivés.'
+        : 'Brouillon chargé dans le formulaire.'
+    )
   }, [people])
+
+  const handleUseDraft = useCallback((draft) => {
+    openDraftInEditor(draft)
+  }, [openDraftInEditor])
+
+  const handleUseDraftWithSyntheticEmail = useCallback((draft) => {
+    openDraftInEditor(draft, { useSyntheticEmail: true })
+  }, [openDraftInEditor])
 
   const handleUseNextDraft = useCallback(() => {
     if (!nextActionableDraft) {
@@ -2196,6 +2729,125 @@ const PartiesPrenantes = () => {
     removePendingDrafts((draft) => draft.id === draftId)
     toast.info('Entrée retirée de la file de complétion.')
   }, [removePendingDrafts])
+
+  const handleAssignCandidateDraftEmail = useCallback(() => {
+    if (!form.roles.includes('candidat')) {
+      toast.info("L'email brouillon est réservé aux candidats.")
+      return
+    }
+
+    const currentEmail = normalizeWhitespace(form.email)
+    if (currentEmail && !isSyntheticOrganizerEmail(currentEmail)) {
+      const confirmed = window.confirm(
+        "Remplacer l'email actuel par un email brouillon @tpiorganizer.ch ? Les emails automatiques seront désactivés."
+      )
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    const selectedYear = Array.isArray(form.candidateYears) && form.candidateYears.length > 0
+      ? form.candidateYears[0]
+      : new Date().getFullYear()
+    const syntheticEmail = buildSyntheticStakeholderEmail({
+      firstName: form.firstName,
+      lastName: form.lastName,
+      role: 'candidat',
+      year: selectedYear,
+      seed: `${selectedPerson?._id || ''}|${form.firstName}|${form.lastName}|${selectedYear}`
+    })
+
+    setForm((currentForm) => ({
+      ...currentForm,
+      email: syntheticEmail,
+      sendEmails: false
+    }))
+    toast.success('Email brouillon candidat appliqué. Les emails automatiques sont désactivés.')
+  }, [form, selectedPerson])
+
+  const handleBulkAssignCandidateDraftEmails = useCallback(async () => {
+    if (candidateSyntheticDraftTargets.length === 0) {
+      toast.info('Aucun candidat sans email à compléter automatiquement.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Créer ou compléter ${candidateSyntheticDraftTargets.length} fiche${candidateSyntheticDraftTargets.length > 1 ? 's' : ''} candidat avec un email brouillon @tpiorganizer.ch et désactiver les emails automatiques ?`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsAssigningDraftEmails(true)
+
+    const completedDraftIds = new Set()
+    const failures = []
+
+    try {
+      for (const target of candidateSyntheticDraftTargets) {
+        const selectedYear = target.candidateYears[0] || new Date().getFullYear()
+        const syntheticEmail = buildSyntheticStakeholderEmail({
+          firstName: target.firstName,
+          lastName: target.lastName,
+          role: 'candidat',
+          year: selectedYear,
+          seed: `${target.key}|${target.draftIds.join('|')}`
+        })
+        const payload = {
+          firstName: target.firstName,
+          lastName: target.lastName,
+          email: syntheticEmail,
+          phone: normalizeWhitespace(target.existingPerson?.phone),
+          site: target.site,
+          entreprise: target.entreprise,
+          roles: Array.from(new Set([...(Array.isArray(target.roles) ? target.roles : []), 'candidat'])),
+          isActive: target.existingPerson?.isActive !== false,
+          sendEmails: false,
+          candidateYears: target.candidateYears
+        }
+
+        try {
+          if (target.existingPerson?._id) {
+            await personService.update(String(target.existingPerson._id), payload)
+          } else {
+            await personService.create(payload)
+          }
+
+          target.draftIds.forEach((draftId) => completedDraftIds.add(draftId))
+        } catch (error) {
+          failures.push({
+            name: target.displayName,
+            message: error?.data?.error || error?.message || 'Erreur inconnue'
+          })
+        }
+      }
+
+      if (completedDraftIds.size > 0) {
+        removePendingDrafts((draft) => completedDraftIds.has(draft.id))
+      }
+
+      await loadPeople()
+
+      if (failures.length === 0) {
+        toast.success(
+          `${completedDraftIds.size} brouillon${completedDraftIds.size > 1 ? 's' : ''} candidat complété${completedDraftIds.size > 1 ? 's' : ''} avec un email brouillon.`
+        )
+        return
+      }
+
+      if (completedDraftIds.size > 0) {
+        toast.warning(
+          `${completedDraftIds.size} brouillon${completedDraftIds.size > 1 ? 's' : ''} candidat traité${completedDraftIds.size > 1 ? 's' : ''}, ${failures.length} erreur${failures.length > 1 ? 's' : ''}. Première erreur: ${failures[0].name} (${failures[0].message})`
+        )
+      } else {
+        toast.error(`Aucun email brouillon créé. Première erreur: ${failures[0].name} (${failures[0].message})`)
+      }
+    } finally {
+      setIsAssigningDraftEmails(false)
+    }
+  }, [candidateSyntheticDraftTargets, loadPeople, removePendingDrafts])
 
   const handleTabChange = useCallback((tab) => {
     setActiveStakeholderTab(tab)
@@ -2313,6 +2965,13 @@ const PartiesPrenantes = () => {
     const normalizedPhone = normalizeWhitespace(form.phone)
     const normalizedSite = normalizeWhitespace(form.site)
     const normalizedEntreprise = normalizeWhitespace(form.entreprise)
+    const preferredSoutenanceChoices = buildPreferredSoutenanceChoices(
+      PREFERRED_SOUTENANCE_CHOICE_FIELDS.map(({ dateField, slotField }) => ({
+        date: form[dateField],
+        period: form[slotField]
+      }))
+    )
+    const preferredSoutenanceDates = buildPreferredSoutenanceDates(preferredSoutenanceChoices)
 
     if (!normalizedFirstName || !normalizedLastName || !normalizedEmail) {
       toast.error('Prénom, nom et email sont requis.')
@@ -2327,6 +2986,8 @@ const PartiesPrenantes = () => {
       phone: normalizedPhone,
       site: normalizedSite,
       entreprise: normalizedEntreprise,
+      preferredSoutenanceChoices,
+      preferredSoutenanceDates,
       roles: form.roles
     }
 
@@ -2347,11 +3008,17 @@ const PartiesPrenantes = () => {
 
       clearDraftsCoveredByPerson(payload)
       await loadPeople()
+
+      if (routeContext.returnTo) {
+        navigate(routeContext.returnTo)
+        return
+      }
+
       handleReset()
     } catch (err) {
       toast.error(err?.data?.error || err?.message || 'Sauvegarde impossible.')
     }
-  }, [clearDraftsCoveredByPerson, form, handleReset, loadPeople, selectedPerson])
+  }, [clearDraftsCoveredByPerson, form, handleReset, loadPeople, navigate, routeContext.returnTo, selectedPerson])
 
   return (
     <div className='stakeholders-page'>
@@ -2436,10 +3103,16 @@ const PartiesPrenantes = () => {
             <div className='stakeholders-workbench-content'>
               {activeStakeholderTab === 'create' ? (
                 <StakeholderEditorPanel
+                  availablePreferredSlotCount={preferredSoutenanceSlotContext.slotCount}
                   form={form}
                   handleChange={handleChange}
+                  handlePreferredChoiceDateChange={handlePreferredChoiceDateChange}
+                  handleAssignCandidateDraftEmail={handleAssignCandidateDraftEmail}
                   handleReset={handleReset}
                   handleRolePresetChange={handleRolePresetChange}
+                  preferredSlotContextLabel={preferredSoutenanceSlotContext.label}
+                  preferredSlotLabelResolver={preferredSoutenanceSlotContext.getSlotLabel}
+                  preferredSlotSummary={preferredSoutenanceSlotContext.slotSummary}
                   handleSubmit={handleSubmit}
                   selectedPerson={selectedPerson}
                 />
@@ -2447,12 +3120,16 @@ const PartiesPrenantes = () => {
 
               {activeStakeholderTab === 'draft' ? (
                 <StakeholderDraftPanel
+                  candidateSyntheticDraftCount={candidateSyntheticDraftTargets.length}
                   draftStatusCounts={draftStatusCounts}
                   draftStatusFilter={draftStatusFilter}
+                  handleBulkAssignCandidateDraftEmails={handleBulkAssignCandidateDraftEmails}
                   handleClearResolvedDrafts={handleClearResolvedDrafts}
                   handleDismissDraft={handleDismissDraft}
                   handleUseNextDraft={handleUseNextDraft}
                   handleUseDraft={handleUseDraft}
+                  handleUseDraftWithSyntheticEmail={handleUseDraftWithSyntheticEmail}
+                  isAssigningDraftEmails={isAssigningDraftEmails}
                   loadPendingDrafts={loadPendingDrafts}
                   onDraftStatusFilterChange={handleDraftStatusFilterChange}
                   visibleStakeholderDraftStatuses={visibleStakeholderDraftStatuses}

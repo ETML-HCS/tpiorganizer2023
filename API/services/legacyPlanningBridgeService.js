@@ -7,9 +7,13 @@ const Vote = require('../models/voteModel')
 const TpiModelsYear = require('../models/tpiModels')
 const { createTpiRoomModel } = require('../models/tpiRoomsModels')
 const { findOrCreatePerson } = require('./csvImportService')
-const { isExternalPlanningSite } = require('./tpiPlanningVisibility')
+const { getPlanningConfig } = require('./planningConfigService')
+const { isExternalPlanningSite, isPlanifiableTpi } = require('./tpiPlanningVisibility')
 const { personHasRole } = require('./personRegistryService')
-const { validateLegacyTpiStakeholders } = require('./tpiStakeholderService')
+const {
+  linkLegacyTpiStakeholders,
+  validateLegacyTpiStakeholders
+} = require('./tpiStakeholderService')
 
 const DEFAULT_VOTING_DEADLINE_DAYS = 7
 
@@ -113,6 +117,13 @@ function normalizeLegacyTpiData(rawTpiData, index = 0) {
   }
 }
 
+const LEGACY_TPI_PERSON_ID_FIELDS = Object.freeze([
+  'candidatPersonId',
+  'expert1PersonId',
+  'expert2PersonId',
+  'bossPersonId'
+])
+
 function pickFirstNonEmpty(...values) {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) {
@@ -139,6 +150,33 @@ function pickFirstDefined(...values) {
   }
 
   return null
+}
+
+function normalizeLinkedPersonId(value) {
+  if (!value) {
+    return ''
+  }
+
+  if (value?._id) {
+    return String(value._id)
+  }
+
+  return String(value).trim()
+}
+
+function extractLegacyTpiParticipantLinkUpdates(previousTpi = {}, nextTpi = {}) {
+  const updates = {}
+
+  for (const fieldName of LEGACY_TPI_PERSON_ID_FIELDS) {
+    const previousValue = normalizeLinkedPersonId(previousTpi?.[fieldName])
+    const nextValue = normalizeLinkedPersonId(nextTpi?.[fieldName])
+
+    if (!previousValue && nextValue) {
+      updates[fieldName] = nextValue
+    }
+  }
+
+  return updates
 }
 
 function buildReference(year, legacyRef, fallbackIndex) {
@@ -229,6 +267,167 @@ async function loadLegacyTpis(year) {
   }
 }
 
+function buildPlanningDraftFromLegacyTpi({ year, legacyTpi, linkedPersonIds = {}, createdById = null }) {
+  const legacyRef = normalizeRef(legacyTpi?.refTpi || legacyTpi?.id)
+  const reference = buildReference(year, legacyRef, 0)
+  const candidat = toObjectIdOrNull(linkedPersonIds.candidatPersonId || legacyTpi?.candidatPersonId)
+  const expert1 = toObjectIdOrNull(linkedPersonIds.expert1PersonId || legacyTpi?.expert1PersonId)
+  const expert2 = toObjectIdOrNull(linkedPersonIds.expert2PersonId || legacyTpi?.expert2PersonId)
+  const chefProjet = toObjectIdOrNull(linkedPersonIds.bossPersonId || legacyTpi?.bossPersonId)
+
+  return {
+    reference,
+    year,
+    candidat,
+    expert1,
+    expert2,
+    chefProjet,
+    sujet: pickFirstNonEmpty(legacyTpi?.sujet, legacyTpi?.titre),
+    description: pickFirstNonEmpty(legacyTpi?.description),
+    entreprise: pickFirstNonEmpty(legacyTpi?.lieu?.entreprise, legacyTpi?.entreprise)
+      ? { nom: pickFirstNonEmpty(legacyTpi?.lieu?.entreprise, legacyTpi?.entreprise) }
+      : undefined,
+    classe: pickFirstNonEmpty(legacyTpi?.classe),
+    site: pickFirstNonEmpty(legacyTpi?.lieu?.site, legacyTpi?.site),
+    dates: {
+      debut: normalizeDateOnly(legacyTpi?.dates?.depart || legacyTpi?.dates?.debut),
+      fin: normalizeDateOnly(legacyTpi?.dates?.fin),
+      premiereVisite: normalizeDateOnly(legacyTpi?.dates?.premiereVisite),
+      deuxiemeVisite: normalizeDateOnly(legacyTpi?.dates?.deuxiemeVisite),
+      renduFinal: normalizeDateOnly(legacyTpi?.dates?.renduFinal)
+    },
+    status: 'draft',
+    proposedSlots: [],
+    confirmedSlot: null,
+    soutenanceDateTime: null,
+    soutenanceRoom: '',
+    conflicts: [],
+    manualOverride: {
+      isManual: false,
+      reason: '',
+      overriddenBy: null,
+      overriddenAt: null
+    },
+    notifications: [],
+    evaluation: legacyTpi?.evaluation || undefined,
+    tags: Array.isArray(legacyTpi?.tags) ? legacyTpi.tags.filter(Boolean) : [],
+    history: [],
+    createdBy: createdById
+  }
+}
+
+async function syncLegacyCatalogToPlanning({ year, createdBy = null }) {
+  const normalizedYear = Number.parseInt(String(year), 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour la synchronisation du catalogue legacy.')
+  }
+
+  const planningConfig = await getPlanningConfig(normalizedYear)
+  const [legacyTpis, activePeople, existingPlanningTpis] = await Promise.all([
+    loadLegacyTpis(normalizedYear),
+    Person.find({ isActive: true })
+      .select('firstName lastName email roles candidateYears isActive')
+      .lean(),
+    TpiPlanning.find({ year: normalizedYear })
+      .select('reference')
+      .lean()
+  ])
+
+  const createdById = toObjectIdOrNull(createdBy?.id || createdBy?._id || createdBy)
+  const LegacyTpiModel = TpiModelsYear(normalizedYear)
+  const existingReferences = new Set(
+    existingPlanningTpis
+      .map((tpi) => normalizeString(tpi?.reference))
+      .filter(Boolean)
+  )
+  const summary = {
+    year: normalizedYear,
+    totalLegacyTpis: Array.isArray(legacyTpis) ? legacyTpis.length : 0,
+    planifiableLegacyTpis: 0,
+    createdCount: 0,
+    skippedExistingCount: 0,
+    skippedMissingReferenceCount: 0,
+    skippedInvalidStakeholdersCount: 0,
+    outOfScopeCount: 0
+  }
+  const legacyBulkOperations = []
+  const planningCreates = []
+
+  for (const rawLegacyTpi of Array.isArray(legacyTpis) ? legacyTpis : []) {
+    const plainLegacyTpi = toPlainObject(rawLegacyTpi) || {}
+
+    if (!isPlanifiableTpi(plainLegacyTpi, planningConfig)) {
+      summary.outOfScopeCount += 1
+      continue
+    }
+
+    summary.planifiableLegacyTpis += 1
+
+    const { tpi: linkedLegacyTpi } = linkLegacyTpiStakeholders(plainLegacyTpi, activePeople, {
+      year: normalizedYear
+    })
+    const linkUpdates = extractLegacyTpiParticipantLinkUpdates(plainLegacyTpi, linkedLegacyTpi)
+
+    if (plainLegacyTpi?._id && Object.keys(linkUpdates).length > 0) {
+      legacyBulkOperations.push({
+        updateOne: {
+          filter: { _id: plainLegacyTpi._id },
+          update: { $set: linkUpdates }
+        }
+      })
+    }
+
+    const legacyRef = normalizeRef(linkedLegacyTpi?.refTpi || linkedLegacyTpi?.id)
+    if (!legacyRef) {
+      summary.skippedMissingReferenceCount += 1
+      continue
+    }
+
+    const reference = buildReference(normalizedYear, legacyRef, 0)
+    if (existingReferences.has(reference)) {
+      summary.skippedExistingCount += 1
+      continue
+    }
+
+    const stakeholderValidation = validateLegacyTpiStakeholders(linkedLegacyTpi, {
+      people: activePeople,
+      year: normalizedYear,
+      requireResolved: true
+    })
+
+    if (!stakeholderValidation.isValidated) {
+      summary.skippedInvalidStakeholdersCount += 1
+      continue
+    }
+
+    const planningDraft = buildPlanningDraftFromLegacyTpi({
+      year: normalizedYear,
+      legacyTpi: linkedLegacyTpi,
+      linkedPersonIds: stakeholderValidation.linkedPersonIds,
+      createdById
+    })
+
+    if (!planningDraft.candidat || !planningDraft.expert1 || !planningDraft.expert2 || !planningDraft.chefProjet) {
+      summary.skippedInvalidStakeholdersCount += 1
+      continue
+    }
+
+    planningCreates.push(planningDraft)
+    existingReferences.add(reference)
+  }
+
+  if (legacyBulkOperations.length > 0) {
+    await LegacyTpiModel.bulkWrite(legacyBulkOperations)
+  }
+
+  if (planningCreates.length > 0) {
+    await TpiPlanning.insertMany(planningCreates, { ordered: false })
+    summary.createdCount = planningCreates.length
+  }
+
+  return summary
+}
+
 async function rebuildWorkflowFromLegacyPlanning({
   year,
   legacyRooms = null,
@@ -239,6 +438,7 @@ async function rebuildWorkflowFromLegacyPlanning({
     throw new Error('Annee invalide pour la synchronisation du planning.')
   }
 
+  const planningConfig = await getPlanningConfig(normalizedYear)
   const rooms = await loadLegacyRooms(normalizedYear, legacyRooms)
   const legacyTpis = await loadLegacyTpis(normalizedYear)
   const activePeople = await Person.find({ isActive: true })
@@ -278,7 +478,9 @@ async function rebuildWorkflowFromLegacyPlanning({
     slotCount: 0,
     voteCount: 0,
     skippedEntries: 0,
+    outOfScopeEntries: 0,
     externalEntries: 0,
+    unconfiguredSiteEntries: 0,
     missingReferences: []
   }
 
@@ -312,10 +514,22 @@ async function rebuildWorkflowFromLegacyPlanning({
 
       const legacyTpi = legacyTpiByRef.get(legacyRef) || null
       const siteCandidates = [room.site, legacyTpi?.lieu?.site, legacyTpi?.site]
-      if (siteCandidates.some(isExternalPlanningSite)) {
-        console.warn(`⚠️ TPI ignoré (site externe): ${legacyRef}`)
+      const planningSiteValue = pickFirstNonEmpty(...siteCandidates)
+
+      if (!isPlanifiableTpi({ site: planningSiteValue }, planningConfig)) {
+        const isExternalSite = siteCandidates.some(isExternalPlanningSite)
+        const skipReason = isExternalSite
+          ? 'site externe'
+          : 'site hors périmètre de Configuration Sites'
+
+        console.warn(`⚠️ TPI ignoré (${skipReason}): ${legacyRef}`)
         summary.skippedEntries += 1
-        summary.externalEntries += 1
+        summary.outOfScopeEntries += 1
+        if (isExternalSite) {
+          summary.externalEntries += 1
+        } else {
+          summary.unconfiguredSiteEntries += 1
+        }
         continue
       }
 
@@ -552,7 +766,9 @@ async function rebuildWorkflowFromLegacyPlanning({
   console.log(`✅ Slots créés: ${summary.slotCount}`)
   console.log(`✅ Votes créés: ${summary.voteCount}`)
   console.log(`⚠️ TPI ignorés: ${summary.skippedEntries}`)
+  console.log(`⚠️ Sites hors périmètre: ${summary.outOfScopeEntries}`)
   console.log(`⚠️ Sites externes: ${summary.externalEntries}`)
+  console.log(`⚠️ Sites non configurés: ${summary.unconfiguredSiteEntries}`)
   console.log(`❌ Références manquantes: ${JSON.stringify(summary.missingReferences)}`)
   console.log('============================')
 
@@ -561,6 +777,7 @@ async function rebuildWorkflowFromLegacyPlanning({
 
 module.exports = {
   rebuildWorkflowFromLegacyPlanning,
+  syncLegacyCatalogToPlanning,
   loadLegacyRooms,
   loadLegacyTpis,
   normalizeLegacyRoom,

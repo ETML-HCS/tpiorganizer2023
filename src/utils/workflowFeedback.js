@@ -33,7 +33,7 @@ export const buildValidationToast = (year, result) => {
     }
 
     if (importIssueCount > 0) {
-      details.push(`${importIssueCount} écart(s) GestionTPI/Planning`)
+      details.push(`${importIssueCount} écart(s) GestionTPI/workflow`)
     }
 
     const extra = details.length > 0 ? ` (${details.join(', ')})` : ''

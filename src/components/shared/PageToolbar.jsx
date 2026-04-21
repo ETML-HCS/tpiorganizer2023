@@ -1,5 +1,10 @@
 import React from "react"
-import { Link, useLocation } from "react-router-dom"
+import {
+  Link,
+  UNSAFE_LocationContext as LocationContext,
+  useInRouterContext
+} from "react-router-dom"
+import { ChevronDownIcon } from "./InlineIcons"
 
 const PageToolbar = ({
   id = "tools",
@@ -20,14 +25,38 @@ const PageToolbar = ({
   tabsClassName = "",
   bodyClassName = "",
   navigationLinks = [],
+  navigationMode = "body",
   flatHeader = false,
   collapseLabel = "Réduire les outils",
-  expandLabel = "Afficher les outils"
+  expandLabel = "Afficher les outils",
+  hideWhenEmpty = true
 }) => {
   const tabItems = Array.isArray(tabs) ? tabs.filter(Boolean) : []
   const navItems = Array.isArray(navigationLinks) ? navigationLinks.filter(Boolean) : []
-  const location = useLocation()
+  const bodyItems = React.Children.toArray(children).filter(
+    (child) => child !== null && child !== false && child !== ''
+  )
+  const isInRouter = useInRouterContext()
+  const routerLocation = React.useContext(LocationContext)?.location
+  const pathname = routerLocation?.pathname || ""
   const hasHeaderCopy = Boolean(eyebrow || title || description)
+  const hasMeta = Boolean(meta)
+  const hasActions = Boolean(actions)
+  const hasBodyContent = bodyItems.length > 0
+  const hasHeaderSection = Boolean(hasHeaderCopy || hasMeta || hasActions || toggleArrow)
+  const hasNavigation = navItems.length > 0
+  const hasTabs = tabItems.length > 0
+  const shouldRenderBody = isArrowUp && hasBodyContent
+  const shouldRenderNavigation = hasNavigation && isArrowUp && isInRouter
+  const shouldRenderNavigationInHeader =
+    shouldRenderNavigation && navigationMode === "header" && hasHeaderSection
+  const shouldRenderNavigationStandalone =
+    shouldRenderNavigation && !shouldRenderNavigationInHeader
+  const hasToolbarContent = hasHeaderSection || hasTabs || shouldRenderNavigation || hasBodyContent
+
+  if (hideWhenEmpty && !hasToolbarContent) {
+    return null
+  }
 
   const isLinkActive = (link) => {
     if (!link?.to) {
@@ -46,12 +75,12 @@ const PageToolbar = ({
       }
 
       if (pattern === "/") {
-        return location.pathname === "/"
+        return pathname === "/"
       }
 
       return pattern.endsWith("/")
-        ? location.pathname.startsWith(pattern)
-        : location.pathname === pattern
+        ? pathname.startsWith(pattern)
+        : pathname === pattern
     })
   }
 
@@ -89,10 +118,42 @@ const PageToolbar = ({
     }
   }
 
+  const toolbarClassName = [
+    "page-tools",
+    className,
+    hasNavigation && navigationMode === "floating" ? "page-tools--nav-floating" : "",
+    hasNavigation && navigationMode === "header" ? "page-tools--nav-header" : "",
+    !hasHeaderCopy ? "page-tools--headerless" : "",
+    !hasBodyContent ? "page-tools--bodyless" : "",
+    !hasTabs ? "page-tools--tabless" : "",
+    !hasNavigation ? "page-tools--navless" : ""
+  ]
+    .filter(Boolean)
+    .join(" ")
+
+  const renderNavigation = (extraClassName = "") => (
+    <div
+      className={`page-tools-navigation ${extraClassName}`.trim()}
+      role='navigation'
+      aria-label='Navigation rapide'
+    >
+      {navItems.map((link) => (
+        <Link
+          key={link.to}
+          to={link.to}
+          className={`page-tools-navigation-link ${isLinkActive(link) ? "active" : ""}`.trim()}
+          title={link.title || link.label}
+        >
+          {link.label}
+        </Link>
+      ))}
+    </div>
+  )
+
   return (
-    <div id={id} className={`page-tools ${className}`.trim()}>
+    <div id={id} className={toolbarClassName} data-page-toolbar='true'>
       <div className='page-tools-shell' role='toolbar' aria-label={ariaLabel}>
-        {flatHeader ? (
+        {hasHeaderSection && flatHeader ? (
           <div className='page-tools-topline'>
             {hasHeaderCopy ? (
               <>
@@ -102,6 +163,8 @@ const PageToolbar = ({
                 ) : null}
               </>
             ) : null}
+
+            {shouldRenderNavigationInHeader ? renderNavigation("page-tools-navigation--header") : null}
 
             {meta ? <div className='page-tools-meta'>{meta}</div> : null}
 
@@ -119,11 +182,15 @@ const PageToolbar = ({
                 aria-expanded={isArrowUp}
                 aria-controls={`${id}-body`}
               >
-                <span className='collapse-toggle-icon' aria-hidden='true'></span>
+                <span className='collapse-toggle-icon' aria-hidden='true'>
+                  <ChevronDownIcon />
+                </span>
               </button>
             ) : null}
           </div>
-        ) : (
+        ) : null}
+
+        {hasHeaderSection && !flatHeader ? (
           <div className='page-tools-header'>
             {hasHeaderCopy ? (
               <>
@@ -135,6 +202,8 @@ const PageToolbar = ({
               </>
             ) : null}
 
+            {shouldRenderNavigationInHeader ? renderNavigation("page-tools-navigation--header") : null}
+
             {meta ? <div className='page-tools-meta'>{meta}</div> : null}
 
             {actions ? <div className='page-tools-actions'>{actions}</div> : null}
@@ -151,30 +220,17 @@ const PageToolbar = ({
                 aria-expanded={isArrowUp}
                 aria-controls={`${id}-body`}
               >
-                <span className='collapse-toggle-icon' aria-hidden='true'></span>
+                <span className='collapse-toggle-icon' aria-hidden='true'>
+                  <ChevronDownIcon />
+                </span>
               </button>
             ) : null}
           </div>
-        )}
-
-        {navItems.length > 0 && isArrowUp ? (
-          <div className='page-tools-navigation' role='navigation' aria-label='Navigation rapide'>
-            {navItems.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`page-tools-navigation-link ${
-                  isLinkActive(link) ? "active" : ""
-                }`.trim()}
-                title={link.title || link.label}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
         ) : null}
 
-        {tabItems.length > 0 ? (
+        {shouldRenderNavigationStandalone ? renderNavigation() : null}
+
+        {hasTabs ? (
           <div
             className={`page-tools-tabs ${tabsClassName}`.trim()}
             role='tablist'
@@ -218,9 +274,9 @@ const PageToolbar = ({
           </div>
         ) : null}
 
-        {isArrowUp ? (
+        {shouldRenderBody ? (
           <div id={`${id}-body`} className={`page-tools-body ${bodyClassName}`.trim()}>
-            {children}
+            {bodyItems}
           </div>
         ) : null}
       </div>

@@ -105,17 +105,17 @@ const getPersonIdentity = (person) => {
 
 const getTpiSiteValue = (tpi) =>
   compactText(
-    tpi?.site ||
     tpi?.lieu?.site ||
+    tpi?.site ||
     tpi?.room?.site ||
     tpi?.salle?.site
   )
 
 const getTpiStakeholderIds = (tpi) => [
   getPersonIdentity(tpi?.candidat),
-  getPersonIdentity(tpi?.expert1),
-  getPersonIdentity(tpi?.expert2),
-  getPersonIdentity(tpi?.chefProjet)
+  getPersonIdentity(tpi?.expert1 || tpi?.experts?.[1] || tpi?.experts?.["1"]),
+  getPersonIdentity(tpi?.expert2 || tpi?.experts?.[2] || tpi?.experts?.["2"]),
+  getPersonIdentity(tpi?.chefProjet || tpi?.boss)
 ].filter(Boolean)
 
 const countActiveRooms = (site) =>
@@ -200,6 +200,7 @@ const createBucket = (meta = {}) => ({
   hasUnmatchedSite: meta.hasUnmatchedSite === true,
   tpis: [],
   classTypeCounts: new Map(),
+  typeBreakdowns: new Map(),
   stakeholderCounts: new Map(),
   dateLoadCounts: new Map(),
   undatedTpiCount: 0
@@ -277,43 +278,76 @@ const resolveClassTypeDateKeys = (classTypeCode, classTypeDateIndex) => {
 const getTpiActualDateKeys = (tpi) =>
   normalizeDateList([
     tpi?.confirmedSlot?.date,
-    tpi?.soutenanceDateTime
+    tpi?.soutenanceDateTime,
+    tpi?.dates?.soutenance
   ])
-
-const buildPressureSummary = (repeatOccurrences, tpiCount) => {
-  const highThreshold = Math.max(2, Math.ceil(Math.max(tpiCount, 1) / 5))
-
-  if (repeatOccurrences <= 0) {
-    return {
-      pressureLevel: "low",
-      pressureLabel: "Faible",
-      operationalBonus: 0,
-      recommendedBonus: 0,
-      pressureNote: "Aucune répétition marquante."
-    }
-  }
-
-  if (repeatOccurrences > highThreshold) {
-    return {
-      pressureLevel: "high",
-      pressureLabel: "Forte",
-      operationalBonus: 1,
-      recommendedBonus: 2,
-      pressureNote: `${repeatOccurrences} répétition(s) de parties prenantes. +2 salles conseillées.`
-    }
-  }
-
-  return {
-    pressureLevel: "medium",
-    pressureLabel: "Moyenne",
-    operationalBonus: 1,
-    recommendedBonus: 1,
-    pressureNote: `${repeatOccurrences} répétition(s) de parties prenantes. +1 salle conseillée.`
-  }
-}
 
 const formatScheduleLabel = (slotsPerRoom, tpiTimeMinutes, breaklineMinutes) =>
   `${slotsPerRoom} créneaux/salle · ${tpiTimeMinutes} min/TPI · pause ${breaklineMinutes} min`
+
+const formatDateLabel = (dateKey) => {
+  const date = new Date(dateKey)
+
+  if (Number.isNaN(date.getTime())) {
+    return compactText(dateKey)
+  }
+
+  return date.toLocaleDateString("fr-CH", {
+    day: "2-digit",
+    month: "2-digit"
+  })
+}
+
+const getOrCreateTypeBreakdown = (bucket, classTypeCode) => {
+  const code = compactText(classTypeCode) || "AUTRE"
+
+  if (!bucket.typeBreakdowns.has(code)) {
+    bucket.typeBreakdowns.set(code, {
+      code,
+      tpiCount: 0,
+      undatedTpiCount: 0,
+      dateKeys: new Set(),
+      dateLoadCounts: new Map(),
+      usesConfiguredDates: false,
+      usesPlannedDates: false
+    })
+  }
+
+  return bucket.typeBreakdowns.get(code)
+}
+
+const finalizeTypeBreakdown = (typeBreakdown, slotsPerRoom) => {
+  const dateKeys = Array.from(typeBreakdown?.dateKeys || []).sort((left, right) => left.localeCompare(right))
+  const peakDailyLoad = Array.from(typeBreakdown?.dateLoadCounts?.values?.() || []).reduce(
+    (maxValue, value) => Math.max(maxValue, Number(value) || 0),
+    0
+  )
+  const optimalRooms = peakDailyLoad > 0
+    ? Math.ceil(peakDailyLoad / slotsPerRoom)
+    : typeBreakdown.undatedTpiCount > 0
+      ? Math.ceil(typeBreakdown.undatedTpiCount / slotsPerRoom)
+      : 0
+  const averageLoadPerDate = dateKeys.length > 0
+    ? Number(typeBreakdown.tpiCount || 0) / dateKeys.length
+    : null
+
+  return {
+    code: compactText(typeBreakdown?.code) || "AUTRE",
+    tpiCount: Number(typeBreakdown?.tpiCount || 0),
+    undatedTpiCount: Number(typeBreakdown?.undatedTpiCount || 0),
+    dateCount: dateKeys.length,
+    dateKeys,
+    dateLabels: dateKeys.map((dateKey) => formatDateLabel(dateKey)),
+    peakDailyLoad,
+    averageLoadPerDate,
+    optimalRooms,
+    datesSource: typeBreakdown?.usesConfiguredDates
+      ? "configured"
+      : typeBreakdown?.usesPlannedDates
+        ? "planned"
+        : "missing"
+  }
+}
 
 const finalizeBucket = (bucket) => {
   const tpiCount = bucket.tpis.length
@@ -332,9 +366,8 @@ const finalizeBucket = (bucket) => {
     ? Math.ceil(bucket.undatedTpiCount / bucket.slotsPerRoom)
     : 0
   const theoreticalRooms = datedTheoreticalRooms + undatedTheoreticalRooms
-  const pressure = buildPressureSummary(repeatedStakeholderCount, tpiCount)
-  const operationalRooms = theoreticalRooms + pressure.operationalBonus
-  const recommendedRooms = theoreticalRooms + pressure.recommendedBonus
+  const operationalRooms = theoreticalRooms
+  const recommendedRooms = theoreticalRooms
   const usesManualRoomTarget = hasManualRoomTarget(bucket.manualRoomTarget)
   const targetRooms = usesManualRoomTarget ? Number(bucket.manualRoomTarget) : recommendedRooms
   const currentCapacity = bucket.activeRoomCount * bucket.slotsPerRoom
@@ -348,6 +381,19 @@ const finalizeBucket = (bucket) => {
 
       return left.code.localeCompare(right.code)
     })
+  const typeBreakdowns = Array.from(bucket.typeBreakdowns.values())
+    .map((typeBreakdown) => finalizeTypeBreakdown(typeBreakdown, bucket.slotsPerRoom))
+    .sort((left, right) => {
+      if (right.tpiCount !== left.tpiCount) {
+        return right.tpiCount - left.tpiCount
+      }
+
+      return left.code.localeCompare(right.code)
+    })
+  const constraintHints = [
+    repeatedStakeholderCount > 0 ? "Conflits de parties prenantes à vérifier en planification." : null,
+    bucket.undatedTpiCount > 0 ? `${bucket.undatedTpiCount} TPI sans dates de soutenance configurées.` : null
+  ].filter(Boolean)
 
   return {
     ...bucket,
@@ -363,14 +409,14 @@ const finalizeBucket = (bucket) => {
     usesManualRoomTarget,
     currentCapacity,
     roomGap,
+    sizingStatus: roomGap > 0 ? "alert" : roomGap < 0 ? "surplus" : "ok",
     classTypeCounts,
+    typeBreakdowns,
     classTypeSummary: classTypeCounts
       .map((entry) => `${entry.code} ${entry.count}`)
       .join(" · "),
     scheduleLabel: formatScheduleLabel(bucket.slotsPerRoom, bucket.tpiTimeMinutes, bucket.breaklineMinutes),
-    pressureLevel: pressure.pressureLevel,
-    pressureLabel: pressure.pressureLabel,
-    pressureNote: pressure.pressureNote,
+    constraintHints,
     siteStatusLabel: bucket.siteKind === "catalog"
       ? (bucket.siteActive ? "Actif" : "Inactif")
       : bucket.siteKind === "fallback"
@@ -523,19 +569,29 @@ export const buildPlanningRoomSizingOverview = ({
 
     const classTypeCode = buildClassTypeCode(tpi, classTypes, normalizedCatalogSites, rawSiteValue)
     incrementMap(bucket.classTypeCounts, classTypeCode)
+    const typeBreakdown = getOrCreateTypeBreakdown(bucket, classTypeCode)
+    typeBreakdown.tpiCount += 1
 
     const actualDateKeys = getTpiActualDateKeys(tpi)
-    const configuredDateKeys = actualDateKeys.length > 0
-      ? actualDateKeys
-      : resolveClassTypeDateKeys(classTypeCode, classTypeDateIndex)
+    const configuredDateKeys = resolveClassTypeDateKeys(classTypeCode, classTypeDateIndex)
+    const effectiveDateKeys = configuredDateKeys.length > 0 ? configuredDateKeys : actualDateKeys
 
-    if (configuredDateKeys.length > 0) {
-      const loadShare = 1 / configuredDateKeys.length
-      for (const dateKey of configuredDateKeys) {
+    if (effectiveDateKeys.length > 0) {
+      const loadShare = 1 / effectiveDateKeys.length
+      for (const dateKey of effectiveDateKeys) {
         incrementNumericMap(bucket.dateLoadCounts, dateKey, loadShare)
+        incrementNumericMap(typeBreakdown.dateLoadCounts, dateKey, loadShare)
+        typeBreakdown.dateKeys.add(dateKey)
+      }
+
+      if (configuredDateKeys.length > 0) {
+        typeBreakdown.usesConfiguredDates = true
+      } else {
+        typeBreakdown.usesPlannedDates = true
       }
     } else {
       bucket.undatedTpiCount += 1
+      typeBreakdown.undatedTpiCount += 1
     }
 
     for (const stakeholderId of getTpiStakeholderIds(tpi)) {

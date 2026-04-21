@@ -7,8 +7,9 @@ import {
   getEvaluationStorageKey,
   normalizeEvaluationList
 } from "./tpiEvalUtils"
+import IconButtonContent from "../shared/IconButtonContent"
 import PageToolbar from "../shared/PageToolbar"
-import { InboxIcon, PencilIcon } from "../shared/InlineIcons"
+import { CloseIcon, PlusIcon, UploadIcon } from "../shared/InlineIcons"
 import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
 import { STORAGE_KEYS } from "../../config/appConfig"
 import {
@@ -281,48 +282,72 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
     fileInputRef.current?.click()
   }
 
+  const evaluationCount = Array.isArray(evaluations)
+    ? evaluations.length
+    : evaluations
+      ? 1
+      : 0
+  const loadEvaluationLabel = 'Charger JSON'
+  const createEvaluationLabel = hasOpenEvaluation ? 'Fermer le formulaire' : 'Nouvelle évaluation'
+
   return (
     <div id='tpiEval' className='page-with-toolbar'>
+      <input
+        ref={fileInputRef}
+        type='file'
+        id='fileInput'
+        accept='.json'
+        onChange={handleFileSelect}
+        style={{ display: "none" }}
+      />
+
       <PageToolbar
         id='tools'
         className='tpi-eval-tools'
+        eyebrow='Évaluation'
+        title='Bibliothèque des évaluations'
+        description='Créer une évaluation locale, rouvrir une fiche existante et importer un export JSON.'
         meta={
-          <span className='page-tools-chip'>
-            {Array.isArray(evaluations)
-              ? `${evaluations.length} enreg.`
-              : evaluations
-                ? '1 enreg.'
-                : '0 enreg.'}
-          </span>
+          <div className='tpi-eval-toolbar-meta'>
+            <span className='page-tools-chip'>
+              {evaluationCount} enreg.
+            </span>
+          </div>
         }
         actions={
           <div className='tpi-eval-toolbar-actions'>
             <button
               id='btnLoadEval'
               type='button'
-              className='page-tools-action-btn secondary tpi-eval-action-btn'
+              className='page-tools-action-btn secondary tpi-eval-action-btn icon-button'
               onClick={handleLoadEval}
+              aria-label={loadEvaluationLabel}
               title='Importer un fichier JSON d’évaluation existant.'
             >
-              <InboxIcon className='tpi-eval-action-icon' />
-              <span>Charger JSON</span>
+              <IconButtonContent
+                label={loadEvaluationLabel}
+                icon={UploadIcon}
+                iconClassName='tpi-eval-action-icon'
+              />
             </button>
 
             <button
               id='btnNewEval'
               type='button'
-              className='page-tools-action-btn primary tpi-eval-action-btn'
+              className='page-tools-action-btn primary tpi-eval-action-btn icon-button'
               onClick={handleNewEval}
+              aria-label={createEvaluationLabel}
               title={
                 hasOpenEvaluation
                   ? 'Fermer le formulaire d’évaluation courant.'
                   : 'Créer une nouvelle évaluation vide.'
               }
             >
-              <PencilIcon className='tpi-eval-action-icon' />
-              <span>
-                {hasOpenEvaluation ? 'Fermer le formulaire' : 'Nouvelle évaluation'}
-              </span>
+              <IconButtonContent
+                label={createEvaluationLabel}
+                icon={hasOpenEvaluation ? CloseIcon : PlusIcon}
+                iconClassName='tpi-eval-action-icon'
+              />
             </button>
           </div>
         }
@@ -330,16 +355,7 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
         ariaLabel='Outils des évaluations TPI'
-      >
-        <input
-          ref={fileInputRef}
-          type='file'
-          id='fileInput'
-          accept='.json'
-          onChange={handleFileSelect}
-          style={{ display: "none" }}
-        />
-      </PageToolbar>
+      />
 
       {hasOpenEvaluation && (
         <section id='newEvalForm' className='evaluation-form-shell'>

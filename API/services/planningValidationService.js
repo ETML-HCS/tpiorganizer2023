@@ -5,8 +5,8 @@ const Person = require('../models/personModel')
 const Slot = require('../models/slotModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const TpiModelsYear = require('../models/tpiModels')
+const { getPlanningConfig } = require('./planningConfigService')
 const { filterPlanifiableTpis } = require('./tpiPlanningVisibility')
-const { isExternalPlanningSite } = require('./tpiPlanningVisibility')
 const {
   buildOccupiedStepKeys,
   buildTimelineIndex,
@@ -459,17 +459,52 @@ function detectSequenceViolations(slots) {
 }
 
 function buildUnplannedTpiIssues(tpis) {
+  const buildUnplannedReason = (tpi) => {
+    const conflictDescriptions = Array.isArray(tpi?.conflicts)
+      ? tpi.conflicts
+        .map((conflict) => normalizeText(conflict?.description))
+        .filter(Boolean)
+      : []
+
+    if (conflictDescriptions.length > 0) {
+      return conflictDescriptions[0]
+    }
+
+    const manualOverrideReason = normalizeText(tpi?.manualOverride?.reason)
+    if (manualOverrideReason) {
+      return manualOverrideReason
+    }
+
+    switch (normalizeText(tpi?.status)) {
+      case 'draft':
+        return "La planification automatique n'a pas encore traite cette fiche."
+      case 'pending_slots':
+        return "Les propositions de creneaux n'ont pas encore ete generees pour cette fiche."
+      case 'manual_required':
+        return "Une intervention manuelle reste necessaire pour proposer un creneau."
+      default:
+        return ''
+    }
+  }
+
   return (Array.isArray(tpis) ? tpis : [])
     .filter((tpi) => !['cancelled', 'completed'].includes(normalizeText(tpi?.status)))
     .filter((tpi) => !buildPlanningEntryFromTpi(tpi))
-    .map((tpi) => ({
-      type: 'unplanned_tpi',
-      severity: 'error',
-      tpiId: tpi?._id ? String(tpi._id) : null,
-      reference: normalizeText(tpi?.reference),
-      status: normalizeText(tpi?.status),
-      message: `${normalizeText(tpi?.reference) || 'TPI sans référence'} n'a aucun créneau proposé ou confirmé dans Planning.`
-    }))
+    .map((tpi) => {
+      const reason = buildUnplannedReason(tpi)
+      const reference = normalizeText(tpi?.reference)
+      const baseMessage = `${reference || 'TPI sans référence'} n'a aucun créneau proposé ou confirmé dans Planning.`
+
+      return {
+        type: 'unplanned_tpi',
+        severity: 'error',
+        tpiId: tpi?._id ? String(tpi._id) : null,
+        reference,
+        status: normalizeText(tpi?.status),
+        reason,
+        message: reason ? `${baseMessage} Raison: ${reason}` : baseMessage
+      }
+    })
     .sort((left, right) => String(left.reference || '').localeCompare(String(right.reference || '')))
 }
 
@@ -525,27 +560,25 @@ async function loadActiveStakeholders() {
     .lean()
 }
 
-function buildLegacyConsistencyIssues({ year, legacyTpis, workflowTpis, people = [] }) {
+function buildLegacyConsistencyIssues({ year, legacyTpis, workflowTpis, people = [], planningConfig = null }) {
   const workflowRefs = new Set(
     (Array.isArray(workflowTpis) ? workflowTpis : [])
       .map((tpi) => extractLegacyRefFromWorkflowReference(tpi?.reference, year))
       .filter(Boolean)
   )
 
-  return (Array.isArray(legacyTpis) ? legacyTpis : [])
+  return filterPlanifiableTpis(
+    Array.isArray(legacyTpis) ? legacyTpis : [],
+    planningConfig
+  )
     .map((legacyTpi) => {
       const legacyRef = pickFirstNonEmpty(legacyTpi?.refTpi, legacyTpi?.id)
-      const legacySite = pickFirstNonEmpty(legacyTpi?.lieu?.site, legacyTpi?.site)
-
-      if (isExternalPlanningSite(legacySite)) {
-        return null
-      }
 
       if (!legacyRef) {
         return {
           type: 'legacy_tpi_missing_reference',
           severity: 'error',
-          message: 'Un TPI de GestionTPI n a aucune référence exploitable pour la synchronisation vers Planning.'
+          message: 'Un TPI de GestionTPI n a aucune référence exploitable pour l integration au workflow de planification.'
         }
       }
 
@@ -563,7 +596,7 @@ function buildLegacyConsistencyIssues({ year, legacyTpis, workflowTpis, people =
           legacyRef,
           reference: workflowReference,
           missingStakeholders: stakeholderValidation.missingRoles,
-          message: `${workflowReference} ne peut pas être synchronisé vers Planning: parties prenantes incomplètes (${stakeholderValidation.missingRoles.join(', ')}).`
+          message: `${workflowReference} ne peut pas être intégré au workflow de planification: parties prenantes incomplètes (${stakeholderValidation.missingRoles.join(', ')}).`
         }
       }
 
@@ -574,7 +607,7 @@ function buildLegacyConsistencyIssues({ year, legacyTpis, workflowTpis, people =
           legacyRef,
           reference: workflowReference,
           unresolvedStakeholders: stakeholderValidation.unresolvedRoles,
-          message: `${workflowReference} doit être confirmé dans Parties prenantes avant synchronisation (${stakeholderValidation.unresolvedRoles.join(', ')}).`
+          message: `${workflowReference} doit être confirmé dans Parties prenantes avant intégration au workflow de planification (${stakeholderValidation.unresolvedRoles.join(', ')}).`
         }
       }
 
@@ -587,7 +620,7 @@ function buildLegacyConsistencyIssues({ year, legacyTpis, workflowTpis, people =
         severity: 'error',
         legacyRef,
         reference: workflowReference,
-        message: `${workflowReference} existe dans GestionTPI mais n'est pas présent dans Planning. Placez-le dans Planification avant le gel.`
+        message: `${workflowReference} existe dans GestionTPI mais n'est pas encore intégré au workflow de planification. Placez-le dans la planification courante avant le gel.`
       }
     })
     .filter(Boolean)
@@ -660,7 +693,7 @@ function computeSnapshotHash(input) {
   return crypto.createHash('sha256').update(serialized).digest('hex')
 }
 
-async function loadPlanningTpis(year) {
+async function loadPlanningTpis(year, planningConfig = null) {
   return filterPlanifiableTpis(await TpiPlanning.find({ year })
     .populate('candidat', 'firstName lastName email')
     .populate('expert1', 'firstName lastName email')
@@ -668,7 +701,7 @@ async function loadPlanningTpis(year) {
     .populate('chefProjet', 'firstName lastName email')
     .populate('proposedSlots.slot')
     .populate('confirmedSlot')
-    .lean())
+    .lean(), planningConfig)
 }
 
 async function loadPlanningSlots(year) {
@@ -682,19 +715,23 @@ async function loadPlanningSlots(year) {
 }
 
 async function validatePlanningForYear(year) {
+  const planningConfig = await getPlanningConfig(year)
+
   const [tpis, slots, legacyTpis, people] = await Promise.all([
-    loadPlanningTpis(year),
+    loadPlanningTpis(year, planningConfig),
     loadPlanningSlots(year),
     loadLegacyTpis(year),
     loadActiveStakeholders()
   ])
+  const planifiableLegacyTpis = filterPlanifiableTpis(legacyTpis, planningConfig)
   const entries = buildEntriesFromTpis(tpis)
   const workflowGapIssues = buildUnplannedTpiIssues(tpis)
   const legacyConsistencyIssues = buildLegacyConsistencyIssues({
     year,
     legacyTpis,
     workflowTpis: tpis,
-    people
+    people,
+    planningConfig
   })
   const validationIssues = buildValidationIssues(
     entries,
@@ -706,7 +743,7 @@ async function validatePlanningForYear(year) {
     totalTpis: tpis.length,
     plannedTpis: entries.length,
     unplannedTpis: Math.max(tpis.length - entries.length, 0),
-    totalLegacyTpis: Array.isArray(legacyTpis) ? legacyTpis.length : 0,
+    totalLegacyTpis: planifiableLegacyTpis.length,
     legacyImportGapCount: legacyConsistencyIssues.length
   }
 

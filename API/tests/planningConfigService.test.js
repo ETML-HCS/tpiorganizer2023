@@ -11,7 +11,8 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
     {
       id: 'site-etml',
       code: 'ETML',
-      label: 'ETML Sébeillon'
+      label: 'ETML Sébeillon',
+      planningColor: '#14532d'
     }
   ])
 
@@ -26,6 +27,7 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
   assert.equal(config.siteConfigs[0].siteId, 'site-etml')
   assert.equal(config.siteConfigs[0].siteCode, 'ETML')
   assert.equal(config.siteConfigs[0].label, 'ETML Sébeillon')
+  assert.equal(config.siteConfigs[0].planningColor, '#14532D')
   assert.equal(config.siteConfigs[0].breaklineMinutes, 10)
   assert.equal(config.siteConfigs[0].tpiTimeMinutes, 60)
   assert.equal(config.siteConfigs[0].firstTpiStartTime, '08:00')
@@ -76,7 +78,8 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
       {
         id: 'site-etml',
         code: 'ETML',
-        label: 'ETML Sébeillon'
+        label: 'ETML Sébeillon',
+        planningColor: '#14532d'
       }
     ]
   )
@@ -97,6 +100,7 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
   assert.equal(config.siteConfigs.length, 1)
   assert.equal(config.siteConfigs[0].siteId, 'site-etml')
   assert.equal(config.siteConfigs[0].siteCode, 'ETML')
+  assert.equal(config.siteConfigs[0].planningColor, '#14532D')
   assert.equal(config.siteConfigs[0].breaklineMinutes, 15)
   assert.equal(config.siteConfigs[0].tpiTimeMinutes, 90)
   assert.equal(config.siteConfigs[0].firstTpiStartTime, '08:30')

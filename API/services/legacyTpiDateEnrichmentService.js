@@ -39,6 +39,18 @@ function resolveQuery(query) {
   return Promise.resolve(query)
 }
 
+async function resolveOptionalContextValue(query, fallbackValue, label, year) {
+  try {
+    return await resolveQuery(query)
+  } catch (error) {
+    console.warn(
+      `Impossible de charger ${label} pour ${year}; enrichissement partiel utilise.`,
+      error?.message || error
+    )
+    return fallbackValue
+  }
+}
+
 function extractLegacyRefFromWorkflowReference(value) {
   const rawValue = compactText(value)
   const workflowMatch = rawValue.match(/^TPI-\d{4}-(.+)$/i)
@@ -261,12 +273,22 @@ async function loadLegacyTpiDateEnrichmentContext(year, options = {}) {
   }
 
   const [planningConfigDocument, publicationVersion] = await Promise.all([
-    options.planningConfig !== undefined
-      ? Promise.resolve(options.planningConfig)
-      : resolveQuery(PlanningConfig.findOne({ year: normalizedYear })),
-    options.publicationVersion !== undefined
-      ? Promise.resolve(options.publicationVersion)
-      : resolveQuery(PublicationVersion.findOne({ year: normalizedYear, isActive: true }))
+    resolveOptionalContextValue(
+      options.planningConfig !== undefined
+        ? options.planningConfig
+        : PlanningConfig.findOne({ year: normalizedYear }),
+      { classTypes: [] },
+      'la configuration de planification',
+      normalizedYear
+    ),
+    resolveOptionalContextValue(
+      options.publicationVersion !== undefined
+        ? options.publicationVersion
+        : PublicationVersion.findOne({ year: normalizedYear, isActive: true }),
+      null,
+      'la publication active des soutenances',
+      normalizedYear
+    )
   ])
 
   return {

@@ -812,7 +812,7 @@
 /* === FILTERS === */
 .stakeholders-filters {
   display: grid;
-  grid-template-columns: minmax(280px, 1.9fr) repeat(3, minmax(150px, 1fr)) max-content max-content;
+  grid-template-columns: minmax(280px, 1.9fr) repeat(3, minmax(140px, 0.9fr)) repeat(3, max-content);
   gap: 10px;
   align-items: center;
   overflow-x: auto;
@@ -1256,9 +1256,10 @@
 .stakeholders-collapse-icon {
   width: 16px;
   height: 16px;
+  display: block;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: var(--app-button-icon-stroke-width);
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: transform 0.18s ease;
@@ -1380,10 +1381,128 @@
   box-sizing: border-box;
 }
 
+.stakeholders-grid select {
+  width: 100%;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--sp-surface);
+  padding: 10px 12px;
+  color: var(--sp-text);
+  box-sizing: border-box;
+}
+
 .stakeholders-grid input:focus {
   outline: none;
   border-color: var(--sp-primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.stakeholders-grid select:focus {
+  outline: none;
+  border-color: var(--sp-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.stakeholders-preferred-dates {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--sp-border-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--sp-surface-alt) 0%, var(--sp-surface) 100%);
+}
+
+.stakeholders-preferred-dates-head {
+  display: grid;
+  gap: 4px;
+}
+
+.stakeholders-preferred-dates-head span {
+  color: var(--sp-text);
+  font-weight: 700;
+}
+
+.stakeholders-preferred-dates-head small {
+  color: var(--sp-text-secondary);
+  line-height: 1.4;
+}
+
+.stakeholders-preferred-dates-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stakeholders-preferred-date-choice {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--sp-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.stakeholders-preferred-date-choice-title {
+  color: var(--sp-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.stakeholders-preferred-dates-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--sp-text);
+  font-weight: 600;
+}
+
+.stakeholders-preferred-dates-grid input,
+.stakeholders-preferred-dates-grid select {
+  width: 100%;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--sp-surface);
+  padding: 10px 12px;
+  color: var(--sp-text);
+  box-sizing: border-box;
+}
+
+.stakeholders-preferred-dates-grid input:focus,
+.stakeholders-preferred-dates-grid select:focus {
+  outline: none;
+  border-color: var(--sp-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.stakeholders-email-field {
+  display: grid;
+  gap: 8px;
+}
+
+.stakeholders-email-draft-button {
+  justify-self: flex-start;
+  border: 1px dashed var(--sp-candidat-light);
+  border-radius: var(--radius-sm);
+  background: var(--sp-candidat-bg);
+  color: var(--sp-candidat);
+  padding: 8px 12px;
+  min-height: 34px;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stakeholders-email-draft-button:hover {
+  border-color: var(--sp-candidat);
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.stakeholders-email-draft-hint {
+  color: var(--sp-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 /* === ROLE CHIPS === */
@@ -1421,7 +1540,8 @@
 .stakeholders-role-chip-check {
   width: 14px;
   height: 14px;
-  stroke-width: 2.4;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -1550,7 +1670,7 @@
 .stakeholders-binary-toggle .page-tools-toggle-icon {
   width: 0.9rem;
   height: 0.9rem;
-  stroke-width: 2.1;
+  stroke-width: var(--app-button-icon-stroke-width);
 }
 
 .stakeholders-email-toggle .stakeholders-binary-toggle .page-tools-toggle-option.active {
@@ -1613,7 +1733,8 @@
 .stakeholders-candidate-year-icon {
   width: 13px;
   height: 13px;
-  stroke-width: 2.4;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
 }
 
 .stakeholders-candidate-year-chip:hover {
@@ -1915,6 +2036,7 @@
 
 @media (max-width: 760px) {
   .stakeholders-grid { grid-template-columns: 1fr; }
+  .stakeholders-preferred-dates-grid { grid-template-columns: 1fr; }
   .stakeholder-row { grid-template-columns: 1fr; }
   .stakeholders-import-overview,
   .stakeholders-import-metrics {

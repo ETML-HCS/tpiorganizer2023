@@ -286,20 +286,22 @@ export const getPlanningClassDisplayInfo = (
 ) => {
   const resolved = getPlanningClassModeDetails(value, classTypes, planningCatalogSites, siteValue)
   const classCode = compactText(resolved.classCode)
+  const classLabel = compactText(resolved.classLabel)
   const typeCode = compactText(resolved.code)
   const hasSpecificClass =
     Boolean(classCode && typeCode && normalizeClassValue(classCode) !== normalizeClassValue(typeCode))
+  const displayClassLabel = hasSpecificClass
+    ? (classLabel || classCode)
+    : typeCode || classLabel || classCode
 
   return {
     ...resolved,
     hasSpecificClass,
-    displayClassLabel: hasSpecificClass
-      ? classCode
-      : typeCode || classCode,
+    displayClassLabel,
     displayTypeLabel: typeCode,
     displayLabel: hasSpecificClass
-      ? [classCode, typeCode].filter(Boolean).join(' · ')
-      : typeCode || classCode
+      ? [displayClassLabel, typeCode].filter(Boolean).join(' · ')
+      : displayClassLabel
   }
 }
 

@@ -4,9 +4,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import PlanningConfiguration from './PlanningConfiguration'
 import {
   planningCatalogService,
-  planningConfigService,
-  tpiPlanningService
+  planningConfigService
 } from '../../services/planningService'
+import * as tpiController from '../tpiControllers/TpiController.jsx'
 
 jest.mock('../../services/planningService', () => ({
   planningCatalogService: {
@@ -16,10 +16,11 @@ jest.mock('../../services/planningService', () => ({
   planningConfigService: {
     getByYear: jest.fn(),
     saveByYear: jest.fn()
-  },
-  tpiPlanningService: {
-    getByYear: jest.fn()
   }
+}))
+
+jest.mock('../tpiControllers/TpiController.jsx', () => ({
+  getTpiModels: jest.fn()
 }))
 
 const mockCatalog = {
@@ -175,7 +176,7 @@ describe('PlanningConfiguration', () => {
     planningCatalogService.saveGlobal.mockImplementation(async (payload) => payload)
     planningConfigService.getByYear.mockResolvedValue(mockYearConfig)
     planningConfigService.saveByYear.mockImplementation(async (_year, payload) => payload)
-    tpiPlanningService.getByYear.mockResolvedValue([])
+    tpiController.getTpiModels.mockResolvedValue([])
   })
 
   test('replie un site en masquant son contenu', async () => {
@@ -266,9 +267,11 @@ describe('PlanningConfiguration', () => {
   })
 
   test('applique une cible manuelle dans le dimensionnement', async () => {
-    tpiPlanningService.getByYear.mockResolvedValueOnce([
+    tpiController.getTpiModels.mockResolvedValueOnce([
       {
-        site: 'ETML',
+        lieu: {
+          site: 'ETML'
+        },
         classe: 'CFC'
       }
     ])
@@ -276,7 +279,7 @@ describe('PlanningConfiguration', () => {
     render(<PlanningConfiguration />)
 
     const sizingSection = (await screen.findByRole('heading', { name: 'Salles à prévoir' })).closest('section')
-    const manualTargetInput = await screen.findByLabelText('Rooms / date')
+    const manualTargetInput = await screen.findByLabelText('Salles / date')
 
     fireEvent.change(manualTargetInput, { target: { value: '4' } })
 
@@ -293,9 +296,11 @@ describe('PlanningConfiguration', () => {
   })
 
   test('retire un site supprimé du panneau de dimensionnement', async () => {
-    tpiPlanningService.getByYear.mockResolvedValueOnce([
+    tpiController.getTpiModels.mockResolvedValueOnce([
       {
-        site: 'ETML',
+        lieu: {
+          site: 'ETML'
+        },
         classe: 'CFC'
       }
     ])
@@ -312,13 +317,39 @@ describe('PlanningConfiguration', () => {
     await waitFor(() => {
       expect(within(sizingSection).queryByText('ETML')).not.toBeInTheDocument()
     })
-    expect(within(sizingSection).getByText('1 TPI hors catalogue ignoré du dimensionnement')).toBeInTheDocument()
+    expect(within(sizingSection).getByText('Aucun TPI pris en compte pour le calcul théorique.')).toBeInTheDocument()
+  })
+
+  test('dimensionne depuis les TPI legacy de GestionTPI', async () => {
+    tpiController.getTpiModels.mockResolvedValueOnce([
+      {
+        refTpi: '1655',
+        classe: 'CFC',
+        candidat: 'Cand Legacy',
+        experts: {
+          1: 'Expert 1',
+          2: 'Expert 2'
+        },
+        boss: 'Boss Legacy',
+        lieu: {
+          site: 'ETML'
+        },
+        dates: {
+          soutenance: '2026-06-10'
+        }
+      }
+    ])
+
+    render(<PlanningConfiguration />)
+
+    expect(await screen.findByText(/1 TPI pris en compte/i)).toBeInTheDocument()
+    expect(tpiController.getTpiModels).toHaveBeenCalledWith(2026)
   })
 
   test('génère des rooms depuis la cible manuelle du site', async () => {
     render(<PlanningConfiguration />)
 
-    const targetInput = await screen.findByLabelText('Rooms / date')
+    const targetInput = await screen.findByLabelText('Salles / date')
     fireEvent.change(targetInput, { target: { value: '3' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Créer 2' }))
@@ -328,14 +359,14 @@ describe('PlanningConfiguration', () => {
     expect(screen.getAllByDisplayValue('A101').length).toBeGreaterThan(0)
   })
 
-  test("affiche une aide hover sur le champ Rooms / date", async () => {
+  test("affiche une aide hover sur le champ Salles / date", async () => {
     render(<PlanningConfiguration />)
 
-    const roomDateLabel = await screen.findByText('Rooms / date')
+    const roomDateLabel = await screen.findByText('Salles / date')
 
     expect(roomDateLabel).toHaveAttribute(
       'title',
-      'Nombre de rooms à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
+      'Nombre de salles à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
     )
   })
 
@@ -344,7 +375,7 @@ describe('PlanningConfiguration', () => {
 
     const removeSiteButton = await screen.findByRole('button', { name: 'Supprimer le site' })
     const siteCard = removeSiteButton.closest('article')
-    const slotInput = within(siteCard).getByLabelText('Créneaux / room')
+    const slotInput = within(siteCard).getByLabelText('Créneaux / salle')
 
     fireEvent.change(slotInput, { target: { value: '9' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
@@ -371,7 +402,7 @@ describe('PlanningConfiguration', () => {
 
     const removeSiteButton = await screen.findByRole('button', { name: 'Supprimer le site' })
     const siteCard = removeSiteButton.closest('article')
-    const slotInput = within(siteCard).getByLabelText('Créneaux / room')
+    const slotInput = within(siteCard).getByLabelText('Créneaux / salle')
     const siteNameInput = within(siteCard).getAllByLabelText('Nom')[0]
 
     fireEvent.change(slotInput, { target: { value: '9' } })

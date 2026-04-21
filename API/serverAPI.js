@@ -376,20 +376,53 @@ app.put(
   }
 )
 
-function startServer(options = {}) {
-  const { connectDb = true } = options
+async function startServer(options = {}) {
+  const {
+    connectDb = true,
+    logger = console
+  } = options
 
   if (connectDb) {
-    void connectToDatabase()
+    const connected = await connectToDatabase({ logger })
+
+    if (!connected) {
+      const error = new Error('Connexion MongoDB impossible. Backend non demarre.')
+      error.code = 'DATABASE_UNAVAILABLE'
+      error.statusCode = 503
+      throw error
+    }
   }
 
-  return app.listen(port, () => {
-    console.log(`Backend server is running on port ${port}`)
+  return await new Promise((resolve, reject) => {
+    const handleError = error => {
+      cleanup()
+      reject(error)
+    }
+    const cleanup = () => {
+      if (typeof server?.off === 'function') {
+        server.off('error', handleError)
+      } else if (typeof server?.removeListener === 'function') {
+        server.removeListener('error', handleError)
+      }
+    }
+
+    const server = app.listen(port, () => {
+      cleanup()
+      logger.log(`Backend server is running on port ${port}`)
+      resolve(server)
+    })
+
+    if (typeof server?.once === 'function') {
+      server.once('error', handleError)
+    }
   })
 }
 
 if (require.main === module) {
-  startServer({ connectDb: true })
+  void startServer({ connectDb: true }).catch(error => {
+    console.error('Backend startup failed:', error)
+    process.exit(1)
+  })
 }
 
 // // Fonction utilitaire pour afficher les routes

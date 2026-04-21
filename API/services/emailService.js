@@ -390,6 +390,10 @@ async function sendVoteRequests(tpi, magicLinks) {
   return results
 }
 
+function canReceiveAutomaticEmail(recipient) {
+  return Boolean(recipient?.email) && recipient?.sendEmails !== false
+}
+
 /**
  * Envoie les confirmations de soutenance
  */
@@ -397,6 +401,10 @@ async function sendSoutenanceConfirmations(tpi, slot, recipients) {
   const results = []
   
   for (const recipient of recipients) {
+    if (!canReceiveAutomaticEmail(recipient)) {
+      continue
+    }
+
     const candidateName = tpi.candidat?.fullName || [tpi.candidat?.firstName, tpi.candidat?.lastName].filter(Boolean).join(' ').trim()
     const expert1Name = tpi.expert1?.fullName || [tpi.expert1?.firstName, tpi.expert1?.lastName].filter(Boolean).join(' ').trim()
     const expert2Name = tpi.expert2?.fullName || [tpi.expert2?.firstName, tpi.expert2?.lastName].filter(Boolean).join(' ').trim()

@@ -90,6 +90,61 @@ describe('tpiManagementUtils', () => {
     })
   })
 
+  it('prefers the stakeholder state computed by the API when available', () => {
+    const sourceTpi = {
+      refTpi: '2163',
+      candidat: 'Chasi Sanchez Dario Jhesuanj',
+      candidatPersonId: null,
+      experts: {
+        1: 'Alain Pittet',
+        2: 'Karim Bourahla'
+      },
+      expert1PersonId: null,
+      expert2PersonId: null,
+      boss: 'Laurent Deschamps',
+      bossPersonId: null,
+      stakeholderState: {
+        isComplete: true,
+        isResolved: true,
+        isValidated: true,
+        missingRoles: [],
+        unresolvedRoles: []
+      }
+    }
+
+    expect(getMissingStakeholders(sourceTpi)).toEqual([])
+    expect(getStakeholderIssues(sourceTpi)).toEqual({
+      missingStakeholders: [],
+      missingLinks: [],
+      hasIssues: false,
+      summary: 'Completes'
+    })
+  })
+
+  it('does not treat a linked stakeholder without copied name as missing', () => {
+    const sourceTpi = {
+      refTpi: '2163',
+      candidat: 'Chasi Sanchez Dario Jhesuanj',
+      candidatPersonId: 'person-candidate',
+      experts: {
+        1: 'Alain Pittet',
+        2: 'Karim Bourahla'
+      },
+      expert1PersonId: 'person-expert-1',
+      expert2PersonId: 'person-expert-2',
+      boss: '',
+      bossPersonId: 'person-boss'
+    }
+
+    expect(getMissingStakeholders(sourceTpi)).toEqual([])
+    expect(getStakeholderIssues(sourceTpi)).toEqual({
+      missingStakeholders: [],
+      missingLinks: [],
+      hasIssues: false,
+      summary: 'Completes'
+    })
+  })
+
   it('treats literal null placeholders as missing stakeholder data', () => {
     const sourceTpi = {
       refTpi: 'TPI-2026-003',

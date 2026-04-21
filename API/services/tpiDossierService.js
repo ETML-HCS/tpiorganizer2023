@@ -2,7 +2,9 @@ const Person = require('../models/personModel')
 const TpiModelsYear = require('../models/tpiModels')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
+const { getPlanningConfig } = require('./planningConfigService')
 const { validateLegacyTpiStakeholders } = require('./tpiStakeholderService')
+const { isPlanifiableTpi } = require('./tpiPlanningVisibility')
 const { enrichLegacyTpisWithDerivedDates } = require('./legacyTpiDateEnrichmentService')
 
 function compactText(value) {
@@ -136,10 +138,11 @@ function getPlannedSlot(tpi) {
   return proposedSlot
 }
 
-function buildLegacyConsistencyIssues(legacyTpi, stakeholderState, planningTpi) {
+function buildLegacyConsistencyIssues(legacyTpi, stakeholderState, planningTpi, options = {}) {
+  const { isPlanifiable = true } = options
   const issues = []
 
-  if (legacyTpi && !planningTpi) {
+  if (legacyTpi && isPlanifiable && !planningTpi) {
     issues.push({
       type: 'legacy_tpi_not_imported',
       severity: 'warning',
@@ -155,7 +158,7 @@ function buildLegacyConsistencyIssues(legacyTpi, stakeholderState, planningTpi) 
     })
   }
 
-  if (legacyTpi && stakeholderState && stakeholderState.isComplete === false) {
+  if (legacyTpi && isPlanifiable && stakeholderState && stakeholderState.isComplete === false) {
     issues.push({
       type: 'legacy_tpi_missing_stakeholders',
       severity: 'warning',
@@ -163,7 +166,7 @@ function buildLegacyConsistencyIssues(legacyTpi, stakeholderState, planningTpi) 
     })
   }
 
-  if (legacyTpi && stakeholderState && stakeholderState.isResolved === false) {
+  if (legacyTpi && isPlanifiable && stakeholderState && stakeholderState.isResolved === false) {
     issues.push({
       type: 'legacy_tpi_unresolved_stakeholders',
       severity: 'warning',
@@ -212,9 +215,10 @@ async function getTpiDossierByRef(year, ref) {
     return null
   }
 
-  const [legacyTpi, planningTpi] = await Promise.all([
+  const [legacyTpi, planningTpi, planningConfig] = await Promise.all([
     findLegacyTpi(normalizedYear, normalizedRef),
-    findPlanningTpi(normalizedYear, normalizedRef)
+    findPlanningTpi(normalizedYear, normalizedRef),
+    getPlanningConfig(normalizedYear)
   ])
 
   if (!legacyTpi && !planningTpi) {
@@ -238,6 +242,11 @@ async function getTpiDossierByRef(year, ref) {
   const planningVotes = planningTpi?._id
     ? await findPlanningVotes(planningTpi._id)
     : []
+  const isLegacyPlanifiable = legacyTpi
+    ? isPlanifiableTpi(legacyTpi, planningConfig)
+    : planningTpi
+      ? isPlanifiableTpi(planningTpi, planningConfig)
+      : false
 
   return {
     year: normalizedYear,
@@ -263,7 +272,9 @@ async function getTpiDossierByRef(year, ref) {
     },
     consistency: {
       importedToPlanning: Boolean(enrichedLegacyTpi && planningTpi),
-      issues: buildLegacyConsistencyIssues(enrichedLegacyTpi, stakeholderState, planningTpi)
+      issues: buildLegacyConsistencyIssues(enrichedLegacyTpi, stakeholderState, planningTpi, {
+        isPlanifiable: isLegacyPlanifiable
+      })
     }
   }
 }

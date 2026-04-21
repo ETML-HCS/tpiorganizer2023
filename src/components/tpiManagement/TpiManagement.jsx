@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 
 import { saveTpiToServer, getTpiFromServer } from './TpiData.jsx'
 import TpiForm from './TpiForm.jsx'
 import TpiList from './TpiList.jsx'
 import TpiManagementButtons from './TpiManagementButtons.jsx'
+import { createTpiModel, updateTpiModel } from '../tpiControllers/TpiController.jsx'
 import { extractLegacyRefFromWorkflowReference } from '../tpiDetail/tpiDetailUtils.js'
 import { getPlanningClassPeriod } from '../tpiPlanning/planningClassUtils.js'
 import { YEARS_CONFIG } from '../../config/appConfig'
 import { planningCatalogService, planningConfigService } from '../../services/planningService'
+import { getPlanningPerimeterState } from '../../utils/planningScopeUtils.js'
 import {
   hasMissingStakeholders,
   shouldDisplayTag,
@@ -25,10 +27,13 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   const [tpiList, setTpiList] = useState([])
   const [planningCatalogSites, setPlanningCatalogSites] = useState([])
   const [planningClassTypes, setPlanningClassTypes] = useState([])
+  const [planningSoutenanceDates, setPlanningSoutenanceDates] = useState([])
+  const [planningSiteConfigs, setPlanningSiteConfigs] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [searchTerm, setSearchTerm] = useState('')
+  const fetchRequestIdRef = useRef(0)
 
   const availableYears = useMemo(
     () => generateAvailableYears().slice().sort((left, right) => right - left),
@@ -88,6 +93,8 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   }, [planningCatalogSites, planningClassTypes, requestedPrefillTpi])
 
   const fetchData = useCallback(async () => {
+    const requestId = fetchRequestIdRef.current + 1
+    fetchRequestIdRef.current = requestId
     setIsLoading(true)
     setError(null)
 
@@ -107,23 +114,43 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
         })
       ])
 
+      if (fetchRequestIdRef.current !== requestId) {
+        return
+      }
+
       setTpiList(Array.isArray(data) ? data : [])
       setPlanningCatalogSites(Array.isArray(catalog?.sites) ? catalog.sites : [])
       setPlanningClassTypes(Array.isArray(config?.classTypes) ? config.classTypes : [])
+      setPlanningSoutenanceDates(Array.isArray(config?.soutenanceDates) ? config.soutenanceDates : [])
+      setPlanningSiteConfigs(Array.isArray(config?.siteConfigs) ? config.siteConfigs : [])
     } catch (err) {
+      if (fetchRequestIdRef.current !== requestId) {
+        return
+      }
+
       console.error('Erreur lors de la recuperation des TPI:', err)
       setError('Impossible de charger les TPI pour cette annee.')
       setTpiList([])
       setPlanningCatalogSites([])
       setPlanningClassTypes([])
+      setPlanningSoutenanceDates([])
+      setPlanningSiteConfigs([])
     } finally {
-      setIsLoading(false)
+      if (fetchRequestIdRef.current === requestId) {
+        setIsLoading(false)
+      }
     }
   }, [year])
 
   useEffect(() => {
     void fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    return () => {
+      fetchRequestIdRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     if (!requestedYear || !availableYears.includes(requestedYear) || requestedYear === year) {
@@ -163,6 +190,46 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     setNewTpi(false)
   }, [])
 
+  const handleBulkSave = useCallback(
+    async (tpiBatch = []) => {
+      const normalizedBatch = Array.isArray(tpiBatch) ? tpiBatch.filter(Boolean) : []
+      const failures = []
+      let successCount = 0
+
+      for (const tpiDetails of normalizedBatch) {
+        try {
+          const tpiId = String(tpiDetails?._id || '').trim()
+
+          if (tpiId) {
+            const { _id, ...updatePayload } = tpiDetails
+            await updateTpiModel(tpiId, year, updatePayload)
+          } else {
+            await createTpiModel(tpiDetails, year, { validationMode: 'manual' })
+          }
+
+          successCount += 1
+        } catch (saveError) {
+          failures.push({
+            refTpi: String(tpiDetails?.refTpi || '').trim() || 'Référence inconnue',
+            message: saveError?.message || 'Erreur lors de la sauvegarde'
+          })
+        }
+      }
+
+      if (successCount > 0) {
+        await fetchData()
+      }
+
+      return {
+        total: normalizedBatch.length,
+        successCount,
+        failureCount: failures.length,
+        failures
+      }
+    },
+    [fetchData, year]
+  )
+
   const handleYearChange = useCallback((selectedYear) => {
     setYear(Number(selectedYear))
     setNewTpi(false)
@@ -173,8 +240,12 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     const uniqueTags = new Set()
     let plannedSoutenances = 0
     let missingStakeholdersCount = 0
+    let planifiableCount = 0
+    let outOfScopeCount = 0
 
     tpiList.forEach((tpi) => {
+      const planningPerimeter = getPlanningPerimeterState(tpi, planningSiteConfigs, year)
+
       if (tpi?.lieu?.entreprise) {
         uniqueCompanies.add(tpi.lieu.entreprise)
       }
@@ -187,7 +258,13 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
         .filter(shouldDisplayTag)
         .forEach((tag) => uniqueTags.add(tag))
 
-      if (hasMissingStakeholders(tpi)) {
+      if (planningPerimeter.isPlanifiable) {
+        planifiableCount += 1
+      } else {
+        outOfScopeCount += 1
+      }
+
+      if (planningPerimeter.isPlanifiable && hasMissingStakeholders(tpi)) {
         missingStakeholdersCount += 1
       }
     })
@@ -196,18 +273,17 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
       companies: uniqueCompanies.size,
       tags: uniqueTags.size,
       soutenances: plannedSoutenances,
-      missingStakeholders: missingStakeholdersCount
+      missingStakeholders: missingStakeholdersCount,
+      planifiable: planifiableCount,
+      outOfScope: outOfScopeCount
     }
-  }, [tpiList])
+  }, [planningSiteConfigs, tpiList, year])
 
   const overviewChips = useMemo(
     () => [
-      { label: 'Année', value: year },
       { label: 'Fiches', value: tpiList.length },
       { label: 'Entreprises', value: overviewStats.companies || 0 },
-      { label: 'Tags', value: overviewStats.tags || 0 },
-      { label: 'Soutenances', value: overviewStats.soutenances || 0 },
-      { label: 'PP', value: overviewStats.missingStakeholders || 0 }
+      { label: 'Soutenances', value: overviewStats.soutenances || 0 }
     ],
     [overviewStats, tpiList.length, year]
   )
@@ -289,6 +365,9 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
               onClose={handleOnClose}
               year={year}
               initialTpi={requestedCreate ? enrichedRequestedPrefillTpi : null}
+              planningCatalogSites={planningCatalogSites}
+              planningClassTypes={planningClassTypes}
+              planningSoutenanceDates={planningSoutenanceDates}
             />
           </section>
         )}
@@ -312,6 +391,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
           <TpiList
             tpiList={tpiList}
             onSave={handleSaveTpi}
+            onBulkSave={handleBulkSave}
             year={year}
             searchTerm={searchTerm}
             onSearchTermChange={setSearchTerm}
@@ -319,6 +399,8 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
             requestedEditRef={requestedEditRef}
             planningCatalogSites={planningCatalogSites}
             planningClassTypes={planningClassTypes}
+            planningSoutenanceDates={planningSoutenanceDates}
+            planningSiteConfigs={planningSiteConfigs}
           />
         )}
       </section>

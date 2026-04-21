@@ -1,9 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import TpiForm from './TpiForm.jsx'
 import { buildTpiDetailsLink } from '../tpiDetail/tpiDetailUtils.js'
+import {
+  CheckIcon,
+  CloseIcon,
+  FileTextIcon,
+  ListIcon,
+  PencilIcon,
+  RefreshIcon,
+  SaveIcon
+} from '../shared/InlineIcons.jsx'
 import { getPlanningClassDisplayInfo } from '../tpiPlanning/planningClassUtils.js'
+import { getActivePlanningSiteLabels, getPlanningPerimeterState } from '../../utils/planningScopeUtils.js'
 import {
   buildTpiTagProfile,
   formatDisplayDate,
@@ -13,7 +23,10 @@ import {
   getStakeholderIssues,
   getTpiLocationLabel,
   getTpiTimelineLabel,
-  matchesSearch
+  matchesSearch,
+  normalizeTpiForForm,
+  normalizeTpiForSave,
+  splitTags
 } from './tpiManagementUtils.js'
 
 const DISPLAY_FIELDS = [
@@ -65,9 +78,10 @@ const readStakeholderFieldValue = (tpi, fieldName) => {
   return tpi?.[fieldName] || ''
 }
 
-const buildStakeholderDetailsLink = (tpi, field) => {
+const buildStakeholderDetailsLink = (tpi, field, year) => {
   const personId = String(tpi?.[field.idName] || '').trim()
   const personName = String(readStakeholderFieldValue(tpi, field.name) || '').trim()
+  const tpiRef = String(tpi?.refTpi || '').trim()
   const params = new URLSearchParams()
 
   if (personId) {
@@ -79,11 +93,25 @@ const buildStakeholderDetailsLink = (tpi, field) => {
   }
 
   params.set('role', field.role)
+  params.set('tab', 'create')
+
+  if (year) {
+    params.set('year', String(year))
+  }
+
+  if (year && tpiRef) {
+    const returnToParams = new URLSearchParams({
+      year: String(year),
+      focus: tpiRef,
+      edit: '1'
+    })
+    params.set('returnTo', `/gestionTPI?${returnToParams.toString()}`)
+  }
 
   return `/partiesPrenantes?${params.toString()}`
 }
 
-const StakeholderLink = ({ tpi, field, children }) => {
+const StakeholderLink = ({ tpi, field, year, children }) => {
   const personName = String(readStakeholderFieldValue(tpi, field.name) || '').trim()
   const personId = String(tpi?.[field.idName] || '').trim()
 
@@ -93,7 +121,7 @@ const StakeholderLink = ({ tpi, field, children }) => {
 
   return (
     <Link
-      to={buildStakeholderDetailsLink(tpi, field)}
+      to={buildStakeholderDetailsLink(tpi, field, year)}
       className='tpi-stakeholder-link'
       title={personId ? 'Ouvrir la fiche de la personne' : 'Ouvrir la recherche de la personne dans Parties prenantes'}
     >
@@ -120,19 +148,75 @@ const normalizeManagedRef = (value) =>
     .trim()
     .replace(/^TPI-\d{4}-/i, '')
 
+const BULK_EDIT_FIELDS = [
+  { key: 'classe', label: 'Classe', type: 'text', placeholder: 'CID4A' },
+  { key: 'sujet', label: 'Sujet', type: 'text', placeholder: 'Sujet commun' },
+  { key: 'lieuSite', label: 'Site', type: 'text', placeholder: 'ETML' },
+  { key: 'lieuEntreprise', label: 'Entreprise', type: 'text', placeholder: 'Entreprise' },
+  { key: 'dateDepart', label: 'Début', type: 'date', placeholder: '' },
+  { key: 'dateFin', label: 'Fin', type: 'date', placeholder: '' },
+  { key: 'tags', label: 'Tags', type: 'text', placeholder: 'React, API, infra' }
+]
+
+const DEFAULT_BULK_FIELD_VALUES = BULK_EDIT_FIELDS.reduce((accumulator, field) => ({
+  ...accumulator,
+  [field.key]: ''
+}), {})
+
+const DEFAULT_BULK_FIELD_SELECTION = BULK_EDIT_FIELDS.reduce((accumulator, field) => ({
+  ...accumulator,
+  [field.key]: false
+}), {})
+
+const mergeBulkTags = (currentValue, nextValue, mode = 'replace') => {
+  if (mode !== 'append') {
+    return splitTags(nextValue).join(', ')
+  }
+
+  return Array.from(new Set([
+    ...splitTags(currentValue),
+    ...splitTags(nextValue)
+  ])).join(', ')
+}
+
+const applyBulkEditToTpi = (tpi, selectedFields, fieldValues, tagMode) => {
+  const nextFormState = {
+    ...normalizeTpiForForm(tpi)
+  }
+
+  BULK_EDIT_FIELDS.forEach((field) => {
+    if (!selectedFields[field.key]) {
+      return
+    }
+
+    if (field.key === 'tags') {
+      nextFormState.tags = mergeBulkTags(nextFormState.tags, fieldValues.tags, tagMode)
+      return
+    }
+
+    nextFormState[field.key] = fieldValues[field.key]
+  })
+
+  return normalizeTpiForSave(nextFormState)
+}
+
 const TpiList = ({
   tpiList,
   onSave,
+  onBulkSave,
   year,
   searchTerm = '',
   onSearchTermChange = () => {},
   focusedTpiRef = '',
   requestedEditRef = '',
   planningCatalogSites = [],
-  planningClassTypes = []
+  planningClassTypes = [],
+  planningSoutenanceDates = [],
+  planningSiteConfigs = []
 }) => {
   const [editingTpiId, setEditingTpiId] = useState(null)
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const [planningScopeFilter, setPlanningScopeFilter] = useState('all')
   const [stakeholderFilter, setStakeholderFilter] = useState(() =>
     tpiList.some((tpi) => getMissingStakeholders(tpi).length > 0) ? 'missing' : 'all'
   )
@@ -140,23 +224,44 @@ const TpiList = ({
   const [cardColumns, setCardColumns] = useState(4)
   const [cardGridWidth, setCardGridWidth] = useState(0)
   const [displayOptions, setDisplayOptions] = useState(DEFAULT_DISPLAY_OPTIONS)
+  const [isBulkMode, setIsBulkMode] = useState(false)
+  const [selectedRefs, setSelectedRefs] = useState([])
+  const [bulkFieldSelection, setBulkFieldSelection] = useState(DEFAULT_BULK_FIELD_SELECTION)
+  const [bulkFieldValues, setBulkFieldValues] = useState(DEFAULT_BULK_FIELD_VALUES)
+  const [bulkTagMode, setBulkTagMode] = useState('replace')
+  const [isBulkSaving, setIsBulkSaving] = useState(false)
+  const [bulkFeedback, setBulkFeedback] = useState(null)
   const cardGridRef = useRef(null)
-
   const profiles = useMemo(
     () =>
       tpiList.map((tpi) => ({
         tpi,
         profile: buildTpiTagProfile(tpi),
-        stakeholderIssues: getStakeholderIssues(tpi),
-        missingStakeholders: getMissingStakeholders(tpi),
+        planningPerimeter: getPlanningPerimeterState(tpi, planningSiteConfigs, year),
         classResolution: getPlanningClassDisplayInfo(
           tpi.classe,
           planningClassTypes,
           planningCatalogSites,
           tpi.site || tpi.lieu?.site
         )
-      })),
-    [planningCatalogSites, planningClassTypes, tpiList]
+      }))
+        .map((entry) => {
+          const stakeholderIssues = entry.planningPerimeter.isPlanifiable
+            ? getStakeholderIssues(entry.tpi)
+            : {
+                missingStakeholders: [],
+                missingLinks: [],
+                hasIssues: false,
+                summary: entry.planningPerimeter.reason || 'Hors planification'
+              }
+
+          return {
+            ...entry,
+            stakeholderIssues,
+            missingStakeholders: stakeholderIssues.missingStakeholders
+          }
+        }),
+    [planningCatalogSites, planningClassTypes, planningSiteConfigs, tpiList, year]
   )
 
   const categoryOptions = useMemo(() => {
@@ -193,16 +298,23 @@ const TpiList = ({
 
   const filteredProfiles = useMemo(
     () =>
-      profiles.filter(({ tpi, profile, stakeholderIssues, missingStakeholders }) => {
+      profiles.filter(({ tpi, profile, stakeholderIssues, missingStakeholders, planningPerimeter }) => {
         const matchesCategory =
           categoryFilter === 'all' || profile.categoryKeys.includes(categoryFilter)
+        const matchesPlanningScope =
+          planningScopeFilter === 'all' ||
+          (planningScopeFilter === 'planifiable' && planningPerimeter.isPlanifiable) ||
+          (planningScopeFilter === 'out-of-scope' && !planningPerimeter.isPlanifiable)
         const matchesStakeholder = stakeholderFilter === 'all' ||
           (stakeholderFilter === 'missing' && missingStakeholders.length > 0) ||
           (stakeholderFilter === 'issues' && stakeholderIssues.hasIssues)
 
-        return matchesCategory && matchesStakeholder && matchesSearch(tpi, searchTerm, profile)
+        return matchesCategory &&
+          matchesPlanningScope &&
+          matchesStakeholder &&
+          matchesSearch(tpi, searchTerm, profile)
       }),
-    [categoryFilter, profiles, searchTerm, stakeholderFilter]
+    [categoryFilter, planningScopeFilter, profiles, searchTerm, stakeholderFilter]
   )
 
   const summaryStats = useMemo(() => {
@@ -221,19 +333,57 @@ const TpiList = ({
   }, [profiles])
 
   const missingStakeholderCount = useMemo(
-    () => profiles.filter(({ missingStakeholders }) => missingStakeholders.length > 0).length,
+    () => profiles.filter(({ planningPerimeter, missingStakeholders }) => planningPerimeter.isPlanifiable && missingStakeholders.length > 0).length,
     [profiles]
   )
   const stakeholderIssueCount = useMemo(
-    () => profiles.filter(({ stakeholderIssues }) => stakeholderIssues.hasIssues).length,
+    () => profiles.filter(({ planningPerimeter, stakeholderIssues }) => planningPerimeter.isPlanifiable && stakeholderIssues.hasIssues).length,
     [profiles]
+  )
+  const planifiableCount = useMemo(
+    () => profiles.filter(({ planningPerimeter }) => planningPerimeter.isPlanifiable).length,
+    [profiles]
+  )
+  const outOfScopeCount = useMemo(
+    () => profiles.filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable).length,
+    [profiles]
+  )
+  const activePlanningSiteLabels = useMemo(
+    () => getActivePlanningSiteLabels(planningSiteConfigs),
+    [planningSiteConfigs]
   )
 
   const hasMissingStakeholderFilter = missingStakeholderCount > 0
   const hasStakeholderIssueFilter = stakeholderIssueCount > 0
+  const hasPlanningScopeFilter = outOfScopeCount > 0
   const hasActiveFilters =
-    categoryFilter !== 'all' || stakeholderFilter !== 'all' || Boolean(searchTerm)
-
+    categoryFilter !== 'all' ||
+    planningScopeFilter !== 'all' ||
+    stakeholderFilter !== 'all' ||
+    Boolean(searchTerm)
+  const selectedRefSet = useMemo(() => new Set(selectedRefs), [selectedRefs])
+  const selectedProfiles = useMemo(
+    () =>
+      profiles.filter(({ tpi }) => selectedRefSet.has(normalizeManagedRef(tpi?.refTpi))),
+    [profiles, selectedRefSet]
+  )
+  const selectedCount = selectedProfiles.length
+  const selectedVisibleCount = useMemo(
+    () =>
+      filteredProfiles.filter(({ tpi }) => selectedRefSet.has(normalizeManagedRef(tpi?.refTpi))).length,
+    [filteredProfiles, selectedRefSet]
+  )
+  const allFilteredSelected = filteredProfiles.length > 0 &&
+    filteredProfiles.every(({ tpi }) => selectedRefSet.has(normalizeManagedRef(tpi?.refTpi)))
+  const enabledBulkFieldCount = useMemo(
+    () => Object.values(bulkFieldSelection).filter(Boolean).length,
+    [bulkFieldSelection]
+  )
+  const resetBulkEditor = useCallback(() => {
+    setBulkFieldSelection(DEFAULT_BULK_FIELD_SELECTION)
+    setBulkFieldValues(DEFAULT_BULK_FIELD_VALUES)
+    setBulkTagMode('replace')
+  }, [])
   const effectiveCardColumns = useMemo(
     () => getEffectiveCardColumns(cardGridWidth, cardColumns),
     [cardColumns, cardGridWidth]
@@ -249,6 +399,34 @@ const TpiList = ({
   useEffect(() => {
     setStakeholderFilter(hasMissingStakeholderFilter ? 'missing' : 'all')
   }, [hasMissingStakeholderFilter, year])
+
+  useEffect(() => {
+    setSelectedRefs([])
+    setIsBulkMode(false)
+    setBulkFeedback(null)
+    resetBulkEditor()
+  }, [resetBulkEditor, year])
+
+  useEffect(() => {
+    const availableRefs = new Set(
+      profiles
+        .map(({ tpi }) => normalizeManagedRef(tpi?.refTpi))
+        .filter(Boolean)
+    )
+
+    setSelectedRefs((currentSelection) => {
+      const nextSelection = currentSelection.filter((refKey) => availableRefs.has(refKey))
+
+      if (
+        nextSelection.length === currentSelection.length &&
+        nextSelection.every((refKey, index) => refKey === currentSelection[index])
+      ) {
+        return currentSelection
+      }
+
+      return nextSelection
+    })
+  }, [profiles])
 
   useEffect(() => {
     if (displayMode !== 'cards') {
@@ -309,8 +487,69 @@ const TpiList = ({
 
   const clearFilters = () => {
     setCategoryFilter('all')
+    setPlanningScopeFilter('all')
     setStakeholderFilter('all')
     onSearchTermChange('')
+  }
+
+  const handleToggleBulkMode = () => {
+    setBulkFeedback(null)
+    setIsBulkMode((currentValue) => {
+      const nextValue = !currentValue
+
+      if (!nextValue) {
+        setSelectedRefs([])
+        resetBulkEditor()
+      }
+
+      return nextValue
+    })
+  }
+
+  const handleToggleSelection = (tpiRef) => {
+    const normalizedRef = normalizeManagedRef(tpiRef)
+
+    if (!normalizedRef) {
+      return
+    }
+
+    if (!isBulkMode) {
+      setIsBulkMode(true)
+    }
+
+    setBulkFeedback(null)
+    setSelectedRefs((currentSelection) =>
+      currentSelection.includes(normalizedRef)
+        ? currentSelection.filter((entry) => entry !== normalizedRef)
+        : [...currentSelection, normalizedRef]
+    )
+  }
+
+  const handleSelectAllFiltered = () => {
+    const filteredRefs = filteredProfiles
+      .map(({ tpi }) => normalizeManagedRef(tpi?.refTpi))
+      .filter(Boolean)
+
+    if (filteredRefs.length === 0) {
+      return
+    }
+
+    setBulkFeedback(null)
+    setSelectedRefs((currentSelection) => {
+      const currentSet = new Set(currentSelection)
+      const shouldClearVisibleSelection = filteredRefs.every((refKey) => currentSet.has(refKey))
+
+      if (shouldClearVisibleSelection) {
+        return currentSelection.filter((refKey) => !filteredRefs.includes(refKey))
+      }
+
+      return Array.from(new Set([...currentSelection, ...filteredRefs]))
+    })
+  }
+
+  const handleClearSelection = () => {
+    setBulkFeedback(null)
+    setSelectedRefs([])
   }
 
   const toggleDisplayOption = (key) => {
@@ -318,6 +557,141 @@ const TpiList = ({
       ...current,
       [key]: !current[key]
     }))
+  }
+
+  const handleBulkFieldToggle = (fieldKey) => {
+    setBulkFeedback(null)
+    setBulkFieldSelection((currentSelection) => ({
+      ...currentSelection,
+      [fieldKey]: !currentSelection[fieldKey]
+    }))
+  }
+
+  const handleBulkFieldValueChange = (fieldKey) => (event) => {
+    setBulkFeedback(null)
+    setBulkFieldValues((currentValues) => ({
+      ...currentValues,
+      [fieldKey]: event.target.value
+    }))
+  }
+
+  const handleResetBulkEditor = () => {
+    setBulkFeedback(null)
+    resetBulkEditor()
+  }
+
+  const executeBulkSaveFallback = async (payloads) => {
+    const failures = []
+    let successCount = 0
+
+    for (const payload of payloads) {
+      try {
+        const savedTpi = await onSave(payload)
+
+        if (savedTpi) {
+          successCount += 1
+        } else {
+          failures.push({
+            refTpi: payload?.refTpi,
+            message: 'Erreur lors de la sauvegarde'
+          })
+        }
+      } catch (saveError) {
+        failures.push({
+          refTpi: payload?.refTpi,
+          message: saveError?.message || 'Erreur lors de la sauvegarde'
+        })
+      }
+    }
+
+    return {
+      total: payloads.length,
+      successCount,
+      failureCount: failures.length,
+      failures
+    }
+  }
+
+  const handleBulkSubmit = async (event) => {
+    event.preventDefault()
+
+    if (selectedProfiles.length === 0) {
+      setBulkFeedback({
+        tone: 'warning',
+        message: 'Sélectionne au moins une fiche avant de lancer une modification groupée.',
+        details: []
+      })
+      return
+    }
+
+    if (enabledBulkFieldCount === 0) {
+      setBulkFeedback({
+        tone: 'warning',
+        message: 'Coche au moins un champ à appliquer sur la sélection.',
+        details: []
+      })
+      return
+    }
+
+    setIsBulkSaving(true)
+    setBulkFeedback(null)
+
+    try {
+      const payloads = selectedProfiles.map(({ tpi }) => {
+        const payload = applyBulkEditToTpi(tpi, bulkFieldSelection, bulkFieldValues, bulkTagMode)
+
+        return tpi?._id
+          ? { ...payload, _id: tpi._id }
+          : payload
+      })
+      const result = typeof onBulkSave === 'function'
+        ? await onBulkSave(payloads)
+        : await executeBulkSaveFallback(payloads)
+      const successCount = Number(result?.successCount || 0)
+      const failureCount = Number(result?.failureCount || 0)
+      const failures = Array.isArray(result?.failures) ? result.failures : []
+
+      if (successCount > 0) {
+        const failedRefSet = new Set(
+          failures
+            .map((failure) => normalizeManagedRef(failure?.refTpi))
+            .filter(Boolean)
+        )
+
+        setBulkFeedback({
+          tone: failureCount > 0 ? 'warning' : 'success',
+          message: failureCount > 0
+            ? `${successCount} fiche(s) mises à jour, ${failureCount} à reprendre.`
+            : `${successCount} fiche(s) mises à jour d'un coup.`,
+          details: failures.slice(0, 4)
+        })
+
+        if (failureCount > 0) {
+          setSelectedRefs((currentSelection) =>
+            currentSelection.filter((refKey) => failedRefSet.has(refKey))
+          )
+        } else {
+          setSelectedRefs([])
+        }
+
+        resetBulkEditor()
+        return
+      }
+
+      setBulkFeedback({
+        tone: 'error',
+        message: 'Aucune fiche n’a pu être mise à jour.',
+        details: failures.slice(0, 4)
+      })
+    } catch (bulkError) {
+      setBulkFeedback({
+        tone: 'error',
+        message: bulkError?.message || 'Impossible de lancer la mise à jour groupée.',
+        details: []
+      })
+    } finally {
+      setIsBulkSaving(false)
+    }
   }
 
   const getCardBadge = (profile) => {
@@ -396,6 +770,26 @@ const TpiList = ({
                 ))}
               </div>
             )}
+
+            <div className='tpi-bulk-mode-launcher'>
+              <button
+                type='button'
+                className={`tpi-bulk-mode-toggle ${isBulkMode ? 'active' : ''}`.trim()}
+                onClick={handleToggleBulkMode}
+                aria-pressed={isBulkMode}
+              >
+                <ListIcon className='tpi-action-icon' />
+                <span>{isBulkMode ? 'Fermer le lot' : 'Édition multiple'}</span>
+              </button>
+
+              {selectedCount > 0 ? (
+                <span className='tpi-bulk-count-pill'>
+                  <CheckIcon className='tpi-action-icon' />
+                  <strong>{selectedCount}</strong>
+                  <span>sélection</span>
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className='tpi-display-controls-bottom'>
@@ -445,6 +839,39 @@ const TpiList = ({
               </button>
             </div>
           )}
+
+          {hasPlanningScopeFilter && (
+            <div
+              className='tpi-display-controls-planning'
+              aria-label='Filtre périmètre planning'
+            >
+              <span>Planification</span>
+              <button
+                type='button'
+                className={planningScopeFilter === 'planifiable' ? 'active' : ''}
+                onClick={() => setPlanningScopeFilter('planifiable')}
+              >
+                À planifier
+                <strong>{planifiableCount}</strong>
+              </button>
+              <button
+                type='button'
+                className={planningScopeFilter === 'out-of-scope' ? 'active' : ''}
+                onClick={() => setPlanningScopeFilter('out-of-scope')}
+              >
+                Hors périmètre
+                <strong>{outOfScopeCount}</strong>
+              </button>
+              <button
+                type='button'
+                className={planningScopeFilter === 'all' ? 'active' : ''}
+                onClick={() => setPlanningScopeFilter('all')}
+              >
+                Toutes
+                <strong>{profiles.length}</strong>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className='tpi-category-strip tpi-axis-strip' aria-label='Filtre par axe'>
@@ -468,9 +895,30 @@ const TpiList = ({
         </div>
       </div>
 
+      {outOfScopeCount > 0 && (
+        <div className='tpi-planning-scope-banner'>
+          <div>
+            <strong>{outOfScopeCount} fiche(s) hors planification</strong>
+            <p>
+              Ces fiches ont un site hors de `Configuration Sites` pour {year}. Elles restent éditables ici,
+              mais ne sont pas comptées dans `PP manquantes` ou `PP incorrectes`.
+            </p>
+            {activePlanningSiteLabels.length > 0 ? (
+              <p className='tpi-planning-scope-banner-sites'>
+                Sites actifs: {activePlanningSiteLabels.join(', ')}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       <div className='tpi-list-mini-stats'>
         <span>{summaryStats.axes} axes distincts</span>
         <span>{summaryStats.tags} tags nettoyés</span>
+        <span>{planifiableCount} fiche(s) dans le périmètre Planning</span>
+        {outOfScopeCount > 0 ? (
+          <span>{outOfScopeCount} fiche(s) hors périmètre</span>
+        ) : null}
         {hasMissingStakeholderFilter ? (
           <span>{missingStakeholderCount} fiche(s) avec PP manquantes</span>
         ) : null}
@@ -478,6 +926,119 @@ const TpiList = ({
           <span>{stakeholderIssueCount} fiche(s) avec PP incorrectes</span>
         ) : null}
       </div>
+
+      {isBulkMode ? (
+        <section className='tpi-bulk-editor-shell'>
+          <div className='tpi-bulk-editor-head'>
+            <div>
+              <span className='tpi-management-toolbar-label'>Édition multiple</span>
+              <h3>{selectedCount > 0 ? `${selectedCount} fiche(s) sélectionnée(s)` : 'Sélection en attente'}</h3>
+            </div>
+
+            <p>
+              Coche les fiches à modifier, puis active uniquement les champs à propager.
+              Un champ coché avec une valeur vide efface la donnée sur la sélection.
+            </p>
+          </div>
+
+          <div className='tpi-bulk-editor-toolbar'>
+            <span>{selectedVisibleCount}/{filteredProfiles.length} visible(s) cochée(s)</span>
+            <button
+              type='button'
+              className={`tpi-bulk-toolbar-button ${allFilteredSelected ? 'active' : ''}`.trim()}
+              onClick={handleSelectAllFiltered}
+              disabled={filteredProfiles.length === 0}
+            >
+              <CheckIcon className='tpi-action-icon' />
+              <span>{allFilteredSelected ? 'Retirer visibles' : 'Prendre visibles'}</span>
+            </button>
+            <button
+              type='button'
+              className='tpi-bulk-toolbar-button'
+              onClick={handleClearSelection}
+              disabled={selectedCount === 0}
+            >
+              <CloseIcon className='tpi-action-icon' />
+              <span>Vider</span>
+            </button>
+            <button
+              type='button'
+              className='tpi-bulk-toolbar-button'
+              onClick={handleResetBulkEditor}
+              disabled={enabledBulkFieldCount === 0 && !Object.values(bulkFieldValues).some(Boolean)}
+            >
+              <RefreshIcon className='tpi-action-icon' />
+              <span>Réinitialiser</span>
+            </button>
+          </div>
+
+          {bulkFeedback ? (
+            <div className={`tpi-bulk-feedback is-${bulkFeedback.tone || 'info'}`}>
+              <strong>{bulkFeedback.message}</strong>
+              {Array.isArray(bulkFeedback.details) && bulkFeedback.details.length > 0 ? (
+                <ul>
+                  {bulkFeedback.details.map((detail) => (
+                    <li key={`${detail.refTpi}-${detail.message}`}>
+                      <strong>{detail.refTpi}</strong>
+                      <span>{detail.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          <form className='tpi-bulk-editor-form' onSubmit={handleBulkSubmit}>
+            <div className='tpi-bulk-editor-grid'>
+              {BULK_EDIT_FIELDS.map((field) => (
+                <label
+                  key={field.key}
+                  className={`tpi-bulk-field ${bulkFieldSelection[field.key] ? 'is-active' : ''}`.trim()}
+                >
+                  <span className='tpi-bulk-field-head'>
+                    <input
+                      type='checkbox'
+                      checked={bulkFieldSelection[field.key]}
+                      onChange={() => handleBulkFieldToggle(field.key)}
+                    />
+                    <span>{field.label}</span>
+                  </span>
+
+                  <input
+                    type={field.type}
+                    value={bulkFieldValues[field.key]}
+                    onChange={handleBulkFieldValueChange(field.key)}
+                    placeholder={field.placeholder}
+                    disabled={!bulkFieldSelection[field.key]}
+                  />
+
+                  {field.key === 'tags' ? (
+                    <select
+                      value={bulkTagMode}
+                      onChange={(event) => setBulkTagMode(event.target.value)}
+                      disabled={!bulkFieldSelection.tags}
+                    >
+                      <option value='replace'>Remplacer les tags</option>
+                      <option value='append'>Ajouter aux tags</option>
+                    </select>
+                  ) : null}
+                </label>
+              ))}
+            </div>
+
+            <div className='tpi-bulk-editor-actions'>
+              <button
+                type='submit'
+                className='tpi-bulk-submit'
+                disabled={selectedCount === 0 || enabledBulkFieldCount === 0 || isBulkSaving}
+              >
+                <SaveIcon className='tpi-action-icon' />
+                <span>{isBulkSaving ? 'Application...' : 'Appliquer à la sélection'}</span>
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
       {editingTpiId && (
         <section className='tpi-management-editor-shell'>
@@ -493,6 +1054,10 @@ const TpiList = ({
             tpiToLoad={tpiList.find((tpi) => tpi.refTpi === editingTpiId)}
             onSave={onSave}
             onClose={handleFormClose}
+            year={year}
+            planningCatalogSites={planningCatalogSites}
+            planningClassTypes={planningClassTypes}
+            planningSoutenanceDates={planningSoutenanceDates}
           />
         </section>
       )}
@@ -508,11 +1073,16 @@ const TpiList = ({
           className='tpi-card-grid'
           style={{ gridTemplateColumns: `repeat(${effectiveCardColumns}, minmax(0, 1fr))` }}
         >
-          {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution }) => {
-            const classCode = String(classResolution?.displayClassLabel || '').trim()
+          {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution, planningPerimeter }) => {
+            const classChipLabel = String(
+              classResolution?.classLabel || classResolution?.displayClassLabel || ''
+            ).trim()
+            const classCode = String(classResolution?.classCode || '').trim()
             const classTypeLabel = String(classResolution?.displayTypeLabel || '').trim()
             const classTitle = [
-              classResolution?.displayLabel ? `Classe ${classResolution.displayLabel}` : '',
+              classChipLabel ? `Classe ${classChipLabel}` : '',
+              classCode && classChipLabel && classCode !== classChipLabel ? `Code ${classCode}` : '',
+              classTypeLabel ? `Type ${classTypeLabel}` : '',
               classResolution?.siteLabel || tpi.site || tpi.lieu?.site ? `Site ${classResolution?.siteLabel || tpi.site || tpi.lieu?.site}` : ''
             ]
               .filter(Boolean)
@@ -520,9 +1090,13 @@ const TpiList = ({
             const missingStakeholders = stakeholderIssues.missingStakeholders
             const missingStakeholderLinks = stakeholderIssues.missingLinks
             const isFocused = normalizedFocusedRef && normalizeManagedRef(tpi.refTpi) === normalizedFocusedRef
+            const isSelected = selectedRefSet.has(normalizeManagedRef(tpi.refTpi))
 
             return (
-              <article key={tpi.refTpi} className={`tpi-card ${isFocused ? 'is-focused' : ''}`.trim()}>
+              <article
+                key={tpi.refTpi}
+                className={`tpi-card ${isFocused ? 'is-focused' : ''} ${isSelected ? 'is-selected' : ''}`.trim()}
+              >
                 <div className='tpi-card-header'>
                   <div className='tpi-card-header-main'>
                     <div className='tpi-card-badges'>
@@ -532,9 +1106,9 @@ const TpiList = ({
                       {profile.domainLabel && profile.domainLabel !== profile.primaryCategory && (
                         <span className='tpi-domain-chip'>{profile.domainLabel}</span>
                       )}
-                      {classCode ? (
-                        <span className='tpi-class-chip' title={classTitle || classCode}>
-                          {classCode}
+                      {classChipLabel ? (
+                        <span className='tpi-class-chip' title={classTitle || classChipLabel}>
+                          {classChipLabel}
                         </span>
                       ) : null}
                       {classResolution?.hasSpecificClass && classTypeLabel ? (
@@ -548,24 +1122,42 @@ const TpiList = ({
                   </div>
 
                   <div className='tpi-card-actions'>
+                    {isBulkMode ? (
+                      <button
+                        type='button'
+                        className={`tpi-card-select-toggle ${isSelected ? 'is-selected' : ''}`.trim()}
+                        onClick={() => handleToggleSelection(tpi.refTpi)}
+                        aria-pressed={isSelected}
+                        title={isSelected ? `Retirer ${tpi.refTpi} de la sélection` : `Ajouter ${tpi.refTpi} à la sélection`}
+                      >
+                        <CheckIcon className='tpi-action-icon' />
+                        <span className='sr-only'>
+                          {isSelected ? `Retirer ${tpi.refTpi} de la sélection` : `Ajouter ${tpi.refTpi} à la sélection`}
+                        </span>
+                      </button>
+                    ) : null}
                     <Link
                       to={buildTpiDetailsLink(year, tpi.refTpi)}
-                      className='tpi-card-open'
+                      className='tpi-card-icon-button tpi-card-open'
+                      title={`Ouvrir la fiche ${tpi.refTpi}`}
                     >
-                      Ouvrir la fiche
+                      <FileTextIcon className='tpi-action-icon' />
+                      <span className='sr-only'>Ouvrir la fiche</span>
                     </Link>
                     <button
                       type='button'
-                      className='tpi-card-edit'
+                      className='tpi-card-icon-button tpi-card-edit'
                       onClick={() => handleEdit(tpi.refTpi)}
+                      title={`Modifier ${tpi.refTpi}`}
                     >
-                      Modifier
+                      <PencilIcon className='tpi-action-icon' />
+                      <span className='sr-only'>Modifier la fiche</span>
                     </button>
                   </div>
                 </div>
 
                 <h3 className='tpi-card-candidate'>
-                  <StakeholderLink tpi={tpi} field={stakeholderFields.candidat}>
+                  <StakeholderLink tpi={tpi} field={stakeholderFields.candidat} year={year}>
                     {tpi.candidat || 'Candidat non renseigné'}
                   </StakeholderLink>
                 </h3>
@@ -607,6 +1199,15 @@ const TpiList = ({
                     </span>
                   ) : null}
 
+                  {!planningPerimeter.isPlanifiable ? (
+                    <span
+                      className='tpi-tag tpi-tag-scope'
+                      title={planningPerimeter.reason}
+                    >
+                      Hors planification
+                    </span>
+                  ) : null}
+
                   {isFocused ? (
                     <span className='tpi-tag tpi-tag-focus'>
                       Fiche ciblée
@@ -618,7 +1219,7 @@ const TpiList = ({
                   <div>
                     <dt>Encadrant</dt>
                     <dd>
-                      <StakeholderLink tpi={tpi} field={stakeholderFields.boss}>
+                      <StakeholderLink tpi={tpi} field={stakeholderFields.boss} year={year}>
                         {tpi.boss || 'Non renseigné'}
                       </StakeholderLink>
                     </dd>
@@ -667,6 +1268,7 @@ const TpiList = ({
           <table className='tpiTable'>
             <thead>
               <tr>
+                {isBulkMode ? <th className='tpi-table-selection-col'>Lot</th> : null}
                 <th>Ref</th>
                 <th>Candidat</th>
                 <th>Classe</th>
@@ -679,17 +1281,34 @@ const TpiList = ({
               </tr>
             </thead>
             <tbody>
-              {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution }) => {
+              {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution, planningPerimeter }) => {
                 const classDisplay = classResolution?.displayLabel || String(tpi.classe || '').trim() || 'Non renseignée'
                 const missingStakeholders = stakeholderIssues.missingStakeholders
                 const missingStakeholderLinks = stakeholderIssues.missingLinks
                 const isFocused = normalizedFocusedRef && normalizeManagedRef(tpi.refTpi) === normalizedFocusedRef
+                const isSelected = selectedRefSet.has(normalizeManagedRef(tpi.refTpi))
 
                 return (
-                  <tr key={tpi.refTpi} className={isFocused ? 'is-focused' : ''}>
+                  <tr key={tpi.refTpi} className={`${isFocused ? 'is-focused' : ''} ${isSelected ? 'is-selected' : ''}`.trim()}>
+                    {isBulkMode ? (
+                      <td className='tpi-table-selection-cell'>
+                        <button
+                          type='button'
+                          className={`tpi-card-select-toggle ${isSelected ? 'is-selected' : ''}`.trim()}
+                          onClick={() => handleToggleSelection(tpi.refTpi)}
+                          aria-pressed={isSelected}
+                          title={isSelected ? `Retirer ${tpi.refTpi} de la sélection` : `Ajouter ${tpi.refTpi} à la sélection`}
+                        >
+                          <CheckIcon className='tpi-action-icon' />
+                          <span className='sr-only'>
+                            {isSelected ? `Retirer ${tpi.refTpi} de la sélection` : `Ajouter ${tpi.refTpi} à la sélection`}
+                          </span>
+                        </button>
+                      </td>
+                    ) : null}
                     <td>{tpi.refTpi}</td>
                     <td>
-                      <StakeholderLink tpi={tpi} field={stakeholderFields.candidat}>
+                      <StakeholderLink tpi={tpi} field={stakeholderFields.candidat} year={year}>
                         {tpi.candidat || 'Candidat non renseigné'}
                       </StakeholderLink>
                     </td>
@@ -720,18 +1339,30 @@ const TpiList = ({
                           A completer
                         </span>
                       ) : null}
+                      {!planningPerimeter.isPlanifiable ? (
+                        <span
+                          className='tpi-table-link-warning tpi-table-link-scope'
+                          title={planningPerimeter.reason}
+                        >
+                          Hors planification
+                        </span>
+                      ) : null}
                       <Link
                         to={buildTpiDetailsLink(year, tpi.refTpi)}
-                        className='tpi-table-open'
+                        className='tpi-card-icon-button tpi-table-open'
+                        title={`Ouvrir la fiche ${tpi.refTpi}`}
                       >
-                        Ouvrir
+                        <FileTextIcon className='tpi-action-icon' />
+                        <span className='sr-only'>Ouvrir la fiche</span>
                       </Link>
                       <button
                         type='button'
-                        className='tpi-table-edit'
+                        className='tpi-card-icon-button tpi-table-edit'
                         onClick={() => handleEdit(tpi.refTpi)}
+                        title={`Modifier ${tpi.refTpi}`}
                       >
-                        Modifier
+                        <PencilIcon className='tpi-action-icon' />
+                        <span className='sr-only'>Modifier la fiche</span>
                       </button>
                     </td>
                   </tr>

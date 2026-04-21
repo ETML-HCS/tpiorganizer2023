@@ -3,6 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TpiScheduleButtons from './TpiScheduleButtons'
 
+jest.mock('../../config/appConfig', () => {
+  const actual = jest.requireActual('../../config/appConfig')
+  return {
+    ...actual,
+    IS_DEBUG: true
+  }
+})
+
 jest.mock('../shared/PageToolbar', () => {
   const React = require('react')
 
@@ -51,9 +59,11 @@ const baseProps = {
   workflowActionLoading: false,
   pendingWorkflowAction: '',
   validationResult: null,
+  onAutomatePlanification: jest.fn(),
   onValidatePlanification: jest.fn(),
   onFreezeSnapshot: jest.fn(),
   onOpenVotes: jest.fn(),
+  onOpenVotesWithoutEmails: jest.fn(),
   onRemindVotes: jest.fn(),
   onCloseVotes: jest.fn(),
   onPublishDefinitive: jest.fn(),
@@ -112,6 +122,8 @@ describe('TpiScheduleButtons - Données', () => {
 
   test('bascule le mode édition et met à jour le libellé', () => {
     renderButtons()
+
+    expect(screen.getByRole('button', { name: /Données\s+10/i })).toBeInTheDocument()
 
     const editButton = screen.getByRole('button', { name: /Mode édition/i })
     fireEvent.click(editButton)
@@ -174,6 +186,15 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('button', { name: /Vérifier/i }))
 
     expect(baseProps.onValidatePlanification).toHaveBeenCalledTimes(1)
+  })
+
+  test('déclenche l automatisation de planification depuis Workflow > Préparation', () => {
+    renderButtons()
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Automatiser planification/i }))
+
+    expect(baseProps.onAutomatePlanification).toHaveBeenCalledTimes(1)
   })
 
   test('désactive le bouton Vérifier après une validation réussie sans conflit', () => {
@@ -291,7 +312,9 @@ describe('TpiScheduleButtons - Données', () => {
 
     expect(screen.getByLabelText('mer., 10.06.2026')).toBeInTheDocument()
     expect(screen.getByLabelText('ven., 12.06.2026')).toBeInTheDocument()
-    expect(screen.getByText('ETML', { selector: 'strong' })).toBeInTheDocument()
+    expect(
+      screen.getByText('ETML', { selector: '.planning-room-site-overview-head strong' })
+    ).toBeInTheDocument()
     expect(screen.getByLabelText('A101')).toBeInTheDocument()
     expect(screen.getByLabelText('B202')).toBeInTheDocument()
   })
@@ -359,11 +382,30 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
     fireEvent.click(screen.getByRole('tab', { name: /Vote/i }))
 
-    const openVotesButton = screen.getByRole('button', { name: /Ouvrir votes/i })
+    const openVotesButton = screen.getByRole('button', { name: /^Ouvrir votes$/i })
     expect(openVotesButton).toBeDisabled()
     expect(openVotesButton).toHaveAttribute(
       'title',
       expect.stringContaining('a changé depuis le dernier snapshot')
     )
+  })
+
+  test('déclenche l ouverture des votes sans emails en mode debug', () => {
+    const onOpenVotesWithoutEmails = jest.fn()
+
+    renderButtons({
+      activeSnapshotVersion: 3,
+      onOpenVotesWithoutEmails
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Vote/i }))
+
+    const openVotesWithoutEmailsButton = screen.getByRole('button', {
+      name: /Ouvrir votes sans emails/i
+    })
+    fireEvent.click(openVotesWithoutEmailsButton)
+
+    expect(onOpenVotesWithoutEmails).toHaveBeenCalledTimes(1)
   })
 })

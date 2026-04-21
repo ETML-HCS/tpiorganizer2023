@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import { getStoredAuthToken } from '../../utils/storage'
+import { tpiPlanningService } from '../../services/planningService'
 import {
   AlertIcon,
   BanIcon,
@@ -124,7 +124,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
    * Renvoie les demandes de vote pour un TPI
    */
   const handleResendVotes = useCallback(async () => {
-    if (!selectedConflict._id) {
+    if (!selectedConflict?._id) {
       setResendVotesError('Aucun TPI sélectionné')
       return
     }
@@ -133,26 +133,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
     setResendVotesError(null)
 
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:6000/api'
-      const token = getStoredAuthToken('/api/planning')
-      const headers = {
-        'Content-Type': 'application/json'
-      }
-
-      if (token) {
-        headers.Authorization = `Bearer ${token}`
-      }
-
-      const response = await fetch(`${apiUrl}/planning/tpi/${selectedConflict._id}/resend-votes`, {
-        method: 'POST',
-        headers
-      })
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de l\'envoi des demandes de vote')
-      }
-
-      const data = await response.json()
+      const data = await tpiPlanningService.resendVotes(selectedConflict._id)
       
       // Afficher un message de succès
       alert(`Demandes de vote renvoyées avec succès (${data.emailsSent} emails envoyés)`)
@@ -450,7 +431,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                     <button
                       className="btn-secondary"
                       onClick={handleResendVotes}
-                      disabled={isResendingVotes || !selectedConflict._id}
+                      disabled={isResendingVotes || !selectedConflict?._id}
                     >
                       {isResendingVotes ? (
                         <>

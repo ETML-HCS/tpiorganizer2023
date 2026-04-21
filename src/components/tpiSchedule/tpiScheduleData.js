@@ -5,6 +5,17 @@ const DEFAULT_OFFER = {
   submit: []
 }
 
+const DEFAULT_SITE_PLANNING_COLORS = [
+  '#1D4ED8',
+  '#0F766E',
+  '#BE185D',
+  '#7C3AED',
+  '#C2410C',
+  '#0891B2',
+  '#4F46E5',
+  '#65A30D'
+]
+
 const DEFAULT_SITE_SCHEDULE = {
   breaklineMinutes: 10,
   tpiTimeMinutes: 60,
@@ -19,6 +30,39 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizePlanningColor(value) {
+  const hex = compactText(value).replace(/^#/, '')
+
+  if (/^[\da-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toUpperCase()}`
+  }
+
+  if (/^[\da-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`
+  }
+
+  return ''
+}
+
+function getDefaultPlanningColor(seed = '', fallbackIndex = 0) {
+  const normalizedSeed = compactText(seed).toUpperCase()
+
+  if (!normalizedSeed) {
+    return DEFAULT_SITE_PLANNING_COLORS[Math.abs(Number(fallbackIndex) || 0) % DEFAULT_SITE_PLANNING_COLORS.length]
+  }
+
+  let hash = 0
+  for (const character of normalizedSeed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  }
+
+  return DEFAULT_SITE_PLANNING_COLORS[hash % DEFAULT_SITE_PLANNING_COLORS.length]
 }
 
 function normalizeIdSegment(value) {
@@ -203,6 +247,13 @@ function normalizeSiteConfig(siteConfig = {}, fallbackSiteConfig = DEFAULT_SITE_
     siteId: siteId || compactText(source.id || makeStableId("site", siteCode || label)),
     siteCode,
     label: label || siteCode || siteId,
+    planningColor: normalizePlanningColor(
+      source.planningColor ||
+      source.color ||
+      fallback.planningColor ||
+      fallback.color ||
+      getDefaultPlanningColor(siteCode || label)
+    ),
     breaklineMinutes,
     tpiTimeMinutes,
     firstTpiStartTime,

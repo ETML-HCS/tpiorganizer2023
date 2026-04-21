@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { schedulingService } from '../../services/planningService'
-import { getStoredAuthToken } from '../../utils/storage'
 import {
   AlertIcon,
   CalendarIcon,
@@ -238,28 +237,9 @@ const PlanningCalendar = ({
     
     // Charger les disponibilités pour ce TPI
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:6000/api'
-      const year = planningYear
-      const token = getStoredAuthToken('/api/planning')
-      const headers = {}
-
-      if (token) {
-        headers.Authorization = `Bearer ${token}`
-      }
-
-      const response = await fetch(
-        `${apiUrl}/planning/availability/${year}/${tpi._id}`,
-        {
-          headers
-        }
-      )
-      
-      if (response.ok) {
-        const availableSlots = await response.json()
-        // Extraire les IDs des créneaux disponibles
-        const availableSlotIds = availableSlots.map(s => s.slotDetails?.id || s.slot).filter(Boolean)
-        setHighlightedSlots(availableSlotIds)
-      }
+      const availableSlots = await schedulingService.getAvailability(planningYear, tpi._id)
+      const availableSlotIds = availableSlots.map(s => s.slotDetails?.id || s.slot).filter(Boolean)
+      setHighlightedSlots(availableSlotIds)
     } catch (error) {
       console.error('Erreur lors du chargement des disponibilités:', error)
     }

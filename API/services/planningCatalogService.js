@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto')
+const { ensureDatabaseConnection } = require('../config/dbConfig')
 const PlanningSharedCatalog = require('../models/planningSharedCatalogModel')
 
 const DEFAULT_SCHEMA_VERSION = 2
@@ -497,6 +498,10 @@ function normalizeStoredCatalog(document, fallbackCatalog = buildDefaultPlanning
 }
 
 async function getSharedPlanningCatalog() {
+  await ensureDatabaseConnection({
+    errorMessage: 'Catalogue partagé indisponible: connexion MongoDB impossible.'
+  })
+
   const document = await PlanningSharedCatalog.findOne({ key: 'shared' }).lean()
 
   if (document) {
@@ -524,6 +529,10 @@ async function getSharedPlanningCatalog() {
 }
 
 async function saveSharedPlanningCatalog(payload = {}) {
+  await ensureDatabaseConnection({
+    errorMessage: 'Catalogue partagé indisponible: connexion MongoDB impossible.'
+  })
+
   const fallback = await getSharedPlanningCatalog()
   const normalizedCatalog = normalizeStoredCatalog(payload, fallback)
 

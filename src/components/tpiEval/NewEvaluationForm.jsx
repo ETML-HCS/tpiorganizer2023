@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react"
 import { toast } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
 
+import IconButtonContent from "../shared/IconButtonContent"
 import {
   DownloadIcon,
   SaveIcon,
@@ -1142,20 +1143,20 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
           type='button'
           onClick={handleFreeze}
           title='Ferme la modification & télécharge le document en PDF'
-          className='freeze-button'
+          className='freeze-button icon-button'
+          aria-label='Clôturer'
         >
-          <span>Clôturer </span>
-          <SnowflakeIcon />
+          <IconButtonContent label='Clôturer' icon={SnowflakeIcon} />
         </button>
 
         <button
           type='button'
           onClick={handleSave}
           title='Enregistrer'
-          className='save-button'
+          className='save-button icon-button'
+          aria-label='Enregistrer'
         >
-          <span>Enregistrer </span>
-          <SaveIcon />
+          <IconButtonContent label='Enregistrer' icon={SaveIcon} />
         </button>
 
         {showDownloadButton && (
@@ -1163,10 +1164,10 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
             type='button'
             onClick={handleDownload}
             title='Ferme la modification et télécharge le document en JSON'
-            className='download-button'
+            className='download-button icon-button'
+            aria-label='Télécharger'
           >
-            <span>Télécharger</span>
-            <DownloadIcon />
+            <IconButtonContent label='Télécharger' icon={DownloadIcon} />
           </button>
         )}
 
@@ -1174,13 +1175,25 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
           type='button'
           onClick={handleClear}
           title='Réinitialiser'
-          className='reset-button'
+          className='reset-button icon-button'
+          aria-label='Réinitialiser'
         >
-          <span>Réinitialiser </span>
-          <TrashIcon />
+          <IconButtonContent label='Réinitialiser' icon={TrashIcon} />
         </button>
-        <button type='button' onClick={() => handleClickDeleteEval(data?.id)}>
-          Supprimer l'éval ID : {`${data?.id}`}
+        <button
+          type='button'
+          className='icon-button icon-button--with-badge'
+          onClick={() => handleClickDeleteEval(data?.id)}
+          aria-label={`Supprimer l'éval ID : ${data?.id}`}
+          title={`Supprimer l'éval ID : ${data?.id}`}
+        >
+          <IconButtonContent
+            label={`Supprimer l'éval ID : ${data?.id}`}
+            icon={TrashIcon}
+          />
+          <span className='ui-button-badge' aria-hidden='true'>
+            {data?.id}
+          </span>
         </button>
       </div>
     </>

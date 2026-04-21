@@ -151,4 +151,35 @@ describe('DateRoom', () => {
     expect(screen.getAllByTestId('tpi-slot')[0]).toHaveTextContent('08:00 - 09:00')
     expect(screen.getAllByTestId('tpi-slot')[1]).toHaveTextContent('09:10 - 10:10')
   })
+
+  test('applique la couleur de planning configurée pour un site non legacy', () => {
+    render(
+      <DateRoom
+        roomData={{
+          site: 'VENNES',
+          name: 'Vennes - A101',
+          date: '2026-06-10',
+          configSite: {
+            planningColor: '#14532d',
+            numSlots: 1,
+            breaklineMinutes: 10,
+            tpiTimeMinutes: 60,
+            firstTpiStartTime: '08:00'
+          },
+          tpiDatas: [null]
+        }}
+        roomIndex={0}
+        onDelete={jest.fn()}
+        onUpdateRoom={jest.fn()}
+        isEditOfRoom={false}
+        onUpdateTpi={jest.fn()}
+        onSwapTpiCards={jest.fn()}
+      />
+    )
+
+    const roomElement = screen.getByText('Vennes - A101').closest('.date-room')
+
+    expect(roomElement?.style.getPropertyValue('--dateRoom-bgColor')).toBe('#14532D')
+    expect(roomElement).toHaveClass('site_vennes')
+  })
 })

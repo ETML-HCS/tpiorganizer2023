@@ -224,6 +224,13 @@ test('GET /api/get-tpi backfills missing stakeholder links from the people regis
     assert.match(payload[0].dates.soutenance, /^2026-06-10/)
     assert.equal(payload[0].salle, 'A101')
     assert.equal(payload[0].lieu.site, 'ETML')
+    assert.deepEqual(payload[0].stakeholderState, {
+      isComplete: true,
+      isResolved: true,
+      isValidated: true,
+      missingRoles: [],
+      unresolvedRoles: []
+    })
     assert.equal(capturedBulkOperations.length, 1)
     assert.deepEqual(capturedBulkOperations[0], {
       updateOne: {

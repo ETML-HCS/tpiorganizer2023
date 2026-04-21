@@ -5,15 +5,19 @@ const Vote = require('../models/voteModel')
 const { requireNonEmptyBody, requireYearParam } = require('../middleware/requestValidation')
 const { authMiddleware, requireRole } = require('../services/magicLinkService')
 const magicLinkV2Service = require('../services/magicLinkV2Service')
+const emailService = require('../services/emailService')
 const {
   publishConfirmedPlanningSoutenances,
-  rollbackPublicationVersion
+  rollbackPublicationVersion,
+  getActivePublicationVersion
 } = require('../services/publishedSoutenanceService')
+const planningAutomationService = require('../services/planningAutomationService')
 const planningValidationService = require('../services/planningValidationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
 const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
 const {
+  syncLegacyCatalogToPlanning,
   rebuildWorkflowFromLegacyPlanning
 } = require('../services/legacyPlanningBridgeService')
 
@@ -66,7 +70,108 @@ function getFrontendBaseUrl(req) {
   )
 }
 
-async function findDevVoteLinkTarget(year) {
+function compactText(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim()
+}
+
+function normalizeReference(value) {
+  return compactText(value)
+    .toLowerCase()
+    .replace(/^tpi-\d{4}-/i, '')
+}
+
+function matchesReference(candidateReference, requestedReference) {
+  const normalizedCandidate = normalizeReference(candidateReference)
+  const normalizedRequested = normalizeReference(requestedReference)
+
+  if (!normalizedRequested || !normalizedCandidate) {
+    return false
+  }
+
+  return normalizedCandidate === normalizedRequested ||
+    compactText(candidateReference).toLowerCase() === compactText(requestedReference).toLowerCase()
+}
+
+function formatPersonName(person) {
+  return [person?.firstName, person?.lastName].filter(Boolean).join(' ').trim()
+}
+
+function formatRoleLabel(role) {
+  if (role === 'expert1') {
+    return 'Expert 1'
+  }
+
+  if (role === 'expert2') {
+    return 'Expert 2'
+  }
+
+  if (role === 'chef_projet') {
+    return 'Chef de projet'
+  }
+
+  if (role === 'candidat') {
+    return 'Candidat'
+  }
+
+  return compactText(role)
+}
+
+function buildRedirectPath(pathname, query = {}) {
+  const params = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === null || value === undefined || value === '') {
+      continue
+    }
+
+    params.set(key, String(value))
+  }
+
+  const queryString = params.toString()
+  return queryString ? `${pathname}?${queryString}` : pathname
+}
+
+function getRecipientEmail(rawValue) {
+  return compactText(rawValue).toLowerCase()
+}
+
+function isValidEmailAddress(value) {
+  return /^\S+@\S+\.\S+$/.test(value)
+}
+
+function buildVoteSlotsPayload(votes = []) {
+  const seen = new Set()
+  const slots = []
+
+  for (const vote of votes) {
+    const slot = vote?.slot
+    const slotId = slot?._id ? String(slot._id) : ''
+
+    if (!slot || (slotId && seen.has(slotId))) {
+      continue
+    }
+
+    if (slotId) {
+      seen.add(slotId)
+    }
+
+    slots.push({
+      date: slot.date ? new Date(slot.date).toLocaleDateString('fr-CH') : '',
+      period: slot.period,
+      startTime: slot.startTime || '',
+      endTime: slot.endTime || '',
+      room: slot.room?.name || slot.room || ''
+    })
+  }
+
+  return slots
+}
+
+async function findDevVoteLinkTarget(year, requestedReference = '') {
   const tpis = await TpiPlanning.find({
     year,
     status: { $in: ['voting', 'pending_slots'] }
@@ -75,6 +180,10 @@ async function findDevVoteLinkTarget(year) {
     .sort({ reference: 1 })
 
   for (const tpi of tpis) {
+    if (requestedReference && !matchesReference(tpi.reference, requestedReference)) {
+      continue
+    }
+
     const pendingVotes = await Vote.find({
       tpiPlanning: tpi._id,
       decision: 'pending'
@@ -114,6 +223,74 @@ async function findDevVoteLinkTarget(year) {
   return null
 }
 
+async function findDevSoutenanceLinkTarget(year, requestedReference = '') {
+  const activePublication = await getActivePublicationVersion(year)
+  const rooms = Array.isArray(activePublication?.rooms) ? activePublication.rooms : []
+
+  for (const room of rooms) {
+    for (const tpiData of Array.isArray(room?.tpiDatas) ? room.tpiDatas : []) {
+      if (requestedReference && !matchesReference(tpiData?.refTpi, requestedReference)) {
+        continue
+      }
+
+      const participants = []
+      const seenPersonIds = new Set()
+      const rawParticipants = [
+        {
+          role: 'candidat',
+          personId: tpiData?.candidatPersonId || null,
+          name: tpiData?.candidat || ''
+        },
+        {
+          role: 'expert1',
+          personId: tpiData?.expert1?.personId || null,
+          name: tpiData?.expert1?.name || ''
+        },
+        {
+          role: 'expert2',
+          personId: tpiData?.expert2?.personId || null,
+          name: tpiData?.expert2?.name || ''
+        },
+        {
+          role: 'chef_projet',
+          personId: tpiData?.boss?.personId || null,
+          name: tpiData?.boss?.name || ''
+        }
+      ]
+
+      for (const participant of rawParticipants) {
+        const personId = compactText(participant.personId)
+        if (!personId || seenPersonIds.has(personId)) {
+          continue
+        }
+
+        seenPersonIds.add(personId)
+        participants.push({
+          ...participant,
+          roleLabel: formatRoleLabel(participant.role)
+        })
+      }
+
+      if (participants.length === 0) {
+        continue
+      }
+
+      return {
+        publicationVersion: activePublication?.version || null,
+        reference: tpiData?.refTpi || '',
+        room: {
+          site: room?.site || '',
+          name: room?.name || '',
+          date: room?.date || null
+        },
+        participants
+      }
+    }
+  }
+
+  return null
+}
+
 router.get(
   '/:year/planification/validate',
   requireYearParam('year'),
@@ -143,6 +320,79 @@ router.get(
     } catch (error) {
       console.error('Erreur validation planification:', error)
       return res.status(500).json({ error: 'Erreur lors de la validation de la planification.' })
+    }
+  }
+)
+
+router.post(
+  '/:year/planification/auto-plan',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const workflow = await workflowService.getWorkflowYearState(year)
+
+      if (workflow.state !== 'planning') {
+        return res.status(409).json({
+          error: 'Planification automatique impossible hors etat planning.',
+          details: {
+            year,
+            state: workflow.state,
+            requiredState: 'planning'
+          }
+        })
+      }
+
+      const syncSummary = await syncLegacyCatalogToPlanning({
+        year,
+        createdBy: req.user
+      })
+      const result = await planningAutomationService.autoPlanYear(year)
+      const validation = await planningValidationService.validatePlanningForYear(year)
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.planification.auto-plan',
+        user: req.user,
+        payload: {
+          syncCreatedCount: syncSummary.createdCount,
+          plannedCount: result.plannedCount,
+          manualRequiredCount: result.manualRequiredCount,
+          slotCount: result.slotCount,
+          roomCount: result.roomCount
+        },
+        success: true
+      })
+
+      return res.status(200).json({
+        success: true,
+        summary: result,
+        legacyRooms: Array.isArray(result?.legacyRooms) ? result.legacyRooms : [],
+        sync: syncSummary,
+        validation: {
+          year: validation.year,
+          checkedAt: validation.checkedAt,
+          source: validation.source,
+          summary: validation.summary,
+          issues: validation.issues,
+          hardConflicts: validation.hardConflicts
+        }
+      })
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.planification.auto-plan',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+
+      console.error('Erreur planification automatique:', error)
+      return res.status(500).json({ error: 'Erreur lors de la planification automatique.' })
     }
   }
 )
@@ -356,9 +606,16 @@ router.post(
     const legacyRooms = Array.isArray(req.body?.legacyRooms) && req.body.legacyRooms.length > 0
       ? req.body.legacyRooms
       : null
+    const skipEmails = parseBoolean(req.body?.skipEmails, false)
     let migrationSummary = null
 
     try {
+      if (skipEmails && !IS_DEBUG) {
+        return res.status(403).json({
+          error: 'L ouverture des votes sans emails est indisponible hors mode debug.'
+        })
+      }
+
       const workflow = await workflowService.getWorkflowYearState(year)
 
       if (workflow.state === 'published') {
@@ -459,7 +716,9 @@ router.post(
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`
-      const result = await votingCampaignService.startVotesCampaign(year, baseUrl)
+      const result = await votingCampaignService.startVotesCampaign(year, baseUrl, {
+        skipEmails
+      })
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -468,7 +727,8 @@ router.post(
         payload: {
           tpiCount: result.tpiCount,
           totalEmails: result.totalEmails,
-          successfulEmails: result.successfulEmails
+          successfulEmails: result.successfulEmails,
+          emailsSkipped: result.emailsSkipped === true
         },
         success: true
       })
@@ -493,6 +753,7 @@ async function handleDevVoteLinks(req, res) {
   }
 
   const year = req.validatedParams.year
+  const requestedReference = compactText(req.body?.reference)
 
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
@@ -508,15 +769,21 @@ async function handleDevVoteLinks(req, res) {
       })
     }
 
-    const target = await findDevVoteLinkTarget(year)
+    const target = await findDevVoteLinkTarget(year, requestedReference)
 
     if (!target) {
       return res.status(404).json({
-        error: 'Aucun vote en attente disponible pour cette annee.'
+        error: requestedReference
+          ? `Aucun vote en attente disponible pour ${requestedReference}.`
+          : 'Aucun vote en attente disponible pour cette annee.'
       })
     }
 
     const baseUrl = getFrontendBaseUrl(req)
+    const redirectPath = buildRedirectPath(`/planning/${year}`, {
+      previewVote: '1',
+      focus: target.tpi.reference || ''
+    })
     const links = []
 
     for (const vote of target.votes) {
@@ -530,16 +797,19 @@ async function handleDevVoteLinks(req, res) {
           reference: target.tpi.reference
         },
         baseUrl,
-        redirectPath: `/planning/${year}?previewVote=1`
+        redirectPath
       })
 
       links.push({
+        type: 'vote',
         role: vote.voterRole,
+        roleLabel: formatRoleLabel(vote.voterRole),
         voter: {
           id: String(vote.voter._id),
-          name: `${vote.voter.firstName || ''} ${vote.voter.lastName || ''}`.trim(),
+          name: formatPersonName(vote.voter),
           email: vote.voter.email || ''
         },
+        expiresAt: link.expiresAt,
         url: link.url,
         token: link.token
       })
@@ -560,6 +830,244 @@ async function handleDevVoteLinks(req, res) {
   }
 }
 
+async function handleDevVoteEmails(req, res) {
+  if (!IS_DEBUG) {
+    return res.status(404).json({ error: 'Route indisponible.' })
+  }
+
+  const year = req.validatedParams.year
+  const recipientEmail = getRecipientEmail(req.body?.email)
+  const requestedReference = compactText(req.body?.reference)
+
+  if (!isValidEmailAddress(recipientEmail)) {
+    return res.status(400).json({ error: 'Adresse email de destination invalide.' })
+  }
+
+  try {
+    const workflow = await workflowService.getWorkflowYearState(year)
+
+    if (workflow.state !== 'voting_open') {
+      return res.status(409).json({
+        error: 'Le mode test de vote est disponible uniquement quand les votes sont ouverts.',
+        details: {
+          year,
+          state: workflow.state,
+          requiredState: 'voting_open'
+        }
+      })
+    }
+
+    const target = await findDevVoteLinkTarget(year, requestedReference)
+
+    if (!target) {
+      return res.status(404).json({
+        error: requestedReference
+          ? `Aucun vote en attente disponible pour ${requestedReference}.`
+          : 'Aucun vote en attente disponible pour cette annee.'
+      })
+    }
+
+    const baseUrl = getFrontendBaseUrl(req)
+    const redirectPath = buildRedirectPath(`/planning/${year}`, {
+      previewVote: '1',
+      focus: target.tpi.reference || ''
+    })
+    const slots = buildVoteSlotsPayload(target.votes)
+    const candidateName = formatPersonName(target.tpi.candidat)
+    const fallbackDeadline = target.tpi?.votingSession?.deadline
+      ? new Date(target.tpi.votingSession.deadline).toLocaleDateString('fr-CH')
+      : ''
+    const links = []
+    let emailsSucceeded = 0
+
+    for (const vote of target.votes) {
+      const link = await magicLinkV2Service.createVoteMagicLink({
+        year,
+        person: vote.voter,
+        recipientEmail,
+        role: vote.voterRole,
+        scope: {
+          year,
+          tpiId: String(target.tpi._id),
+          reference: target.tpi.reference,
+          source: 'dev_vote_email'
+        },
+        baseUrl,
+        redirectPath
+      })
+
+      const emailDelivery = await emailService.sendEmail(recipientEmail, 'voteRequest', {
+        recipientName: formatPersonName(vote.voter) || formatRoleLabel(vote.voterRole),
+        candidateName,
+        tpiReference: target.tpi.reference,
+        tpiSubject: target.tpi.sujet || '',
+        role: formatRoleLabel(vote.voterRole),
+        slots,
+        deadline: fallbackDeadline || link.expiresAt.toLocaleDateString('fr-CH'),
+        magicLinkUrl: link.url
+      })
+
+      if (emailDelivery.success) {
+        emailsSucceeded += 1
+      }
+
+      links.push({
+        type: 'vote',
+        role: vote.voterRole,
+        roleLabel: formatRoleLabel(vote.voterRole),
+        viewer: {
+          id: String(vote.voter._id),
+          name: formatPersonName(vote.voter),
+          email: vote.voter.email || ''
+        },
+        expiresAt: link.expiresAt,
+        url: link.url,
+        token: link.token,
+        emailDelivery: {
+          ...emailDelivery,
+          sentTo: recipientEmail
+        }
+      })
+    }
+
+    return res.status(200).json({
+      success: true,
+      kind: 'vote',
+      year,
+      reference: target.tpi.reference,
+      sentTo: recipientEmail,
+      summary: {
+        emailsSent: links.length,
+        emailsSucceeded,
+        emailsFailed: Math.max(links.length - emailsSucceeded, 0)
+      },
+      links
+    })
+  } catch (error) {
+    console.error('Erreur envoi emails de test vote:', error)
+    return res.status(500).json({
+      error: 'Erreur lors de l envoi des emails de test de vote.'
+    })
+  }
+}
+
+async function handleDevSoutenanceEmails(req, res) {
+  if (!IS_DEBUG) {
+    return res.status(404).json({ error: 'Route indisponible.' })
+  }
+
+  const year = req.validatedParams.year
+  const recipientEmail = getRecipientEmail(req.body?.email)
+  const requestedReference = compactText(req.body?.reference)
+
+  if (!isValidEmailAddress(recipientEmail)) {
+    return res.status(400).json({ error: 'Adresse email de destination invalide.' })
+  }
+
+  try {
+    const workflow = await workflowService.getWorkflowYearState(year)
+
+    if (workflow.state !== 'published') {
+      return res.status(409).json({
+        error: 'Le mode test soutenance est disponible uniquement apres publication.',
+        details: {
+          year,
+          state: workflow.state,
+          requiredState: 'published'
+        }
+      })
+    }
+
+    const target = await findDevSoutenanceLinkTarget(year, requestedReference)
+
+    if (!target) {
+      return res.status(404).json({
+        error: requestedReference
+          ? `Aucune soutenance publiee disponible pour ${requestedReference}.`
+          : 'Aucune soutenance publiee disponible pour cette annee.'
+      })
+    }
+
+    const baseUrl = getFrontendBaseUrl(req)
+    const redirectPath = buildRedirectPath(`/Soutenances/${year}`, {
+      focus: target.reference || ''
+    })
+    const links = []
+    let emailsSucceeded = 0
+
+    for (const participant of target.participants) {
+      const link = await magicLinkV2Service.createSoutenanceMagicLink({
+        year,
+        person: {
+          _id: participant.personId,
+          firstName: participant.name || participant.roleLabel,
+          lastName: '',
+          email: recipientEmail
+        },
+        recipientEmail,
+        scope: {
+          kind: 'published_soutenances',
+          publicationVersion: target.publicationVersion,
+          reference: target.reference,
+          source: 'dev_soutenance_email'
+        },
+        baseUrl,
+        redirectPath
+      })
+
+      const emailDelivery = await emailService.sendEmail(recipientEmail, 'soutenanceAccess', {
+        recipientName: participant.name || participant.roleLabel,
+        year,
+        magicLinkUrl: link.url,
+        deadline: link.expiresAt.toLocaleDateString('fr-CH')
+      })
+
+      if (emailDelivery.success) {
+        emailsSucceeded += 1
+      }
+
+      links.push({
+        type: 'soutenance',
+        role: participant.role,
+        roleLabel: participant.roleLabel,
+        viewer: {
+          id: compactText(participant.personId),
+          name: participant.name || participant.roleLabel,
+          email: ''
+        },
+        expiresAt: link.expiresAt,
+        url: link.url,
+        token: link.token,
+        emailDelivery: {
+          ...emailDelivery,
+          sentTo: recipientEmail
+        }
+      })
+    }
+
+    return res.status(200).json({
+      success: true,
+      kind: 'soutenance',
+      year,
+      reference: target.reference,
+      publicationVersion: target.publicationVersion,
+      room: target.room,
+      sentTo: recipientEmail,
+      summary: {
+        emailsSent: links.length,
+        emailsSucceeded,
+        emailsFailed: Math.max(links.length - emailsSucceeded, 0)
+      },
+      links
+    })
+  } catch (error) {
+    console.error('Erreur envoi emails de test soutenance:', error)
+    return res.status(500).json({
+      error: 'Erreur lors de l envoi des emails de test de soutenance.'
+    })
+  }
+}
+
 router.post(
   '/:year/votes/dev-links',
   requireYearParam('year'),
@@ -574,6 +1082,24 @@ router.post(
   authMiddleware,
   requireRole('admin'),
   handleDevVoteLinks
+)
+
+router.post(
+  '/:year/votes/dev-email',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  requireNonEmptyBody('Donnees de test vote requises.'),
+  handleDevVoteEmails
+)
+
+router.post(
+  '/:year/publication/dev-email',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  requireNonEmptyBody('Donnees de test soutenance requises.'),
+  handleDevSoutenanceEmails
 )
 
 router.post(

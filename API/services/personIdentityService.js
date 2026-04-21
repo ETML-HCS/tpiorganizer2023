@@ -55,13 +55,38 @@ function buildNameVariants(value = '') {
     return []
   }
 
-  const firstName = parts[0]
-  const lastName = parts.slice(1).join(' ')
+  const variants = []
+  const seen = new Set()
 
-  return [
-    { firstName, lastName },
-    { firstName: lastName, lastName: firstName }
-  ]
+  const appendVariant = (firstName, lastName) => {
+    const normalizedFirstName = normalizeText(firstName)
+    const normalizedLastName = normalizeText(lastName)
+
+    if (!normalizedFirstName || !normalizedLastName) {
+      return
+    }
+
+    const key = `${normalizedFirstName.toLowerCase()}|${normalizedLastName.toLowerCase()}`
+    if (seen.has(key)) {
+      return
+    }
+
+    seen.add(key)
+    variants.push({
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName
+    })
+  }
+
+  for (let splitIndex = 1; splitIndex < parts.length; splitIndex += 1) {
+    const firstName = parts.slice(0, splitIndex).join(' ')
+    const lastName = parts.slice(splitIndex).join(' ')
+
+    appendVariant(firstName, lastName)
+    appendVariant(lastName, firstName)
+  }
+
+  return variants
 }
 
 function resolveUniquePersonFromList(identifier = '', people = []) {

@@ -1,3 +1,10 @@
+import { getPlanningClassDisplayInfo } from '../tpiPlanning/planningClassUtils.js'
+import {
+  formatSoutenanceDateLabel,
+  getSoutenanceDateBadgeLabel,
+  normalizeSoutenanceDateEntries
+} from '../tpiSchedule/soutenanceDateUtils.js'
+
 const toDateObject = (value) => {
   if (!value) {
     return null
@@ -384,6 +391,266 @@ const normalizeFold = (value) =>
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim()
+
+const normalizePlanningLookupToken = (value) =>
+  normalizeOptionalText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
+
+const matchesPlanningLookupToken = (value, candidate) => {
+  const normalizedValue = normalizePlanningLookupToken(value)
+  const normalizedCandidate = normalizePlanningLookupToken(candidate)
+
+  if (!normalizedValue || !normalizedCandidate) {
+    return false
+  }
+
+  if (normalizedValue === normalizedCandidate) {
+    return true
+  }
+
+  if (
+    normalizedValue.startsWith(normalizedCandidate) ||
+    normalizedCandidate.startsWith(normalizedValue)
+  ) {
+    return true
+  }
+
+  if (normalizedValue.length >= 3 && normalizedCandidate.includes(normalizedValue)) {
+    return true
+  }
+
+  if (normalizedCandidate.length >= 3 && normalizedValue.includes(normalizedCandidate)) {
+    return true
+  }
+
+  return false
+}
+
+const dedupeSelectOptions = (options = []) => {
+  const seen = new Set()
+
+  return (Array.isArray(options) ? options : []).filter((option) => {
+    const value = normalizeOptionalText(option?.value)
+    const dedupeKey = normalizeFold(value)
+
+    if (!value || seen.has(dedupeKey)) {
+      return false
+    }
+
+    seen.add(dedupeKey)
+    return true
+  })
+}
+
+const appendCurrentPlanningOption = (options = [], value, buildLabel) => {
+  const currentValue = normalizeOptionalText(value)
+
+  if (!currentValue) {
+    return dedupeSelectOptions(options)
+  }
+
+  const normalizedCurrent = normalizeFold(currentValue)
+  const alreadyPresent = (Array.isArray(options) ? options : []).some(
+    (option) => normalizeFold(option?.value) === normalizedCurrent
+  )
+
+  if (alreadyPresent) {
+    return dedupeSelectOptions(options)
+  }
+
+  return dedupeSelectOptions([
+    {
+      value: currentValue,
+      label: typeof buildLabel === 'function' ? buildLabel(currentValue) : currentValue
+    },
+    ...(Array.isArray(options) ? options : [])
+  ])
+}
+
+const resolveCatalogSiteForForm = (siteValue, planningCatalogSites = []) => {
+  const normalizedSite = normalizePlanningLookupToken(siteValue)
+
+  if (!normalizedSite) {
+    return null
+  }
+
+  return (Array.isArray(planningCatalogSites) ? planningCatalogSites : []).find((site) => {
+    if (site?.active === false) {
+      return false
+    }
+
+    const tokens = [
+      site?.id,
+      site?.code,
+      site?.label,
+      site?.name,
+      ...(Array.isArray(site?.aliases) ? site.aliases : [])
+    ].filter(Boolean)
+
+    return tokens.some((candidate) => matchesPlanningLookupToken(normalizedSite, candidate))
+  }) || null
+}
+
+const readSiteRoomEntries = (site) => {
+  if (!site || typeof site !== 'object') {
+    return []
+  }
+
+  const roomSource = Array.isArray(site.roomDetails)
+    ? site.roomDetails
+    : Array.isArray(site.rooms)
+      ? site.rooms
+      : []
+
+  return roomSource
+    .map((entry) => (
+      entry && typeof entry === 'object' && !Array.isArray(entry)
+        ? entry
+        : { code: entry, label: entry }
+    ))
+    .filter((room) => room?.active !== false)
+}
+
+const resolveClassTypeSoutenanceDates = (classInfo, planningClassTypes = []) => {
+  const classTokens = new Set(
+    [
+      classInfo?.code,
+      classInfo?.prefix
+    ]
+      .map((value) => normalizePlanningLookupToken(value))
+      .filter(Boolean)
+  )
+
+  if (classTokens.size === 0) {
+    return []
+  }
+
+  const matchingClassType = (Array.isArray(planningClassTypes) ? planningClassTypes : []).find((classType) => {
+    if (classType?.active === false) {
+      return false
+    }
+
+    return [classType?.code, classType?.prefix].some((candidate) => {
+      const normalizedCandidate = normalizePlanningLookupToken(candidate)
+      return normalizedCandidate && classTokens.has(normalizedCandidate)
+    })
+  })
+
+  return normalizeSoutenanceDateEntries(matchingClassType?.soutenanceDates || [])
+}
+
+const filterDateEntriesForClass = (entries = [], classInfo) => {
+  const normalizedEntries = normalizeSoutenanceDateEntries(entries)
+  const classTokens = new Set(
+    [
+      classInfo?.code,
+      classInfo?.prefix
+    ]
+      .map((value) => normalizePlanningLookupToken(value))
+      .filter(Boolean)
+  )
+
+  if (classTokens.size === 0) {
+    return normalizedEntries
+  }
+
+  const filteredEntries = normalizedEntries.filter((entry) => {
+    const allowedClasses = Array.isArray(entry?.classes) ? entry.classes : []
+
+    if (allowedClasses.length === 0) {
+      return true
+    }
+
+    return allowedClasses.some((candidate) => classTokens.has(normalizePlanningLookupToken(candidate)))
+  })
+
+  return filteredEntries.length > 0 ? filteredEntries : normalizedEntries
+}
+
+export const getTpiPlanningSelectOptions = (
+  tpi = {},
+  {
+    planningCatalogSites = [],
+    planningClassTypes = [],
+    planningSoutenanceDates = []
+  } = {}
+) => {
+  const siteValue = normalizeOptionalText(tpi?.lieu?.site ?? tpi?.site)
+  const roomValue = normalizeOptionalText(tpi?.salle)
+  const soutenanceDateValue = normalizeOptionalText(
+    tpi?.dates?.soutenance ?? tpi?.dateSoutenance
+  )
+  const classValue = normalizeOptionalText(tpi?.classe)
+  const classInfo = getPlanningClassDisplayInfo(
+    classValue,
+    planningClassTypes,
+    planningCatalogSites,
+    siteValue
+  )
+  const catalogSites = (Array.isArray(planningCatalogSites) ? planningCatalogSites : []).filter(
+    (site) => site?.active !== false
+  )
+  const resolvedSite = resolveCatalogSiteForForm(siteValue, catalogSites)
+  const roomSites = resolvedSite ? [resolvedSite] : catalogSites
+  const showSiteInRoomLabel = !resolvedSite
+  const roomOptions = appendCurrentPlanningOption(
+    dedupeSelectOptions(
+      roomSites.flatMap((site) =>
+        readSiteRoomEntries(site).map((room) => {
+          const roomLabel = normalizeOptionalText(room?.label || room?.code || room?.name)
+          const siteLabel = normalizeOptionalText(site?.label || site?.code || siteValue)
+
+          return {
+            value: roomLabel,
+            label: showSiteInRoomLabel && siteLabel
+              ? `${roomLabel} · ${siteLabel}`
+              : roomLabel
+          }
+        })
+      )
+    ),
+    roomValue,
+    (currentValue) => `${currentValue} (hors configuration)`
+  )
+
+  const mergedFallbackDates = normalizeSoutenanceDateEntries([
+    ...(Array.isArray(planningSoutenanceDates) ? planningSoutenanceDates : []),
+    ...(Array.isArray(planningClassTypes)
+      ? planningClassTypes.flatMap((classType) => classType?.soutenanceDates || [])
+      : [])
+  ])
+  const configuredDateEntries = resolveClassTypeSoutenanceDates(classInfo, planningClassTypes)
+  const availableDateEntries =
+    configuredDateEntries.length > 0
+      ? configuredDateEntries
+      : filterDateEntriesForClass(mergedFallbackDates, classInfo)
+  const soutenanceDateOptions = appendCurrentPlanningOption(
+    dedupeSelectOptions(
+      availableDateEntries.map((entry) => {
+        const badgeLabel = getSoutenanceDateBadgeLabel(entry)
+        const baseLabel = formatSoutenanceDateLabel(entry?.date) || normalizeOptionalText(entry?.date)
+
+        return {
+          value: normalizeOptionalText(entry?.date),
+          label: badgeLabel ? `${baseLabel} (${badgeLabel})` : baseLabel
+        }
+      })
+    ),
+    soutenanceDateValue,
+    (currentValue) => {
+      const formattedDate = formatSoutenanceDateLabel(currentValue) || currentValue
+      return `${formattedDate} (hors configuration)`
+    }
+  )
+
+  return {
+    roomOptions,
+    soutenanceDateOptions
+  }
+}
 
 const cleanupTag = (value) =>
   normalizeOptionalText(value)
@@ -956,6 +1223,49 @@ const STAKEHOLDER_LINK_FIELDS = [
   }
 ]
 
+const formatStakeholderRoleLabel = (value) => {
+  const normalizedRole = normalizeFold(value)
+
+  switch (normalizedRole) {
+    case 'candidat':
+      return 'candidat'
+    case 'expert1':
+    case 'expert_1':
+    case 'expert 1':
+      return 'expert 1'
+    case 'expert2':
+    case 'expert_2':
+    case 'expert 2':
+      return 'expert 2'
+    case 'chef_projet':
+    case 'chef projet':
+    case 'chef de projet':
+    case 'boss':
+      return 'chef de projet'
+    default:
+      return normalizeOptionalText(value)
+  }
+}
+
+const readStakeholderStateLabels = (tpi, key) => {
+  const roles = tpi?.stakeholderState?.[key]
+
+  if (!Array.isArray(roles)) {
+    return null
+  }
+
+  return Array.from(
+    new Set(
+      roles
+        .map((role) => formatStakeholderRoleLabel(role))
+        .filter(Boolean)
+    )
+  )
+}
+
+const readStakeholderPersonId = (tpi, idName) =>
+  normalizeOptionalText(tpi?.[idName])
+
 const readStakeholderValue = (tpi, fieldPath) => {
   if (!tpi || !fieldPath) {
     return ''
@@ -969,19 +1279,32 @@ const readStakeholderValue = (tpi, fieldPath) => {
 }
 
 export const getMissingStakeholderLinks = (tpi = {}) => {
+  const derivedMissingLinks = readStakeholderStateLabels(tpi, 'unresolvedRoles')
+
+  if (derivedMissingLinks) {
+    return derivedMissingLinks
+  }
+
   return STAKEHOLDER_LINK_FIELDS.filter((field) => {
     const value = String(readStakeholderValue(tpi, field.name) || '').trim()
-    const personId = String(tpi?.[field.idName] || '').trim()
+    const personId = String(readStakeholderPersonId(tpi, field.idName) || '').trim()
 
     return Boolean(value) && !personId
   }).map((field) => field.label)
 }
 
 export const getMissingStakeholders = (tpi = {}) => {
+  const derivedMissingStakeholders = readStakeholderStateLabels(tpi, 'missingRoles')
+
+  if (derivedMissingStakeholders) {
+    return derivedMissingStakeholders
+  }
+
   return STAKEHOLDER_LINK_FIELDS.filter((field) => {
     const value = String(readStakeholderValue(tpi, field.name) || '').trim()
+    const personId = String(readStakeholderPersonId(tpi, field.idName) || '').trim()
 
-    return !value
+    return !value && !personId
   }).map((field) => field.label)
 }
 

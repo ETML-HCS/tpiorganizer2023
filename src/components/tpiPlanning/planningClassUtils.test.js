@@ -57,7 +57,7 @@ describe('planningClassUtils', () => {
     })
   })
 
-  it('keeps code-only labels even when human-readable labels differ', () => {
+  it('prefers the human-readable class label when the catalog provides one', () => {
     const classTypes = [
       {
         code: 'CFC',
@@ -88,9 +88,9 @@ describe('planningClassUtils', () => {
 
     const displayInfo = getPlanningClassDisplayInfo('cid4a', classTypes, catalogSites, 'sebeillon')
 
-    expect(displayInfo.displayClassLabel).toBe('CID4A')
+    expect(displayInfo.displayClassLabel).toBe('Informatique de gestion')
     expect(displayInfo.displayTypeLabel).toBe('CFC')
-    expect(displayInfo.displayLabel).toBe('CID4A · CFC')
+    expect(displayInfo.displayLabel).toBe('Informatique de gestion · CFC')
   })
 
   ;['FPA', 'MATU'].forEach((classCode) => {

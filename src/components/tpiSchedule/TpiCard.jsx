@@ -2,11 +2,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useDrag } from "react-dnd";
-import { Link } from "react-router-dom";
 import { ItemTypes } from "./Constants";
 import { getTpiModels } from "../tpiControllers/TpiController";
 import { normalizeTpi } from "./tpiScheduleData";
-import { buildTpiDetailsLink } from "../tpiDetail/tpiDetailUtils";
 import {
   inferRoomClassMode,
   matchesClassFilterForRoom
@@ -17,6 +15,28 @@ import {
   ExpertIcon,
   ProjectLeadIcon
 } from "../shared/InlineIcons";
+import {
+  formatPreferredSoutenanceChoiceLabel,
+  getPreferredSoutenanceChoicesForPerson
+} from "../../utils/preferredSoutenanceUtils";
+
+const PREFERENCE_INDICATOR_COPY = Object.freeze({
+  green: {
+    ariaLabel: "Préférence respectée",
+    title: "Préférence respectée"
+  },
+  orange: {
+    ariaLabel: "Préférences compatibles",
+    title: "Préférences compatibles"
+  },
+  red: {
+    ariaLabel: "Préférence non respectée",
+    title: "Préférence non respectée"
+  }
+});
+
+const AFTERNOON_START_MINUTES = 12 * 60 + 30;
+const FALLBACK_MORNING_PERIOD_COUNT = 4;
 
 const getYearFromRoomDate = (value) => {
   const normalizedValue = String(value || "").trim();
@@ -211,6 +231,103 @@ const resolveUniqueRegistryPerson = (people, value, role, year) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+const normalizeDateKey = (value) => {
+  const normalizedValue = String(value || "").trim();
+
+  if (!normalizedValue) {
+    return "";
+  }
+
+  const isoMatch = normalizedValue.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) {
+    return isoMatch[1];
+  }
+
+  const parsedDate = new Date(normalizedValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+const normalizeDateKeyList = (values = []) => {
+  const normalizedValues = [];
+  const seen = new Set();
+
+  for (const value of (Array.isArray(values) ? values : [values])) {
+    const dateKey = normalizeDateKey(value);
+
+    if (!dateKey || seen.has(dateKey)) {
+      continue;
+    }
+
+    seen.add(dateKey);
+    normalizedValues.push(dateKey);
+  }
+
+  return normalizedValues;
+};
+
+const formatDateKeyLabel = (value) => {
+  const dateKey = normalizeDateKey(value);
+
+  if (!dateKey) {
+    return "";
+  }
+
+  const [year, month, day] = dateKey.split("-");
+  return `${day}.${month}.${year}`;
+};
+
+const resolvePeriodStartMinutes = (period, scheduleContext = null) => {
+  const normalizedPeriod = Number.parseInt(period, 10);
+
+  if (!Number.isInteger(normalizedPeriod) || normalizedPeriod <= 0) {
+    return null;
+  }
+
+  const firstTpiStartMinutes = Number(scheduleContext?.firstTpiStartMinutes);
+  const tpiDurationMinutes = Number(scheduleContext?.tpiDurationMinutes);
+  const breakDurationMinutes = Number(scheduleContext?.breakDurationMinutes ?? 0);
+
+  if (!Number.isFinite(firstTpiStartMinutes) || !Number.isFinite(tpiDurationMinutes)) {
+    return null;
+  }
+
+  return firstTpiStartMinutes + (normalizedPeriod - 1) * (
+    tpiDurationMinutes + (Number.isFinite(breakDurationMinutes) ? breakDurationMinutes : 0)
+  );
+};
+
+const resolvePeriodHalfDay = (period, scheduleContext = null) => {
+  const startMinutes = resolvePeriodStartMinutes(period, scheduleContext);
+
+  if (Number.isFinite(startMinutes)) {
+    return startMinutes >= AFTERNOON_START_MINUTES ? "afternoon" : "morning";
+  }
+
+  const normalizedPeriod = Number.parseInt(period, 10);
+
+  if (!Number.isInteger(normalizedPeriod) || normalizedPeriod <= 0) {
+    return null;
+  }
+
+  return normalizedPeriod <= FALLBACK_MORNING_PERIOD_COUNT ? "morning" : "afternoon";
+};
+
+const PreferenceTriangleIcon = (props) => (
+  <svg viewBox="0 0 20 18" aria-hidden="true" focusable="false" {...props}>
+    <path
+      d="M10 2 18 16H2Z"
+      fill="currentColor"
+      stroke="rgba(255, 255, 255, 0.94)"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const TpiCard = ({
   tpi,
   isEditingTpiCard,
@@ -219,6 +336,8 @@ const TpiCard = ({
   roomSite = '',
   roomName = '',
   roomDate = '',
+  roomPeriod = null,
+  roomScheduleContext = null,
   peopleRegistry = [],
   stakeholderShortIdHints = {},
   soutenanceDates = [],
@@ -540,6 +659,157 @@ const TpiCard = ({
   const bossPersonId = compactText(
     formatRegistryPersonShortId(bossRegistryPerson) || bossShortIdHint
   );
+  const roomDateKey = useMemo(() => normalizeDateKey(roomDate), [roomDate]);
+  const resolvedRoomPeriod = useMemo(() => {
+    const explicitPeriod = Number.parseInt(roomPeriod, 10);
+    if (Number.isInteger(explicitPeriod) && explicitPeriod > 0) {
+      return explicitPeriod;
+    }
+
+    const tpiPeriod = Number.parseInt(safeTpi?.period, 10);
+    return Number.isInteger(tpiPeriod) && tpiPeriod > 0 ? tpiPeriod : null;
+  }, [roomPeriod, safeTpi?.period]);
+  const resolvedRoomHalfDay = useMemo(
+    () => resolvePeriodHalfDay(resolvedRoomPeriod, roomScheduleContext),
+    [resolvedRoomPeriod, roomScheduleContext]
+  );
+  const stakeholderPreferenceEntries = useMemo(() => {
+    const rawEntries = [
+      {
+        key: "candidat",
+        roleLabel: "Candidat",
+        displayName: candidateName,
+        person: candidateRegistryPerson
+      },
+      {
+        key: "expert1",
+        roleLabel: "Expert 1",
+        displayName: expert1Name,
+        person: expert1RegistryPerson
+      },
+      {
+        key: "expert2",
+        roleLabel: "Expert 2",
+        displayName: expert2Name,
+        person: expert2RegistryPerson
+      },
+      {
+        key: "boss",
+        roleLabel: "Chef de projet",
+        displayName: bossName,
+        person: bossRegistryPerson
+      }
+    ];
+
+    return rawEntries
+      .map((entry) => {
+        const preferredChoices = getPreferredSoutenanceChoicesForPerson(entry.person);
+        const preferredDateKeys = Array.from(
+          new Set(preferredChoices.map((choice) => normalizeDateKey(choice?.date)).filter(Boolean))
+        );
+
+        if (preferredChoices.length === 0 || preferredDateKeys.length === 0) {
+          return null;
+        }
+
+        const matchedChoices = roomDateKey
+          ? preferredChoices.filter((choice) => (
+              normalizeDateKey(choice?.date) === roomDateKey &&
+              (choice?.period == null || Number(choice.period) === Number(resolvedRoomPeriod))
+            ))
+          : [];
+        const compatibleHalfDayChoices = roomDateKey && resolvedRoomHalfDay
+          ? preferredChoices.filter((choice) => {
+              const choicePeriod = Number.parseInt(choice?.period, 10);
+
+              return (
+                Number.isInteger(choicePeriod) &&
+                normalizeDateKey(choice?.date) === roomDateKey &&
+                choicePeriod !== Number(resolvedRoomPeriod) &&
+                resolvePeriodHalfDay(choicePeriod, roomScheduleContext) === resolvedRoomHalfDay
+              );
+            })
+          : [];
+        const sameDateChoices = roomDateKey
+          ? preferredChoices.filter((choice) => normalizeDateKey(choice?.date) === roomDateKey)
+          : [];
+
+        return {
+          ...entry,
+          personLabel: compactText(formatRegistryPersonLabel(entry.person) || entry.displayName || entry.roleLabel),
+          preferredChoices,
+          preferredDateKeys,
+          hasExactPreference: matchedChoices.some((choice) => Number.isInteger(Number(choice?.period))),
+          hasCompatibleHalfDayPreference: compatibleHalfDayChoices.length > 0,
+          hasSameDateChoiceWithDifferentHalfDay:
+            sameDateChoices.some((choice) => Number.isInteger(Number(choice?.period))) &&
+            matchedChoices.length === 0 &&
+            compatibleHalfDayChoices.length === 0,
+          hasMultiplePreferences: preferredDateKeys.length > 1,
+          isMatched: matchedChoices.length > 0 || compatibleHalfDayChoices.length > 0
+        };
+      })
+      .filter(Boolean);
+  }, [
+    bossName,
+    bossRegistryPerson,
+    candidateName,
+    candidateRegistryPerson,
+    expert1Name,
+    expert1RegistryPerson,
+    expert2Name,
+    expert2RegistryPerson,
+    resolvedRoomPeriod,
+    resolvedRoomHalfDay,
+    roomScheduleContext,
+    roomDateKey
+  ]);
+  const preferenceIndicator = useMemo(() => {
+    if (isEditingTpiCard || normalizedDetailLevel < 2 || stakeholderPreferenceEntries.length === 0) {
+      return null;
+    }
+
+    const matchedPreferenceCount = stakeholderPreferenceEntries.filter((entry) => entry.isMatched).length;
+    const hasCompatibleHalfDayPreference = stakeholderPreferenceEntries.some(
+      (entry) => entry.hasCompatibleHalfDayPreference
+    );
+    const status = matchedPreferenceCount === 0
+      ? "red"
+      : matchedPreferenceCount < stakeholderPreferenceEntries.length || hasCompatibleHalfDayPreference
+        ? "orange"
+        : "green";
+    const copy = PREFERENCE_INDICATOR_COPY[status];
+    const plannedDateLabel = formatDateKeyLabel(roomDateKey);
+    const titleLines = [
+      copy.title,
+      plannedDateLabel ? `Date planifiée: ${plannedDateLabel}` : null,
+      resolvedRoomPeriod ? `Créneau planifié: ${resolvedRoomPeriod}` : null,
+      ...stakeholderPreferenceEntries.map((entry) => {
+        const preferredDatesLabel = entry.preferredChoices.map((choice) => formatPreferredSoutenanceChoiceLabel(choice)).join(", ");
+        const stateLabel = entry.isMatched
+          ? entry.hasCompatibleHalfDayPreference
+            ? "même demi-journée retenue"
+            : entry.hasExactPreference
+            ? entry.hasMultiplePreferences
+              ? "une préférence précise est retenue"
+              : "créneau préféré retenu"
+            : entry.hasMultiplePreferences
+              ? "une date préférée est retenue"
+              : "date préférée retenue"
+          : entry.hasSameDateChoiceWithDifferentHalfDay
+            ? "date retenue mais demi-journée préférée non respectée"
+            : "aucune préférence retenue";
+
+        return `${entry.roleLabel}: ${entry.personLabel} - ${stateLabel} (${preferredDatesLabel})`;
+      })
+    ].filter(Boolean);
+
+    return {
+      status,
+      ariaLabel: copy.ariaLabel,
+      title: titleLines.join("\n")
+    };
+  }, [isEditingTpiCard, normalizedDetailLevel, resolvedRoomPeriod, roomDateKey, stakeholderPreferenceEntries]);
   const rolesFilled = [expert1Name, expert2Name, bossName].filter(Boolean).length;
   const isEmptyCard =
     !displayRef &&
@@ -559,7 +829,6 @@ const TpiCard = ({
   const validationErrorTitle = Array.isArray(validationErrorMessages) && validationErrorMessages.length > 0
     ? validationErrorMessages.join("\n")
     : undefined;
-  const tpiDetailLink = buildTpiDetailsLink(roomYear, displayRef);
   const showHeaderMeta =
     !isEmptyCard &&
     normalizedDetailLevel >= 3 &&
@@ -717,17 +986,21 @@ const TpiCard = ({
       }`}
       title={!isEmptyCard && hasValidationError ? validationErrorTitle : undefined}
     >
-      {!isEditingTpiCard && displayRef && normalizedDetailLevel >= 2 ? (
-        <Link
-          className="tpi-card-dossier-link"
-          to={tpiDetailLink}
-          draggable={false}
-          title={`Ouvrir la fiche ${displayRef}`}
-          aria-label={`Ouvrir la fiche ${displayRef}`}
-          onClick={(event) => event.stopPropagation()}
+      {preferenceIndicator ? (
+        <span
+          className={`tpi-card-preference-indicator tpi-card-preference-indicator--${preferenceIndicator.status}`}
+          role="img"
+          tabIndex={0}
+          aria-label={preferenceIndicator.ariaLabel}
+          title={preferenceIndicator.title}
         >
-          Fiche
-        </Link>
+          <PreferenceTriangleIcon />
+          {resolvedRoomPeriod ? (
+            <span className="tpi-card-preference-slot-number" aria-hidden="true">
+              {resolvedRoomPeriod}
+            </span>
+          ) : null}
+        </span>
       ) : null}
 
       {showHeaderMeta ? (

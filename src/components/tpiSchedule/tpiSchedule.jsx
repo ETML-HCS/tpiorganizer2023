@@ -15,7 +15,15 @@ import {
 } from "../tpiControllers/TpiRoomsController"
 
 import DateRoom from "./DateRoom"
-import { AlertIcon, TimeIcon } from "../shared/InlineIcons"
+import IconButtonContent from "../shared/IconButtonContent"
+import {
+  AlertIcon,
+  ArrowRightIcon,
+  CloseIcon,
+  ConfigurationIcon,
+  RefreshIcon,
+  TimeIcon
+} from "../shared/InlineIcons"
 import {
   combinedScheduleConfig,
   buildPlanningConfigForYear,
@@ -37,7 +45,10 @@ import {
 import {
   buildValidationMarkers
 } from "./tpiScheduleValidationMarkers"
-import { API_URL, STORAGE_KEYS, YEARS_CONFIG } from "../../config/appConfig"
+import {
+  getNonImportableTpiRefs
+} from "./tpiScheduleImportability"
+import { API_URL, IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../../config/appConfig"
 import { planningCatalogService, planningConfigService } from "../../services/planningService"
 import {
   readJSONListValue,
@@ -50,6 +61,7 @@ import {
   buildOptimizationToast,
   buildValidationToast
 } from "../../utils/workflowFeedback"
+import { getPlanningPerimeterState } from "../../utils/planningScopeUtils"
 
 const apiUrl = API_URL
 
@@ -565,8 +577,18 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     return Array.from(new Set(refs))
   }, [roomEntries])
 
-  const tpiUsageSummary = useMemo(() => {
+  const planifiableTpiModels = useMemo(() => {
     if (!Array.isArray(availableTpiModels)) {
+      return null
+    }
+
+    return availableTpiModels.filter((model) =>
+      getPlanningPerimeterState(model, configData?.siteConfigs, selectedYear).isPlanifiable
+    )
+  }, [availableTpiModels, configData?.siteConfigs, selectedYear])
+
+  const tpiUsageSummary = useMemo(() => {
+    if (!Array.isArray(planifiableTpiModels)) {
       return {
         usedTpiCount: null,
         totalTpiCount: null
@@ -575,7 +597,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     const availableRefSet = new Set()
 
-    for (const model of availableTpiModels) {
+    for (const model of planifiableTpiModels) {
       const refTpi = String(model?.refTpi || "").trim()
       if (refTpi) {
         availableRefSet.add(refTpi)
@@ -589,34 +611,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       usedTpiCount,
       totalTpiCount
     }
-  }, [assignedTpiRefs, availableTpiModels])
+  }, [assignedTpiRefs, planifiableTpiModels])
 
   // TPI placés dans les salles mais qui ne peuvent pas être importés lors du gel.
-  const nonImportableTpiRefs = useMemo(() => {
-    const refs = []
-
-    for (const room of roomEntries) {
-      const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
-
-      for (const tpi of tpiDatas) {
-        const ref = String(tpi?.refTpi || tpi?.id || "").trim()
-        if (!ref) continue
-
-        const candidat = tpi.candidat || ""
-        const expert1 = tpi.expert1?.name || ""
-        const expert2 = tpi.expert2?.name || ""
-        const boss = tpi.boss?.name || ""
-
-        const isNull = (v) => !v || v.toLowerCase() === "null" || v.toLowerCase() === "undefined"
-
-        if (isNull(candidat) || isNull(expert1) || isNull(expert2) || isNull(boss)) {
-          refs.push(ref)
-        }
-      }
-    }
-
-    return refs
-  }, [roomEntries])
+  const nonImportableTpiRefs = useMemo(() => getNonImportableTpiRefs(roomEntries), [roomEntries])
 
   const localConflictSummary = useMemo(() => {
     return summarizeLocalPersonConflicts(roomEntries)
@@ -687,7 +685,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     let isCancelled = false
 
-    if (tpiCardDetailLevel !== 0 || peopleRegistry !== null) {
+    const shouldLoadPeopleRegistry = [0, 2, 3].includes(Number(tpiCardDetailLevel))
+
+    if (!shouldLoadPeopleRegistry || peopleRegistry !== null) {
       return undefined
     }
 
@@ -700,7 +700,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         }
       } catch (error) {
         if (!isCancelled) {
-          console.error("Erreur lors du chargement du référentiel Parties prenantes pour la vue 0 :", error)
+          console.error("Erreur lors du chargement du référentiel Parties prenantes pour les cartes TPI :", error)
           setPeopleRegistry([])
         }
       }
@@ -1303,6 +1303,60 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     return result
   }
 
+  const handleAutomatePlanification = async () => {
+    const result = await executeWorkflowAction({
+      actionKey: "autoPlan",
+      confirmMessage: `Reconstruire automatiquement la planification ${selectedYear} ? La version locale actuelle sera remplacée par la version générée selon la configuration annuelle.`,
+      run: () => workflowPlanningService.automatePlanification(selectedYear),
+      successMessage: (payload) => {
+        const summary = payload?.summary || {}
+        const syncSummary = payload?.sync || {}
+        const plannedCount = Number(summary.plannedCount || 0)
+        const manualRequiredCount = Number(summary.manualRequiredCount || 0)
+        const roomCount = Number(summary.legacyRoomCount || summary.roomCount || 0)
+        const syncCreatedCount = Number(syncSummary.createdCount || 0)
+        const syncPrefix = syncCreatedCount > 0
+          ? `${syncCreatedCount} TPI intégré(s) depuis GestionTPI dans le workflow. `
+          : ''
+
+        return `${syncPrefix}Planification automatique terminée: ${plannedCount} TPI placés, ${manualRequiredCount} manuel(s), ${roomCount} salle(s).`
+      },
+      onSuccess: (payload) => {
+        if (payload?.validation) {
+          setValidationResult(payload.validation)
+        }
+      }
+    })
+
+    if (result?.success) {
+      const generatedLegacyRooms = Array.isArray(result?.legacyRooms)
+        ? result.legacyRooms
+        : []
+
+      if (generatedLegacyRooms.length > 0) {
+        const normalizedRooms = normalizeOrganizerRooms(generatedLegacyRooms, configData)
+
+        removeStorageValue(STORAGE_KEYS.ORGANIZER_DATA)
+        writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, normalizedRooms)
+        resetPlanningViewState()
+        setNewRooms(normalizedRooms)
+
+        if (result?.validation) {
+          setValidationResult(result.validation)
+        }
+      } else {
+        await handleFetchConfig(selectedYear, {
+          skipConfirm: true,
+          notifyStart: false,
+          notifySuccess: false,
+          preserveValidation: result?.validation || null
+        })
+      }
+    }
+
+    return result
+  }
+
   const handleFreezeSnapshot = async () => {
     const result = await executeWorkflowAction({
       actionKey: "freeze",
@@ -1346,6 +1400,26 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           : ''
 
         return `Campagne ouverte: ${tpiCount} TPI synchronises, ${successfulEmails}/${totalEmails} emails envoyes.${emailSuffix}`
+      }
+    })
+
+    if (result?.workflowState) {
+      setWorkflowState(result.workflowState)
+    }
+  }
+
+  const handleOpenVotesWithoutEmails = async () => {
+    if (!IS_DEBUG) {
+      return
+    }
+
+    const result = await executeWorkflowAction({
+      actionKey: "startVotesNoEmail",
+      confirmMessage: "Confirmer l ouverture de la campagne de votes sans envoyer d emails ?",
+      run: () => workflowPlanningService.startVotesWithoutEmails(selectedYear, newRooms),
+      successMessage: (result) => {
+        const tpiCount = result?.tpiCount || 0
+        return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
       }
     })
 
@@ -1753,8 +1827,15 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     saveDataToLocalStorage(updatedNewRooms)
   }
 
-  const handleFetchConfig = async (selectedYear) => {
-    if (roomEntries.length > 0) {
+  const handleFetchConfig = async (selectedYear, options = {}) => {
+    const {
+      skipConfirm = false,
+      notifyStart = true,
+      notifySuccess = true,
+      preserveValidation
+    } = options
+
+    if (!skipConfirm && roomEntries.length > 0) {
       const confirmed = window.confirm(
         `Charger la configuration ${selectedYear} depuis la BDD va remplacer la planification locale actuelle (${roomEntries.length} salle(s)). Continuer ?`
       )
@@ -1765,7 +1846,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       }
     }
 
-    notify(`Chargement de la configuration ${selectedYear} depuis la BDD...`)
+    if (notifyStart) {
+      notify(`Chargement de la configuration ${selectedYear} depuis la BDD...`)
+    }
+
     try {
       const response = await fetch(`${apiUrl}/api/tpiRoomYear/${selectedYear}`)
 
@@ -1780,6 +1864,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, normalizedRooms)
       resetPlanningViewState()
       setNewRooms(normalizedRooms)
+      if (Object.prototype.hasOwnProperty.call(options, "preserveValidation")) {
+        setValidationResult(preserveValidation)
+      }
       const requestedYear = Number.parseInt(selectedYear, 10)
       const inferredYear = inferPlanningYearFromRooms(normalizedRooms)
       setSelectedYear(
@@ -1789,10 +1876,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
             ? inferredYear
             : YEARS_CONFIG.getCurrentYear()
       )
-      notify(
-        `Configuration ${selectedYear} chargée depuis la BDD: ${normalizedRooms.length} salle(s).`,
-        "success"
-      )
+      if (notifySuccess) {
+        notify(
+          `Configuration ${selectedYear} chargée depuis la BDD: ${normalizedRooms.length} salle(s).`,
+          "success"
+        )
+      }
       return true
     } catch (error) {
       console.error("Erreur lors du chargement de la configuration:", error)
@@ -1890,9 +1979,11 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           workflowActionLoading={workflowActionLoading}
           pendingWorkflowAction={pendingWorkflowAction}
           validationResult={validationResult}
+          onAutomatePlanification={handleAutomatePlanification}
           onValidatePlanification={handleValidatePlanification}
           onFreezeSnapshot={handleFreezeSnapshot}
           onOpenVotes={handleOpenVotes}
+          onOpenVotesWithoutEmails={IS_DEBUG ? handleOpenVotesWithoutEmails : null}
           onRemindVotes={handleRemindVotes}
           onCloseVotes={handleCloseVotes}
           onPublishDefinitive={handlePublishDefinitive}
@@ -1945,12 +2036,13 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
               >
                 <button
                   type="button"
-                  className="planning-year-change-close"
+                  className="planning-year-change-close icon-button"
                   aria-label="Fermer"
+                  title="Fermer"
                   onClick={handleCancelYearChange}
                   disabled={isReplacingPlanningYear}
                 >
-                  ×
+                  <IconButtonContent label='Fermer' icon={CloseIcon} />
                 </button>
                 <div className="planning-year-change-icon" aria-hidden="true">
                   <AlertIcon />
@@ -1982,26 +2074,26 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                 <div className="planning-year-change-actions">
                   <button
                     type="button"
-                    className="planning-year-change-btn secondary"
+                    className="planning-year-change-btn secondary icon-button"
                     onClick={handleCancelYearChange}
                     disabled={isReplacingPlanningYear}
+                    aria-label="Annuler"
+                    title="Annuler"
                   >
-                    Annuler
+                    <IconButtonContent label='Annuler' icon={CloseIcon} />
                   </button>
                   <button
                     type="button"
-                    className="planning-year-change-btn primary"
+                    className="planning-year-change-btn primary icon-button"
                     onClick={confirmYearChange}
                     disabled={isReplacingPlanningYear}
+                    aria-label={isReplacingPlanningYear ? "Chargement..." : "Planifier et remplacer"}
+                    title={isReplacingPlanningYear ? "Chargement..." : "Planifier et remplacer"}
                   >
-                    {isReplacingPlanningYear ? (
-                      <>
-                        <TimeIcon className="button-icon" />
-                        Chargement...
-                      </>
-                    ) : (
-                      "Planifier et remplacer"
-                    )}
+                    <IconButtonContent
+                      label={isReplacingPlanningYear ? "Chargement..." : "Planifier et remplacer"}
+                      icon={isReplacingPlanningYear ? TimeIcon : ArrowRightIcon}
+                    />
                   </button>
                 </div>
               </div>
@@ -2017,7 +2109,15 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
             Le stockage local ne contient pas encore de planning compatible.
           </p>
           <p>Ouvre Configuration pour préparer les dates, les sites et les salles.</p>
-          <button onClick={() => navigate("/configuration")}>Ouvrir Configuration</button>
+          <button
+            type='button'
+            className='icon-button'
+            onClick={() => navigate("/configuration")}
+            aria-label='Ouvrir Configuration'
+            title='Ouvrir Configuration'
+          >
+            <IconButtonContent label='Ouvrir Configuration' icon={ConfigurationIcon} />
+          </button>
         </div>
       ) : visibleRooms.length === 0 ? (
         <div className='planning-empty-state'>
@@ -2026,7 +2126,15 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
             Les filtres actuels ne renvoient aucune colonne.
           </p>
           <p>Réinitialise le filtre site, date ou salle pour revoir les colonnes.</p>
-          <button onClick={clearRoomFilters}>Réinitialiser les filtres</button>
+          <button
+            type='button'
+            className='icon-button'
+            onClick={clearRoomFilters}
+            aria-label='Réinitialiser les filtres'
+            title='Réinitialiser les filtres'
+          >
+            <IconButtonContent label='Réinitialiser les filtres' icon={RefreshIcon} />
+          </button>
         </div>
       ) : (
         <div id='rooms' ref={roomsContainerRef}>

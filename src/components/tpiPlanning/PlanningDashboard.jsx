@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { authPlanningService, planningCatalogService, planningConfigService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
 import { tpiDossierService } from '../../services/tpiDossierService'
+import { IS_DEBUG } from '../../config/appConfig'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
 import PlanningCalendar from './PlanningCalendar'
 import TpiPlanningList from './TpiPlanningList'
@@ -13,6 +14,7 @@ import PageToolbar from '../shared/PageToolbar'
 import {
   AlertIcon,
   ArrowRightIcon,
+  BanIcon,
   CalendarIcon,
   CheckIcon,
   CloseIcon,
@@ -26,12 +28,19 @@ import {
   WrenchIcon
 } from '../shared/InlineIcons'
 import TpiDetailSections from '../tpiDetail/TpiDetailSections'
-import { buildPlanningOnlyDossier, buildTpiDetailsLink } from '../tpiDetail/tpiDetailUtils'
+import {
+  buildPlanningOnlyDossier,
+  buildTpiDetailsLink,
+  formatPersonName,
+  getPlannedSlotLabel,
+  getPlanningStatusMeta
+} from '../tpiDetail/tpiDetailUtils'
 import {
   MANUAL_REQUIRED_STATUSES,
   normalizePlanningStatus,
   PLANNING_STATUS
 } from '../../constants/planningStatus'
+import { getActivePlanningSiteLabels, getPlanningPerimeterState } from '../../utils/planningScopeUtils'
 import { buildValidationToast } from '../../utils/workflowFeedback'
 import './PlanningDashboard.css'
 
@@ -42,13 +51,44 @@ const WORKFLOW_LABELS = {
 }
 
 const WORKFLOW_ACTION_LABELS = {
+  autoPlan: 'Automatiser planification',
   validate: 'Verifier conflits',
   freeze: 'Geler snapshot',
   startVotes: 'Ouvrir votes',
+  startVotesNoEmail: 'Ouvrir votes sans emails',
   remindVotes: 'Relancer votes',
   closeVotes: 'Clore votes',
   publish: 'Publier definitif',
   sendLinks: 'Envoyer liens soutenance'
+}
+
+const STATUS_FILTER_LABELS = {
+  all: 'Tous les statuts',
+  [PLANNING_STATUS.DRAFT]: 'Brouillons',
+  [PLANNING_STATUS.VOTING]: 'En vote',
+  [PLANNING_STATUS.CONFIRMED]: 'Confirmes',
+  [PLANNING_STATUS.MANUAL_REQUIRED]: 'Intervention requise'
+}
+
+const TAB_PRESENTATIONS = {
+  list: {
+    kicker: 'Pilotage',
+    title: 'Liste operationnelle',
+    adminDescription: 'Travaille la matiere annuelle, ouvre une fiche et controle rapidement l etat des TPI.',
+    viewerDescription: 'Retrouve tes TPI et consulte leur etat sans quitter la vue planning.'
+  },
+  votes: {
+    kicker: 'Campagne',
+    title: 'Suivi des votes',
+    adminDescription: 'Suis les reponses, relance les non repondants et gere les TPI encore en attente.',
+    viewerDescription: 'Reponds a tes votes et consulte les propositions de creneaux qui te concernent.'
+  },
+  conflicts: {
+    kicker: 'Exceptions',
+    title: 'Traitement manuel',
+    adminDescription: 'Centralise les TPI qui demandent une intervention humaine avant la publication.',
+    viewerDescription: 'Aucune intervention manuelle n est disponible dans cette vue.'
+  }
 }
 
 const VALIDATION_ISSUE_LABELS = {
@@ -172,18 +212,6 @@ function formatValidationCheckedAt(value) {
   })
 }
 
-function normalizeSiteValue(value) {
-  return compactText(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, '')
-    .toLowerCase()
-}
-
-function isExternalPlanningSite(value) {
-  return normalizeSiteValue(value).includes('horsetml')
-}
-
 function getVoterRoleLabel(role) {
   if (!role) {
     return ""
@@ -239,6 +267,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
   const [planningClassTypes, setPlanningClassTypes] = useState([])
   const [planningCatalogSites, setPlanningCatalogSites] = useState([])
+  const [planningSiteConfigs, setPlanningSiteConfigs] = useState([])
   const [validationResult, setValidationResult] = useState(null)
   
   // États de l'interface
@@ -320,6 +349,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
       setPlanningClassTypes(Array.isArray(planningConfigResponse?.classTypes) ? planningConfigResponse.classTypes : [])
       setPlanningCatalogSites(Array.isArray(planningCatalogResponse?.sites) ? planningCatalogResponse.sites : [])
+      setPlanningSiteConfigs(Array.isArray(planningConfigResponse?.siteConfigs) ? planningConfigResponse.siteConfigs : [])
       
       setTpis(tpisResponse)
       setLegacyTpis(legacyTpisResponse)
@@ -494,9 +524,20 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     })
   }, [visibleTpis, isAdmin])
 
+  const legacyPlanningPerimeterEntries = useMemo(() => {
+    if (!isAdmin || !legacyTpis.length) {
+      return []
+    }
+
+    return legacyTpis.map((tpi) => ({
+      tpi,
+      planningPerimeter: getPlanningPerimeterState(tpi, planningSiteConfigs, year)
+    }))
+  }, [legacyTpis, isAdmin, planningSiteConfigs, year])
+
   // TPI legacy non importés (dans le legacy mais pas dans tpiPlannings)
   const notImportedLegacyTpis = useMemo(() => {
-    if (!isAdmin || !legacyTpis.length) return []
+    if (!legacyPlanningPerimeterEntries.length) return []
 
     // Extraire les refsTpi des TPI importés (format TPI-2026-XXX)
     const importedRefs = new Set(
@@ -507,19 +548,56 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       }).filter(Boolean)
     )
 
-    return legacyTpis.filter(tpi => {
-      if (isExternalPlanningSite(tpi?.lieu?.site || tpi?.site)) {
-        return false
-      }
+    return legacyPlanningPerimeterEntries
+      .filter(({ tpi, planningPerimeter }) => {
+        if (!planningPerimeter.isPlanifiable) {
+          return false
+        }
 
-      const ref = tpi.refTpi || tpi.id
-      return ref && !importedRefs.has(String(ref).trim())
-    })
-  }, [legacyTpis, tpis, isAdmin])
+        const ref = tpi.refTpi || tpi.id
+        return ref && !importedRefs.has(String(ref).trim())
+      })
+      .map(({ tpi }) => tpi)
+  }, [legacyPlanningPerimeterEntries, tpis])
+
+  const outOfScopeLegacyTpis = useMemo(() => {
+    return legacyPlanningPerimeterEntries
+      .filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable)
+      .map(({ tpi }) => tpi)
+  }, [legacyPlanningPerimeterEntries])
+
+  const inScopeLegacyCount = useMemo(() => {
+    return legacyPlanningPerimeterEntries
+      .filter(({ planningPerimeter }) => planningPerimeter.isPlanifiable)
+      .length
+  }, [legacyPlanningPerimeterEntries])
+
+  const outOfScopeLegacySiteBreakdown = useMemo(() => {
+    const countsBySite = new Map()
+
+    legacyPlanningPerimeterEntries
+      .filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable)
+      .forEach(({ planningPerimeter }) => {
+        const label = compactText(planningPerimeter?.siteValue) || 'Site non renseigne'
+        countsBySite.set(label, (countsBySite.get(label) || 0) + 1)
+      })
+
+    return Array.from(countsBySite.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+  }, [legacyPlanningPerimeterEntries])
+
+  const activePlanningSiteLabels = useMemo(() => {
+    return getActivePlanningSiteLabels(planningSiteConfigs)
+  }, [planningSiteConfigs])
+
+  const legacyOutOfScopeCount = outOfScopeLegacyTpis.length
+  const hasLegacyOutOfScope = legacyOutOfScopeCount > 0
+  const notImportedLegacyTpisByPlanningPerimeter = notImportedLegacyTpis
 
   const legacyTpiCount = legacyTpis.length
   const hasLegacyPlanningData = isAdmin && stats.total === 0 && legacyTpiCount > 0
-  const hasLegacyImportGap = notImportedLegacyTpis.length > 0
+  const hasLegacyImportGap = notImportedLegacyTpisByPlanningPerimeter.length > 0
   const validationAnnotations = useMemo(() => {
     const issues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
 
@@ -575,13 +653,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             count: 0,
             issues: [],
             labels: [],
-            messages: []
+            messages: [],
+            reasons: []
           }
         }
 
         const target = byTpiId[tpiId]
         const label = getValidationIssueLabel(issue)
         const message = compactText(issue?.message)
+        const reason = compactText(issue?.reason)
 
         target.count += 1
         target.issues.push(issue)
@@ -592,6 +672,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
         if (message && !target.messages.includes(message)) {
           target.messages.push(message)
+        }
+
+        if (reason && !target.reasons.includes(reason)) {
+          target.reasons.push(reason)
         }
       })
     })
@@ -661,6 +745,35 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
     return selectedTpiFallbackDossier
   }, [selectedTpi, selectedTpiDossier, selectedTpiFallbackDossier])
+  const selectedTpiCandidateLabel = useMemo(() => {
+    return formatPersonName(
+      selectedTpi?.candidat,
+      compactText(selectedTpiDisplayDossier?.legacy?.data?.candidat) || 'Candidat non renseigné'
+    )
+  }, [selectedTpi, selectedTpiDisplayDossier])
+  const selectedTpiSubjectLabel = useMemo(() => {
+    return compactText(selectedTpi?.sujet) ||
+      compactText(selectedTpiDisplayDossier?.legacy?.data?.sujet) ||
+      'Sujet non renseigné'
+  }, [selectedTpi, selectedTpiDisplayDossier])
+  const selectedTpiStatusMeta = useMemo(() => {
+    return getPlanningStatusMeta(selectedTpi?.status)
+  }, [selectedTpi])
+  const selectedTpiSlotLabel = useMemo(() => {
+    const plannedSlot =
+      selectedTpiDisplayDossier?.planning?.plannedSlot ||
+      selectedTpi?.confirmedSlot ||
+      null
+
+    return getPlannedSlotLabel(plannedSlot)
+  }, [selectedTpi, selectedTpiDisplayDossier])
+  const selectedTpiIssueCount = useMemo(() => {
+    const dossierIssues = Array.isArray(selectedTpiDisplayDossier?.consistency?.issues)
+      ? selectedTpiDisplayDossier.consistency.issues.length
+      : 0
+
+    return dossierIssues + selectedTpiValidationMessages.length
+  }, [selectedTpiDisplayDossier, selectedTpiValidationMessages])
   const focusedTpiMatch = useMemo(() => {
     if (!requestedFocus) {
       return null
@@ -767,6 +880,28 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     statusFilter,
     visibleTpis
   ])
+
+  useEffect(() => {
+    if (!selectedTpi) {
+      return undefined
+    }
+
+    const previousOverflow = document.body.style.overflow
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedTpi(null)
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [selectedTpi])
 
   const clearFocusedSearch = useCallback(() => {
     const params = new URLSearchParams(location.search)
@@ -942,6 +1077,45 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return result
   }, [year, executeWorkflowAction])
 
+  const handleAutomatePlanification = useCallback(async () => {
+    await executeWorkflowAction({
+      actionKey: 'autoPlan',
+      confirmMessage: `Reconstruire automatiquement la planification ${year} ? Les créneaux proposés actuels seront recalculés à partir de la configuration.`,
+      run: () => workflowPlanningService.automatePlanification(year),
+      successBuilder: (result) => {
+        const summary = result?.summary || {}
+        const syncSummary = result?.sync || {}
+        const validationSummary = result?.validation?.summary || {}
+        const totalTpis = Number(summary.totalTpis || 0)
+        const plannedCount = Number(summary.plannedCount || 0)
+        const manualRequiredCount = Number(summary.manualRequiredCount || 0)
+        const issueCount = Number(validationSummary.issueCount || 0)
+        const syncCreatedCount = Number(syncSummary.createdCount || 0)
+        const suffix = issueCount > 0
+          ? ` ${issueCount} anomalie(s) restent à corriger.`
+          : ' Planning prêt pour vérification.'
+        const syncPrefix = syncCreatedCount > 0
+          ? `${syncCreatedCount} TPI intégré(s) depuis GestionTPI dans le workflow. `
+          : ''
+
+        return `${syncPrefix}Planification automatique: ${plannedCount}/${totalTpis} TPI placés, ${manualRequiredCount} en manuel, ${Number(summary.slotCount || 0)} créneau(x) généré(s).${suffix}`
+      },
+      errorFallback: 'Erreur lors de la planification automatique.',
+      reloadAfterSuccess: true,
+      onSuccess: (result) => {
+        if (result?.validation) {
+          setValidationResult(result.validation)
+        }
+
+        if (Number(result?.summary?.manualRequiredCount || 0) > 0 || Number(result?.validation?.summary?.issueCount || 0) > 0) {
+          setStatusFilter('all')
+          setSearchQuery('')
+          setActiveTab('list')
+        }
+      }
+    })
+  }, [year, executeWorkflowAction])
+
   const handleFreezePlanification = useCallback(async () => {
     const result = await executeWorkflowAction({
       actionKey: 'freeze',
@@ -976,6 +1150,27 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         return `Campagne ouverte: ${tpiCount} TPI synchronises, ${successfulEmails}/${totalEmails} emails envoyes.${emailSuffix}`
       },
       errorFallback: 'Erreur lors du lancement de la campagne de votes.',
+      reloadAfterSuccess: true
+    })
+
+    if (result?.workflowState) {
+      setWorkflow(prev => ({
+        ...(prev || {}),
+        state: result.workflowState
+      }))
+    }
+  }, [year, executeWorkflowAction])
+
+  const handleStartVotesCampaignWithoutEmails = useCallback(async () => {
+    const result = await executeWorkflowAction({
+      actionKey: 'startVotesNoEmail',
+      confirmMessage: 'Confirmer l ouverture de la campagne de votes sans envoyer d emails ?',
+      run: () => workflowPlanningService.startVotesWithoutEmails(year),
+      successBuilder: (result) => {
+        const tpiCount = result?.tpiCount || 0
+        return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
+      },
+      errorFallback: 'Erreur lors de l ouverture de la campagne de votes sans emails.',
       reloadAfterSuccess: true
     })
 
@@ -1100,6 +1295,108 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     manualRequiredCount
   ])
 
+  const activeTabMeta = useMemo(
+    () => tabs.find((tab) => tab.id === activeTab) || tabs[0] || null,
+    [activeTab, tabs]
+  )
+  const activeTabPresentation = useMemo(() => {
+    const presentation = TAB_PRESENTATIONS[activeTab] || TAB_PRESENTATIONS.list
+
+    return {
+      kicker: presentation.kicker,
+      title: presentation.title,
+      description: isAdmin
+        ? presentation.adminDescription
+        : presentation.viewerDescription
+    }
+  }, [activeTab, isAdmin])
+  const activeSitesSummary = activePlanningSiteLabels.length > 0
+    ? activePlanningSiteLabels.join(', ')
+    : `Aucun site actif pour ${year}`
+  const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || STATUS_FILTER_LABELS.all
+  const activeViewCount = activeTab === 'list'
+    ? filteredTpis.length
+    : activeTab === 'votes'
+      ? (isAdmin ? voteTrackingTpis.length : pendingVotes.length)
+      : conflicts.length
+  const planningHeroLead = useMemo(() => {
+    if (isScopedVoteViewer) {
+      return 'Vue personnelle de vote: retrouve tes TPI, reponds vite et garde une lecture claire des propositions de creneaux.'
+    }
+
+    if (!isAdmin) {
+      return 'Cette page sert de poste de vote. Tu y trouves uniquement les TPI qui te concernent et l etat de la campagne.'
+    }
+
+    if (isPublishedState) {
+      return 'La planification est publiee. Les actions restantes concernent surtout la diffusion et le suivi final des soutenances.'
+    }
+
+    if (isVotingState) {
+      return 'La campagne de votes est ouverte. Surveille les reponses, traite les cas manuels et prepare la publication.'
+    }
+
+    return 'Prepare les creneaux, verifie les conflits puis gele le snapshot avant l ouverture des votes.'
+  }, [isAdmin, isPublishedState, isScopedVoteViewer, isVotingState])
+  const heroSignalCards = useMemo(() => ([
+    {
+      key: 'workflow',
+      label: 'Workflow',
+      value: workflowLabel,
+      helper: hasActiveSnapshot ? `Snapshot v${activeSnapshot.version}` : 'Aucun snapshot gele',
+      tone: isPublishedState ? 'ready' : isVotingState ? 'info' : 'warning'
+    },
+    {
+      key: 'perimeter',
+      label: 'Perimetre',
+      value: activePlanningSiteLabels.length > 0
+        ? `${activePlanningSiteLabels.length} site${activePlanningSiteLabels.length > 1 ? 's' : ''}`
+        : '0 site',
+      helper: activeSitesSummary,
+      tone: activePlanningSiteLabels.length > 0 ? 'ready' : 'muted'
+    },
+    {
+      key: 'attention',
+      label: isAdmin ? 'Exceptions' : 'Votes',
+      value: isAdmin
+        ? `${manualRequiredCount} manuel${manualRequiredCount > 1 ? 's' : ''}`
+        : `${pendingVotes.length} en attente`,
+      helper: isAdmin
+        ? `${validationAnnotations.totalIssues} anomalie${validationAnnotations.totalIssues > 1 ? 's' : ''} de verification`
+        : `${stats.pendingVotes} dossier${stats.pendingVotes > 1 ? 's' : ''} visible${stats.pendingVotes > 1 ? 's' : ''}`,
+      tone: (isAdmin ? manualRequiredCount : pendingVotes.length) > 0 ? 'warning' : 'ready'
+    },
+    {
+      key: 'current-view',
+      label: 'Vue active',
+      value: activeTabMeta?.label || 'TPI',
+      helper: `${activeViewCount} element${activeViewCount > 1 ? 's' : ''} visible${activeViewCount > 1 ? 's' : ''}`,
+      tone: searchQuery ? 'info' : 'muted'
+    }
+  ]), [
+    activePlanningSiteLabels.length,
+    activeSitesSummary,
+    activeTabMeta?.label,
+    activeViewCount,
+    activeSnapshot?.version,
+    hasActiveSnapshot,
+    isAdmin,
+    isPublishedState,
+    isVotingState,
+    manualRequiredCount,
+    pendingVotes.length,
+    searchQuery,
+    stats.pendingVotes,
+    validationAnnotations.totalIssues,
+    workflowLabel
+  ])
+  const hasDashboardNotices = Boolean(
+    error ||
+    successMessage ||
+    hasLegacyPlanningData ||
+    (isAdmin && hasLegacyOutOfScope)
+  )
+
   /**
    * Callback après import réussi
    */
@@ -1169,6 +1466,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         id="tools"
         className="planning-dashboard-tools"
         flatHeader
+        title={`Planning ${year}`}
+        description="Pilotage annuel du workflow, des votes et de la publication."
         meta={
           <div className="planning-dashboard-stats">
             {dashboardStatsChips.map((stat) => (
@@ -1208,34 +1507,146 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ariaLabel="Outils de planification"
         bodyClassName="planning-dashboard-tools-body"
       >
-        {isScopedVoteViewer && (
-          <section className="workflow-actions">
-            <div className="workflow-state-badge state-voting_open">
-              Vue vote personnelle
+        <section className="planning-hero">
+          <div className="planning-hero-main">
+            <div className="planning-hero-copy">
+              <span className="planning-hero-kicker">
+                {isAdmin ? 'Console annuelle' : 'Vue planning'}
+              </span>
+              <h2>Planifier, suivre et publier sans perdre le fil.</h2>
+              <p>{planningHeroLead}</p>
             </div>
-            <button
-              type="button"
-              className="workflow-btn neutral"
-              onClick={handleExitScopedVoteView}
-              title="Quitter le mode vote et revenir à la vue globale."
-            >
-              Quitter le mode vote
-            </button>
+
+            <div className="planning-hero-inline-meta" aria-label={`Contexte planning ${year}`}>
+              <span className={`planning-hero-inline-chip state-${workflowState}`}>
+                Workflow {workflowLabel}
+              </span>
+              <span className="planning-hero-inline-chip">Annee {year}</span>
+              <span className="planning-hero-inline-chip">
+                {hasActiveSnapshot ? `Snapshot v${activeSnapshot.version}` : 'Aucun snapshot'}
+              </span>
+              <span className="planning-hero-inline-chip">
+                {activePlanningSiteLabels.length > 0
+                  ? `${activePlanningSiteLabels.length} site${activePlanningSiteLabels.length > 1 ? 's' : ''} actifs`
+                  : 'Sites non configures'}
+              </span>
+            </div>
+
+            <div className="planning-hero-actions">
+              <button
+                type="button"
+                className="planning-hero-action is-primary"
+                onClick={() => setActiveTab('list')}
+              >
+                <ListIcon className="button-icon" />
+                Ouvrir les TPI
+              </button>
+              {tabs.some((tab) => tab.id === 'votes') ? (
+                <button
+                  type="button"
+                  className="planning-hero-action"
+                  onClick={() => setActiveTab('votes')}
+                >
+                  <VoteIcon className="button-icon" />
+                  {isAdmin ? 'Suivre les votes' : 'Mes votes'}
+                </button>
+              ) : null}
+              {isAdmin && tabs.some((tab) => tab.id === 'conflicts') ? (
+                <button
+                  type="button"
+                  className="planning-hero-action"
+                  onClick={() => setActiveTab('conflicts')}
+                >
+                  <WrenchIcon className="button-icon" />
+                  Voir le manuel
+                </button>
+              ) : null}
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="planning-hero-action"
+                  onClick={() => navigate('/gestionTPI')}
+                >
+                  <FileTextIcon className="button-icon" />
+                  Gestion TPI
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="planning-hero-signal-grid">
+            {heroSignalCards.map((card) => (
+              <article
+                key={card.key}
+                className={`planning-hero-signal is-${card.tone}`}
+              >
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <p>{card.helper}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {isScopedVoteViewer && (
+          <section className="workflow-actions workflow-actions-personal">
+            <div className="workflow-actions-copy">
+              <div className="workflow-state-badge state-voting_open">
+                Vue vote personnelle
+              </div>
+              <h3>La page est focalisée sur tes votes.</h3>
+              <p>
+                Tu peux revenir à la vue globale de l année si tu veux retrouver l ensemble du dashboard.
+              </p>
+            </div>
+            <div className="workflow-actions-inline">
+              <button
+                type="button"
+                className="workflow-btn neutral"
+                onClick={handleExitScopedVoteView}
+                title="Quitter le mode vote et revenir à la vue globale."
+              >
+                Quitter le mode vote
+              </button>
+            </div>
           </section>
         )}
 
         {!isAdmin && !isScopedVoteViewer && (
-          <section className="workflow-actions">
-            <div className="workflow-state-badge" style={{background: '#ffebee', color: '#c62828'}}>
-              Accès admin requis
+          <section className="workflow-actions workflow-actions-restricted">
+            <div className="workflow-actions-copy">
+              <div className="workflow-state-badge state-restricted">
+                Acces admin requis
+              </div>
+              <h3>Le pilotage complet du workflow est reserve a l administration.</h3>
+              <p>
+                Cette vue publique reste limitee aux actions de vote et a la consultation ciblee.
+              </p>
             </div>
           </section>
         )}
 
         {isAdmin && (
-          <section className="workflow-actions">
-            <div className={`workflow-state-badge state-${workflowState}`}>
-              Workflow: {workflowLabel}
+          <section className="workflow-actions workflow-actions-admin">
+            <div className="workflow-actions-head">
+              <div className="workflow-actions-copy">
+                <div className={`workflow-state-badge state-${workflowState}`}>
+                  Workflow: {workflowLabel}
+                </div>
+                <h3>Poste de pilotage du workflow {year}</h3>
+                <p>
+                  {isPlanningState
+                    ? 'Verifie le planning, gele la version a soumettre puis ouvre la campagne de votes.'
+                    : isVotingState
+                      ? 'Suis les reponses, traite les cas manuels et prepare la publication.'
+                      : 'Le planning est publie. Tu peux encore renvoyer les liens et ouvrir la vue soutenances.'}
+                </p>
+              </div>
+              <div className={`workflow-progress ${workflowActionLoading ? 'is-busy' : 'is-idle'}`}>
+                {workflowActionLoading
+                  ? `Action en cours: ${WORKFLOW_ACTION_LABELS[pendingWorkflowAction] || 'Traitement'}`
+                  : `${activeSitesSummary} • ${stats.total} TPI visibles • ${validationAnnotations.totalIssues} anomalie${validationAnnotations.totalIssues > 1 ? 's' : ''}`}
+              </div>
             </div>
             <div className="workflow-steps">
               {workflowSteps.map(step => (
@@ -1251,12 +1662,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 </div>
               ))}
             </div>
-            {workflowActionLoading && (
-              <div className="workflow-progress">
-                Action en cours: {WORKFLOW_ACTION_LABELS[pendingWorkflowAction] || 'Traitement'}
-              </div>
-            )}
-            <div className="workflow-buttons">
+            <div className="workflow-buttons workflow-sections-grid">
               {/* Section Planification - visible uniquement en état Planification */}
               {isPlanningState && (
                 <div className="workflow-section">
@@ -1265,6 +1671,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                     Planification
                   </h4>
                   <div className="section-buttons">
+                    <button
+                      className="workflow-btn primary"
+                      onClick={handleAutomatePlanification}
+                      disabled={workflowActionLoading}
+                      title="Reconstruire automatiquement un créneau principal par TPI selon les dates, sites et contraintes configurés."
+                    >
+                      <RefreshIcon className="button-icon" />
+                      {isActionRunning('autoPlan') ? 'Automatisation...' : 'Automatiser planification'}
+                    </button>
                     <button
                       className="workflow-btn secondary"
                       onClick={handleValidatePlanification}
@@ -1300,6 +1715,23 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       <ArrowRightIcon className="button-icon" />
                       {isActionRunning('startVotes') ? 'Ouverture...' : 'Ouvrir votes'}
                     </button>
+                    {IS_DEBUG && (
+                      <button
+                        className="workflow-btn secondary"
+                        onClick={handleStartVotesCampaignWithoutEmails}
+                        disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
+                        title={hasLegacyImportGap
+                          ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
+                          : !hasActiveSnapshot
+                            ? 'Geler un snapshot d\'abord.'
+                            : hasVotingCandidates
+                              ? 'Ouvrir la campagne sans envoyer les emails automatiques.'
+                              : 'Proposer des creneaux aux TPI d\'abord.'}
+                      >
+                        <VoteIcon className="button-icon" />
+                        {isActionRunning('startVotesNoEmail') ? 'Ouverture...' : 'Ouvrir votes sans emails'}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1384,142 +1816,216 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         )}
       </PageToolbar>
 
-      {/* Message d'erreur */}
-      {error && (
-        <div className="error-banner">
-          <span className="banner-copy">
-            <AlertIcon className="banner-icon" />
-            {error}
-          </span>
-          <button onClick={() => setError(null)}>×</button>
+      {hasDashboardNotices && (
+        <div className="planning-dashboard-notices">
+          {error && (
+            <div className="error-banner">
+              <span className="banner-copy">
+                <AlertIcon className="banner-icon" />
+                {error}
+              </span>
+              <button onClick={() => setError(null)}>×</button>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="success-banner">
+              <span className="banner-copy">
+                <CheckIcon className="banner-icon" />
+                {successMessage}
+              </span>
+              <button onClick={() => setSuccessMessage(null)}>×</button>
+            </div>
+          )}
+
+          {hasLegacyPlanningData && (
+            <div className="legacy-planning-banner">
+              <div>
+                <strong>Les TPI legacy existent, mais pas dans la collection de planification.</strong>
+                <p>
+                  {legacyTpiCount} fiche{legacyTpiCount > 1 ? 's' : ''} sont encore dans `tpiList_{year}`.
+                  La page `/planning/{year}` lit `tpiPlannings`, qui est vide pour cette année.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="legacy-planning-button"
+                onClick={() => navigate('/gestionTPI')}
+              >
+                Ouvrir Gestion TPI
+              </button>
+            </div>
+          )}
+
+          {isAdmin && hasLegacyOutOfScope && (
+            <div className="legacy-planning-banner legacy-planning-banner-info legacy-perimeter-banner">
+              <div className="legacy-perimeter-copy">
+                <div className="legacy-perimeter-head">
+                  <span className="legacy-perimeter-eyebrow">Perimetre Planning {year}</span>
+                  <strong>Le workflow ne couvre que les sites actives pour cette annee.</strong>
+                </div>
+
+                <div className="legacy-perimeter-metrics" aria-label={`Résumé du périmètre Planning ${year}`}>
+                  <span className="legacy-perimeter-metric in-scope">
+                    <CheckIcon className="inline-icon" />
+                    {inScopeLegacyCount} dans le workflow
+                  </span>
+                  <span className="legacy-perimeter-metric out-of-scope">
+                    <BanIcon className="inline-icon" />
+                    {legacyOutOfScopeCount} TPI hors site
+                  </span>
+                </div>
+
+                <p>{legacyOutOfScopeCount} TPI hors site.</p>
+
+                <div className="legacy-perimeter-tags">
+                  <span className="legacy-perimeter-tag active-sites">
+                    {activePlanningSiteLabels.length > 0
+                      ? `Sites planifies: ${activePlanningSiteLabels.join(', ')}`
+                      : `Aucun site actif n'est configure pour ${year}.`}
+                  </span>
+                  {outOfScopeLegacySiteBreakdown.map(({ label, count }) => (
+                    <span
+                      key={`${label}-${count}`}
+                      className="legacy-perimeter-tag excluded-sites"
+                    >
+                      {label}: {count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="legacy-planning-button legacy-planning-button-info"
+                onClick={() => navigate('/gestionTPI')}
+              >
+                Ouvrir Gestion TPI
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {successMessage && (
-        <div className="success-banner">
-          <span className="banner-copy">
-            <CheckIcon className="banner-icon" />
-            {successMessage}
-          </span>
-          <button onClick={() => setSuccessMessage(null)}>×</button>
-        </div>
-      )}
-
-      {hasLegacyPlanningData && (
-        <div className="legacy-planning-banner">
-          <div>
-            <strong>Les TPI legacy existent, mais pas dans la collection de planification.</strong>
-            <p>
-              {legacyTpiCount} fiche{legacyTpiCount > 1 ? 's' : ''} sont encore dans `tpiList_{year}`.
-              La page `/planning/{year}` lit `tpiPlannings`, qui est vide pour cette année.
-            </p>
+      <section className="planning-command-shell">
+        <div className="planning-command-head">
+          <div className="planning-command-copy">
+            <span className="planning-command-kicker">{activeTabPresentation.kicker}</span>
+            <h2>{activeTabPresentation.title}</h2>
+            <p>{activeTabPresentation.description}</p>
           </div>
-          <button
-            type="button"
-            className="legacy-planning-button"
-            onClick={() => navigate('/gestionTPI')}
-          >
-            Ouvrir Gestion TPI
-          </button>
+          <div className="planning-command-summary">
+            <span className="planning-command-chip">
+              Vue {activeTabMeta?.label || 'TPI'}
+            </span>
+            <span className="planning-command-chip">
+              {activeViewCount} element{activeViewCount > 1 ? 's' : ''} visibles
+            </span>
+            <span className="planning-command-chip">
+              {statusFilterLabel}
+            </span>
+            {searchQuery ? (
+              <span className="planning-command-chip is-emphasis">
+                Recherche: {searchQuery}
+              </span>
+            ) : null}
+          </div>
         </div>
-      )}
 
-      {/* Navigation par onglets */}
-      <nav className="dashboard-tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span className="tab-icon">{tab.icon}</span>
-            <span className="tab-label">{tab.label}</span>
-            {tab.count !== undefined && tab.count > 0 && (
-              <span className="tab-badge">{tab.count}</span>
-            )}
-          </button>
-        ))}
-      </nav>
-
-      {/* Barre de filtres */}
-      <div className="filters-bar">
-        <div className="search-input">
-          <span className="search-icon">
-            <SearchIcon />
-          </span>
-          <input
-            type="text"
-            placeholder="Rechercher par référence, candidat, sujet..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button 
-              className="clear-search"
-              onClick={() => setSearchQuery('')}
+        <nav className="dashboard-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
             >
-              ×
+              <span className="tab-icon">{tab.icon}</span>
+              <span className="tab-label">{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className="tab-badge">{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="filters-bar">
+          <div className="search-input">
+            <span className="search-icon">
+              <SearchIcon />
+            </span>
+            <input
+              type="text"
+              placeholder="Rechercher par référence, candidat, sujet..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                className="clear-search"
+                onClick={() => setSearchQuery('')}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="status-filter"
+          >
+            <option value="all">Tous les statuts</option>
+            <option value={PLANNING_STATUS.DRAFT}>Brouillons</option>
+            <option value={PLANNING_STATUS.VOTING}>En vote</option>
+            <option value={PLANNING_STATUS.CONFIRMED}>Confirmés</option>
+            <option value={PLANNING_STATUS.MANUAL_REQUIRED}>Intervention requise</option>
+          </select>
+
+          {isAdmin && (
+            <button
+              className="btn-refresh"
+              onClick={loadData}
+            >
+              <RefreshIcon className="button-icon" />
+              Actualiser
             </button>
           )}
         </div>
-        
-        <select 
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="status-filter"
-        >
-          <option value="all">Tous les statuts</option>
-          <option value={PLANNING_STATUS.DRAFT}>Brouillons</option>
-          <option value={PLANNING_STATUS.VOTING}>En vote</option>
-          <option value={PLANNING_STATUS.CONFIRMED}>Confirmés</option>
-          <option value={PLANNING_STATUS.MANUAL_REQUIRED}>Intervention requise</option>
-        </select>
 
-        {isAdmin && (
-          <button 
-            className="btn-refresh"
-            onClick={loadData}
-          >
-            <RefreshIcon className="button-icon" />
-            Actualiser
-          </button>
-        )}
-      </div>
+        {requestedFocus && (
+          <section className={`planning-focus-banner ${hasFocusWithoutMatch ? 'is-missing' : 'is-ready'}`}>
+            <div className="planning-focus-banner-copy">
+              <strong>Focus actif: {requestedFocus}</strong>
+              <p>
+                {hasFocusWithoutMatch
+                  ? `Aucun TPI visible ne correspond à ${requestedFocus} pour l'année ${year}.`
+                  : `La liste et le panneau détail sont centrés sur ${focusedTpiMatch?.reference || requestedFocus}.`}
+              </p>
+            </div>
 
-      {requestedFocus && (
-        <section className={`planning-focus-banner ${hasFocusWithoutMatch ? 'is-missing' : 'is-ready'}`}>
-          <div className="planning-focus-banner-copy">
-            <strong>Focus actif: {requestedFocus}</strong>
-            <p>
-              {hasFocusWithoutMatch
-                ? `Aucun TPI visible ne correspond à ${requestedFocus} pour l'année ${year}.`
-                : `La liste et le panneau détail sont centrés sur ${focusedTpiMatch?.reference || requestedFocus}.`}
-            </p>
-          </div>
-
-          <div className="planning-focus-banner-actions">
-            {focusedTpiMatch && compactText(selectedTpi?._id) !== compactText(focusedTpiMatch?._id) ? (
+            <div className="planning-focus-banner-actions">
+              {focusedTpiMatch && compactText(selectedTpi?._id) !== compactText(focusedTpiMatch?._id) ? (
+                <button
+                  type="button"
+                  className="planning-focus-banner-btn"
+                  onClick={() => setSelectedTpi(focusedTpiMatch)}
+                >
+                  Ouvrir le TPI ciblé
+                </button>
+              ) : null}
               <button
                 type="button"
-                className="planning-focus-banner-btn"
-                onClick={() => setSelectedTpi(focusedTpiMatch)}
+                className="planning-focus-banner-btn secondary"
+                onClick={clearFocusedSearch}
               >
-                Ouvrir le TPI ciblé
+                Effacer le focus
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="planning-focus-banner-btn secondary"
-              onClick={clearFocusedSearch}
-            >
-              Effacer le focus
-            </button>
-          </div>
-        </section>
-      )}
+            </div>
+          </section>
+        )}
+      </section>
 
       {/* Contenu principal - Dashboard suivi de votes */}
-      <main className="dashboard-content">
+      <main className="dashboard-content planning-main-content">
         {activeTab === 'list' && (
           <>
             {validationResult && (
@@ -1638,18 +2144,19 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 />
 
                 {/* Section TPI non importés */}
-                {notImportedLegacyTpis.length > 0 && (
+                {notImportedLegacyTpisByPlanningPerimeter.length > 0 && (
                   <div className="not-imported-section">
                     <h3>
                       <CloseIcon className="section-title-icon" />
-                      TPI non importés ({notImportedLegacyTpis.length})
+                      TPI non intégrés au workflow ({notImportedLegacyTpisByPlanningPerimeter.length})
                     </h3>
                     <p className="not-imported-hint">
-                      Ces TPI existent dans GestionTPI mais n'ont pas pu être importés lors du gel.
+                      Ces TPI existent dans GestionTPI mais n'ont pas encore été intégrés au workflow de planification.
+                      Les fiches hors périmètre de planification sont exclues volontairement de cette liste.
                       Vérifiez que toutes les parties prenantes (candidat, 2 experts, chef de projet) sont renseignées.
                     </p>
                     <div className="not-imported-list">
-                      {notImportedLegacyTpis.map((tpi) => {
+                      {notImportedLegacyTpisByPlanningPerimeter.map((tpi) => {
                         const ref = tpi.refTpi || tpi.id || '?'
                         const candidat = tpi.candidat || '—'
                         const reasons = []
@@ -1711,62 +2218,99 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
       {/* Panel de détails TPI (sidebar) */}
       {selectedTpi && (
-        <aside className="tpi-detail-panel">
-          <div className="panel-header">
-            <h3>
-              <FileTextIcon className="section-title-icon" />
-              {compactText(selectedTpi.reference) ? selectedTpi.reference : 'Détails TPI'}
-            </h3>
-            <button 
-              className="close-panel"
-              onClick={() => setSelectedTpi(null)}
-            >
-              ×
-            </button>
-          </div>
-          
-          <div className="panel-content">
-            {selectedTpiDossierLoading ? (
-              <div className="tpi-detail-panel-state">
-                Chargement de la lecture croisée GestionTPI / Planning.
+        <>
+          <button
+            type="button"
+            className="tpi-detail-panel-backdrop"
+            aria-label="Fermer les détails"
+            onClick={() => setSelectedTpi(null)}
+          />
+
+          <aside
+            className="tpi-detail-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="planning-detail-panel-title"
+          >
+            <div className="panel-header">
+              <div className="panel-header-copy">
+                <span className="panel-kicker">Fiche planning</span>
+                <h3 id="planning-detail-panel-title">
+                  <FileTextIcon className="section-title-icon" />
+                  {compactText(selectedTpi.reference) ? selectedTpi.reference : 'Détails TPI'}
+                </h3>
+                <p className="panel-candidate">{selectedTpiCandidateLabel}</p>
+                <p className="panel-subject">{selectedTpiSubjectLabel}</p>
+                <div className="panel-header-meta">
+                  <span className={`panel-pill is-${selectedTpiStatusMeta.tone}`}>
+                    {selectedTpiStatusMeta.label}
+                  </span>
+                  <span className={`panel-pill is-${selectedTpiSlotLabel === 'Aucun créneau' ? 'warning' : 'ready'}`}>
+                    {selectedTpiSlotLabel}
+                  </span>
+                  <span className={`panel-pill is-${selectedTpiIssueCount > 0 ? 'warning' : 'ready'}`}>
+                    {selectedTpiIssueCount > 0
+                      ? `${selectedTpiIssueCount} point(s) à corriger`
+                      : 'Aucune alerte'}
+                  </span>
+                </div>
               </div>
-            ) : null}
 
-            {selectedTpiDossierError ? (
-              <div className="tpi-detail-panel-state error">
-                {selectedTpiDossierError}
-              </div>
-            ) : null}
-
-            <TpiDetailSections
-              dossier={selectedTpiDisplayDossier}
-              supplementalIssues={selectedTpiValidationMessages}
-              showSummary={false}
-              showOverview={false}
-              className='is-panel'
-            />
-          </div>
-
-          <div className="panel-actions">
-            {isAdmin ? (
-              <Link
-                className="btn-secondary"
-                to={selectedTpiDetailLink}
-              >
-                Ouvrir la fiche
-              </Link>
-            ) : null}
-            {isAdmin && selectedTpi.status === 'draft' ? (
               <button
-                className="btn-primary"
-                onClick={() => handleProposeSlots(selectedTpi._id)}
+                type="button"
+                className="close-panel"
+                onClick={() => setSelectedTpi(null)}
+                aria-label="Fermer le panneau"
+                title="Fermer"
               >
-                <VoteIcon className="button-icon" />
-                Lancer le vote
+                <CloseIcon className="section-title-icon" />
               </button>
-            ) : null}
-          </div>
-        </aside>
+            </div>
+
+            <div className="panel-content">
+              {selectedTpiDossierLoading ? (
+                <div className="tpi-detail-panel-state">
+                  Chargement de la lecture croisée GestionTPI / Planning.
+                </div>
+              ) : null}
+
+              {selectedTpiDossierError ? (
+                <div className="tpi-detail-panel-state error">
+                  {selectedTpiDossierError}
+                </div>
+              ) : null}
+
+              <TpiDetailSections
+                dossier={selectedTpiDisplayDossier}
+                supplementalIssues={selectedTpiValidationMessages}
+                showSummary
+                showOverview={false}
+                className='is-panel'
+                variant='panel'
+              />
+            </div>
+
+            <div className="panel-actions">
+              {isAdmin ? (
+                <Link
+                  className="btn-secondary"
+                  to={selectedTpiDetailLink}
+                >
+                  Ouvrir la fiche complète
+                </Link>
+              ) : null}
+              {isAdmin && selectedTpi.status === 'draft' ? (
+                <button
+                  className="btn-primary"
+                  onClick={() => handleProposeSlots(selectedTpi._id)}
+                >
+                  <VoteIcon className="button-icon" />
+                  Lancer le vote
+                </button>
+              ) : null}
+            </div>
+          </aside>
+        </>
       )}
     </div>
   )

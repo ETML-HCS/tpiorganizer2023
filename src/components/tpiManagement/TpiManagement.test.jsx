@@ -1,9 +1,10 @@
 import React from 'react'
-import { render, waitFor } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 import TpiManagement from './TpiManagement.jsx'
 import { getTpiFromServer } from './TpiData.jsx'
+import { createTpiModel, updateTpiModel } from '../tpiControllers/TpiController.jsx'
 import { planningCatalogService, planningConfigService } from '../../services/planningService'
 
 const mockTpiList = jest.fn(() => <div data-testid="mock-tpi-list" />)
@@ -36,6 +37,11 @@ jest.mock('./TpiData.jsx', () => ({
   saveTpiToServer: jest.fn()
 }))
 
+jest.mock('../tpiControllers/TpiController.jsx', () => ({
+  createTpiModel: jest.fn(),
+  updateTpiModel: jest.fn()
+}))
+
 jest.mock('../../services/planningService', () => ({
   planningCatalogService: {
     getGlobal: jest.fn()
@@ -45,11 +51,24 @@ jest.mock('../../services/planningService', () => ({
   }
 }))
 
+function createDeferred() {
+  let resolve
+  let reject
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('TpiManagement', () => {
 beforeEach(() => {
     mockTpiList.mockClear()
     mockTpiForm.mockClear()
     getTpiFromServer.mockReset()
+    createTpiModel.mockReset()
+    updateTpiModel.mockReset()
     planningCatalogService.getGlobal.mockReset()
     planningConfigService.getByYear.mockReset()
   })
@@ -64,6 +83,13 @@ beforeEach(() => {
         endDate: '2026-06-30'
       }
     ]
+    const soutenanceDates = [
+      {
+        date: '2026-06-10',
+        special: true,
+        classes: ['SPECIAL', 'S']
+      }
+    ]
 
     const sites = [
       {
@@ -75,7 +101,7 @@ beforeEach(() => {
 
     getTpiFromServer.mockResolvedValue([])
     planningCatalogService.getGlobal.mockResolvedValue({ sites })
-    planningConfigService.getByYear.mockResolvedValue({ classTypes })
+    planningConfigService.getByYear.mockResolvedValue({ classTypes, soutenanceDates })
 
     render(
       <MemoryRouter>
@@ -91,6 +117,11 @@ beforeEach(() => {
     await waitFor(() => {
       const lastCallProps = mockTpiList.mock.calls[mockTpiList.mock.calls.length - 1]?.[0]
       expect(lastCallProps?.planningClassTypes).toEqual(classTypes)
+    })
+
+    await waitFor(() => {
+      const lastCallProps = mockTpiList.mock.calls[mockTpiList.mock.calls.length - 1]?.[0]
+      expect(lastCallProps?.planningSoutenanceDates).toEqual(soutenanceDates)
     })
   })
 
@@ -194,6 +225,101 @@ beforeEach(() => {
         dateDepart: '2026-03-01',
         dateFin: '2026-06-03'
       })
+    })
+  })
+
+  it('ignore une réponse tardive de l année précédente après un changement d année', async () => {
+    const currentYear = new Date().getFullYear()
+    const nextYear = currentYear + 1
+    const currentYearDeferred = createDeferred()
+    const nextYearDeferred = createDeferred()
+
+    getTpiFromServer.mockImplementation((requestedYear) => {
+      if (requestedYear === currentYear) {
+        return currentYearDeferred.promise
+      }
+
+      if (requestedYear === nextYear) {
+        return nextYearDeferred.promise
+      }
+
+      return Promise.resolve([])
+    })
+    planningCatalogService.getGlobal.mockResolvedValue({ sites: [] })
+    planningConfigService.getByYear.mockResolvedValue({ classTypes: [] })
+
+    render(
+      <MemoryRouter initialEntries={[`/gestionTPI?year=${nextYear}`]}>
+        <TpiManagement toggleArrow={() => {}} isArrowUp={true} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(getTpiFromServer).toHaveBeenCalledWith(currentYear)
+      expect(getTpiFromServer).toHaveBeenCalledWith(nextYear)
+    })
+
+    await act(async () => {
+      nextYearDeferred.resolve([{ refTpi: 'NEXT-YEAR' }])
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      const lastListProps = mockTpiList.mock.calls[mockTpiList.mock.calls.length - 1]?.[0]
+      expect(lastListProps?.tpiList).toEqual([{ refTpi: 'NEXT-YEAR' }])
+    })
+
+    await act(async () => {
+      currentYearDeferred.resolve([{ refTpi: 'STALE-YEAR' }])
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      const lastListProps = mockTpiList.mock.calls[mockTpiList.mock.calls.length - 1]?.[0]
+      expect(lastListProps?.tpiList).toEqual([{ refTpi: 'NEXT-YEAR' }])
+    })
+  })
+
+  it('utilise la route de mise à jour pour les modifications groupées des TPI existants', async () => {
+    getTpiFromServer.mockResolvedValue([])
+    planningCatalogService.getGlobal.mockResolvedValue({ sites: [] })
+    planningConfigService.getByYear.mockResolvedValue({ classTypes: [] })
+    updateTpiModel.mockResolvedValue({ _id: '507f1f77bcf86cd799439011', refTpi: '19' })
+
+    render(
+      <MemoryRouter>
+        <TpiManagement toggleArrow={() => {}} isArrowUp={true} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockTpiList).toHaveBeenCalled()
+    })
+
+    const lastListProps = mockTpiList.mock.calls[mockTpiList.mock.calls.length - 1]?.[0]
+    const result = await lastListProps.onBulkSave([
+      {
+        _id: '507f1f77bcf86cd799439011',
+        refTpi: '19',
+        classe: 'MID4B'
+      }
+    ])
+
+    expect(updateTpiModel).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439011',
+      expect.any(Number),
+      expect.objectContaining({
+        refTpi: '19',
+        classe: 'MID4B'
+      })
+    )
+    expect(updateTpiModel.mock.calls[0][2]).not.toHaveProperty('_id')
+    expect(createTpiModel).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      total: 1,
+      successCount: 1,
+      failureCount: 0,
+      failures: []
     })
   })
 })

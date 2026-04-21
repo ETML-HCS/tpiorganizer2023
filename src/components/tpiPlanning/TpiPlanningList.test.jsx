@@ -39,8 +39,11 @@ describe('TpiPlanningList', () => {
           'tpi-1': {
             count: 2,
             labels: ['Sans créneau', 'Parties prenantes incomplètes'],
+            reasons: [
+              'Aucune date de soutenance configuree pour cette classe.'
+            ],
             messages: [
-              "TPI-2026-001 n'a aucun créneau proposé ou confirmé dans Planning.",
+              "TPI-2026-001 n'a aucun créneau proposé ou confirmé dans Planning. Raison: Aucune date de soutenance configuree pour cette classe.",
               'TPI-2026-001 ne peut pas être synchronisé: parties prenantes incomplètes.'
             ]
           }
@@ -50,7 +53,8 @@ describe('TpiPlanningList', () => {
     )
 
     expect(screen.getByText('À corriger')).toBeInTheDocument()
-    expect(screen.getByText(/2 anomalies · Sans créneau \+1/i)).toBeInTheDocument()
+    expect(screen.getByText(/2 anomalies/i)).toBeInTheDocument()
+    expect(screen.getByText(/Aucune date de soutenance configuree pour cette classe\./i)).toBeInTheDocument()
     expect(screen.getByText('TPI-2026-001').closest('tr')).toHaveClass('has-validation-issues')
     expect(screen.getByText('TPI-2026-002').closest('tr')).not.toHaveClass('has-validation-issues')
   })

@@ -16,6 +16,16 @@ import {
 const PLANNING_BASE_URL = '/api/planning'
 const WORKFLOW_BASE_URL = '/api/workflow'
 
+function buildStartVotesBody(legacyRooms = null, options = {}) {
+  const body = Array.isArray(legacyRooms) ? { legacyRooms } : {}
+
+  if (options.skipEmails === true) {
+    body.skipEmails = true
+  }
+
+  return body
+}
+
 /**
  * Service d'authentification par Magic Link
  */
@@ -218,6 +228,13 @@ export const tpiPlanningService = {
    */
   forceSlot: async (tpiId, slotId, reason) => {
     return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/force-slot`, { slotId, reason })
+  },
+
+  /**
+   * Renvoyer les demandes de vote d'un TPI
+   */
+  resendVotes: async (tpiId) => {
+    return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/resend-votes`, {})
   }
 }
 
@@ -327,6 +344,10 @@ export const workflowPlanningService = {
     return await apiService.get(`${WORKFLOW_BASE_URL}/${year}/planification/validate${query}`)
   },
 
+  automatePlanification: async (year) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/planification/auto-plan`, {})
+  },
+
   getActiveSnapshot: async (year, includeEntries = false) => {
     const query = includeEntries ? '?includeEntries=true' : ''
     return await apiService.get(`${WORKFLOW_BASE_URL}/${year}/planification/snapshot${query}`)
@@ -344,9 +365,18 @@ export const workflowPlanningService = {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/planification/freeze`, body)
   },
 
-  startVotes: async (year, legacyRooms = null) => {
-    const body = Array.isArray(legacyRooms) ? { legacyRooms } : {}
-    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/start`, body)
+  startVotes: async (year, legacyRooms = null, options = {}) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/votes/start`,
+      buildStartVotesBody(legacyRooms, options)
+    )
+  },
+
+  startVotesWithoutEmails: async (year, legacyRooms = null) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/votes/start`,
+      buildStartVotesBody(legacyRooms, { skipEmails: true })
+    )
   },
 
   createDevVoteLinks: async (year, baseUrl = null) => {
@@ -357,6 +387,22 @@ export const workflowPlanningService = {
     }
 
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/dev-links`, body)
+  },
+
+  sendDevVoteEmails: async (year, email, options = {}) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/dev-email`, {
+      email,
+      reference: typeof options.reference === 'string' ? options.reference : '',
+      baseUrl: options.baseUrl || null
+    })
+  },
+
+  sendDevSoutenanceEmails: async (year, email, options = {}) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/dev-email`, {
+      email,
+      reference: typeof options.reference === 'string' ? options.reference : '',
+      baseUrl: options.baseUrl || null
+    })
   },
 
   previewAccessLinks: async (year, baseUrl = null) => {

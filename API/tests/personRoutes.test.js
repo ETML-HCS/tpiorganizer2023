@@ -250,7 +250,7 @@ test('POST /api/planning/persons updates a synthetic organizer email when the na
   }
 })
 
-test('PUT /api/planning/persons/:id persists sendEmails and candidateYears', async () => {
+test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferredSoutenanceDates and preferredSoutenanceChoices', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFindByIdAndUpdate = Person.findByIdAndUpdate
@@ -281,7 +281,14 @@ test('PUT /api/planning/persons/:id persists sendEmails and candidateYears', asy
         lastName: 'Martin',
         roles: ['candidat'],
         sendEmails: false,
-        candidateYears: [2026, '2025']
+        candidateYears: [2026, '2025'],
+        preferredSoutenanceDates: ['2026-06-12', '2026-06-10', '2026-06-12', 'invalid-date'],
+        preferredSoutenanceChoices: [
+          { date: '2026-06-12', period: 3 },
+          { date: '2026-06-10', period: '1' },
+          { date: '2026-06-10', period: 6 },
+          { date: 'invalid-date', period: 2 }
+        ]
       })
     })
 
@@ -290,6 +297,11 @@ test('PUT /api/planning/persons/:id persists sendEmails and candidateYears', asy
     assert.equal(body._id, VALID_OBJECT_ID)
     assert.equal(body.sendEmails, false)
     assert.deepEqual(body.candidateYears, [2025, 2026])
+    assert.deepEqual(body.preferredSoutenanceDates, ['2026-06-12', '2026-06-10'])
+    assert.deepEqual(body.preferredSoutenanceChoices, [
+      { date: '2026-06-12', period: 3 },
+      { date: '2026-06-10', period: 1 }
+    ])
     assert.deepEqual(body.roles, ['candidat'])
   } finally {
     Person.findByIdAndUpdate = originalFindByIdAndUpdate
@@ -387,12 +399,16 @@ test('POST /api/planning/persons/merge merges duplicate people and rewires refer
     isActive: true,
     sendEmails: true,
     candidateYears: [],
+    preferredSoutenanceDates: ['2026-06-11'],
+    preferredSoutenanceChoices: [{ date: '2026-06-11', period: 2 }],
     save: async function save() {
       calls.savedTarget = {
         email: this.email,
         phone: this.phone,
         roles: this.roles,
-        candidateYears: this.candidateYears
+        candidateYears: this.candidateYears,
+        preferredSoutenanceDates: this.preferredSoutenanceDates,
+        preferredSoutenanceChoices: this.preferredSoutenanceChoices
       }
       return this
     }
@@ -408,7 +424,12 @@ test('POST /api/planning/persons/merge merges duplicate people and rewires refer
     roles: ['chef_projet'],
     isActive: true,
     sendEmails: false,
-    candidateYears: [2025]
+    candidateYears: [2025],
+    preferredSoutenanceDates: ['2026-06-10', '2026-06-12'],
+    preferredSoutenanceChoices: [
+      { date: '2026-06-10', period: 1 },
+      { date: '2026-06-12', period: 4 }
+    ]
   }
   const sourceObjectId = new mongoose.Types.ObjectId(sourcePersonId)
   const targetObjectId = new mongoose.Types.ObjectId(targetPersonId)
@@ -478,6 +499,12 @@ test('POST /api/planning/persons/merge merges duplicate people and rewires refer
     assert.equal(targetPerson.phone, '079 111 22 33')
     assert.deepEqual(targetPerson.roles, ['expert', 'chef_projet'])
     assert.deepEqual(targetPerson.candidateYears, [2025])
+    assert.deepEqual(targetPerson.preferredSoutenanceDates, ['2026-06-11', '2026-06-10', '2026-06-12'])
+    assert.deepEqual(targetPerson.preferredSoutenanceChoices, [
+      { date: '2026-06-11', period: 2 },
+      { date: '2026-06-10', period: 1 },
+      { date: '2026-06-12', period: 4 }
+    ])
     assert.deepEqual(calls.deleteMany, { _id: { $in: [sourceObjectId] } })
     assert.equal(calls.tpiPlanningUpdates.length, 4)
     assert.equal(calls.slotUpdates.length, 4)

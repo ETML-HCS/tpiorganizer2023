@@ -1,9 +1,32 @@
 import React, { useEffect, useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { Link, useLocation } from "react-router-dom"
+import { IS_DEBUG } from "../../config/appConfig"
 import PageToolbar from "../shared/PageToolbar"
 import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
-import { CollapseIcon, ExpandIcon, WrapIcon } from "../shared/InlineIcons"
+import IconButtonContent from "../shared/IconButtonContent"
+import {
+  ArrowRightIcon,
+  BanIcon,
+  ChartIcon,
+  CheckIcon,
+  ConfigurationIcon,
+  CollapseIcon,
+  DownloadIcon,
+  ExpandIcon,
+  MailIcon,
+  PencilIcon,
+  RefreshIcon,
+  RoomAddIcon,
+  SaveIcon,
+  SearchIcon,
+  SendIcon,
+  SnowflakeIcon,
+  UploadIcon,
+  VoteIcon,
+  WrapIcon,
+  WrenchIcon
+} from "../shared/InlineIcons"
 import {
   getSoutenanceDateBadgeLabel,
   getSoutenanceDateBadgeTone,
@@ -25,9 +48,11 @@ const TpiScheduleButtons = ({
   workflowActionLoading = false,
   pendingWorkflowAction = "",
   validationResult = null,
+  onAutomatePlanification,
   onValidatePlanification,
   onFreezeSnapshot,
   onOpenVotes,
+  onOpenVotesWithoutEmails = null,
   onRemindVotes,
   onCloseVotes,
   onPublishDefinitive,
@@ -133,7 +158,39 @@ const TpiScheduleButtons = ({
     ? "Vérification..."
     : isValidationSuccessful
       ? "Vérifié"
-      : "Vérifier"
+      : "Vérifier conflits"
+  const editButtonLabel = isEditing ? "Édition activée" : "Mode édition"
+  const automatePlanificationLabel = isActionRunning("autoPlan")
+    ? "Automatisation..."
+    : "Automatiser planification"
+  const freezeSnapshotLabel = isActionRunning("freeze")
+    ? "Gel..."
+    : isAlreadyFrozen
+      ? `Gelé v${activeSnapshotVersion}`
+      : "Geler snapshot"
+  const openVotesLabel = isActionRunning("startVotes") ? "Ouverture..." : "Ouvrir votes"
+  const openVotesWithoutEmailsLabel = isActionRunning("startVotesNoEmail")
+    ? "Ouverture..."
+    : "Ouvrir votes sans emails"
+  const trackVotesLabel = "Suivre votes"
+  const remindVotesLabel = isActionRunning("remindVotes") ? "Relance..." : "Relancer votes"
+  const closeVotesLabel = isActionRunning("closeVotes") ? "Clôture..." : "Clore votes"
+  const publishDefinitiveLabel = isActionRunning("publish")
+    ? "Publication..."
+    : "Publier définitif"
+  const sendLinksLabel = isActionRunning("sendLinks") ? "Envoi..." : "Envoyer liens"
+  const openSoutenancesLabel = "Ouvrir Soutenances"
+  const workflowActionLabels = {
+    autoPlan: "Automatisation",
+    validate: "Vérification",
+    freeze: "Gel du snapshot",
+    startVotes: "Ouverture des votes",
+    startVotesNoEmail: "Ouverture des votes sans emails",
+    remindVotes: "Relance des votes",
+    closeVotes: "Clôture des votes",
+    publish: "Publication",
+    sendLinks: "Envoi des liens"
+  }
 
   const validationIssueDetails = []
   if (validationSummary.personOverlapCount > 0) {
@@ -152,7 +209,7 @@ const TpiScheduleButtons = ({
     validationIssueDetails.push(`${validationUnplannedTpiCount} TPI sans créneau`)
   }
   if (validationImportIssueCount > 0) {
-    validationIssueDetails.push(`${validationImportIssueCount} écart(s) GestionTPI/Planning`)
+    validationIssueDetails.push(`${validationImportIssueCount} écart(s) GestionTPI/workflow`)
   }
   const validationIssueDetailText = validationIssueDetails.length > 0
     ? ` (${validationIssueDetails.join(', ')})`
@@ -170,22 +227,28 @@ const TpiScheduleButtons = ({
     : hasLocalConflictCount
       ? String(localConflictCount)
       : ""
+  const totalTpiBadge = Number.isInteger(Number(totalTpiCount)) && Number(totalTpiCount) > 0
+    ? String(totalTpiCount)
+    : ""
 
   const workflowTabs = useMemo(() => ([
     {
       id: "preparation",
       label: "Préparation",
-      state: "planning"
+      state: "planning",
+      icon: WrenchIcon
     },
     {
       id: "vote",
       label: "Vote",
-      state: "voting_open"
+      state: "voting_open",
+      icon: VoteIcon
     },
     {
       id: "finalisation",
       label: "Finalisation",
-      state: "published"
+      state: "published",
+      icon: CheckIcon
     }
   ]), [])
 
@@ -198,7 +261,8 @@ const TpiScheduleButtons = ({
   const toolbarTabs = useMemo(() => [
     {
       id: "data",
-      label: "Données"
+      label: "Données",
+      badge: totalTpiBadge
     },
     {
       id: "rooms",
@@ -212,7 +276,7 @@ const TpiScheduleButtons = ({
       label: "Workflow",
       badge: workflowBadge
     }
-  ], [roomsCount, workflowBadge])
+  ], [roomsCount, totalTpiBadge, workflowBadge])
 
   const navigationLinks = useMemo(() => {
     if (location.pathname === "/planification") {
@@ -438,7 +502,8 @@ const TpiScheduleButtons = ({
           id="tools"
           className="planning-tools"
           flatHeader
-          eyebrow=""
+          title={`Planification ${effectiveYear}`}
+          description="Données, salles et workflow dans une barre compacte."
           tabs={toolbarTabs}
           activeTab={activeToolTab}
           onTabChange={setActiveToolTab}
@@ -455,22 +520,24 @@ const TpiScheduleButtons = ({
           <div className="planning-tools-button-row planning-tools-button-grid">
             <button
               type="button"
-              className={`page-tools-action-btn secondary ${isEditing ? "active-edit" : ""}`}
+              className={`page-tools-action-btn secondary icon-button ${
+                isEditing || hasTpiUsageCount ? "icon-button--with-badge" : ""
+              } ${isEditing ? "active-edit" : ""}`.trim()}
               onClick={handleToggleEditing}
+              aria-label={editButtonLabel}
               title={
                 hasTpiUsageCount
                   ? `Activer ou désactiver l'édition des cartes et des salles. ${usedTpiCount}/${totalTpiCount} TPI utilisés.`
                   : "Activer ou désactiver l'édition des cartes et des salles."
               }
             >
-              <span className="planning-edit-toggle-label">
-                {isEditing ? "Édition activée" : "Mode édition"}
-              </span>
-              {isEditing && hasTpiUsageCount ? (
-                <span className="planning-edit-toggle-count">
-                  ({usedTpiCount}/{totalTpiCount})
-                </span>
-              ) : null}
+              <IconButtonContent
+                label={editButtonLabel}
+                icon={PencilIcon}
+                iconClassName="planning-button-icon"
+                badge={isEditing && hasTpiUsageCount ? `${usedTpiCount}/${totalTpiCount}` : null}
+                badgeClassName="ui-button-badge planning-edit-toggle-count"
+              />
             </button>
 
             <input
@@ -484,42 +551,70 @@ const TpiScheduleButtons = ({
             />
             <label
               htmlFor="planning-file-input"
-              className="planning-tools-file-label"
+              className="planning-tools-file-label icon-button"
               title="Importer un fichier JSON de configuration (salles et TPI)."
             >
-              Importer JSON
+              <IconButtonContent
+                label="Importer JSON"
+                icon={UploadIcon}
+                iconClassName="planning-button-icon"
+              />
             </label>
 
             <button
-              className="planning-data-btn save"
+              type="button"
+              className="planning-data-btn save icon-button"
               onClick={onSave}
+              aria-label="Sauvegarder localement"
               title="Enregistrer la configuration courante dans le navigateur."
             >
-              Sauvegarder localement
+              <IconButtonContent
+                label="Sauvegarder localement"
+                icon={SaveIcon}
+                iconClassName="planning-button-icon"
+              />
             </button>
 
             <button
-              className="planning-data-btn export"
+              type="button"
+              className="planning-data-btn export icon-button"
               onClick={onExport}
+              aria-label="Exporter JSON"
               title="Télécharger une sauvegarde JSON de la configuration."
             >
-              Exporter JSON
+              <IconButtonContent
+                label="Exporter JSON"
+                icon={DownloadIcon}
+                iconClassName="planning-button-icon"
+              />
             </button>
 
             <button
-              className="planning-data-btn fetch"
+              type="button"
+              className="planning-data-btn fetch icon-button"
               onClick={() => onFetchConfig?.(effectiveYear)}
+              aria-label="Charger BDD"
               title={`Recharger la configuration ${effectiveYear} depuis la base de données.`}
             >
-              Charger BDD
+              <IconButtonContent
+                label="Charger BDD"
+                icon={RefreshIcon}
+                iconClassName="planning-button-icon"
+              />
             </button>
 
             <button
-              className="planning-data-btn transmit"
+              type="button"
+              className="planning-data-btn transmit icon-button"
               onClick={onSendBD}
+              aria-label="Envoyer BDD"
               title="Synchroniser la configuration courante vers la base de données."
             >
-              Envoyer BDD
+              <IconButtonContent
+                label="Envoyer BDD"
+                icon={SendIcon}
+                iconClassName="planning-button-icon"
+              />
             </button>
           </div>
         </section>
@@ -536,19 +631,29 @@ const TpiScheduleButtons = ({
               {typeof onGenerateRoomsFromCatalog === "function" ? (
                 <button
                   type="button"
-                  className="page-tools-action-btn secondary"
+                  className="page-tools-action-btn secondary icon-button"
                   onClick={onGenerateRoomsFromCatalog}
+                  aria-label="Créer les rooms du planning"
+                  title="Créer les rooms du planning"
                 >
-                  Créer les rooms du planning
+                  <IconButtonContent
+                    label="Créer les rooms du planning"
+                    icon={RoomAddIcon}
+                    iconClassName="planning-button-icon"
+                  />
                 </button>
               ) : null}
               <Link
                 to="/configuration"
-                className="page-tools-action-btn primary"
+                className="page-tools-action-btn primary icon-button"
                 aria-label="Ouvrir Configuration"
                 title="Ouvrir le module Configuration"
               >
-                Configuration
+                <IconButtonContent
+                  label="Ouvrir Configuration"
+                  icon={ConfigurationIcon}
+                  iconClassName="planning-button-icon"
+                />
               </Link>
             </div>
           </div>
@@ -603,12 +708,13 @@ const TpiScheduleButtons = ({
                 <div className="planning-room-site-list">
                   {roomCatalogSiteOptions.map((site) => {
                     const roomNames = normalizedRoomCatalogBySite[site] || []
+                    const siteLabel = String(site || "").trim().toUpperCase()
 
                     return (
-                      <div key={site} className="planning-room-site-overview">
-                        <div className="planning-room-site-overview-head">
-                          <strong>{site}</strong>
-                        </div>
+                        <div key={site} className="planning-room-site-overview">
+                          <div className="planning-room-site-overview-head">
+                            <strong>{siteLabel}</strong>
+                          </div>
 
                         {roomNames.length > 0 ? (
                           <div className="planning-room-dates-list planning-room-dates-list--compact">
@@ -725,11 +831,17 @@ const TpiScheduleButtons = ({
 
                 <button
                   type="button"
-                  className="page-tools-action-btn secondary planning-room-filter-reset"
+                  className="page-tools-action-btn secondary planning-room-filter-reset icon-button"
                   onClick={onClearRoomFilters}
+                  aria-label="Réinitialiser les filtres"
+                  title="Réinitialiser les filtres"
                   disabled={!(roomFilters?.site || roomFilters?.date || roomFilters?.room)}
                 >
-                  Réinit.
+                  <IconButtonContent
+                    label="Réinitialiser les filtres"
+                    icon={RefreshIcon}
+                    iconClassName="planning-button-icon"
+                  />
                 </button>
               </div>
             </div>
@@ -740,173 +852,271 @@ const TpiScheduleButtons = ({
         <section className="planning-tools-panel planning-tools-panel-workflow">
           {workflowActionLoading ? (
             <div className="planning-workflow-progress">
-              Action en cours : {pendingWorkflowAction || "workflow"}
+              Action en cours : {workflowActionLabels[pendingWorkflowAction] || pendingWorkflowAction || "workflow"}
             </div>
           ) : null}
 
-          <div
-            className="planning-workflow-tabs page-tools-tabs"
-            role="tablist"
-            aria-label="Étapes du workflow"
-          >
-            {workflowTabs.map((tab) => {
-              const isActive = activeWorkflowTab === tab.id
+          <div className="planning-workflow-topbar">
+            <div
+              className="planning-workflow-tabs page-tools-tabs"
+              role="tablist"
+              aria-label="Étapes du workflow"
+            >
+              {workflowTabs.map((tab) => {
+                const isActive = activeWorkflowTab === tab.id
 
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  className={`page-tools-tab ${isActive ? "active" : ""}`.trim()}
-                  aria-selected={isActive}
-                  aria-controls={`planning-workflow-panel-${tab.id}`}
-                  tabIndex={isActive ? 0 : -1}
-                  onClick={() => setActiveWorkflowTab(tab.id)}
-                  title={tab.label}
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    className={`page-tools-tab ${isActive ? "active" : ""}`.trim()}
+                    aria-selected={isActive}
+                    aria-controls={`planning-workflow-panel-${tab.id}`}
+                    tabIndex={isActive ? 0 : -1}
+                    onClick={() => setActiveWorkflowTab(tab.id)}
+                    title={tab.label}
+                  >
+                    {tab.icon ? (
+                      <span className="page-tools-tab-icon" aria-hidden="true">
+                        <tab.icon />
+                      </span>
+                    ) : null}
+                    <span className="page-tools-tab-label">{tab.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="planning-workflow-stage">
+              {activeWorkflowTab === "preparation" ? (
+                <section
+                  className="planning-workflow-section"
+                  id="planning-workflow-panel-preparation"
+                  role="tabpanel"
                 >
-                  {tab.icon ? (
-                    <span className="page-tools-tab-icon" aria-hidden="true">
-                      <tab.icon />
-                    </span>
-                  ) : null}
-                  <span className="page-tools-tab-label">{tab.label}</span>
-                </button>
-              )
-            })}
-          </div>
+                  <div className="planning-workflow-section-actions">
+                    <button
+                      type="button"
+                      className="planning-workflow-btn primary"
+                      onClick={onAutomatePlanification}
+                      disabled={workflowActionLoading || !isPlanningState || !onAutomatePlanification}
+                      title="Créer automatiquement les salles nécessaires et placer les TPI selon la configuration annuelle."
+                      aria-label={automatePlanificationLabel}
+                    >
+                      <IconButtonContent
+                        label={automatePlanificationLabel}
+                        icon={WrenchIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-          <div className="planning-workflow-stage">
-            {activeWorkflowTab === "preparation" ? (
-              <section
-                className="planning-workflow-section"
-                id="planning-workflow-panel-preparation"
-                role="tabpanel"
-              >
-                <div className="planning-workflow-section-actions">
-                  <button
-                    className={`planning-workflow-btn neutral ${isValidationSuccessful ? "validated" : ""}`}
-                    onClick={onValidatePlanification}
-                    disabled={workflowActionLoading || !isPlanningState || isValidationSuccessful}
-                    title={validationTooltip}
-                  >
-                    {validationLabel}
-                  </button>
+                    <button
+                      type="button"
+                      className={`planning-workflow-btn neutral ${
+                        isValidationSuccessful ? "validated" : ""
+                      }`.trim()}
+                      onClick={onValidatePlanification}
+                      disabled={workflowActionLoading || !isPlanningState || isValidationSuccessful}
+                      title={validationTooltip}
+                      aria-label={validationLabel}
+                    >
+                      <IconButtonContent
+                        label={validationLabel}
+                        icon={isValidationSuccessful ? CheckIcon : SearchIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-                  <button
-                    className="planning-workflow-btn primary"
-                    onClick={onFreezeSnapshot}
-                    disabled={workflowActionLoading || !isPlanningState || isAlreadyFrozen || nonImportableTpiCount > 0}
-                    title={
-                      nonImportableTpiCount > 0
-                        ? "Corrige les TPI non importables avant de geler le snapshot."
-                        : isAlreadyFrozen
-                        ? `Snapshot v${activeSnapshotVersion} déjà gelé. Modifie une salle pour créer une nouvelle version.`
-                        : "Figer la version planification à soumettre aux votes."
-                    }
-                  >
-                    {isActionRunning("freeze")
-                      ? "Gel..."
-                      : isAlreadyFrozen
-                        ? `Gelé v${activeSnapshotVersion}`
-                        : "Geler snapshot"}
-                  </button>
-                </div>
-              </section>
-            ) : null}
+                    <button
+                      type="button"
+                      className="planning-workflow-btn primary"
+                      onClick={onFreezeSnapshot}
+                      disabled={workflowActionLoading || !isPlanningState || isAlreadyFrozen || nonImportableTpiCount > 0}
+                      aria-label={freezeSnapshotLabel}
+                      title={
+                        nonImportableTpiCount > 0
+                          ? "Corrige les TPI non importables avant de geler le snapshot."
+                          : isAlreadyFrozen
+                            ? `Snapshot v${activeSnapshotVersion} déjà gelé. Modifie une salle pour créer une nouvelle version.`
+                            : "Figer la version planification à soumettre aux votes."
+                      }
+                    >
+                      <IconButtonContent
+                        label={freezeSnapshotLabel}
+                        icon={SnowflakeIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+                  </div>
+                </section>
+              ) : null}
 
-            {activeWorkflowTab === "vote" ? (
-              <section
-                className="planning-workflow-section"
-                id="planning-workflow-panel-vote"
-                role="tabpanel"
-              >
-                <div className="planning-workflow-section-actions">
-                  <button
-                    className="planning-workflow-btn primary"
-                    onClick={onOpenVotes}
-                    disabled={workflowActionLoading || !canStartVotes}
-                    title={
-                      hasStaleSnapshot
-                        ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
-                        : canStartVotes
-                        ? "Ouvrir la campagne de votes."
-                        : "Snapshot requis avant ouverture des votes."
-                    }
-                  >
-                    {isActionRunning("startVotes") ? "Ouverture..." : "Ouvrir votes"}
-                  </button>
+              {activeWorkflowTab === "vote" ? (
+                <section
+                  className="planning-workflow-section"
+                  id="planning-workflow-panel-vote"
+                  role="tabpanel"
+                >
+                  <div className="planning-workflow-section-actions">
+                    <button
+                      type="button"
+                      className="planning-workflow-btn primary"
+                      onClick={onOpenVotes}
+                      disabled={workflowActionLoading || !canStartVotes}
+                      aria-label={openVotesLabel}
+                      title={
+                        hasStaleSnapshot
+                          ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
+                          : canStartVotes
+                            ? "Ouvrir la campagne de votes."
+                            : "Snapshot requis avant ouverture des votes."
+                      }
+                    >
+                      <IconButtonContent
+                        label={openVotesLabel}
+                        icon={VoteIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-                  <button
-                    className="planning-workflow-btn neutral"
-                    onClick={onOpenVotesTracking}
-                    disabled={workflowActionLoading || !canOpenVoteTracking || !onOpenVotesTracking}
-                    title="Ouvrir la page de suivi des votes pour cette année."
-                  >
-                    Suivre votes
-                  </button>
+                    {IS_DEBUG ? (
+                      <button
+                        type="button"
+                        className="planning-workflow-btn secondary"
+                        onClick={onOpenVotesWithoutEmails}
+                        disabled={workflowActionLoading || !canStartVotes || !onOpenVotesWithoutEmails}
+                        title={
+                          hasStaleSnapshot
+                            ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
+                            : canStartVotes
+                              ? "Ouvrir la campagne de votes sans envoyer les emails automatiques."
+                              : "Snapshot requis avant ouverture des votes."
+                        }
+                        aria-label={openVotesWithoutEmailsLabel}
+                      >
+                        <IconButtonContent
+                          label={openVotesWithoutEmailsLabel}
+                          icon={VoteIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+                    ) : null}
 
-                  <button
-                    className="planning-workflow-btn neutral"
-                    onClick={onRemindVotes}
-                    disabled={workflowActionLoading || !isVotingState}
-                    title="Relancer les non-répondants."
-                  >
-                    {isActionRunning("remindVotes")
-                      ? "Relance..."
-                      : "Relancer votes"}
-                  </button>
+                    <button
+                      type="button"
+                      className="planning-workflow-btn neutral"
+                      onClick={onOpenVotesTracking}
+                      disabled={workflowActionLoading || !canOpenVoteTracking || !onOpenVotesTracking}
+                      title="Ouvrir la page de suivi des votes pour cette année."
+                      aria-label={trackVotesLabel}
+                    >
+                      <IconButtonContent
+                        label={trackVotesLabel}
+                        icon={ChartIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-                  <button
-                    className="planning-workflow-btn neutral"
-                    onClick={onCloseVotes}
-                    disabled={workflowActionLoading || !isVotingState}
-                    title="Clore la campagne de votes."
-                  >
-                    {isActionRunning("closeVotes") ? "Clôture..." : "Clore votes"}
-                  </button>
-                </div>
-              </section>
-            ) : null}
+                    <button
+                      type="button"
+                      className="planning-workflow-btn neutral"
+                      onClick={onRemindVotes}
+                      disabled={workflowActionLoading || !isVotingState}
+                      title="Relancer les non-répondants."
+                      aria-label={remindVotesLabel}
+                    >
+                      <IconButtonContent
+                        label={remindVotesLabel}
+                        icon={MailIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-            {activeWorkflowTab === "finalisation" ? (
-              <section
-                className="planning-workflow-section"
-                id="planning-workflow-panel-finalisation"
-                role="tabpanel"
-              >
-                <div className="planning-workflow-section-actions">
-                  <button
-                    className="planning-workflow-btn success"
-                    onClick={onPublishDefinitive}
-                    disabled={workflowActionLoading || !canPublishDefinitive}
-                    title="Publier la version définitive dans Soutenances."
-                  >
-                    {isActionRunning("publish")
-                      ? "Publication..."
-                      : "Publier définitif"}
-                  </button>
+                    <button
+                      type="button"
+                      className="planning-workflow-btn neutral"
+                      onClick={onCloseVotes}
+                      disabled={workflowActionLoading || !isVotingState}
+                      title="Clore la campagne de votes."
+                      aria-label={closeVotesLabel}
+                    >
+                      <IconButtonContent
+                        label={closeVotesLabel}
+                        icon={BanIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+                  </div>
+                </section>
+              ) : null}
 
-                  <button
-                    className="planning-workflow-btn success"
-                    onClick={onSendSoutenanceLinks}
-                    disabled={workflowActionLoading || !isPublishedState}
-                    title="Renvoyer les magic links de soutenance."
-                  >
-                    {isActionRunning("sendLinks")
-                      ? "Envoi..."
-                      : "Envoyer liens"}
-                  </button>
+              {activeWorkflowTab === "finalisation" ? (
+                <section
+                  className="planning-workflow-section"
+                  id="planning-workflow-panel-finalisation"
+                  role="tabpanel"
+                >
+                  <div className="planning-workflow-section-actions">
+                    <button
+                      type="button"
+                      className="planning-workflow-btn success"
+                      onClick={onPublishDefinitive}
+                      disabled={workflowActionLoading || !canPublishDefinitive}
+                      title="Publier la version définitive dans Soutenances."
+                      aria-label={publishDefinitiveLabel}
+                    >
+                      <IconButtonContent
+                        label={publishDefinitiveLabel}
+                        icon={CheckIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-                  <button
-                    className="planning-workflow-btn open"
-                    onClick={onOpenSoutenances}
-                    disabled={workflowActionLoading}
-                  >
-                    Ouvrir Soutenances
-                  </button>
-                </div>
-              </section>
-            ) : null}
+                    <button
+                      type="button"
+                      className="planning-workflow-btn success"
+                      onClick={onSendSoutenanceLinks}
+                      disabled={workflowActionLoading || !isPublishedState}
+                      title="Renvoyer les magic links de soutenance."
+                      aria-label={sendLinksLabel}
+                    >
+                      <IconButtonContent
+                        label={sendLinksLabel}
+                        icon={SendIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="planning-workflow-btn open"
+                      onClick={onOpenSoutenances}
+                      disabled={workflowActionLoading}
+                      aria-label={openSoutenancesLabel}
+                      title="Ouvrir le module Soutenances."
+                    >
+                      <IconButtonContent
+                        label={openSoutenancesLabel}
+                        icon={ArrowRightIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+            </div>
           </div>
 
           {validationResult ? (

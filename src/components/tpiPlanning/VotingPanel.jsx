@@ -500,10 +500,10 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                             onChange={(nextValue) => toggleSpecialRequest(tpiId, nextValue)}
                             name={`special-request-${tpiId}`}
                             className="special-request-toggle"
-                            ariaLabel="Ajouter une demande spéciale"
+                            ariaLabel="Activation de la demande spéciale"
                             iconOnly
-                            trueLabel="Demande spéciale activée"
-                            falseLabel="Demande spéciale désactivée"
+                            trueLabel="Ajouter une demande spéciale"
+                            falseLabel="Ne pas ajouter de demande spéciale"
                             trueIcon={AlertIcon}
                             falseIcon={CloseIcon}
                           />

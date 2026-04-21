@@ -3,8 +3,15 @@ import Papa from 'papaparse'
 import { Link } from 'react-router-dom'
 
 import { createTpiModel, deleteTpiModelsByYear } from '../tpiControllers/TpiController.jsx'
+import IconButtonContent from '../shared/IconButtonContent.jsx'
 import PageToolbar from '../shared/PageToolbar.jsx'
-import { InboxIcon, PencilIcon, TrashIcon } from '../shared/InlineIcons'
+import {
+  buttonIconProps,
+  CloseIcon,
+  InboxIcon,
+  PencilIcon,
+  TrashIcon
+} from '../shared/InlineIcons'
 import { MAIN_NAVIGATION_LINKS } from '../shared/mainNavigation'
 import { showNotification } from '../Tools.jsx'
 import { STORAGE_KEYS } from '../../config/appConfig'
@@ -20,6 +27,42 @@ import {
   buildStakeholderDraftEntries,
   mergeStakeholderDraftEntries
 } from './tpiStakeholderDraftUtils.js'
+
+const toolsBodyIconProps = buttonIconProps
+
+const ChooseCsvIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...toolsBodyIconProps} {...props}>
+    <path d='M3.5 8.5A2.5 2.5 0 0 1 6 6h3l1.8 1.8H18A2.5 2.5 0 0 1 20.5 10v6.5A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5z' />
+    <rect x='8.1' y='10.1' width='5.7' height='6.9' rx='1.2' fill='currentColor' opacity='0.14' stroke='none' />
+    <path d='M9.6 12.2h2.7M9.6 14.8h2.7' />
+  </svg>
+)
+
+const DetectColumnsIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...toolsBodyIconProps} {...props}>
+    <rect x='4.5' y='5' width='9.5' height='14' rx='2.2' />
+    <path d='M7.7 5v14M10.8 5v14' />
+    <path d='m17.2 8.4.9 1.9 1.9.9-1.9.9-.9 1.9-.9-1.9-1.9-.9 1.9-.9z' />
+  </svg>
+)
+
+const SubmitImportIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...toolsBodyIconProps} {...props}>
+    <path d='M12 4.5v8.2' />
+    <path d='m8.8 9.8 3.2 3.2 3.2-3.2' />
+    <path d='M5.5 14.8v2.2A2.5 2.5 0 0 0 8 19.5h8a2.5 2.5 0 0 0 2.5-2.5v-2.2' />
+    <path d='M7.2 19.5h9.6' />
+    <path d='M7 15.6h10' opacity='0.45' />
+  </svg>
+)
+
+const ClosePanelIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...toolsBodyIconProps} {...props}>
+    <circle cx='12' cy='12' r='7.8' fill='currentColor' opacity='0.12' stroke='none' />
+    <circle cx='12' cy='12' r='7.8' />
+    <path d='m9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6' />
+  </svg>
+)
 
 const TpiManagementButtons = ({
   onNewTpi,
@@ -48,6 +91,10 @@ const TpiManagementButtons = ({
   const handleCancelImport = () => {
     setShowImportForm(false)
   }
+
+  const newTpiButtonLabel = newTpi ? 'Fermer le formulaire' : 'Nouveau TPI'
+  const importButtonLabel = showImportForm ? "Fermer l'import" : 'Importer CSV'
+  const deleteYearLabel = isDeletingYear ? 'Suppression...' : 'Vider l’année'
 
   const handleDeleteYearTpis = async () => {
     if (isDeletingYear) {
@@ -275,6 +322,14 @@ const TpiManagementButtons = ({
     () => MAIN_NAVIGATION_LINKS.filter((link) => link?.to !== '/gestionTPI'),
     []
   )
+  const toolbarMeta = useMemo(
+    () => (showImportForm ? (
+      <div className='tpi-management-toolbar-meta'>
+        <span className='page-tools-chip'>Import ouvert</span>
+      </div>
+    ) : null),
+    [showImportForm]
+  )
 
   const renderMappingSelect = (field) => (
     <label
@@ -484,7 +539,12 @@ const TpiManagementButtons = ({
     <PageToolbar
       id='tools'
       className='tpi-management-tools'
+      eyebrow='Gestion TPI'
+      title={`Catalogue ${year}`}
+      description='Créer, importer et nettoyer les fiches TPI d une année depuis un seul point d entrée.'
+      meta={toolbarMeta}
       navigationLinks={toolbarNavigationLinks}
+      navigationMode='floating'
       toggleArrow={toggleArrow}
       isArrowUp={isArrowUp}
       ariaLabel='Outils de gestion TPI'
@@ -494,38 +554,52 @@ const TpiManagementButtons = ({
         <button
           id='btNewTpi'
           type='button'
-          className={`page-tools-action-btn ${newTpi ? 'primary' : 'secondary'}`}
+          className={`page-tools-action-btn icon-button ${newTpi ? 'primary' : 'secondary'}`}
           onClick={handleToggleCreateForm}
           aria-pressed={newTpi}
+          aria-label={newTpiButtonLabel}
+          title={newTpiButtonLabel}
         >
-          <PencilIcon className='tpi-management-action-icon' />
-          <span>{newTpi ? 'Fermer le formulaire' : 'Nouveau TPI'}</span>
+          <IconButtonContent
+            label={newTpiButtonLabel}
+            icon={newTpi ? CloseIcon : PencilIcon}
+            iconClassName='tpi-management-action-icon'
+          />
         </button>
 
         <button
           id='btImportTpi'
           type='button'
-          className={`page-tools-action-btn ${showImportForm ? 'primary' : 'secondary'}`}
+          className={`page-tools-action-btn icon-button ${showImportForm ? 'primary' : 'secondary'}`}
           onClick={handleToggleImportSection}
           aria-expanded={showImportForm}
           aria-controls='tpi-import-panel'
+          aria-label={importButtonLabel}
+          title={importButtonLabel}
         >
-          <InboxIcon className='tpi-management-action-icon' />
-          <span>{showImportForm ? "Fermer l'import" : 'Importer CSV'}</span>
+          <IconButtonContent
+            label={importButtonLabel}
+            icon={showImportForm ? CloseIcon : InboxIcon}
+            iconClassName='tpi-management-action-icon'
+          />
         </button>
 
         {tpiCount > 0 ? (
           <button
             id='btDeleteYearTpi'
             type='button'
-            className='page-tools-action-btn secondary danger tpi-management-year-danger'
+            className='page-tools-action-btn secondary danger tpi-management-year-danger icon-button icon-button--with-badge'
             onClick={handleDeleteYearTpis}
             disabled={isDeletingYear || isImporting || isParsingFile}
+            aria-label={deleteYearLabel}
             title={`Supprimer tous les TPI de l'année ${year}`}
           >
-            <TrashIcon className='tpi-management-action-icon' />
-            <span>{isDeletingYear ? 'Suppression...' : 'Vider l’année'}</span>
-            <strong>{tpiCount}</strong>
+            <IconButtonContent
+              label={deleteYearLabel}
+              icon={TrashIcon}
+              iconClassName='tpi-management-action-icon'
+            />
+            <strong aria-hidden='true'>{tpiCount}</strong>
           </button>
         ) : null}
       </div>
@@ -621,8 +695,9 @@ const TpiManagementButtons = ({
 
               <div className='tpi-import-source-grid'>
                 <div className='tpi-import-file-block'>
-                  <label className='page-tools-file-label tpi-import-file-trigger' htmlFor='fileInput'>
-                    Choisir un CSV
+                  <label className='page-tools-file-label tpi-import-file-trigger icon-button' htmlFor='fileInput'>
+                    <ChooseCsvIcon className='tpi-management-action-icon' aria-hidden='true' />
+                    <span className='tpi-management-action-label'>Choisir un CSV</span>
                   </label>
                   <input
                     type='file'
@@ -673,11 +748,14 @@ const TpiManagementButtons = ({
                 </div>
                 <button
                   type='button'
-                  className='page-tools-action-btn secondary tpi-import-reset'
+                  className='page-tools-action-btn secondary tpi-import-reset icon-button'
                   onClick={handleResetMapping}
                   disabled={!importHeaders.length}
+                  aria-label='Détecter'
+                  title='Détecter'
                 >
-                  Détecter
+                  <DetectColumnsIcon className='tpi-management-action-icon' aria-hidden='true' />
+                  <span className='tpi-management-action-label'>Détecter</span>
                 </button>
               </div>
 
@@ -725,11 +803,27 @@ const TpiManagementButtons = ({
             ) : null}
 
             <div className='tpi-import-actions'>
-              <button type='submit' disabled={!canSubmitImport}>
-                {isImporting || isParsingFile ? 'Analyse...' : "Lancer l'import"}
+              <button
+                type='submit'
+                className='page-tools-action-btn primary icon-button'
+                disabled={!canSubmitImport}
+                aria-label={isImporting || isParsingFile ? 'Analyse...' : "Lancer l'import"}
+                title={isImporting || isParsingFile ? 'Analyse...' : "Lancer l'import"}
+              >
+                <SubmitImportIcon className='tpi-management-action-icon' aria-hidden='true' />
+                <span className='tpi-management-action-label'>
+                  {isImporting || isParsingFile ? 'Analyse...' : "Lancer l'import"}
+                </span>
               </button>
-              <button type='button' className='secondary' onClick={handleCancelImport}>
-                Fermer
+              <button
+                type='button'
+                className='page-tools-action-btn secondary icon-button'
+                onClick={handleCancelImport}
+                aria-label='Fermer'
+                title='Fermer'
+              >
+                <ClosePanelIcon className='tpi-management-action-icon' aria-hidden='true' />
+                <span className='tpi-management-action-label'>Fermer</span>
               </button>
             </div>
           </form>
