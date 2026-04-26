@@ -1,5 +1,9 @@
+const mongoose = require('mongoose')
 const PlanningConfig = require('../models/planningConfigModel')
 const PublicationVersion = require('../models/publicationVersionModel')
+
+const defaultPlanningConfigFindOne = PlanningConfig.findOne
+const defaultPublicationVersionFindOne = PublicationVersion.findOne
 
 const DEFAULT_CLASS_TYPES = [
   { code: 'CFC', prefix: 'C', label: 'CFC' },
@@ -272,11 +276,17 @@ async function loadLegacyTpiDateEnrichmentContext(year, options = {}) {
     }
   }
 
+  const canQueryOptionalContext = mongoose.connection.readyState === 1
+  const hasPatchedPlanningConfigQuery = PlanningConfig.findOne !== defaultPlanningConfigFindOne
+  const hasPatchedPublicationVersionQuery = PublicationVersion.findOne !== defaultPublicationVersionFindOne
+
   const [planningConfigDocument, publicationVersion] = await Promise.all([
     resolveOptionalContextValue(
       options.planningConfig !== undefined
         ? options.planningConfig
-        : PlanningConfig.findOne({ year: normalizedYear }),
+        : canQueryOptionalContext || hasPatchedPlanningConfigQuery
+          ? PlanningConfig.findOne({ year: normalizedYear })
+          : { classTypes: [] },
       { classTypes: [] },
       'la configuration de planification',
       normalizedYear
@@ -284,7 +294,9 @@ async function loadLegacyTpiDateEnrichmentContext(year, options = {}) {
     resolveOptionalContextValue(
       options.publicationVersion !== undefined
         ? options.publicationVersion
-        : PublicationVersion.findOne({ year: normalizedYear, isActive: true }),
+        : canQueryOptionalContext || hasPatchedPublicationVersionQuery
+          ? PublicationVersion.findOne({ year: normalizedYear, isActive: true })
+          : null,
       null,
       'la publication active des soutenances',
       normalizedYear

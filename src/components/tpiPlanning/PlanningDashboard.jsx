@@ -41,7 +41,7 @@ import {
   PLANNING_STATUS
 } from '../../constants/planningStatus'
 import { getActivePlanningSiteLabels, getPlanningPerimeterState } from '../../utils/planningScopeUtils'
-import { buildValidationToast } from '../../utils/workflowFeedback'
+import { buildValidationToast, extractValidationResultFromError } from '../../utils/workflowFeedback'
 import './PlanningDashboard.css'
 
 const WORKFLOW_LABELS = {
@@ -60,6 +60,14 @@ const WORKFLOW_ACTION_LABELS = {
   closeVotes: 'Clore votes',
   publish: 'Publier definitif',
   sendLinks: 'Envoyer liens soutenance'
+}
+
+const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== 'test'
+
+function logWorkflowDebug(...args) {
+  if (shouldLogWorkflowDebug) {
+    console.log(...args)
+  }
 }
 
 const STATUS_FILTER_LABELS = {
@@ -105,6 +113,10 @@ const VALIDATION_ISSUE_LABELS = {
 
 function getApiErrorMessage(err, fallbackMessage) {
   return err?.data?.error || err?.message || fallbackMessage
+}
+
+function normalizeListResponse(value) {
+  return Array.isArray(value) ? value : []
 }
 
 function getValidationIssueLabel(issue) {
@@ -232,6 +244,175 @@ function getVoterRoleLabel(role) {
   return compactText(role)
 }
 
+const VOTE_ROLE_ORDER = ['expert1', 'expert2', 'chef_projet']
+
+function getVoteRoleEntries(tpi) {
+  const voteRoleStatus = tpi?.voteRoleStatus || {}
+
+  return VOTE_ROLE_ORDER.map((role) => ({
+    role,
+    label: getVoterRoleLabel(role),
+    status: voteRoleStatus[role] || {
+      decision: 'pending',
+      responseMode: 'pending',
+      votedAt: null,
+      alternativeCount: 0,
+      availabilityException: false,
+      specialRequestReason: '',
+      specialRequestDate: null
+    }
+  }))
+}
+
+function hasVoteRoleResponded(roleStatus) {
+  const responseMode = compactText(roleStatus?.responseMode)
+  const decision = compactText(roleStatus?.decision)
+
+  return responseMode === 'ok' ||
+    responseMode === 'proposal' ||
+    (decision && decision !== 'pending')
+}
+
+function getVoteRoleTone(roleStatus) {
+  if (!hasVoteRoleResponded(roleStatus)) {
+    return 'pending'
+  }
+
+  const responseMode = compactText(roleStatus?.responseMode)
+  const decision = compactText(roleStatus?.decision)
+
+  if (responseMode === 'ok' || decision === 'accepted') {
+    return 'ok'
+  }
+
+  if (
+    responseMode === 'proposal' ||
+    decision === 'preferred' ||
+    Number(roleStatus?.alternativeCount || 0) > 0 ||
+    roleStatus?.availabilityException ||
+    compactText(roleStatus?.specialRequestReason)
+  ) {
+    return 'proposal'
+  }
+
+  if (decision === 'rejected') {
+    return 'rejected'
+  }
+
+  return 'answered'
+}
+
+function getVoteRoleStatusLabel(roleStatus) {
+  const tone = getVoteRoleTone(roleStatus)
+
+  if (tone === 'ok') {
+    return 'OK'
+  }
+
+  if (tone === 'proposal') {
+    return 'Proposition'
+  }
+
+  if (tone === 'rejected') {
+    return 'Refus'
+  }
+
+  if (tone === 'answered') {
+    return 'Repondu'
+  }
+
+  return 'Attente'
+}
+
+function getVoteFixedSlot(tpi) {
+  if (tpi?.confirmedSlot) {
+    return tpi.confirmedSlot
+  }
+
+  if (!Array.isArray(tpi?.proposedSlots)) {
+    return null
+  }
+
+  const fixedSlot = tpi.proposedSlots.find((proposedSlot) => proposedSlot?.slot)
+  return fixedSlot?.slot || null
+}
+
+function formatVoteDate(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toLocaleDateString('fr-CH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
+}
+
+function formatVoteDeadline(value) {
+  const label = formatVoteDate(value)
+  return label ? `Echeance ${label}` : ''
+}
+
+function formatVoteSlotLabel(slot) {
+  if (!slot) {
+    return 'Aucun creneau fixe'
+  }
+
+  const dateLabel = formatVoteDate(slot.date)
+  const timeLabel = [slot.startTime, slot.endTime].filter(Boolean).join('-')
+  const roomLabel = compactText(slot.room?.name || slot.room)
+
+  return [dateLabel, timeLabel, roomLabel].filter(Boolean).join(' · ') || 'Creneau a verifier'
+}
+
+function buildVoteWorkflowRow(tpi) {
+  const roleEntries = getVoteRoleEntries(tpi)
+  const respondedRoles = roleEntries.filter((entry) => hasVoteRoleResponded(entry.status))
+  const missingRoles = roleEntries.filter((entry) => !hasVoteRoleResponded(entry.status))
+  const normalizedStatus = normalizePlanningStatus(tpi?.status)
+  const hasManualStatus = MANUAL_REQUIRED_STATUSES.includes(normalizedStatus)
+  const hasProposal = roleEntries.some((entry) => getVoteRoleTone(entry.status) === 'proposal')
+  const hasSpecialRequest = roleEntries.some((entry) =>
+    Boolean(entry.status?.availabilityException) ||
+    Boolean(compactText(entry.status?.specialRequestReason)) ||
+    Boolean(entry.status?.specialRequestDate)
+  )
+
+  let bucket = 'other'
+  if (hasManualStatus) {
+    bucket = 'manual'
+  } else if (normalizedStatus === PLANNING_STATUS.CONFIRMED) {
+    bucket = 'confirmed'
+  } else if (missingRoles.length > 0) {
+    bucket = 'pending'
+  } else {
+    bucket = 'ready'
+  }
+
+  return {
+    tpi,
+    id: compactText(tpi?._id) || compactText(tpi?.reference),
+    reference: compactText(tpi?.reference) || 'TPI',
+    candidate: formatPersonName(tpi?.candidat, 'Candidat non renseigne'),
+    status: normalizedStatus,
+    roleEntries,
+    respondedCount: respondedRoles.length,
+    missingCount: missingRoles.length,
+    missingLabels: missingRoles.map((entry) => entry.label),
+    fixedSlotLabel: formatVoteSlotLabel(getVoteFixedSlot(tpi)),
+    deadlineLabel: formatVoteDeadline(tpi?.votingSession?.deadline),
+    hasProposal,
+    hasSpecialRequest,
+    bucket
+  }
+}
+
 /**
  * Dashboard principal pour la planification des soutenances TPI
  * Offre une vue d'ensemble du processus de planification avec calendrier,
@@ -347,19 +528,24 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         legacyTpisRequest
       ])
 
+      const safeTpisResponse = normalizeListResponse(tpisResponse)
+      const safeCalendarResponse = normalizeListResponse(calendarResponse)
+      const safeVotesResponse = normalizeListResponse(votesResponse)
+      const safeLegacyTpisResponse = normalizeListResponse(legacyTpisResponse)
+
       setPlanningClassTypes(Array.isArray(planningConfigResponse?.classTypes) ? planningConfigResponse.classTypes : [])
       setPlanningCatalogSites(Array.isArray(planningCatalogResponse?.sites) ? planningCatalogResponse.sites : [])
       setPlanningSiteConfigs(Array.isArray(planningConfigResponse?.siteConfigs) ? planningConfigResponse.siteConfigs : [])
       
-      setTpis(tpisResponse)
-      setLegacyTpis(legacyTpisResponse)
-      setCalendarData(calendarResponse)
-      setPendingVotes(votesResponse)
+      setTpis(safeTpisResponse)
+      setLegacyTpis(safeLegacyTpisResponse)
+      setCalendarData(safeCalendarResponse)
+      setPendingVotes(safeVotesResponse)
       setWorkflow(workflowResponse)
       setActiveSnapshot(snapshotResponse)
       
       // Identifier les conflits
-      const tpisWithConflicts = tpisResponse.filter(tpi => 
+      const tpisWithConflicts = safeTpisResponse.filter(tpi =>
         MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(tpi.status)) || 
         tpi.votingSession?.hasConflicts
       )
@@ -509,10 +695,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return manualRequiredCount > 0
   }, [manualRequiredCount])
 
-  const hasVotingCandidates = useMemo(() => {
-    return visibleTpis.some(tpi => tpi.proposedSlots && tpi.proposedSlots.length > 0)
-  }, [visibleTpis])
-
   const voteTrackingTpis = useMemo(() => {
     if (!isAdmin) {
       return []
@@ -523,6 +705,75 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       return normalizedStatus !== PLANNING_STATUS.DRAFT
     })
   }, [visibleTpis, isAdmin])
+
+  const filteredVoteTrackingTpis = useMemo(() => {
+    if (!isAdmin) {
+      return []
+    }
+
+    return filteredTpis.filter((tpi) => {
+      const normalizedStatus = normalizePlanningStatus(tpi.status)
+      return normalizedStatus !== PLANNING_STATUS.DRAFT
+    })
+  }, [filteredTpis, isAdmin])
+
+  const voteWorkflowRows = useMemo(() => {
+    return filteredVoteTrackingTpis.map((tpi) => buildVoteWorkflowRow(tpi))
+  }, [filteredVoteTrackingTpis])
+
+  const voteWorkflowAllRows = useMemo(() => {
+    return voteTrackingTpis.map((tpi) => buildVoteWorkflowRow(tpi))
+  }, [voteTrackingTpis])
+
+  const voteWorkflowStats = useMemo(() => {
+    const totalTpis = voteWorkflowAllRows.length
+    const expectedVotes = totalTpis * VOTE_ROLE_ORDER.length
+    const receivedVotes = voteWorkflowAllRows.reduce((sum, row) => sum + row.respondedCount, 0)
+    const missingVotes = Math.max(expectedVotes - receivedVotes, 0)
+    const completionRate = expectedVotes > 0
+      ? Math.round((receivedVotes / expectedVotes) * 100)
+      : 0
+
+    return {
+      totalTpis,
+      expectedVotes,
+      receivedVotes,
+      missingVotes,
+      completionRate,
+      pendingTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'pending').length,
+      readyTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'ready').length,
+      manualTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'manual').length,
+      confirmedTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'confirmed').length,
+      proposalTpis: voteWorkflowAllRows.filter((row) => row.hasProposal || row.hasSpecialRequest).length
+    }
+  }, [voteWorkflowAllRows])
+
+  const voteWorkflowSections = useMemo(() => ([
+    {
+      id: 'pending',
+      title: 'A relancer',
+      helper: 'Votes encore manquants. Ce sont les personnes a cibler avant la cloture.',
+      rows: voteWorkflowRows.filter((row) => row.bucket === 'pending')
+    },
+    {
+      id: 'ready',
+      title: 'Prets pour cloture',
+      helper: 'Les trois roles ont repondu. La cloture decidera automatiquement ou basculera en manuel.',
+      rows: voteWorkflowRows.filter((row) => row.bucket === 'ready')
+    },
+    {
+      id: 'manual',
+      title: 'Intervention requise',
+      helper: 'Ces TPI doivent etre traites dans la vue Manuels avant publication.',
+      rows: voteWorkflowRows.filter((row) => row.bucket === 'manual')
+    },
+    {
+      id: 'confirmed',
+      title: 'Confirmes',
+      helper: 'Les soutenances ont un creneau confirme.',
+      rows: voteWorkflowRows.filter((row) => row.bucket === 'confirmed')
+    }
+  ]), [voteWorkflowRows])
 
   const legacyPlanningPerimeterEntries = useMemo(() => {
     if (!isAdmin || !legacyTpis.length) {
@@ -702,7 +953,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const isVotingState = workflowState === 'voting_open'
   const isPublishedState = workflowState === 'published'
   const isScopedVoteViewer = Boolean(!isAdmin && magicLinkViewer?.personId)
-  const canStartVotes = isPlanningState && hasActiveSnapshot
+  const hasSuccessfulValidation =
+    !validationResult ||
+    Number(validationResult?.year) !== Number(year) ||
+    validationResult?.summary?.isValid === true
+  const hasBlockedValidation = Boolean(validationResult) &&
+    Number(validationResult?.year) === Number(year) &&
+    validationResult?.summary?.isValid === false
+  const canStartVotes = isPlanningState && hasActiveSnapshot && hasSuccessfulValidation
   const canPublish = isVotingState || isPublishedState
 
   const selectedTpiValidationMessages = useMemo(() => {
@@ -995,12 +1253,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     setSuccessMessage(null)
 
     try {
-      console.log(`[WORKFLOW] Exécution action: ${actionKey}`)
+      logWorkflowDebug(`[WORKFLOW] Exécution action: ${actionKey}`)
       const result = await run()
-      console.log(`[WORKFLOW] Résultat ${actionKey}:`, result)
+      logWorkflowDebug(`[WORKFLOW] Résultat ${actionKey}:`, result)
 
       if (reloadAfterSuccess) {
-        console.log(`[WORKFLOW] Rechargement données après ${actionKey}`)
+        logWorkflowDebug(`[WORKFLOW] Rechargement données après ${actionKey}`)
         await loadData()
       }
 
@@ -1009,7 +1267,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         : successBuilder
 
       if (builtMessage) {
-        console.log(`[WORKFLOW] Message succès: ${builtMessage}`)
+        logWorkflowDebug(`[WORKFLOW] Message succès: ${builtMessage}`)
         setSuccessMessage(builtMessage)
       }
 
@@ -1150,6 +1408,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         return `Campagne ouverte: ${tpiCount} TPI synchronises, ${successfulEmails}/${totalEmails} emails envoyes.${emailSuffix}`
       },
       errorFallback: 'Erreur lors du lancement de la campagne de votes.',
+      onError: (_errorMessage, error) => {
+        const validationFromError = extractValidationResultFromError(year, error)
+        if (validationFromError) {
+          setValidationResult(validationFromError)
+          setStatusFilter('all')
+          setSearchQuery('')
+          setActiveTab('list')
+        }
+      },
       reloadAfterSuccess: true
     })
 
@@ -1171,6 +1438,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
       },
       errorFallback: 'Erreur lors de l ouverture de la campagne de votes sans emails.',
+      onError: (_errorMessage, error) => {
+        const validationFromError = extractValidationResultFromError(year, error)
+        if (validationFromError) {
+          setValidationResult(validationFromError)
+          setStatusFilter('all')
+          setSearchQuery('')
+          setActiveTab('list')
+        }
+      },
       reloadAfterSuccess: true
     })
 
@@ -1237,6 +1513,16 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handleOpenPublishedView = useCallback(() => {
     window.location.href = `/Soutenances/${year}`
   }, [year])
+
+  const handleOpenVoteAccessPreview = useCallback(() => {
+    const query = new URLSearchParams({
+      year: String(year),
+      type: 'vote',
+      auto: '1'
+    })
+
+    navigate(`/genTokens?${query.toString()}`)
+  }, [navigate, year])
 
   const handleExitScopedVoteView = useCallback(() => {
     authPlanningService.clearSession()
@@ -1317,7 +1603,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const activeViewCount = activeTab === 'list'
     ? filteredTpis.length
     : activeTab === 'votes'
-      ? (isAdmin ? voteTrackingTpis.length : pendingVotes.length)
+      ? (isAdmin ? filteredVoteTrackingTpis.length : pendingVotes.length)
       : conflicts.length
   const planningHeroLead = useMemo(() => {
     if (isScopedVoteViewer) {
@@ -1401,7 +1687,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
    * Callback après import réussi
    */
   const handleImportComplete = useCallback((type, results) => {
-    console.log(`Import ${type} terminé:`, results)
+    logWorkflowDebug(`Import ${type} terminé:`, results)
     // Recharger les données après import
     loadData()
     // Passer à l'onglet approprié
@@ -1636,9 +1922,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <h3>Poste de pilotage du workflow {year}</h3>
                 <p>
                   {isPlanningState
-                    ? 'Verifie le planning, gele la version a soumettre puis ouvre la campagne de votes.'
+                    ? 'Verifie le planning et gele la version a soumettre. Le demarrage de campagne se fait dans le cockpit votes.'
                     : isVotingState
-                      ? 'Suis les reponses, traite les cas manuels et prepare la publication.'
+                      ? 'Le pilotage des reponses et de la cloture se fait dans le cockpit votes.'
                       : 'Le planning est publie. Tu peux encore renvoyer les liens et ouvrir la vue soutenances.'}
                 </p>
               </div>
@@ -1665,7 +1951,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             <div className="workflow-buttons workflow-sections-grid">
               {/* Section Planification - visible uniquement en état Planification */}
               {isPlanningState && (
-                <div className="workflow-section">
+                <div className="workflow-section workflow-section-planification">
                   <h4 className="section-title">
                     <CalendarIcon className="section-title-icon" />
                     Planification
@@ -1700,83 +1986,21 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       <ArrowRightIcon className="button-icon" />
                       {isActionRunning('freeze') ? 'Gel en cours...' : 'Geler snapshot'}
                     </button>
-                    <button
-                      className="workflow-btn primary"
-                      onClick={handleStartVotesCampaign}
-                      disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
-                      title={hasLegacyImportGap
-                        ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
-                        : !hasActiveSnapshot
-                        ? 'Geler un snapshot d\'abord.'
-                        : hasVotingCandidates
-                          ? 'Lancer la campagne de votes.'
-                          : 'Proposer des creneaux aux TPI d\'abord.'}
-                    >
-                      <ArrowRightIcon className="button-icon" />
-                      {isActionRunning('startVotes') ? 'Ouverture...' : 'Ouvrir votes'}
-                    </button>
-                    {IS_DEBUG && (
-                      <button
-                        className="workflow-btn secondary"
-                        onClick={handleStartVotesCampaignWithoutEmails}
-                        disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
-                        title={hasLegacyImportGap
-                          ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
-                          : !hasActiveSnapshot
-                            ? 'Geler un snapshot d\'abord.'
-                            : hasVotingCandidates
-                              ? 'Ouvrir la campagne sans envoyer les emails automatiques.'
-                              : 'Proposer des creneaux aux TPI d\'abord.'}
-                      >
-                        <VoteIcon className="button-icon" />
-                        {isActionRunning('startVotesNoEmail') ? 'Ouverture...' : 'Ouvrir votes sans emails'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Section Votes - visible uniquement en état Votes */}
-              {isVotingState && (
-                <div className="workflow-section">
-                  <h4 className="section-title">
-                    <VoteIcon className="section-title-icon" />
-                    Votes
-                  </h4>
-                  <div className="section-buttons">
                     <Link
                       to={`/planning/${year}?tab=votes`}
                       className="workflow-btn open workflow-link-btn"
-                      title="Ouvrir le suivi des votes."
+                      title="Ouvrir le cockpit de campagne de votes."
                     >
                       <VoteIcon className="button-icon" />
-                      Suivre votes
+                      Cockpit votes
                     </Link>
-                    <button
-                      className="workflow-btn neutral"
-                      onClick={handleRemindVotes}
-                      disabled={workflowActionLoading}
-                      title="Renvoyer les liens magiques aux personnes qui n'ont pas encore voté."
-                    >
-                      <MailIcon className="button-icon" />
-                      {isActionRunning('remindVotes') ? 'Relance...' : 'Renvoyer liens'}
-                    </button>
-                    <button
-                      className="workflow-btn primary"
-                      onClick={handleCloseVotes}
-                      disabled={workflowActionLoading}
-                      title="Clore la campagne et classer confirmed/manual_required."
-                    >
-                      <ArrowRightIcon className="button-icon" />
-                      {isActionRunning('closeVotes') ? 'Cloture...' : 'Clore votes'}
-                    </button>
                   </div>
                 </div>
               )}
 
               {/* Section Publication - visible en états Votes ou Publication */}
               {(isVotingState || isPublishedState) && (
-                <div className="workflow-section">
+                <div className="workflow-section workflow-section-publication">
                   <h4 className="section-title">
                     <CheckIcon className="section-title-icon" />
                     Publication
@@ -2109,80 +2333,311 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         )}
 
         {activeTab === 'votes' && isAdmin && (
-          <section className="vote-tracking-panel">
-            <div className="vote-tracking-header">
-              <h2>
-                <VoteIcon className="section-title-icon" />
-                Dashboard de suivi des votes - {year}
-              </h2>
-              <p>
-                Visualisez l'avancement des votes, relancez les non-répondants, et validez manuellement les TPI en attente.
-                Une fois tous les votes clôturés, vous pourrez publier l'agenda officiel des soutenances.
-              </p>
+          <section className="vote-workflow-panel">
+            <div className="vote-workflow-header">
+              <div className="vote-workflow-title-block">
+                <span className="vote-workflow-kicker">Planification-votes</span>
+                <h2>
+                  <VoteIcon className="section-title-icon" />
+                  Campagne de votes {year}
+                </h2>
+                <p>
+                  Cette vue sert uniquement a piloter la campagne: ouvrir les votes,
+                  relancer les personnes en attente, clore, puis traiter les cas manuels.
+                </p>
+              </div>
+
+              <div className={`vote-workflow-next state-${workflowState}`}>
+                <span>Prochaine action</span>
+                <strong>
+                  {isPlanningState
+                    ? hasActiveSnapshot
+                      ? 'Ouvrir la campagne'
+                      : 'Geler un snapshot'
+                    : isVotingState
+                      ? voteWorkflowStats.missingVotes > 0
+                        ? 'Relancer les votes'
+                        : 'Clore la campagne'
+                      : isPublishedState
+                        ? 'Agenda publie'
+                        : 'Verifier le workflow'}
+                </strong>
+                <p>
+                  {isPlanningState
+                    ? hasActiveSnapshot
+                      ? `${voteWorkflowStats.totalTpis} TPI sont prets a recevoir un lien de vote.`
+                      : 'La campagne ne peut pas demarrer sans snapshot de planification gele.'
+                    : isVotingState
+                      ? `${voteWorkflowStats.receivedVotes}/${voteWorkflowStats.expectedVotes} votes recus.`
+                      : isPublishedState
+                        ? 'Les votes ne sont plus modifiables depuis cette vue.'
+                        : 'Etat annuel inattendu pour la campagne.'}
+                </p>
+              </div>
             </div>
 
-            {voteTrackingTpis.length === 0 ? (
-              <div className="vote-tracking-empty">
+            <div className="vote-workflow-metrics" aria-label="Resume de campagne">
+              <article className="vote-workflow-metric is-progress">
+                <span>Votes recus</span>
+                <strong>{voteWorkflowStats.receivedVotes}/{voteWorkflowStats.expectedVotes}</strong>
+                <div className="vote-workflow-progressbar">
+                  <span style={{ width: `${voteWorkflowStats.completionRate}%` }} />
+                </div>
+                <p>{voteWorkflowStats.completionRate}% de la campagne</p>
+              </article>
+              <article className="vote-workflow-metric">
+                <span>A relancer</span>
+                <strong>{voteWorkflowStats.pendingTpis}</strong>
+                <p>{voteWorkflowStats.missingVotes} vote{voteWorkflowStats.missingVotes > 1 ? 's' : ''} manquant{voteWorkflowStats.missingVotes > 1 ? 's' : ''}</p>
+              </article>
+              <article className="vote-workflow-metric">
+                <span>Prets cloture</span>
+                <strong>{voteWorkflowStats.readyTpis}</strong>
+                <p>{voteWorkflowStats.proposalTpis} avec proposition ou demande</p>
+              </article>
+              <article className={`vote-workflow-metric ${voteWorkflowStats.manualTpis > 0 ? 'is-warning' : ''}`}>
+                <span>Manuels</span>
+                <strong>{voteWorkflowStats.manualTpis}</strong>
+                <p>{voteWorkflowStats.confirmedTpis} TPI confirme{voteWorkflowStats.confirmedTpis > 1 ? 's' : ''}</p>
+              </article>
+            </div>
+
+            <div className="vote-workflow-actions">
+              {isPlanningState ? (
+                <>
+                  <button
+                    type="button"
+                    className="workflow-btn primary"
+                    onClick={handleStartVotesCampaign}
+                    disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
+                    title={hasLegacyImportGap
+                      ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
+                      : hasBlockedValidation
+                        ? 'La vérification a détecté des anomalies. Corrigez-les avant d\'ouvrir les votes.'
+                        : !hasActiveSnapshot
+                        ? 'Geler un snapshot d abord.'
+                        : 'Ouvrir la campagne et envoyer les liens de vote.'}
+                  >
+                    <ArrowRightIcon className="button-icon" />
+                    {isActionRunning('startVotes') ? 'Ouverture...' : 'Ouvrir votes'}
+                  </button>
+                  {IS_DEBUG && (
+                    <button
+                      type="button"
+                      className="workflow-btn secondary"
+                      aria-label="Ouvrir votes sans emails"
+                      onClick={handleStartVotesCampaignWithoutEmails}
+                      disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
+                      title={hasLegacyImportGap
+                        ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
+                        : hasBlockedValidation
+                          ? 'La vérification a détecté des anomalies. Corrigez-les avant d\'ouvrir les votes.'
+                          : 'Mode debug: ouvre la campagne sans envoyer les emails automatiques.'}
+                    >
+                      <VoteIcon className="button-icon" />
+                      {isActionRunning('startVotesNoEmail') ? 'Ouverture...' : 'Ouvrir sans emails'}
+                    </button>
+                  )}
+                </>
+              ) : null}
+
+              {isVotingState ? (
+                <>
+                  <button
+                    type="button"
+                    className="workflow-btn neutral"
+                    onClick={handleRemindVotes}
+                    disabled={workflowActionLoading || voteWorkflowStats.missingVotes === 0}
+                    title="Renvoyer les liens magiques aux personnes qui n'ont pas encore voté."
+                  >
+                    <MailIcon className="button-icon" />
+                    {isActionRunning('remindVotes') ? 'Relance...' : 'Relancer non-repondants'}
+                    </button>
+                  {IS_DEBUG ? (
+                    <button
+                      type="button"
+                      className="workflow-btn open"
+                      onClick={handleOpenVoteAccessPreview}
+                      title="Ouvre l'aperçu des liens de vote préfiltré sur cette année."
+                    >
+                      <VoteIcon className="button-icon" />
+                      Aperçu des liens vote
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="workflow-btn primary"
+                    onClick={handleCloseVotes}
+                    disabled={workflowActionLoading || voteWorkflowStats.totalTpis === 0}
+                    title="Clore la campagne et classer chaque TPI en confirme ou manuel."
+                  >
+                    <ArrowRightIcon className="button-icon" />
+                    {isActionRunning('closeVotes') ? 'Cloture...' : 'Clore campagne'}
+                  </button>
+                </>
+              ) : null}
+
+              {voteWorkflowStats.manualTpis > 0 ? (
+                <button
+                  type="button"
+                  className="workflow-btn open"
+                  onClick={() => setActiveTab('conflicts')}
+                >
+                  <WrenchIcon className="button-icon" />
+                  Traiter manuels
+                </button>
+              ) : null}
+
+              {isPublishedState ? (
+                <button
+                  type="button"
+                  className="workflow-btn success"
+                  onClick={handleOpenPublishedView}
+                >
+                  <CheckIcon className="button-icon" />
+                  Ouvrir soutenances
+                </button>
+              ) : null}
+            </div>
+
+            {voteWorkflowStats.totalTpis === 0 ? (
+              <div className="vote-workflow-empty-state">
                 <strong>Aucune donnée de vote visible pour cette année.</strong>
                 <p>
-                  Si tu viens de geler un planning, vérifie que tu l'as fait sur la même année
-                  que celle ouverte ici, puis recharge la page de suivi.
+                  Gèle un snapshot, ouvre la campagne, puis recharge cette vue si besoin.
                 </p>
               </div>
             ) : (
-              <>
-                <TpiPlanningList
-                  tpis={voteTrackingTpis}
-                  selectedTpi={selectedTpi}
-                  onSelectTpi={setSelectedTpi}
-                  onProposeSlots={handleProposeSlots}
-                  isAdmin={isAdmin}
-                  showVoteRoleDetails
-                  classTypes={planningClassTypes}
-                  planningCatalogSites={planningCatalogSites}
-                  validationIssuesByTpiId={validationAnnotations.byTpiId}
-                />
-
-                {/* Section TPI non importés */}
-                {notImportedLegacyTpisByPlanningPerimeter.length > 0 && (
-                  <div className="not-imported-section">
-                    <h3>
-                      <CloseIcon className="section-title-icon" />
-                      TPI non intégrés au workflow ({notImportedLegacyTpisByPlanningPerimeter.length})
-                    </h3>
-                    <p className="not-imported-hint">
-                      Ces TPI existent dans GestionTPI mais n'ont pas encore été intégrés au workflow de planification.
-                      Les fiches hors périmètre de planification sont exclues volontairement de cette liste.
-                      Vérifiez que toutes les parties prenantes (candidat, 2 experts, chef de projet) sont renseignées.
-                    </p>
-                    <div className="not-imported-list">
-                      {notImportedLegacyTpisByPlanningPerimeter.map((tpi) => {
-                        const ref = tpi.refTpi || tpi.id || '?'
-                        const candidat = tpi.candidat || '—'
-                        const reasons = []
-                        if (!tpi.expert1?.name || tpi.expert1.name.toLowerCase() === 'null') reasons.push('Expert 1 manquant')
-                        if (!tpi.expert2?.name || tpi.expert2.name.toLowerCase() === 'null') reasons.push('Expert 2 manquant')
-                        if (!tpi.boss?.name || tpi.boss.name.toLowerCase() === 'null') reasons.push('Chef de projet manquant')
-                        if (!tpi.candidat) reasons.push('Candidat manquant')
-
-                        return (
-                          <div key={ref} className="not-imported-item">
-                            <span className="not-imported-ref">
-                              <CloseIcon className="inline-icon" />
-                              TPI-{year}-{ref}
-                            </span>
-                            <span className="not-imported-candidat">{candidat}</span>
-                            <span className="not-imported-reason" title={reasons.join(', ')}>
-                              <AlertIcon className="inline-icon" />
-                              {reasons[0]}{reasons.length > 1 ? ` +${reasons.length - 1}` : ''}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
+              <div className="vote-workflow-board">
+                <div className="vote-workflow-board-head">
+                  <div>
+                    <strong>File de traitement</strong>
+                    <p>Les filtres et la recherche ci-dessus s'appliquent a cette file.</p>
                   </div>
-                )}
-              </>
+                  <span>
+                    {filteredVoteTrackingTpis.length}/{voteTrackingTpis.length} TPI affiches
+                  </span>
+                </div>
+
+                <div className="vote-workflow-sections">
+                  {voteWorkflowSections.map((section) => (
+                    <section
+                      key={section.id}
+                      className={`vote-workflow-queue is-${section.id}`}
+                    >
+                      <div className="vote-workflow-queue-head">
+                        <div>
+                          <h3>{section.title}</h3>
+                          <p>{section.helper}</p>
+                        </div>
+                        <span>{section.rows.length}</span>
+                      </div>
+
+                      <div className="vote-workflow-row-list">
+                        {section.rows.length > 0 ? section.rows.map((row) => (
+                          <article
+                            key={row.id}
+                            className={`vote-workflow-row ${selectedTpi?._id === row.tpi?._id ? 'is-selected' : ''}`}
+                          >
+                            <div className="vote-workflow-row-main">
+                              <div>
+                                <strong>{row.reference}</strong>
+                                <p>{row.candidate}</p>
+                              </div>
+                              <button
+                                type="button"
+                                className="vote-workflow-open"
+                                onClick={() => setSelectedTpi(row.tpi)}
+                              >
+                                Ouvrir fiche
+                              </button>
+                            </div>
+
+                            <div className="vote-workflow-slot">
+                              <CalendarIcon className="inline-icon" />
+                              <span>{row.fixedSlotLabel}</span>
+                            </div>
+
+                            <div className="vote-workflow-role-grid" aria-label={`Votes ${row.reference}`}>
+                              {row.roleEntries.map((entry) => {
+                                const tone = getVoteRoleTone(entry.status)
+
+                                return (
+                                  <span
+                                    key={entry.role}
+                                    className={`vote-workflow-role is-${tone}`}
+                                    title={entry.status?.specialRequestReason || undefined}
+                                  >
+                                    <strong>{entry.label}</strong>
+                                    <span>{getVoteRoleStatusLabel(entry.status)}</span>
+                                  </span>
+                                )
+                              })}
+                            </div>
+
+                            <div className="vote-workflow-row-foot">
+                              <span>{row.respondedCount}/3 reponses</span>
+                              {row.missingLabels.length > 0 ? (
+                                <span>Manque: {row.missingLabels.join(', ')}</span>
+                              ) : row.hasSpecialRequest ? (
+                                <span>Demande speciale</span>
+                              ) : row.hasProposal ? (
+                                <span>Proposition recue</span>
+                              ) : (
+                                <span>{row.deadlineLabel || 'Complet'}</span>
+                              )}
+                            </div>
+                          </article>
+                        )) : (
+                          <div className="vote-workflow-empty">
+                            Rien dans cette file avec les filtres actuels.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section TPI non importés */}
+            {notImportedLegacyTpisByPlanningPerimeter.length > 0 && (
+              <div className="not-imported-section">
+                <h3>
+                  <CloseIcon className="section-title-icon" />
+                  TPI non intégrés au workflow ({notImportedLegacyTpisByPlanningPerimeter.length})
+                </h3>
+                <p className="not-imported-hint">
+                  Ces TPI existent dans GestionTPI mais n'ont pas encore été intégrés au workflow de planification.
+                  Les fiches hors périmètre de planification sont exclues volontairement de cette liste.
+                  Vérifiez que toutes les parties prenantes (candidat, 2 experts, chef de projet) sont renseignées.
+                </p>
+                <div className="not-imported-list">
+                  {notImportedLegacyTpisByPlanningPerimeter.map((tpi) => {
+                    const ref = tpi.refTpi || tpi.id || '?'
+                    const candidat = tpi.candidat || '—'
+                    const reasons = []
+                    if (!tpi.expert1?.name || tpi.expert1.name.toLowerCase() === 'null') reasons.push('Expert 1 manquant')
+                    if (!tpi.expert2?.name || tpi.expert2.name.toLowerCase() === 'null') reasons.push('Expert 2 manquant')
+                    if (!tpi.boss?.name || tpi.boss.name.toLowerCase() === 'null') reasons.push('Chef de projet manquant')
+                    if (!tpi.candidat) reasons.push('Candidat manquant')
+
+                    return (
+                      <div key={ref} className="not-imported-item">
+                        <span className="not-imported-ref">
+                          <CloseIcon className="inline-icon" />
+                          TPI-{year}-{ref}
+                        </span>
+                        <span className="not-imported-candidat">{candidat}</span>
+                        <span className="not-imported-reason" title={reasons.join(', ')}>
+                          <AlertIcon className="inline-icon" />
+                          {reasons[0]}{reasons.length > 1 ? ` +${reasons.length - 1}` : ''}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             )}
           </section>
         )}

@@ -64,6 +64,7 @@ const baseProps = {
   onFreezeSnapshot: jest.fn(),
   onOpenVotes: jest.fn(),
   onOpenVotesWithoutEmails: jest.fn(),
+  onOpenVoteAccessPreview: jest.fn(),
   onRemindVotes: jest.fn(),
   onCloseVotes: jest.fn(),
   onPublishDefinitive: jest.fn(),
@@ -390,6 +391,37 @@ describe('TpiScheduleButtons - Données', () => {
     )
   })
 
+  test('bloque l ouverture des votes si la verification courante contient des anomalies', () => {
+    renderButtons({
+      activeSnapshotVersion: 3,
+      validationResult: {
+        year: 2024,
+        checkedAt: '2026-04-12T10:00:00.000Z',
+        summary: {
+          issueCount: 2,
+          hardConflictCount: 2,
+          isValid: false
+        },
+        issues: [
+          {
+            type: 'legacy_tpi_missing_reference',
+            message: 'TPI sans référence exploitable.'
+          }
+        ]
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Vote/i }))
+
+    const openVotesButton = screen.getByRole('button', { name: /^Ouvrir votes$/i })
+    expect(openVotesButton).toBeDisabled()
+    expect(openVotesButton).toHaveAttribute(
+      'title',
+      expect.stringContaining('anomalies')
+    )
+  })
+
   test('déclenche l ouverture des votes sans emails en mode debug', () => {
     const onOpenVotesWithoutEmails = jest.fn()
 
@@ -407,5 +439,24 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(openVotesWithoutEmailsButton)
 
     expect(onOpenVotesWithoutEmails).toHaveBeenCalledTimes(1)
+  })
+
+  test('déclenche l aperçu des liens de vote en mode debug', () => {
+    const onOpenVoteAccessPreview = jest.fn()
+
+    renderButtons({
+      workflowState: 'voting_open',
+      onOpenVoteAccessPreview
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Vote/i }))
+
+    const previewButton = screen.getByRole('button', {
+      name: /Aperçu des liens vote/i
+    })
+    fireEvent.click(previewButton)
+
+    expect(onOpenVoteAccessPreview).toHaveBeenCalledTimes(1)
   })
 })

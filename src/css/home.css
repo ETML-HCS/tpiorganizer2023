@@ -89,6 +89,12 @@
   background: rgba(248, 250, 252, 0.92);
 }
 
+.home-intro-year-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
 .home-intro-label {
   color: #64748b;
   font-size: 0.72rem;
@@ -97,11 +103,20 @@
   text-transform: uppercase;
 }
 
-.home-intro-aside strong {
+.home-intro-year-select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 38px 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 12px;
+  background: #ffffff;
   color: #0f172a;
-  font-size: 2rem;
+  font: inherit;
+  font-size: 1.55rem;
   line-height: 1;
   font-weight: 850;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
 }
 
 .home-intro-years {
@@ -292,11 +307,32 @@
 
 .home-dev-grid {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .home-dev-action {
+  grid-template-columns: auto minmax(0, 1fr);
   font: inherit;
+}
+
+.home-dev-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+}
+
+.home-dev-action:disabled:hover,
+.home-dev-action:disabled:focus-visible {
+  transform: none;
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+}
+
+.home-section-dev .home-dev-action-meta {
+  grid-column: 1 / -1;
+  justify-self: flex-start;
 }
 
 .home-dev-action-copy {
@@ -327,6 +363,7 @@
   padding: 18px;
   background: rgba(15, 23, 42, 0.42);
   backdrop-filter: blur(8px);
+  overflow: auto;
   animation: home-fade-in 140ms ease;
 }
 
@@ -337,6 +374,10 @@
   border-radius: 18px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: 0 22px 48px rgba(15, 23, 42, 0.2);
+  box-sizing: border-box;
+  max-height: calc(100vh - 36px);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
   animation: home-fade-up 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -408,6 +449,7 @@
   font: inherit;
   font-size: 0.94rem;
   font-weight: 600;
+  box-sizing: border-box;
 }
 
 .home-dialog-form {
@@ -435,6 +477,7 @@
   color: #0f172a;
   font: inherit;
   font-size: 0.94rem;
+  box-sizing: border-box;
 }
 
 .home-dialog-help {
@@ -449,6 +492,14 @@
   justify-content: flex-end;
 }
 
+.home-dialog-quick-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 .home-dialog-submit {
   min-height: 40px;
   padding: 0 16px;
@@ -460,6 +511,7 @@
   font-size: 0.9rem;
   font-weight: 800;
   cursor: pointer;
+  box-sizing: border-box;
   transition:
     transform 0.16s ease,
     background-color 0.18s ease,
@@ -467,10 +519,37 @@
     opacity 0.18s ease;
 }
 
-.home-dialog-submit:hover {
+.home-dialog-secondary {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    transform 0.16s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.home-dialog-submit:hover:not(:disabled),
+.home-dialog-secondary:hover {
   transform: translateY(-1px);
+}
+
+.home-dialog-submit:hover:not(:disabled) {
   border-color: #1e40af;
   background: #1e40af;
+}
+
+.home-dialog-secondary:hover {
+  border-color: rgba(100, 116, 139, 0.36);
+  background: #f8fafc;
 }
 
 .home-dialog-submit:disabled {
@@ -479,9 +558,11 @@
 }
 
 .home-dialog-select:focus-visible,
+.home-intro-year-select:focus-visible,
 .home-dialog-input:focus-visible,
 .home-dialog-close:focus-visible,
 .home-dialog-submit:focus-visible,
+.home-dialog-secondary:focus-visible,
 .home-vote-link-actions button:focus-visible,
 .home-card:focus-visible,
 .home-dev-action:focus-visible {
@@ -539,6 +620,21 @@
   font-size: 0.79rem;
 }
 
+.home-vote-link-url {
+  display: block;
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.home-vote-link-url:hover,
+.home-vote-link-url:focus-visible {
+  text-decoration: underline;
+}
+
 .home-vote-link-actions {
   display: flex;
   gap: 8px;
@@ -559,6 +655,10 @@
   }
 
   .home-vote-links-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-dev-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -586,6 +686,10 @@
 
   .home-grid {
     gap: 10px;
+  }
+
+  .home-dev-grid {
+    grid-template-columns: 1fr;
   }
 
   .home-card,
@@ -624,7 +728,15 @@
     justify-content: stretch;
   }
 
+  .home-dialog-quick-actions {
+    justify-content: stretch;
+  }
+
   .home-dialog-submit {
+    width: 100%;
+  }
+
+  .home-dialog-secondary {
     width: 100%;
   }
 }
@@ -649,6 +761,7 @@
   .home-dev-action-meta,
   .home-dialog-close,
   .home-dialog-submit,
+  .home-dialog-secondary,
   .home-vote-link-actions button {
     transition: none;
   }

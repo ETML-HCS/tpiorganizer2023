@@ -379,11 +379,15 @@ export const workflowPlanningService = {
     )
   },
 
-  createDevVoteLinks: async (year, baseUrl = null) => {
+  createDevVoteLinks: async (year, baseUrl = null, options = {}) => {
     const body = {}
 
     if (baseUrl) {
       body.baseUrl = baseUrl
+    }
+
+    if (typeof options.reference === 'string') {
+      body.reference = options.reference
     }
 
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/dev-links`, body)

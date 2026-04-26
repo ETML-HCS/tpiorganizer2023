@@ -35,7 +35,10 @@ test('enrichLegacyTpisWithDerivedDates falls back when optional context queries 
       classe: 'CFC',
       dates: {},
       lieu: {}
-    }])
+    }], {
+      planningConfig: PlanningConfig.findOne(),
+      publicationVersion: PublicationVersion.findOne()
+    })
 
     assert.equal(enrichedTpi.refTpi, '042')
     assert.deepEqual(enrichedTpi.dates, {})

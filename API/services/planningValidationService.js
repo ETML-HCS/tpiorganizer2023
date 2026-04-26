@@ -154,6 +154,40 @@ function buildEntriesFromTpis(tpis) {
     .sort(compareEntries)
 }
 
+function normalizeParticipantForAlignment(participant) {
+  return {
+    role: normalizeText(participant?.role),
+    personId: normalizeText(participant?.personId)
+  }
+}
+
+function normalizeEntryForAlignment(entry) {
+  const slot = entry?.slot || {}
+  const room = slot?.room || {}
+  const participants = Array.isArray(entry?.participants)
+    ? entry.participants.map(normalizeParticipantForAlignment)
+      .sort((left, right) => {
+        const leftKey = `${left.role}|${left.personId}`
+        const rightKey = `${right.role}|${right.personId}`
+        return leftKey.localeCompare(rightKey)
+      })
+    : []
+
+  return {
+    reference: normalizeText(entry?.reference),
+    classe: normalizeText(entry?.classe),
+    slot: {
+      dateKey: normalizeText(slot?.dateKey),
+      period: Number.isInteger(Number(slot?.period)) ? Number(slot.period) : null,
+      room: {
+        site: normalizeText(room?.site),
+        name: normalizeText(room?.name)
+      }
+    },
+    participants
+  }
+}
+
 function buildSlotKey(slot) {
   return `${slot.dateKey}|${slot.period}`
 }
@@ -845,10 +879,10 @@ function isValidationAlignedWithSnapshot(snapshot, validation) {
   }
 
   const snapshotEntries = Array.isArray(snapshot.entries)
-    ? [...snapshot.entries].sort(compareEntries)
+    ? [...snapshot.entries].map(normalizeEntryForAlignment).sort(compareEntries)
     : []
   const validationEntries = Array.isArray(validation.entries)
-    ? [...validation.entries].sort(compareEntries)
+    ? [...validation.entries].map(normalizeEntryForAlignment).sort(compareEntries)
     : []
 
   return computeSnapshotHash({ entries: snapshotEntries }) === computeSnapshotHash({ entries: validationEntries })

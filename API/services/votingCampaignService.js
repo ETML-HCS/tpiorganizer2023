@@ -3,7 +3,7 @@ const Vote = require('../models/voteModel')
 const emailService = require('./emailService')
 const magicLinkV2Service = require('./magicLinkV2Service')
 const { getActivePublicationVersion } = require('./publishedSoutenanceService')
-const { getPlanningConfig } = require('./planningConfigService')
+const { getPlanningConfigIfAvailable } = require('./planningConfigService')
 const schedulingService = require('./schedulingService')
 const { filterPlanifiableTpis } = require('./tpiPlanningVisibility')
 
@@ -92,7 +92,7 @@ function buildTpiVoters(tpi) {
 
 async function loadVotingTpisForYear(year) {
   const [planningConfig, tpis] = await Promise.all([
-    getPlanningConfig(year),
+    getPlanningConfigIfAvailable(year),
     TpiPlanning.find({
       year,
       status: { $in: ['voting', 'pending_slots'] },
@@ -258,7 +258,7 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
 async function remindPendingVotes(year, baseUrl) {
   const [planningConfig, rawTpis] = await Promise.all([
-    getPlanningConfig(year),
+    getPlanningConfigIfAvailable(year),
     TpiPlanning.find({ year, status: 'voting' })
       .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
       .select('reference sujet votingSession candidat expert1 expert2 chefProjet site')
@@ -384,7 +384,7 @@ function hasAllVotes(votes) {
 
 async function closeVotesCampaign(year) {
   const [planningConfig, rawTpis] = await Promise.all([
-    getPlanningConfig(year),
+    getPlanningConfigIfAvailable(year),
     TpiPlanning.find({
       year,
       status: { $in: ['voting', 'pending_validation'] }
@@ -451,7 +451,7 @@ function listSoutenanceRecipientsFromTpi(tpi) {
 
 async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = null) {
   const [planningConfig, rawConfirmedTpis] = await Promise.all([
-    getPlanningConfig(year),
+    getPlanningConfigIfAvailable(year),
     TpiPlanning.find({
       year,
       status: 'confirmed',

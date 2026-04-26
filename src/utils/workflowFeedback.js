@@ -52,6 +52,36 @@ export const buildValidationToast = (year, result) => {
   }
 }
 
+export const extractValidationResultFromError = (year, error) => {
+  const details = error?.data?.details || error?.details || null
+  const issues = Array.isArray(details?.issues)
+    ? details.issues
+    : Array.isArray(details?.hardConflicts)
+      ? details.hardConflicts
+      : []
+
+  if (!details?.summary || issues.length === 0) {
+    return null
+  }
+
+  const parsedYear = Number.parseInt(String(year), 10)
+  const fallbackYear = Number.parseInt(String(details?.year || ''), 10)
+
+  return {
+    year: Number.isInteger(parsedYear)
+      ? parsedYear
+      : Number.isInteger(fallbackYear)
+        ? fallbackYear
+        : null,
+    checkedAt: details.checkedAt || new Date().toISOString(),
+    summary: {
+      ...details.summary,
+      isValid: false
+    },
+    issues
+  }
+}
+
 export const buildOptimizationToast = (year, result) => {
   const optimization = result?.optimization || {}
   const swapCount = Number(optimization.swapCount || 0)

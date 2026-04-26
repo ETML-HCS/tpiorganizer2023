@@ -2,7 +2,7 @@ const Person = require('../models/personModel')
 const TpiModelsYear = require('../models/tpiModels')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
-const { getPlanningConfig } = require('./planningConfigService')
+const { getPlanningConfigIfAvailable } = require('./planningConfigService')
 const { validateLegacyTpiStakeholders } = require('./tpiStakeholderService')
 const { isPlanifiableTpi } = require('./tpiPlanningVisibility')
 const { enrichLegacyTpisWithDerivedDates } = require('./legacyTpiDateEnrichmentService')
@@ -218,7 +218,7 @@ async function getTpiDossierByRef(year, ref) {
   const [legacyTpi, planningTpi, planningConfig] = await Promise.all([
     findLegacyTpi(normalizedYear, normalizedRef),
     findPlanningTpi(normalizedYear, normalizedRef),
-    getPlanningConfig(normalizedYear)
+    getPlanningConfigIfAvailable(normalizedYear)
   ])
 
   if (!legacyTpi && !planningTpi) {
@@ -226,7 +226,9 @@ async function getTpiDossierByRef(year, ref) {
   }
 
   const [enrichedLegacyTpi] = legacyTpi
-    ? await enrichLegacyTpisWithDerivedDates(normalizedYear, [legacyTpi])
+    ? await enrichLegacyTpisWithDerivedDates(normalizedYear, [legacyTpi], {
+        planningConfig
+      })
     : [null]
 
   const stakeholderState = enrichedLegacyTpi

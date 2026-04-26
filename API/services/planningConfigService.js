@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto')
+const mongoose = require('mongoose')
 const { ensureDatabaseConnection } = require('../config/dbConfig')
 const PlanningConfig = require('../models/planningConfigModel')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
@@ -762,6 +763,28 @@ async function getPlanningConfig(year) {
   return normalizeStoredConfig(inserted?.toObject ? inserted.toObject() : inserted, requestedYear, fallback, catalogSites)
 }
 
+async function getPlanningConfigIfAvailable(year) {
+  const requestedYear = toIntegerYear(year)
+
+  if (!Number.isInteger(requestedYear)) {
+    return null
+  }
+
+  if (mongoose.connection.readyState !== 1) {
+    return null
+  }
+
+  try {
+    return await getPlanningConfig(requestedYear)
+  } catch (error) {
+    if (error?.code === 'DATABASE_UNAVAILABLE' || error?.statusCode === 503) {
+      return null
+    }
+
+    throw error
+  }
+}
+
 async function savePlanningConfig(year, payload = {}) {
   await ensureDatabaseConnection({
     errorMessage: 'Configuration de planification indisponible: connexion MongoDB impossible.'
@@ -805,6 +828,7 @@ module.exports = {
   decimalHoursToTimeString,
   flattenClassTypeDates,
   getPlanningConfig,
+  getPlanningConfigIfAvailable,
   normalizeClassTypeEntries,
   normalizeSoutenanceDateEntries,
   normalizeStoredConfig,

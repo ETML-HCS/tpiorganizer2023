@@ -20,8 +20,10 @@ export const API_URL = IS_DEBUG
   ? process.env.REACT_APP_API_URL_TRUE || 'http://localhost:5001'
   : process.env.REACT_APP_API_URL_FALSE || 'http://localhost:6000'
 
-// Debug : log l'URL API au démarrage
-console.log('[appConfig] API_URL:', API_URL)
+// Debug : log l'URL API au démarrage sans polluer les tests.
+if (IS_DEBUG && process.env.NODE_ENV !== 'test') {
+  console.info('[appConfig] API_URL:', API_URL)
+}
 
 // Configuration des années
 const configuredMinYear = Number.parseInt(process.env.REACT_APP_MIN_YEAR || '2023', 10)

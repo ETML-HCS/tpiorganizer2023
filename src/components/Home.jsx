@@ -9,7 +9,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
 import { IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../config/appConfig"
 import { authPlanningService, workflowPlanningService } from "../services/planningService"
-import { writeStorageValue } from "../utils/storage"
+import { readStorageValue, writeStorageValue } from "../utils/storage"
 import IconButtonContent from "./shared/IconButtonContent"
 import {
   ArrowRightIcon,
@@ -20,10 +20,13 @@ import {
   DashboardIcon,
   GestionTpiIcon,
   KeyIcon,
+  MailIcon,
+  MailOffIcon,
   SettingsIcon,
   StarsIcon,
   TestTubeIcon,
   UsersIcon,
+  VoteIcon,
   WorkflowIcon
 } from "./shared/InlineIcons"
 
@@ -39,8 +42,11 @@ const HOME_ICONS = {
   users: UsersIcon,
   clipboard: ClipboardIcon,
   key: KeyIcon,
+  mail: MailIcon,
+  mailOff: MailOffIcon,
   stars: StarsIcon,
   test: TestTubeIcon,
+  vote: VoteIcon,
   configuration: ConfigurationIcon,
   settings: SettingsIcon
 }
@@ -57,7 +63,7 @@ const PRIMARY_ITEMS = [
     icon: "workflow",
     tone: "primary",
     description: "Construire la planification annuelle avant l'ouverture des votes.",
-    actionLabel: "Choisir une année"
+    actionLabel: "Ouvrir"
   },
   {
     name: "Planning",
@@ -65,7 +71,7 @@ const PRIMARY_ITEMS = [
     icon: "clipboard",
     tone: "accent",
     description: "Suivre les votes et l'état annuel du planning.",
-    actionLabel: "Choisir une année"
+    actionLabel: "Ouvrir"
   },
   {
     name: "Soutenances",
@@ -73,7 +79,7 @@ const PRIMARY_ITEMS = [
     icon: "calendar",
     tone: "warm",
     description: "Consulter le calendrier des soutenances par année.",
-    actionLabel: "Choisir une année"
+    actionLabel: "Ouvrir"
   }
 ]
 
@@ -130,21 +136,39 @@ const ADMIN_ITEMS = [
 
 const DEV_ACCESS_ITEMS = [
   {
+    dialog: "voteLinks",
+    title: "Liens de vote",
+    description: "Générer les magic links vote d'un TPI sans envoyer d'email.",
+    meta: "Année + référence",
+    icon: "vote",
+    requiresEmail: false,
+    requiredWorkflowState: "voting_open"
+  },
+  {
     dialog: "voteTest",
-    title: "Tester les votes",
+    title: "Emails vote",
     description: "Envoyer les emails de test vote vers une adresse choisie.",
-    meta: "Année + email"
+    meta: "Année + email",
+    icon: "mail",
+    requiresEmail: true,
+    requiredWorkflowState: "voting_open"
   },
   {
     dialog: "soutenanceTest",
-    title: "Tester les soutenances",
+    title: "Emails soutenance",
     description: "Envoyer les emails de test soutenance vers une adresse choisie.",
-    meta: "Année + email"
+    meta: "Année + email",
+    icon: "mailOff",
+    requiresEmail: true,
+    requiredWorkflowState: "published"
   }
 ]
 
-const ActionCard = ({ item, onOpenDialog, delayMs = 0 }) => {
+const ActionCard = ({ item, onOpenDialog, activeYear, delayMs = 0 }) => {
   const cardStyle = { "--home-card-delay": `${delayMs}ms` }
+  const actionLabel = item.special && activeYear
+    ? `${item.actionLabel} ${activeYear}`
+    : item.actionLabel
 
   const content = (
     <>
@@ -157,7 +181,7 @@ const ActionCard = ({ item, onOpenDialog, delayMs = 0 }) => {
         <p>{item.description}</p>
       </div>
 
-      <span className='home-card-meta'>{item.actionLabel}</span>
+      <span className='home-card-meta'>{actionLabel}</span>
     </>
   )
 
@@ -181,7 +205,7 @@ const ActionCard = ({ item, onOpenDialog, delayMs = 0 }) => {
   )
 }
 
-const HomeSection = ({ title, description, items, onOpenDialog, delayBase = 0 }) => (
+const HomeSection = ({ title, description, items, onOpenDialog, activeYear, delayBase = 0 }) => (
   <section
     className='home-section'
     aria-label={title}
@@ -198,6 +222,7 @@ const HomeSection = ({ title, description, items, onOpenDialog, delayBase = 0 })
           key={item.name}
           item={item}
           onOpenDialog={onOpenDialog}
+          activeYear={activeYear}
           delayMs={delayBase + 50 + index * 45}
         />
       ))}
@@ -205,105 +230,78 @@ const HomeSection = ({ title, description, items, onOpenDialog, delayBase = 0 })
   </section>
 )
 
-const SelectionMenu = ({
-  title,
-  onClose,
-  onYearSelect,
-  initialYear = YEARS_CONFIG.getCurrentYear()
-}) => {
-  const selectRef = useRef(null)
-  const years = useMemo(() => generateYears().slice().reverse(), [])
-  const defaultYear = useMemo(() => {
-    const normalizedInitialYear = String(initialYear)
-
-    if (years.some((year) => String(year) === normalizedInitialYear)) {
-      return normalizedInitialYear
-    }
-
-    return years.length > 0 ? String(years[0]) : ""
-  }, [initialYear, years])
-  const [selectedYear, setSelectedYear] = useState(defaultYear)
-
-  useEffect(() => {
-    selectRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    setSelectedYear(defaultYear)
-  }, [defaultYear])
-
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        onClose()
-      }
-    }
-
-    document.addEventListener("keydown", handleEscape)
-    return () => document.removeEventListener("keydown", handleEscape)
-  }, [onClose])
-
-  const handleSubmit = (event) => {
-    event.preventDefault()
-
-    if (!selectedYear) {
-      return
-    }
-
-    onYearSelect(selectedYear)
+function formatDateTime(value) {
+  if (!value) {
+    return "date inconnue"
   }
 
-  return (
-    <div className='home-overlay' onClick={onClose}>
-      <div
-        className='home-dialog'
-        role='dialog'
-        aria-modal='true'
-        aria-labelledby='home-dialog-title'
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className='home-dialog-head'>
-          <h2 id='home-dialog-title'>{title}</h2>
-          <button
-            type='button'
-            className='home-dialog-close icon-button'
-            onClick={onClose}
-            aria-label='Fermer'
-            title='Fermer'
-          >
-            <IconButtonContent label='Fermer' icon={CloseIcon} />
-          </button>
-        </div>
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "date inconnue"
+  }
 
-        <form className='home-dialog-form' onSubmit={handleSubmit}>
-          <select
-            ref={selectRef}
-            className='home-dialog-select'
-            value={selectedYear}
-            onChange={(event) => setSelectedYear(event.target.value)}
-            aria-label="Sélection de l'année"
-          >
-            {years.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
+  return date.toLocaleString("fr-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  })
+}
 
-          <div className='home-dialog-actions'>
-            <button
-              type='submit'
-              className='home-dialog-submit'
-              disabled={!selectedYear}
-            >
-              Ouvrir
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+async function copyToClipboard(value) {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.setAttribute("readonly", "readonly")
+  textarea.style.position = "absolute"
+  textarea.style.left = "-9999px"
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand("copy")
+  document.body.removeChild(textarea)
+}
+
+const getDevAccessItem = (dialog) =>
+  DEV_ACCESS_ITEMS.find((item) => item.dialog === dialog) || null
+
+const WORKFLOW_STATE_REQUIREMENT_LABELS = {
+  voting_open: "Votes ouverts uniquement",
+  published: "Après publication"
+}
+
+const WORKFLOW_STATE_REQUIREMENT_MESSAGES = {
+  voting_open: "Disponible uniquement quand les votes sont ouverts.",
+  published: "Disponible uniquement après publication."
+}
+
+const getWorkflowStateRequirementLabel = (requiredState) =>
+  WORKFLOW_STATE_REQUIREMENT_LABELS[requiredState] || "Indisponible"
+
+const getWorkflowStateRequirementMessage = (requiredState) =>
+  WORKFLOW_STATE_REQUIREMENT_MESSAGES[requiredState] || "Action indisponible pour le moment."
+
+const getDefaultActiveYear = () => {
+  const storedYear = Number.parseInt(
+    readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ""),
+    10
   )
+
+  if (YEARS_CONFIG.isSupportedYear(storedYear)) {
+    return String(storedYear)
+  }
+
+  const currentYear = YEARS_CONFIG.getCurrentYear()
+  if (YEARS_CONFIG.isSupportedYear(currentYear)) {
+    return String(currentYear)
+  }
+
+  const years = generateYears()
+  return years.length > 0 ? String(years[years.length - 1]) : String(currentYear)
 }
 
 const DevAccessMenu = ({
@@ -313,9 +311,11 @@ const DevAccessMenu = ({
   onClose,
   onSubmit,
   isSubmitting,
+  requiresEmail = true,
   initialYear = YEARS_CONFIG.getCurrentYear()
 }) => {
   const emailRef = useRef(null)
+  const referenceRef = useRef(null)
   const years = useMemo(() => generateYears().slice().reverse(), [])
   const defaultYear = useMemo(() => {
     const normalizedInitialYear = String(initialYear)
@@ -331,8 +331,13 @@ const DevAccessMenu = ({
   const [reference, setReference] = useState("")
 
   useEffect(() => {
-    emailRef.current?.focus()
-  }, [])
+    if (requiresEmail) {
+      emailRef.current?.focus()
+      return
+    }
+
+    referenceRef.current?.focus()
+  }, [requiresEmail])
 
   useEffect(() => {
     setSelectedYear(defaultYear)
@@ -353,7 +358,7 @@ const DevAccessMenu = ({
   const handleSubmit = (event) => {
     event.preventDefault()
 
-    if (!selectedYear || !email.trim()) {
+    if (!selectedYear || (requiresEmail && !email.trim())) {
       return
     }
 
@@ -405,23 +410,26 @@ const DevAccessMenu = ({
             </select>
           </label>
 
-          <label className='home-dialog-field'>
-            <span>Email de test</span>
-            <input
-              ref={emailRef}
-              type='email'
-              className='home-dialog-input'
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder='prenom.nom@example.test'
-              autoComplete='email'
-              aria-label='Email de test'
-            />
-          </label>
+          {requiresEmail ? (
+            <label className='home-dialog-field'>
+              <span>Email de test</span>
+              <input
+                ref={emailRef}
+                type='email'
+                className='home-dialog-input'
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder='prenom.nom@example.test'
+                autoComplete='email'
+                aria-label='Email de test'
+              />
+            </label>
+          ) : null}
 
           <label className='home-dialog-field'>
             <span>Référence ciblée</span>
             <input
+              ref={referenceRef}
               type='text'
               className='home-dialog-input'
               value={reference}
@@ -438,9 +446,9 @@ const DevAccessMenu = ({
             <button
               type='submit'
               className='home-dialog-submit'
-              disabled={!selectedYear || !email.trim() || isSubmitting}
+              disabled={!selectedYear || (requiresEmail && !email.trim()) || isSubmitting}
             >
-              {isSubmitting ? "Envoi..." : submitLabel}
+              {isSubmitting ? "Traitement..." : submitLabel}
             </button>
           </div>
         </form>
@@ -450,7 +458,10 @@ const DevAccessMenu = ({
 }
 
 const DevAccessResultMenu = ({ payload, onClose }) => {
-  const links = Array.isArray(payload?.links) ? payload.links : []
+  const links = Array.isArray(payload?.links)
+    ? payload.links.filter((link) => typeof link?.url === "string" && link.url.length > 0)
+    : []
+  const hasEmailSummary = typeof payload?.summary?.emailsSent === "number"
 
   useEffect(() => {
     const handleEscape = (event) => {
@@ -468,16 +479,38 @@ const DevAccessResultMenu = ({ payload, onClose }) => {
     return null
   }
 
-  const title = payload?.kind === "soutenance"
+  const title = payload?.kind === "vote-links"
+    ? "Liens de vote"
+    : payload?.kind === "soutenance"
     ? "Emails de test soutenance"
     : "Emails de test vote"
+  const resultSummary = hasEmailSummary
+    ? `${payload?.summary?.emailsSucceeded || 0}/${payload?.summary?.emailsSent || 0} email(s) envoyé(s)`
+    : `${links.length} lien(s) généré(s)`
 
   const handleCopy = async (url) => {
     try {
-      await navigator.clipboard.writeText(url)
+      await copyToClipboard(url)
       toast.success("Lien copié.")
     } catch {
       toast.error("Impossible de copier le lien.")
+    }
+  }
+
+  const handleCopyAll = async () => {
+    try {
+      await copyToClipboard(links.map((link) => link.url).filter(Boolean).join("\n"))
+      toast.success("Liens copiés.")
+    } catch {
+      toast.error("Impossible de copier les liens.")
+    }
+  }
+
+  const handleOpenFirst = () => {
+    const firstUrl = links.find((link) => link.url)?.url
+
+    if (firstUrl) {
+      window.open(firstUrl, "_blank", "noopener,noreferrer")
     }
   }
 
@@ -504,47 +537,68 @@ const DevAccessResultMenu = ({ payload, onClose }) => {
         </div>
 
         <div className='home-dialog-summary'>
-          <strong>
-            {payload?.summary?.emailsSucceeded || 0}/{payload?.summary?.emailsSent || 0} email(s)
-            envoyé(s)
-          </strong>
-          <span>{payload?.sentTo || "Adresse inconnue"}</span>
+          <strong>{resultSummary}</strong>
+          {payload?.sentTo ? <span>{payload.sentTo}</span> : null}
           {payload?.reference ? <span>{payload.reference}</span> : null}
         </div>
 
-        <div className='home-vote-links-grid'>
-          {links.map((link) => (
-            <article key={`${link.role || "link"}-${link.url}`} className='home-vote-link-card'>
-              <strong>{link.roleLabel || link.role || "Lien"}</strong>
-              <span>{link.viewer?.name || link.voter?.name || "Personne inconnue"}</span>
-              <span className='home-vote-link-status'>
-                {link.emailDelivery?.success
-                  ? `Envoyé à ${link.emailDelivery.sentTo}`
-                  : link.emailDelivery?.error || "Lien généré sans confirmation d'envoi"}
-              </span>
+        {links.length > 0 ? (
+          <div className='home-dialog-quick-actions'>
+            <button type='button' className='home-dialog-secondary' onClick={handleCopyAll}>
+              Copier tous les liens
+            </button>
+            <button type='button' className='home-dialog-submit' onClick={handleOpenFirst}>
+              Ouvrir le premier
+            </button>
+          </div>
+        ) : null}
 
-              <div className='home-vote-link-actions'>
-                <button
-                  type='button'
-                  className='icon-button'
-                  onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
-                  aria-label='Ouvrir'
-                  title='Ouvrir'
+        <div className='home-vote-links-grid'>
+          {links.map((link) => {
+            const personName = link.viewer?.name || link.voter?.name || "Personne inconnue"
+            const statusLabel = link.emailDelivery
+              ? link.emailDelivery.success
+                ? `Envoyé à ${link.emailDelivery.sentTo}`
+                : link.emailDelivery.error || "Email non confirmé"
+              : `Expire le ${formatDateTime(link.expiresAt)}`
+
+            return (
+              <article key={`${link.role || "link"}-${link.url}`} className='home-vote-link-card'>
+                <strong>{link.roleLabel || link.role || "Lien"}</strong>
+                <span>{personName}</span>
+                <span className='home-vote-link-status'>{statusLabel}</span>
+                <a
+                  href={link.url}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='home-vote-link-url'
                 >
-                  <IconButtonContent label='Ouvrir' icon={ArrowRightIcon} />
-                </button>
-                <button
-                  type='button'
-                  className='secondary icon-button'
-                  onClick={() => handleCopy(link.url)}
-                  aria-label='Copier'
-                  title='Copier'
-                >
-                  <IconButtonContent label='Copier' icon={ClipboardIcon} />
-                </button>
-              </div>
-            </article>
-          ))}
+                  {link.url}
+                </a>
+
+                <div className='home-vote-link-actions'>
+                  <button
+                    type='button'
+                    className='icon-button'
+                    onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                    aria-label='Ouvrir'
+                    title='Ouvrir'
+                  >
+                    <IconButtonContent label='Ouvrir' icon={ArrowRightIcon} />
+                  </button>
+                  <button
+                    type='button'
+                    className='secondary icon-button'
+                    onClick={() => handleCopy(link.url)}
+                    aria-label='Copier'
+                    title='Copier'
+                  >
+                    <IconButtonContent label='Copier' icon={ClipboardIcon} />
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -556,9 +610,46 @@ const Home = () => {
   const [activeDialog, setActiveDialog] = useState(null)
   const [isSendingDevAccess, setIsSendingDevAccess] = useState(false)
   const [devAccessPayload, setDevAccessPayload] = useState(null)
+  const [activeYear, setActiveYear] = useState(getDefaultActiveYear)
+  const [workflowState, setWorkflowState] = useState(null)
 
-  const currentYear = useMemo(() => new Date().getFullYear(), [])
   const availableYears = useMemo(() => generateYears().slice().reverse(), [])
+
+  useEffect(() => {
+    if (!activeYear) {
+      return
+    }
+
+    writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, activeYear)
+  }, [activeYear])
+
+  useEffect(() => {
+    if (!IS_DEBUG || !activeYear) {
+      setWorkflowState(null)
+      return undefined
+    }
+
+    let isCancelled = false
+    setWorkflowState(null)
+
+    workflowPlanningService.getYearState(activeYear)
+      .then((workflow) => {
+        if (isCancelled) {
+          return
+        }
+
+        setWorkflowState(typeof workflow?.state === "string" ? workflow.state : null)
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setWorkflowState(null)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeYear])
 
   useEffect(() => {
     if (!activeDialog) {
@@ -586,11 +677,48 @@ const Home = () => {
     setActiveDialog(null)
   }, [])
 
+  const handleActiveYearChange = useCallback((event) => {
+    const nextYear = event.target.value
+
+    if (!nextYear) {
+      return
+    }
+
+    setActiveYear(nextYear)
+  }, [])
+
+  const handlePrimaryAccess = useCallback(
+    (accessType) => {
+      const year = activeYear || String(YEARS_CONFIG.getCurrentYear())
+
+      if (accessType === "planningWorkflow") {
+        authPlanningService.clearSession()
+        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
+        navigate('/planification')
+        return
+      }
+
+      if (accessType === "planningVotes") {
+        authPlanningService.clearSession()
+        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
+        navigate(`/planning/${year}`)
+        return
+      }
+
+      if (accessType === "soutenance") {
+        navigate(`/Soutenances/${year}`)
+      }
+    },
+    [activeYear, navigate]
+  )
+
   const handleSubmitDevAccess = useCallback(
     async ({ year, email, reference }) => {
       const dialogType = activeDialog
+      const dialogConfig = getDevAccessItem(dialogType)
+      const requiresEmail = dialogConfig?.requiresEmail !== false
 
-      if (!year || !email || isSendingDevAccess) {
+      if (!year || (requiresEmail && !email) || isSendingDevAccess) {
         return
       }
 
@@ -598,8 +726,11 @@ const Home = () => {
       handleCloseDialog()
 
       const isVoteTest = dialogType === "voteTest"
+      const isVoteLinks = dialogType === "voteLinks"
       const loadingToastId = toast.loading(
-        isVoteTest
+        isVoteLinks
+          ? `Génération des liens de vote ${year}...`
+          : isVoteTest
           ? `Envoi des emails de test vote ${year}...`
           : `Envoi des emails de test soutenance ${year}...`,
         {
@@ -608,7 +739,11 @@ const Home = () => {
       )
 
       try {
-        const result = isVoteTest
+        const result = isVoteLinks
+          ? await workflowPlanningService.createDevVoteLinks(year, window.location.origin, {
+              reference
+            })
+          : isVoteTest
           ? await workflowPlanningService.sendDevVoteEmails(year, email, {
               reference,
               baseUrl: window.location.origin
@@ -617,9 +752,14 @@ const Home = () => {
               reference,
               baseUrl: window.location.origin
             })
+        const normalizedResult = isVoteLinks
+          ? { ...result, kind: "vote-links" }
+          : result
 
         toast.update(loadingToastId, {
-          render: `${result?.summary?.emailsSucceeded || 0}/${result?.summary?.emailsSent || 0} email(s) de test envoyé(s).`,
+          render: isVoteLinks
+            ? `${result?.links?.length || 0} lien(s) de vote généré(s).`
+            : `${result?.summary?.emailsSucceeded || 0}/${result?.summary?.emailsSent || 0} email(s) de test envoyé(s).`,
           type: "success",
           isLoading: false,
           autoClose: 3500,
@@ -627,10 +767,14 @@ const Home = () => {
           closeButton: true
         })
 
-        setDevAccessPayload(result)
+        setDevAccessPayload(normalizedResult)
         setActiveDialog("devAccessResult")
       } catch (error) {
-        const errorMessage = error?.data?.error || error?.message || "Impossible d'envoyer les emails de test."
+        const errorMessage = error?.data?.error || error?.message || (
+          isVoteLinks
+            ? "Impossible de générer les liens de vote."
+            : "Impossible d'envoyer les emails de test."
+        )
 
         toast.update(loadingToastId, {
           render: errorMessage,
@@ -645,33 +789,6 @@ const Home = () => {
       }
     },
     [activeDialog, handleCloseDialog, isSendingDevAccess]
-  )
-
-  const handleYearSelect = useCallback(
-    (year) => {
-      if (!year) {
-        return
-      }
-
-      handleCloseDialog()
-
-      if (activeDialog === "planningWorkflow") {
-        authPlanningService.clearSession()
-        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
-        navigate('/planification')
-        return
-      }
-
-      if (activeDialog === "planningVotes") {
-        authPlanningService.clearSession()
-        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
-        navigate(`/planning/${year}`)
-        return
-      }
-
-      navigate(`/Soutenances/${year}`)
-    },
-    [activeDialog, handleCloseDialog, navigate]
   )
 
   return (
@@ -692,8 +809,21 @@ const Home = () => {
         </div>
 
         <div className='home-intro-aside' aria-label='Contexte'>
-          <span className='home-intro-label'>Année active</span>
-          <strong>{currentYear}</strong>
+          <label className='home-intro-year-field'>
+            <span className='home-intro-label'>Année active</span>
+            <select
+              className='home-intro-year-select'
+              value={activeYear}
+              onChange={handleActiveYearChange}
+              aria-label='Année active'
+            >
+              {availableYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className='home-intro-years'>{availableYears.length} années disponibles</span>
         </div>
       </section>
@@ -702,7 +832,8 @@ const Home = () => {
         title='Accès principaux'
         description='Les accès les plus utilisés.'
         items={PRIMARY_ITEMS}
-        onOpenDialog={handleOpenDialog}
+        onOpenDialog={handlePrimaryAccess}
+        activeYear={activeYear}
         delayBase={90}
       />
 
@@ -722,44 +853,54 @@ const Home = () => {
           </div>
 
           <div className='home-dev-grid'>
-            {DEV_ACCESS_ITEMS.map((item, index) => (
-              <button
-                key={item.dialog}
-                type='button'
-                className='home-dev-action'
-                style={{ "--home-card-delay": `${320 + index * 45}ms` }}
-                onClick={() => handleOpenDialog(item.dialog)}
-                disabled={isSendingDevAccess}
-              >
-                <span className='home-dev-action-icon'>
-                  <HomeIcon name='test' className='home-card-svg' />
-                </span>
+            {DEV_ACCESS_ITEMS.map((item, index) => {
+              const isLocked =
+                Boolean(item.requiredWorkflowState) &&
+                workflowState !== item.requiredWorkflowState
+              const availabilityLabel = isLocked
+                ? getWorkflowStateRequirementLabel(item.requiredWorkflowState)
+                : item.meta
+              const availabilityMessage = isLocked
+                ? getWorkflowStateRequirementMessage(item.requiredWorkflowState)
+                : null
 
-                <span className='home-dev-action-copy'>
-                  <strong>{item.title}</strong>
-                  <span>{item.description}</span>
-                </span>
+              return (
+                <button
+                  key={item.dialog}
+                  type='button'
+                  className='home-dev-action'
+                  title={availabilityMessage || item.meta}
+                  style={{ "--home-card-delay": `${320 + index * 45}ms` }}
+                  onClick={() => handleOpenDialog(item.dialog)}
+                  disabled={isSendingDevAccess || isLocked}
+                >
+                  <span className='home-dev-action-icon'>
+                    <HomeIcon name={item.icon || "test"} className='home-card-svg' />
+                  </span>
 
-                <span className='home-dev-action-meta'>{item.meta}</span>
-              </button>
-            ))}
+                  <span className='home-dev-action-copy'>
+                    <strong>{item.title}</strong>
+                    <span>{item.description}</span>
+                  </span>
+
+                  <span className='home-dev-action-meta'>{availabilityLabel}</span>
+                </button>
+              )
+            })}
           </div>
         </section>
       ) : null}
 
-      {activeDialog === "planningVotes" && (
-        <SelectionMenu
-          title='Planning annuel'
+      {activeDialog === "voteLinks" && (
+        <DevAccessMenu
+          title='Liens de vote'
+          description="Le système génère les magic links vote pour le premier dossier disponible, ou pour la référence indiquée."
+          submitLabel='Générer les liens'
           onClose={handleCloseDialog}
-          onYearSelect={handleYearSelect}
-        />
-      )}
-
-      {activeDialog === "planningWorkflow" && (
-        <SelectionMenu
-          title='Planification annuelle'
-          onClose={handleCloseDialog}
-          onYearSelect={handleYearSelect}
+          onSubmit={handleSubmitDevAccess}
+          isSubmitting={isSendingDevAccess}
+          requiresEmail={false}
+          initialYear={activeYear}
         />
       )}
 
@@ -771,6 +912,7 @@ const Home = () => {
           onClose={handleCloseDialog}
           onSubmit={handleSubmitDevAccess}
           isSubmitting={isSendingDevAccess}
+          initialYear={activeYear}
         />
       )}
 
@@ -782,19 +924,12 @@ const Home = () => {
           onClose={handleCloseDialog}
           onSubmit={handleSubmitDevAccess}
           isSubmitting={isSendingDevAccess}
+          initialYear={activeYear}
         />
       )}
 
       {activeDialog === "devAccessResult" && (
         <DevAccessResultMenu payload={devAccessPayload} onClose={handleCloseDevAccessResult} />
-      )}
-
-      {activeDialog === "soutenance" && (
-        <SelectionMenu
-          title='Calendrier des défenses'
-          onClose={handleCloseDialog}
-          onYearSelect={handleYearSelect}
-        />
       )}
     </div>
   )

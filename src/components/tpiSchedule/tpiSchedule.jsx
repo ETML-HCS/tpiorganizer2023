@@ -59,11 +59,13 @@ import {
 } from "../../utils/storage"
 import {
   buildOptimizationToast,
-  buildValidationToast
+  buildValidationToast,
+  extractValidationResultFromError
 } from "../../utils/workflowFeedback"
 import { getPlanningPerimeterState } from "../../utils/planningScopeUtils"
 
 const apiUrl = API_URL
+const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== "test"
 
 function updateTpiDatas(room, sourceConfig = combinedScheduleConfig) {
   const normalizedRoom = normalizeRoom(room, 0, sourceConfig)
@@ -1181,7 +1183,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       const snapshotVersion = snapshot?.version || null
       setActiveSnapshotVersion(snapshotVersion)
 
-      console.log(`[Workflow] année=${year} state=${nextState} snapshot=v${snapshotVersion || "aucun"}`)
+      if (shouldLogWorkflowDebug) {
+        console.log(`[Workflow] année=${year} state=${nextState} snapshot=v${snapshotVersion || "aucun"}`)
+      }
 
     } catch (error) {
       console.error("Erreur chargement contexte workflow:", error)
@@ -1400,6 +1404,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           : ''
 
         return `Campagne ouverte: ${tpiCount} TPI synchronises, ${successfulEmails}/${totalEmails} emails envoyes.${emailSuffix}`
+      },
+      onError: (_message, error) => {
+        const validationFromError = extractValidationResultFromError(selectedYear, error)
+        if (validationFromError) {
+          setValidationResult(validationFromError)
+        }
       }
     })
 
@@ -1420,6 +1430,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       successMessage: (result) => {
         const tpiCount = result?.tpiCount || 0
         return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
+      },
+      onError: (_message, error) => {
+        const validationFromError = extractValidationResultFromError(selectedYear, error)
+        if (validationFromError) {
+          setValidationResult(validationFromError)
+        }
       }
     })
 
@@ -1469,6 +1485,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleOpenVoteTracking = () => {
     navigate(`/planning/${selectedYear}?tab=votes`)
   }
+
+  const handleOpenVoteAccessPreview = useCallback(() => {
+    const query = new URLSearchParams({
+      year: String(selectedYear),
+      type: 'vote',
+      auto: '1'
+    })
+
+    navigate(`/genTokens?${query.toString()}`)
+  }, [navigate, selectedYear])
 
   const handlePublish = async (year) => {
     const soutenancePageUrl = `/Soutenances/${year}`
@@ -1984,6 +2010,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           onFreezeSnapshot={handleFreezeSnapshot}
           onOpenVotes={handleOpenVotes}
           onOpenVotesWithoutEmails={IS_DEBUG ? handleOpenVotesWithoutEmails : null}
+          onOpenVoteAccessPreview={IS_DEBUG ? handleOpenVoteAccessPreview : null}
           onRemindVotes={handleRemindVotes}
           onCloseVotes={handleCloseVotes}
           onPublishDefinitive={handlePublishDefinitive}

@@ -53,6 +53,7 @@ const TpiScheduleButtons = ({
   onFreezeSnapshot,
   onOpenVotes,
   onOpenVotesWithoutEmails = null,
+  onOpenVoteAccessPreview = null,
   onRemindVotes,
   onCloseVotes,
   onPublishDefinitive,
@@ -129,7 +130,15 @@ const TpiScheduleButtons = ({
   const roomsUnchangedSinceFreeze = roomsHashAtFreeze && currentRoomsHash && roomsHashAtFreeze === currentRoomsHash
   const isAlreadyFrozen = hasSnapshot && roomsUnchangedSinceFreeze
   const hasStaleSnapshot = hasSnapshot && currentRoomsHash && roomsHashAtFreeze && !roomsUnchangedSinceFreeze
-  const canStartVotes = isPlanningState && hasSnapshot && !hasStaleSnapshot
+  const hasSuccessfulValidation =
+    !validationResult ||
+    Number(validationResult?.year) !== Number(effectiveYear) ||
+    validationResult?.summary?.isValid === true
+  const hasBlockedValidation =
+    Boolean(validationResult) &&
+    Number(validationResult?.year) === Number(effectiveYear) &&
+    validationResult?.summary?.isValid === false
+  const canStartVotes = isPlanningState && hasSnapshot && !hasStaleSnapshot && hasSuccessfulValidation
 
   const validationYear = Number.parseInt(validationResult?.year, 10)
   const validationSummary = validationResult?.summary || {}
@@ -971,6 +980,8 @@ const TpiScheduleButtons = ({
                       title={
                         hasStaleSnapshot
                           ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
+                          : hasBlockedValidation
+                            ? "La vérification a détecté des anomalies. Corrigez-les avant d'ouvrir les votes."
                           : canStartVotes
                             ? "Ouvrir la campagne de votes."
                             : "Snapshot requis avant ouverture des votes."
@@ -993,15 +1004,35 @@ const TpiScheduleButtons = ({
                         title={
                           hasStaleSnapshot
                             ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
-                            : canStartVotes
-                              ? "Ouvrir la campagne de votes sans envoyer les emails automatiques."
-                              : "Snapshot requis avant ouverture des votes."
+                            : hasBlockedValidation
+                              ? "La vérification a détecté des anomalies. Corrigez-les avant d'ouvrir les votes."
+                              : canStartVotes
+                                ? "Ouvrir la campagne de votes sans envoyer les emails automatiques."
+                                : "Snapshot requis avant ouverture des votes."
                         }
                         aria-label={openVotesWithoutEmailsLabel}
                       >
                         <IconButtonContent
                           label={openVotesWithoutEmailsLabel}
                           icon={VoteIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+                    ) : null}
+
+                    {IS_DEBUG ? (
+                      <button
+                        type="button"
+                        className="planning-workflow-btn open"
+                        onClick={onOpenVoteAccessPreview}
+                        disabled={workflowActionLoading || !isVotingState || !onOpenVoteAccessPreview}
+                        title="Ouvre l'aperçu des liens de vote préfiltré sur cette année."
+                        aria-label="Aperçu des liens vote"
+                      >
+                        <IconButtonContent
+                          label="Aperçu des liens vote"
+                          icon={SearchIcon}
                           showLabel
                           iconClassName="planning-button-icon"
                         />

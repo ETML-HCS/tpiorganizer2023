@@ -4,7 +4,8 @@ const assert = require('node:assert/strict')
 const {
   buildLegacyConsistencyIssues,
   buildUnplannedTpiIssues,
-  buildValidationIssues
+  buildValidationIssues,
+  isValidationAlignedWithSnapshot
 } = require('../services/planningValidationService')
 
 function buildPerson(id, firstName, lastName) {
@@ -282,4 +283,56 @@ test('buildLegacyConsistencyIssues ignores legacy TPI outside configured plannin
   })
 
   assert.deepEqual(result, [])
+})
+
+test('isValidationAlignedWithSnapshot ignores participant display name changes', () => {
+  const snapshot = {
+    entries: [
+      {
+        reference: 'TPI-2026-001',
+        classe: 'DEV4',
+        slot: {
+          dateKey: '2026-06-12',
+          period: 1,
+          room: {
+            site: 'ETML',
+            name: 'A101'
+          }
+        },
+        participants: [
+          {
+            role: 'expert1',
+            personId: 'person-1',
+            fullName: 'Ada Lovelace'
+          }
+        ]
+      }
+    ]
+  }
+
+  const validation = {
+    entries: [
+      {
+        reference: 'TPI-2026-001',
+        classe: 'DEV4',
+        slot: {
+          dateKey: '2026-06-12',
+          period: 1,
+          room: {
+            site: 'ETML',
+            name: 'A101'
+          }
+        },
+        participants: [
+          {
+            role: 'expert1',
+            personId: 'person-1',
+            fullName: 'Grace Hopper'
+          }
+        ]
+      }
+    ]
+  }
+
+  assert.equal(isValidationAlignedWithSnapshot(snapshot, validation), true)
 })

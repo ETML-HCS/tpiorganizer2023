@@ -16,11 +16,7 @@ const app = express()
 //#region : models
 const { Evaluation, TpiEvalCollection } = require('./models/tpiEvalModel')
 
-const TpiModelsYear = require('./models/tpiModels')
-const {
-  createCustomTpiRoomModel,
-  tpiRoomSchema
-} = require('./models/tpiRoomsModels')
+const { createCustomTpiRoomModel } = require('./models/tpiRoomsModels')
 const {
   listPublishedSoutenances,
   updatePublishedSoutenanceOffersByLegacyId
@@ -105,9 +101,7 @@ app.get('/', (req, res) => {
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 app.post('/api/send-email', async (req, res) => {
-  const { email, url } = req.body
-  // Logique pour envoyer l'email avec Nodemailer
-  // ...
+  res.status(501).json({ message: 'Endpoint not implemented.' })
 })
 
 // Définir un endpoint pour récupérer le contenu d'un fichier PDF
