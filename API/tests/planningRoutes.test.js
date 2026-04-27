@@ -6,8 +6,44 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const mongoose = require('mongoose')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
+const Vote = require('../models/voteModel')
+
+const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
+
+function patchMethod(target, key, implementation) {
+  const original = target[key]
+  target[key] = implementation
+  return () => {
+    target[key] = original
+  }
+}
+
+function makeQueryResult(value) {
+  return {
+    populate() {
+      return this
+    },
+    then(resolve, reject) {
+      return Promise.resolve(value).then(resolve, reject)
+    }
+  }
+}
+
+function buildSessionToken(secret, roles = ['admin']) {
+  return jwt.sign(
+    {
+      id: VALID_OBJECT_ID,
+      email: 'planner@example.com',
+      roles
+    },
+    secret,
+    { expiresIn: '1h' }
+  )
+}
 
 async function startServer(app) {
   return await new Promise(resolve => {
@@ -112,6 +148,75 @@ test('GET /api/planning/availability/:year/:tpiId returns available slots', asyn
       'availability endpoint should exist')
 
   } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates existing choices', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const voteId = new mongoose.Types.ObjectId()
+  const slotId = new mongoose.Types.ObjectId()
+  const voterId = new mongoose.Types.ObjectId()
+  const voter = {
+    _id: voterId,
+    firstName: 'Carla',
+    lastName: 'Expert',
+    email: 'carla@example.test',
+    preferredSoutenanceChoices: [
+      { date: new Date('2026-06-10T00:00:00.000Z'), period: 1 },
+      { date: new Date('2026-06-10T00:00:00.000Z'), period: 1 },
+      { date: new Date('2026-06-11T00:00:00.000Z'), period: 2 }
+    ],
+    preferredSoutenanceDates: [],
+    save: async function save() {
+      return this
+    }
+  }
+  const vote = {
+    _id: voteId,
+    decision: 'preferred',
+    slot: {
+      _id: slotId,
+      date: new Date('2026-06-12T08:00:00.000Z'),
+      period: 1,
+      startTime: '08:00',
+      endTime: '12:00',
+      room: { name: 'A101' }
+    },
+    voter
+  }
+  const restore = patchMethod(Vote, 'findById', () => makeQueryResult(vote))
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: 'development'
+  })
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/votes/${voteId}/preferred-soutenance-choice`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+
+    assert.equal(body.success, true)
+    assert.equal(body.added, true)
+    assert.deepEqual(body.preferredSoutenanceChoices, [
+      { date: '2026-06-10', period: 1 },
+      { date: '2026-06-11', period: 2 },
+      { date: '2026-06-12', period: 1 }
+    ])
+    assert.equal(voter.preferredSoutenanceChoices.length, 3)
+  } finally {
+    restore()
     await new Promise(resolve => server.close(resolve))
     restoreEnv()
   }

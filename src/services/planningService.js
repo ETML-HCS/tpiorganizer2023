@@ -231,6 +231,20 @@ export const tpiPlanningService = {
   },
 
   /**
+   * Simule un déplacement de TPI vers un créneau sans modifier le planning
+   */
+  simulateMoveToSlot: async (tpiId, slotId) => {
+    return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/move-to-slot/${slotId}/simulate`, {})
+  },
+
+  /**
+   * Déplace et confirme un TPI vers un créneau si la simulation est sans conflit
+   */
+  moveToSlot: async (tpiId, slotId, reason = '') => {
+    return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/move-to-slot/${slotId}`, { reason })
+  },
+
+  /**
    * Renvoyer les demandes de vote d'un TPI
    */
   resendVotes: async (tpiId) => {
@@ -272,6 +286,13 @@ export const voteService = {
    */
   submitBulkVotes: async (votes) => {
     return await apiService.post(`${PLANNING_BASE_URL}/votes/bulk`, { votes })
+  },
+
+  /**
+   * Ajoute un choix proposé aux dates idéales du votant
+   */
+  addProposalToPreferences: async (voteId) => {
+    return await apiService.post(`${PLANNING_BASE_URL}/votes/${voteId}/preferred-soutenance-choice`, {})
   }
 }
 

@@ -5,7 +5,6 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import PlanningDashboard from './PlanningDashboard'
 import * as planningServices from '../../services/planningService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
-import { tpiDossierService } from '../../services/tpiDossierService'
 
 jest.mock('../../config/appConfig', () => {
   const actual = jest.requireActual('../../config/appConfig')
@@ -37,7 +36,12 @@ jest.mock('./TpiPlanningList', () => ({ tpis, onSelectTpi }) => (
 ))
 
 jest.mock('./VotingPanel', () => () => <div>Votes</div>)
-jest.mock('./ConflictResolver', () => () => <div>Conflits</div>)
+jest.mock('./ConflictResolver', () => ({ focusTpiId }) => (
+  <div>
+    Conflits
+    {focusTpiId ? <span>Focus forçage {focusTpiId}</span> : null}
+  </div>
+))
 jest.mock('./ImportPanel', () => () => <div>Import</div>)
 jest.mock('../shared/PageToolbar', () => ({ children, title }) => (
   <div>
@@ -84,6 +88,28 @@ describe('PlanningDashboard', () => {
         }
       }
     ])
+    jest.spyOn(planningServices.tpiPlanningService, 'forceSlot').mockResolvedValue({
+      success: true
+    })
+    jest.spyOn(planningServices.tpiPlanningService, 'simulateMoveToSlot').mockResolvedValue({
+      success: true,
+      canMove: true,
+      status: 'clear',
+      message: 'Déplacement possible sans conflit détecté.',
+      tpi: { _id: 'planning-vote-1', reference: 'TPI-2026-042' },
+      currentSlot: { _id: 'slot-fixed', label: '10.06.2026 · 08:00-12:00 · A101' },
+      targetSlot: { _id: 'slot-alt', label: '11.06.2026 · 13:00-17:00 · B202' },
+      conflicts: [],
+      swapCandidate: null
+    })
+    jest.spyOn(planningServices.tpiPlanningService, 'moveToSlot').mockResolvedValue({
+      success: true
+    })
+    jest.spyOn(planningServices.voteService, 'addProposalToPreferences').mockResolvedValue({
+      success: true,
+      added: true,
+      voter: { name: 'Carla Expert' }
+    })
     jest.spyOn(planningServices.slotService, 'getCalendar').mockResolvedValue([])
     jest.spyOn(planningServices.workflowPlanningService, 'getYearState').mockResolvedValue({ state: 'planning' })
     jest.spyOn(planningServices.workflowPlanningService, 'getActiveSnapshot').mockResolvedValue(null)
@@ -113,89 +139,28 @@ describe('PlanningDashboard', () => {
       }
     })
     jest.spyOn(tpiController, 'getTpiModels').mockResolvedValue([])
-    jest.spyOn(tpiDossierService, 'getByRef').mockResolvedValue({
-      year: 2026,
-      identifiers: {
-        legacyRef: '001',
-        workflowReference: 'TPI-2026-001'
-      },
-      legacy: {
-        exists: true,
-        data: {
-          sujet: 'Sujet dossier',
-          candidat: 'Alice Durand',
-          experts: {
-            1: 'Bob Expert',
-            2: 'Carla Expert'
-          },
-          boss: 'Diane Boss',
-          tags: []
-        },
-        stakeholderState: {
-          isComplete: true,
-          isResolved: true,
-          missingRoles: [],
-          unresolvedRoles: []
-        }
-      },
-      planning: {
-        exists: true,
-        data: {
-          _id: 'planning-1',
-          reference: 'TPI-2026-001',
-          status: 'draft',
-          sujet: 'Sujet dossier',
-          candidat: { firstName: 'Alice', lastName: 'Durand' },
-          expert1: { firstName: 'Bob', lastName: 'Expert' },
-          expert2: { firstName: 'Carla', lastName: 'Expert' },
-          chefProjet: { firstName: 'Diane', lastName: 'Boss' }
-        },
-        voteSummary: {
-          totalVotes: 0,
-          pendingVotes: 0,
-          acceptedVotes: 0,
-          preferredVotes: 0,
-          rejectedVotes: 0,
-          respondedVotes: 0
-        },
-        workflowVoteSummary: {
-          expert1Voted: false,
-          expert2Voted: false,
-          chefProjetVoted: false
-        },
-        votes: [],
-        plannedSlot: null
-      },
-      consistency: {
-        importedToPlanning: true,
-        issues: []
-      }
-    })
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
   })
 
-  test('charge le dossier partagé dans la sidebar quand un TPI est sélectionné', async () => {
+  test('ouvre une sidebar allégée quand un TPI est sélectionné', async () => {
     render(
       <MemoryRouter>
         <PlanningDashboard year='2026' isAdmin />
       </MemoryRouter>
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /^TPI/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /liste complète/i }))
     fireEvent.click(await screen.findByRole('button', { name: /sélectionner un tpi/i }))
-
-    await waitFor(() => {
-      expect(tpiDossierService.getByRef).toHaveBeenCalledWith('2026', 'TPI-2026-001')
-    })
 
     expect(await screen.findByRole('dialog', { name: /tpi-2026-001/i })).toBeInTheDocument()
     expect(screen.getByText(/fiche planning/i)).toBeInTheDocument()
     expect(screen.getByText('Alice Durand', { selector: '.panel-candidate' })).toBeInTheDocument()
-    expect(await screen.findByText('Sujet dossier', { selector: 'strong' })).toBeInTheDocument()
-    expect(screen.getByText(/projet et références/i)).toBeInTheDocument()
+    expect(screen.getByText('Sujet planning', { selector: '.panel-subject' })).toBeInTheDocument()
+    expect(screen.getByText(/participants/i, { selector: 'h4' })).toBeInTheDocument()
+    expect(screen.getByText(/votes/i, { selector: 'h4' })).toBeInTheDocument()
     expect(screen.queryByText(/lecture croisée gestiontpi \/ planning/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/navigation interne de la fiche/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /ouvrir la fiche/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
@@ -216,12 +181,9 @@ describe('PlanningDashboard', () => {
       </MemoryRouter>
     )
 
-    expect(await screen.findByText(/workflow planification/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/aucun site actif pour 2026/i, {
-        selector: '.workflow-progress'
-      })
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
+    expect(screen.queryByText(/workflow planification/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/poste de pilotage du workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Erreur lors du chargement des données de planification/i)).not.toBeInTheDocument()
   })
 
@@ -231,10 +193,6 @@ describe('PlanningDashboard', () => {
         <PlanningDashboard year='2026' isAdmin />
       </MemoryRouter>
     )
-
-    await waitFor(() => {
-      expect(tpiDossierService.getByRef).toHaveBeenCalledWith('2026', 'TPI-2026-001')
-    })
 
     expect(await screen.findByDisplayValue('TPI-2026-001')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /tpi-2026-001/i })).toBeInTheDocument()
@@ -251,25 +209,18 @@ describe('PlanningDashboard', () => {
 
     expect(await screen.findByDisplayValue('TPI-2026-999')).toBeInTheDocument()
     expect(screen.getByText(/aucun tpi visible ne correspond/i)).toBeInTheDocument()
-    expect(tpiDossierService.getByRef).not.toHaveBeenCalled()
   })
 
-  test('déclenche la planification automatique depuis le workflow admin', async () => {
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
-
+  test('ne rend plus le bloc workflow admin', async () => {
     render(
       <MemoryRouter>
         <PlanningDashboard year='2026' isAdmin />
       </MemoryRouter>
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /automatiser planification/i }))
-
-    await waitFor(() => {
-      expect(planningServices.workflowPlanningService.automatePlanification).toHaveBeenCalledWith('2026')
-    })
-
-    confirmSpy.mockRestore()
+    expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
+    expect(screen.queryByText(/poste de pilotage du workflow/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /automatiser planification/i })).not.toBeInTheDocument()
   })
 
   test('ouvre les votes sans emails depuis le cockpit votes debug', async () => {
@@ -315,6 +266,7 @@ describe('PlanningDashboard', () => {
   })
 
   test('affiche le cockpit admin de campagne avec la file des votes a relancer', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true)
     planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
     planningServices.tpiPlanningService.getByYear.mockResolvedValue([
       {
@@ -357,6 +309,59 @@ describe('PlanningDashboard', () => {
           preferredVotes: 1,
           rejectedVotes: 1,
           respondedVotes: 2
+        },
+        voteDecision: {
+          slots: [
+            {
+              slotId: 'slot-fixed',
+              isFixed: true,
+              slot: {
+                _id: 'slot-fixed',
+                date: '2026-06-10T08:00:00.000Z',
+                startTime: '08:00',
+                endTime: '12:00',
+                room: { name: 'A101' }
+              },
+              positiveCount: 1,
+              rejectedCount: 1,
+              pendingCount: 1,
+              respondedCount: 2,
+              roleDecisions: [
+                { role: 'expert1', decision: 'accepted', voterName: 'Bob Expert' },
+                { role: 'expert2', decision: 'rejected', voterName: 'Carla Expert', comment: 'Pas disponible' },
+                { role: 'chef_projet', decision: 'pending', voterName: 'Diane Boss' }
+              ]
+            },
+            {
+              slotId: 'slot-alt',
+              isFixed: false,
+              slot: {
+                _id: 'slot-alt',
+                date: '2026-06-11T08:00:00.000Z',
+                startTime: '13:00',
+                endTime: '17:00',
+                room: { name: 'B202' }
+              },
+              positiveCount: 1,
+              rejectedCount: 0,
+              pendingCount: 2,
+              respondedCount: 1,
+              roleDecisions: [
+                { role: 'expert1', decision: 'pending', voterName: 'Bob Expert' },
+                {
+                  role: 'expert2',
+                  decision: 'preferred',
+                  voteId: 'vote-alt-expert2',
+                  voterName: 'Carla Expert',
+                  priority: 1,
+                  availabilityException: true,
+                  specialRequestReason: 'Indisponible le matin',
+                  specialRequestDate: '2026-06-13T08:00:00.000Z'
+                },
+                { role: 'chef_projet', decision: 'pending', voterName: 'Diane Boss' }
+              ]
+            }
+          ]
         }
       }
     ])
@@ -372,6 +377,218 @@ describe('PlanningDashboard', () => {
     expect(screen.getByRole('heading', { name: /a relancer/i })).toBeInTheDocument()
     expect(screen.getByText('TPI-2026-042')).toBeInTheDocument()
     expect(screen.getByText(/manque: chef de projet/i)).toBeInTheDocument()
+    expect(screen.getByText(/créneaux votés/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/proposition/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/11\.06\.2026 · 13:00-17:00 · B202/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/propositions reçues/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Expert 2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Carla Expert').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Choix 1: 11\.06\.2026 · 13:00-17:00 · B202/i)).toBeInTheDocument()
+    expect(screen.getByText(/Perso\. 13\.06\.2026 · Indisponible le matin/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', {
+      name: /ajouter 11\.06\.2026 .* b202 aux dates idéales de carla expert/i
+    }))
+
+    await waitFor(() => {
+      expect(planningServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
+    })
+
+    fireEvent.click(screen.getByRole('button', {
+      name: /simuler le déplacement de tpi-2026-042 vers 11\.06\.2026 .* b202/i
+    }))
+
+    expect(await screen.findByRole('dialog', { name: /simulation déplacement/i })).toBeInTheDocument()
+    expect(planningServices.tpiPlanningService.simulateMoveToSlot).toHaveBeenCalledWith(
+      'planning-vote-1',
+      'slot-alt'
+    )
+    expect(await screen.findByText(/déplacement possible sans conflit détecté/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /déplacer et confirmer/i }))
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalled()
+      expect(planningServices.tpiPlanningService.moveToSlot).toHaveBeenCalledWith(
+        'planning-vote-1',
+        'slot-alt',
+        expect.stringMatching(/Carla Expert/i)
+      )
+    })
+  })
+
+  test('ouvre le forçage depuis une ligne de vote à traiter', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      {
+        _id: 'planning-manual-1',
+        reference: 'TPI-2026-077',
+        status: 'manual_required',
+        sujet: 'Sujet manuel',
+        candidat: { firstName: 'Nora', lastName: 'Martin' },
+        expert1: { firstName: 'Bob', lastName: 'Expert' },
+        expert2: { firstName: 'Carla', lastName: 'Expert' },
+        chefProjet: { firstName: 'Diane', lastName: 'Boss' },
+        proposedSlots: [
+          {
+            slot: {
+              _id: 'slot-manual',
+              date: '2026-06-10T08:00:00.000Z',
+              startTime: '08:00',
+              endTime: '12:00',
+              room: { name: 'A101' }
+            }
+          }
+        ],
+        votingSession: {
+          deadline: '2026-06-20T08:00:00.000Z',
+          voteSummary: {
+            expert1Voted: true,
+            expert2Voted: true,
+            chefProjetVoted: true
+          }
+        },
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: { decision: 'rejected', responseMode: 'proposal', alternativeCount: 1 },
+          chef_projet: { decision: 'accepted', responseMode: 'ok' }
+        },
+        voteStats: {
+          totalVotes: 3,
+          pendingVotes: 0,
+          acceptedVotes: 2,
+          preferredVotes: 0,
+          rejectedVotes: 1,
+          respondedVotes: 3
+        },
+        voteDecision: {
+          slots: [
+            {
+              slotId: 'slot-manual',
+              isFixed: true,
+              slot: {
+                _id: 'slot-manual',
+                date: '2026-06-10T08:00:00.000Z',
+                startTime: '08:00',
+                endTime: '12:00',
+                room: { name: 'A101' }
+              },
+              positiveCount: 2,
+              rejectedCount: 1,
+              pendingCount: 0,
+              respondedCount: 3,
+              roleDecisions: [
+                { role: 'expert1', decision: 'accepted', voterName: 'Bob Expert' },
+                { role: 'expert2', decision: 'rejected', voterName: 'Carla Expert', comment: 'Pas disponible' },
+                { role: 'chef_projet', decision: 'accepted', voterName: 'Diane Boss' }
+              ]
+            }
+          ]
+        }
+      }
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
+        <PlanningDashboard year='2026' isAdmin />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /forcer un créneau pour tpi-2026-077/i }))
+
+    expect(await screen.findByRole('heading', { name: /créneaux à forcer/i })).toBeInTheDocument()
+    expect(screen.getByText(/focus forçage planning-manual-1/i)).toBeInTheDocument()
+  })
+
+  test('permet de confirmer directement un créneau depuis le détail des votes admin', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      {
+        _id: 'planning-ready-1',
+        reference: 'TPI-2026-088',
+        status: 'voting',
+        sujet: 'Sujet consensus',
+        candidat: { firstName: 'Nora', lastName: 'Martin' },
+        expert1: { firstName: 'Bob', lastName: 'Expert' },
+        expert2: { firstName: 'Carla', lastName: 'Expert' },
+        chefProjet: { firstName: 'Diane', lastName: 'Boss' },
+        proposedSlots: [
+          {
+            slot: {
+              _id: 'slot-consensus',
+              date: '2026-06-12T08:00:00.000Z',
+              startTime: '08:00',
+              endTime: '12:00',
+              room: { name: 'A101' }
+            }
+          }
+        ],
+        votingSession: {
+          deadline: '2026-06-20T08:00:00.000Z',
+          voteSummary: {
+            expert1Voted: true,
+            expert2Voted: true,
+            chefProjetVoted: true
+          }
+        },
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: { decision: 'accepted', responseMode: 'ok' },
+          chef_projet: { decision: 'accepted', responseMode: 'ok' }
+        },
+        voteStats: {
+          totalVotes: 3,
+          pendingVotes: 0,
+          acceptedVotes: 3,
+          preferredVotes: 0,
+          rejectedVotes: 0,
+          respondedVotes: 3
+        },
+        voteDecision: {
+          slots: [
+            {
+              slotId: 'slot-consensus',
+              isFixed: true,
+              slot: {
+                _id: 'slot-consensus',
+                date: '2026-06-12T08:00:00.000Z',
+                startTime: '08:00',
+                endTime: '12:00',
+                room: { name: 'A101' }
+              },
+              positiveCount: 3,
+              rejectedCount: 0,
+              pendingCount: 0,
+              respondedCount: 3,
+              roleDecisions: [
+                { role: 'expert1', decision: 'accepted', voterName: 'Bob Expert' },
+                { role: 'expert2', decision: 'accepted', voterName: 'Carla Expert' },
+                { role: 'chef_projet', decision: 'accepted', voterName: 'Diane Boss' }
+              ]
+            }
+          ]
+        }
+      }
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
+        <PlanningDashboard year='2026' isAdmin />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /valider 12\.06\.2026 .* tpi-2026-088/i }))
+
+    await waitFor(() => {
+      expect(planningServices.tpiPlanningService.forceSlot).toHaveBeenCalledWith(
+        'planning-ready-1',
+        'slot-consensus',
+        expect.stringMatching(/consensus 3\/3/i)
+      )
+    })
+
+    confirmSpy.mockRestore()
   })
 
   test('n affiche pas les TPI legacy non importés hors des sites configurés', async () => {

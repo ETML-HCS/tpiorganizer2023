@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { authPlanningService, planningCatalogService, planningConfigService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
-import { tpiDossierService } from '../../services/tpiDossierService'
 import { IS_DEBUG } from '../../config/appConfig'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
 import PlanningCalendar from './PlanningCalendar'
@@ -27,12 +26,9 @@ import {
   VoteIcon,
   WrenchIcon
 } from '../shared/InlineIcons'
-import TpiDetailSections from '../tpiDetail/TpiDetailSections'
 import {
-  buildPlanningOnlyDossier,
   buildTpiDetailsLink,
   formatPersonName,
-  getPlannedSlotLabel,
   getPlanningStatusMeta
 } from '../tpiDetail/tpiDetailUtils'
 import {
@@ -81,21 +77,21 @@ const STATUS_FILTER_LABELS = {
 const TAB_PRESENTATIONS = {
   list: {
     kicker: 'Pilotage',
-    title: 'Liste operationnelle',
-    adminDescription: 'Travaille la matiere annuelle, ouvre une fiche et controle rapidement l etat des TPI.',
-    viewerDescription: 'Retrouve tes TPI et consulte leur etat sans quitter la vue planning.'
+    title: 'Recherche complète',
+    adminDescription: 'Vue secondaire pour retrouver un TPI précis.',
+    viewerDescription: 'Tes TPI et leur état.'
   },
   votes: {
     kicker: 'Campagne',
-    title: 'Suivi des votes',
-    adminDescription: 'Suis les reponses, relance les non repondants et gere les TPI encore en attente.',
-    viewerDescription: 'Reponds a tes votes et consulte les propositions de creneaux qui te concernent.'
+    title: 'Votes',
+    adminDescription: 'Réponses reçues, relances et clôture.',
+    viewerDescription: 'Réponds aux votes ouverts.'
   },
   conflicts: {
-    kicker: 'Exceptions',
-    title: 'Traitement manuel',
-    adminDescription: 'Centralise les TPI qui demandent une intervention humaine avant la publication.',
-    viewerDescription: 'Aucune intervention manuelle n est disponible dans cette vue.'
+    kicker: 'Forçage',
+    title: 'À forcer',
+    adminDescription: 'Choisis un TPI, sélectionne un créneau, indique la raison.',
+    viewerDescription: 'Aucune action manuelle.'
   }
 }
 
@@ -371,8 +367,217 @@ function formatVoteSlotLabel(slot) {
   return [dateLabel, timeLabel, roomLabel].filter(Boolean).join(' · ') || 'Creneau a verifier'
 }
 
+function getVoteDecisionSlots(tpi) {
+  const slots = Array.isArray(tpi?.voteDecision?.slots)
+    ? tpi.voteDecision.slots
+    : []
+
+  return slots
+    .filter((slot) => compactText(slot?.slotId))
+    .map((slot) => ({
+      ...slot,
+      label: formatVoteSlotLabel(slot.slot),
+      positiveCount: Number(slot.positiveCount || 0),
+      rejectedCount: Number(slot.rejectedCount || 0),
+      pendingCount: Number(slot.pendingCount || 0),
+      respondedCount: Number(slot.respondedCount || 0),
+      roleDecisions: Array.isArray(slot.roleDecisions) ? slot.roleDecisions : []
+    }))
+}
+
+function getVoteProposalSummaries(tpi) {
+  const summariesByRole = new Map()
+
+  const getSummary = (decision) => {
+    const role = compactText(decision?.role)
+
+    if (!role) {
+      return null
+    }
+
+    if (!summariesByRole.has(role)) {
+      const voterName = compactText(decision?.voterName)
+      summariesByRole.set(role, {
+        role,
+        roleLabel: getVoterRoleLabel(role),
+        voterName,
+        slots: [],
+        specialRequestReason: '',
+        specialRequestDate: null,
+        hasAvailabilityException: false
+      })
+    }
+
+    const summary = summariesByRole.get(role)
+    const voterName = compactText(decision?.voterName)
+    if (voterName && !summary.voterName) {
+      summary.voterName = voterName
+    }
+
+    return summary
+  }
+
+  getVoteDecisionSlots(tpi).forEach((slot) => {
+    const slotLabel = compactText(slot?.label)
+
+    slot.roleDecisions.forEach((decision) => {
+      const summary = getSummary(decision)
+      if (!summary) {
+        return
+      }
+
+      if (decision.decision === 'preferred' && slotLabel) {
+        const alreadyIncluded = summary.slots.some((entry) => entry.slotId === slot.slotId)
+        if (!alreadyIncluded) {
+          summary.slots.push({
+            slotId: slot.slotId,
+            voteId: compactText(decision.voteId),
+            label: slotLabel,
+            priority: Number.isFinite(Number(decision.priority)) ? Number(decision.priority) : null
+          })
+        }
+      }
+
+      if (
+        decision.availabilityException ||
+        compactText(decision.specialRequestReason) ||
+        decision.specialRequestDate
+      ) {
+        summary.hasAvailabilityException = true
+        summary.specialRequestReason = summary.specialRequestReason || compactText(decision.specialRequestReason)
+        summary.specialRequestDate = summary.specialRequestDate || decision.specialRequestDate || null
+      }
+    })
+  })
+
+  return Array.from(summariesByRole.values())
+    .map((summary) => ({
+      ...summary,
+      slots: summary.slots.sort((left, right) => {
+        const leftPriority = Number.isFinite(Number(left.priority)) ? Number(left.priority) : Number.MAX_SAFE_INTEGER
+        const rightPriority = Number.isFinite(Number(right.priority)) ? Number(right.priority) : Number.MAX_SAFE_INTEGER
+
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority
+        }
+
+        return left.label.localeCompare(right.label)
+      })
+    }))
+    .filter((summary) =>
+      summary.slots.length > 0 ||
+      summary.hasAvailabilityException ||
+      compactText(summary.specialRequestReason) ||
+      summary.specialRequestDate
+    )
+    .sort((left, right) =>
+      VOTE_ROLE_ORDER.indexOf(left.role) - VOTE_ROLE_ORDER.indexOf(right.role)
+    )
+}
+
+function formatSpecialRequestDate(value) {
+  const label = formatVoteDate(value)
+  return label ? `Date demandée ${label}` : ''
+}
+
+function buildVoteProposalMoveReason(tpi, summary, slot) {
+  const reference = compactText(tpi?.reference) || 'TPI'
+  const voterLabel = [
+    compactText(summary?.roleLabel),
+    compactText(summary?.voterName)
+  ].filter(Boolean).join(' - ')
+  const slotLabel = compactText(slot?.label) || compactText(slot?.slotId) || 'créneau proposé'
+
+  return `Déplacement depuis proposition de vote: ${reference} vers ${slotLabel}${voterLabel ? ` (${voterLabel})` : ''}.`
+}
+
+function getMoveSlotLabel(slot, fallback = 'Non défini') {
+  return compactText(slot?.label) || formatVoteSlotLabel(slot) || fallback
+}
+
+function getMoveConflictLabel(conflict) {
+  const type = compactText(conflict?.type)
+
+  if (type === 'room_overlap') {
+    return conflict?.description || 'Le créneau cible est déjà occupé.'
+  }
+
+  if (type === 'person_overlap') {
+    const person = compactText(conflict?.person)
+    return person
+      ? `${person} est déjà engagé sur ce créneau.`
+      : 'Une personne est déjà engagée sur ce créneau.'
+  }
+
+  if (type === 'room_class_mismatch') {
+    return 'La salle ne correspond pas au type de classe du TPI.'
+  }
+
+  if (type === 'consecutive_limit') {
+    return 'La règle du nombre de soutenances consécutives serait dépassée.'
+  }
+
+  return conflict?.description || conflict?.message || 'Conflit détecté.'
+}
+
+function getSlotDecisionTone(decision) {
+  if (decision === 'accepted') {
+    return 'ok'
+  }
+
+  if (decision === 'preferred') {
+    return 'proposal'
+  }
+
+  if (decision === 'rejected') {
+    return 'rejected'
+  }
+
+  return 'pending'
+}
+
+function getSlotDecisionLabel(decision, isFixed) {
+  if (decision === 'accepted') {
+    return isFixed ? 'OK' : 'Accepte'
+  }
+
+  if (decision === 'preferred') {
+    return 'Propose'
+  }
+
+  if (decision === 'rejected') {
+    return isFixed ? 'Refus' : 'Non retenu'
+  }
+
+  return 'Attente'
+}
+
+function getAdminSlotActionLabel(slot) {
+  if (slot?.positiveCount >= 3) {
+    return 'Valider'
+  }
+
+  if (slot?.positiveCount === 2) {
+    return 'Imposer 2/3'
+  }
+
+  return 'Forcer'
+}
+
+function buildAdminSlotForceReason(reference, slot) {
+  const slotLabel = compactText(slot?.label) || 'créneau sélectionné'
+  const voteRatio = `${Number(slot?.positiveCount || 0)}/3`
+
+  if (Number(slot?.positiveCount || 0) >= 3) {
+    return `Validation admin depuis le suivi des votes: consensus 3/3 sur ${slotLabel}.`
+  }
+
+  return `Forçage admin depuis le suivi des votes ${reference}: ${voteRatio} avis favorable(s) sur ${slotLabel}.`
+}
+
 function buildVoteWorkflowRow(tpi) {
   const roleEntries = getVoteRoleEntries(tpi)
+  const decisionSlots = getVoteDecisionSlots(tpi)
   const respondedRoles = roleEntries.filter((entry) => hasVoteRoleResponded(entry.status))
   const missingRoles = roleEntries.filter((entry) => !hasVoteRoleResponded(entry.status))
   const normalizedStatus = normalizePlanningStatus(tpi?.status)
@@ -406,6 +611,8 @@ function buildVoteWorkflowRow(tpi) {
     missingCount: missingRoles.length,
     missingLabels: missingRoles.map((entry) => entry.label),
     fixedSlotLabel: formatVoteSlotLabel(getVoteFixedSlot(tpi)),
+    decisionSlots,
+    proposalSummaries: getVoteProposalSummaries(tpi),
     deadlineLabel: formatVoteDeadline(tpi?.votingSession?.deadline),
     hasProposal,
     hasSpecialRequest,
@@ -452,17 +659,19 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [validationResult, setValidationResult] = useState(null)
   
   // États de l'interface
-  const [activeTab, setActiveTab] = useState(() => requestedTab || 'calendar')
+  const [activeTab, setActiveTab] = useState(() => requestedTab || 'votes')
   const [selectedTpi, setSelectedTpi] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [workflowActionLoading, setWorkflowActionLoading] = useState(false)
   const [pendingWorkflowAction, setPendingWorkflowAction] = useState('')
   const [error, setError] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
-  const [selectedTpiDossier, setSelectedTpiDossier] = useState(null)
-  const [selectedTpiDossierLoading, setSelectedTpiDossierLoading] = useState(false)
-  const [selectedTpiDossierError, setSelectedTpiDossierError] = useState('')
   const [appliedFocus, setAppliedFocus] = useState('')
+  const [manualFocusTpiId, setManualFocusTpiId] = useState('')
+  const [proposalMoveReview, setProposalMoveReview] = useState(null)
+  const [proposalMoveLoadingKey, setProposalMoveLoadingKey] = useState('')
+  const [proposalMoveApplying, setProposalMoveApplying] = useState(false)
+  const [preferenceActionLoadingKey, setPreferenceActionLoadingKey] = useState('')
 
   // Filtres
   const [statusFilter, setStatusFilter] = useState('all')
@@ -763,8 +972,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     },
     {
       id: 'manual',
-      title: 'Intervention requise',
-      helper: 'Ces TPI doivent etre traites dans la vue Manuels avant publication.',
+      title: 'À forcer',
+      helper: 'Ces TPI demandent un choix manuel de créneau avant publication.',
       rows: voteWorkflowRows.filter((row) => row.bucket === 'manual')
     },
     {
@@ -971,17 +1180,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return validationAnnotations.byTpiId[compactText(selectedTpi._id)]?.messages || []
   }, [selectedTpi, validationAnnotations.byTpiId])
 
-  const selectedTpiFallbackDossier = useMemo(() => {
-    if (!selectedTpi) {
-      return null
-    }
-
-    return buildPlanningOnlyDossier({
-      year,
-      planningTpi: selectedTpi
-    })
-  }, [selectedTpi, year])
-
   const selectedTpiDetailLink = useMemo(() => {
     if (!selectedTpi) {
       return '/gestionTPI'
@@ -993,45 +1191,39 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     )
   }, [selectedTpi, year])
 
-  const selectedTpiDisplayDossier = useMemo(() => {
-    const selectedWorkflowId = compactText(selectedTpi?._id)
-    const dossierWorkflowId = compactText(selectedTpiDossier?.planning?.data?._id)
-
-    if (selectedWorkflowId && dossierWorkflowId && selectedWorkflowId === dossierWorkflowId) {
-      return selectedTpiDossier
-    }
-
-    return selectedTpiFallbackDossier
-  }, [selectedTpi, selectedTpiDossier, selectedTpiFallbackDossier])
   const selectedTpiCandidateLabel = useMemo(() => {
     return formatPersonName(
       selectedTpi?.candidat,
-      compactText(selectedTpiDisplayDossier?.legacy?.data?.candidat) || 'Candidat non renseigné'
+      'Candidat non renseigné'
     )
-  }, [selectedTpi, selectedTpiDisplayDossier])
+  }, [selectedTpi])
   const selectedTpiSubjectLabel = useMemo(() => {
     return compactText(selectedTpi?.sujet) ||
-      compactText(selectedTpiDisplayDossier?.legacy?.data?.sujet) ||
       'Sujet non renseigné'
-  }, [selectedTpi, selectedTpiDisplayDossier])
+  }, [selectedTpi])
   const selectedTpiStatusMeta = useMemo(() => {
     return getPlanningStatusMeta(selectedTpi?.status)
   }, [selectedTpi])
   const selectedTpiSlotLabel = useMemo(() => {
-    const plannedSlot =
-      selectedTpiDisplayDossier?.planning?.plannedSlot ||
-      selectedTpi?.confirmedSlot ||
-      null
-
-    return getPlannedSlotLabel(plannedSlot)
-  }, [selectedTpi, selectedTpiDisplayDossier])
+    return formatVoteSlotLabel(selectedTpi?.confirmedSlot || getVoteFixedSlot(selectedTpi))
+  }, [selectedTpi])
+  const selectedTpiHasSlot = useMemo(() => {
+    return Boolean(selectedTpi?.confirmedSlot || getVoteFixedSlot(selectedTpi))
+  }, [selectedTpi])
   const selectedTpiIssueCount = useMemo(() => {
-    const dossierIssues = Array.isArray(selectedTpiDisplayDossier?.consistency?.issues)
-      ? selectedTpiDisplayDossier.consistency.issues.length
+    const planningIssues = Array.isArray(selectedTpi?.conflicts)
+      ? selectedTpi.conflicts.length
       : 0
 
-    return dossierIssues + selectedTpiValidationMessages.length
-  }, [selectedTpiDisplayDossier, selectedTpiValidationMessages])
+    return planningIssues + selectedTpiValidationMessages.length
+  }, [selectedTpi, selectedTpiValidationMessages])
+  const selectedTpiVoteEntries = useMemo(() => getVoteRoleEntries(selectedTpi), [selectedTpi])
+  const selectedTpiRespondedVoteCount = useMemo(() => (
+    selectedTpiVoteEntries.filter((entry) => hasVoteRoleResponded(entry.status)).length
+  ), [selectedTpiVoteEntries])
+  const selectedTpiManualAction = useMemo(() => {
+    return MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(selectedTpi?.status))
+  }, [selectedTpi])
   const focusedTpiMatch = useMemo(() => {
     if (!requestedFocus) {
       return null
@@ -1040,57 +1232,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return visibleTpis.find((tpi) => matchesFocusReference(tpi?.reference, requestedFocus)) || null
   }, [requestedFocus, visibleTpis])
   const hasFocusWithoutMatch = Boolean(requestedFocus) && !focusedTpiMatch
-
-  useEffect(() => {
-    if (!selectedTpi || !isAdmin) {
-      setSelectedTpiDossier(null)
-      setSelectedTpiDossierLoading(false)
-      setSelectedTpiDossierError('')
-      return
-    }
-
-    const selectedReference = compactText(selectedTpi.reference)
-
-    if (!selectedReference) {
-      setSelectedTpiDossier(null)
-      setSelectedTpiDossierLoading(false)
-      setSelectedTpiDossierError('Référence Planning introuvable pour cette fiche.')
-      return
-    }
-
-    let isCancelled = false
-
-    const loadSelectedTpiDossier = async () => {
-      setSelectedTpiDossier(null)
-      setSelectedTpiDossierLoading(true)
-      setSelectedTpiDossierError('')
-
-      try {
-        const response = await tpiDossierService.getByRef(year, selectedReference)
-
-        if (!isCancelled) {
-          setSelectedTpiDossier(response)
-        }
-      } catch (loadError) {
-        if (!isCancelled) {
-          setSelectedTpiDossier(null)
-          setSelectedTpiDossierError(
-            getApiErrorMessage(loadError, 'Impossible de charger la lecture croisée de ce TPI.')
-          )
-        }
-      } finally {
-        if (!isCancelled) {
-          setSelectedTpiDossierLoading(false)
-        }
-      }
-    }
-
-    void loadSelectedTpiDossier()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [isAdmin, selectedTpi, year])
 
   useEffect(() => {
     if (!requestedFocus) {
@@ -1102,8 +1243,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       return
     }
 
-    if (activeTab !== 'list') {
-      setActiveTab('list')
+    const focusTargetTab = isAdmin ? 'votes' : 'list'
+    if (activeTab !== focusTargetTab) {
+      setActiveTab(focusTargetTab)
     }
 
     if (statusFilter !== 'all') {
@@ -1136,7 +1278,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     activeTab,
     searchQuery,
     statusFilter,
-    visibleTpis
+    visibleTpis,
+    isAdmin
   ])
 
   useEffect(() => {
@@ -1160,6 +1303,28 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       window.removeEventListener('keydown', handleEscape)
     }
   }, [selectedTpi])
+
+  useEffect(() => {
+    if (!proposalMoveReview) {
+      return undefined
+    }
+
+    const previousOverflow = document.body.style.overflow
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && !proposalMoveApplying) {
+        setProposalMoveReview(null)
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [proposalMoveReview, proposalMoveApplying])
 
   const clearFocusedSearch = useCallback(() => {
     const params = new URLSearchParams(location.search)
@@ -1216,6 +1381,191 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     } catch (err) {
       setError('Erreur lors de l\'attribution manuelle')
       console.error(err)
+    }
+  }, [loadData])
+
+  const openManualResolver = useCallback((tpi) => {
+    const tpiId = compactText(tpi?._id)
+    setManualFocusTpiId(tpiId)
+    setSelectedTpi(null)
+    setActiveTab('conflicts')
+  }, [])
+
+  const handleForceVoteSlot = useCallback(async (tpi, slot) => {
+    const tpiId = compactText(tpi?._id)
+    const slotId = compactText(slot?.slotId)
+    const reference = compactText(tpi?.reference) || 'ce TPI'
+
+    if (!tpiId || !slotId) {
+      setError('Impossible d’identifier le TPI ou le créneau à forcer.')
+      return
+    }
+
+    const actionLabel = slot?.positiveCount >= 3
+      ? 'valider ce créneau'
+      : 'forcer ce créneau'
+    const confirmation = window.confirm(
+      `Confirmer: ${actionLabel} pour ${reference} ?`
+    )
+
+    if (!confirmation) {
+      return
+    }
+
+    try {
+      const result = await tpiPlanningService.forceSlot(
+        tpiId,
+        slotId,
+        buildAdminSlotForceReason(reference, slot)
+      )
+
+      if (result?.success) {
+        setSuccessMessage(`${reference}: créneau confirmé.`)
+        await loadData()
+        setSelectedTpi(null)
+      } else {
+        setError(result?.message || 'Erreur lors de la confirmation du créneau.')
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Erreur lors de la confirmation du créneau.'))
+      console.error(err)
+    }
+  }, [loadData])
+
+  const handleReviewVoteProposalMove = useCallback(async (tpi, summary, slot) => {
+    const tpiId = compactText(tpi?._id)
+    const slotId = compactText(slot?.slotId)
+    const reference = compactText(tpi?.reference) || 'ce TPI'
+
+    if (!tpiId || !slotId) {
+      setError('Impossible d’identifier le TPI ou le créneau proposé.')
+      return
+    }
+
+    const review = {
+      status: 'loading',
+      tpi,
+      summary,
+      slot
+    }
+
+    setError(null)
+    setSelectedTpi(null)
+    setProposalMoveReview(review)
+    setProposalMoveLoadingKey(`${tpiId}:${slotId}`)
+
+    try {
+      const simulation = await tpiPlanningService.simulateMoveToSlot(tpiId, slotId)
+      setProposalMoveReview({
+        ...review,
+        status: 'ready',
+        simulation
+      })
+    } catch (err) {
+      const message = getApiErrorMessage(err, `Impossible de simuler le déplacement de ${reference}.`)
+      setProposalMoveReview({
+        ...review,
+        status: 'error',
+        message
+      })
+      setError(message)
+      console.error(err)
+    } finally {
+      setProposalMoveLoadingKey('')
+    }
+  }, [])
+
+  const handleApplyVoteProposalMove = useCallback(async () => {
+    const tpiId = compactText(proposalMoveReview?.tpi?._id)
+    const slotId = compactText(proposalMoveReview?.slot?.slotId)
+    const reference = compactText(proposalMoveReview?.tpi?.reference) || 'ce TPI'
+    const targetSlotLabel = getMoveSlotLabel(
+      proposalMoveReview?.simulation?.targetSlot,
+      compactText(proposalMoveReview?.slot?.label) || 'ce créneau'
+    )
+
+    if (!tpiId || !slotId) {
+      setError('Impossible d’identifier le TPI ou le créneau à déplacer.')
+      return
+    }
+
+    if (!proposalMoveReview?.simulation?.canMove) {
+      setError('Le déplacement est bloqué par un conflit. Ouvre le forçage pour le traiter.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Déplacer et confirmer ${reference} vers ${targetSlotLabel} ?`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setProposalMoveApplying(true)
+    setError(null)
+
+    try {
+      const result = await tpiPlanningService.moveToSlot(
+        tpiId,
+        slotId,
+        buildVoteProposalMoveReason(proposalMoveReview.tpi, proposalMoveReview.summary, proposalMoveReview.slot)
+      )
+
+      if (result?.success) {
+        const message = `${reference}: déplacé et confirmé.`
+        toast.success(message)
+        setSuccessMessage(message)
+        setProposalMoveReview(null)
+        await loadData()
+      } else {
+        const message = result?.message || 'Le déplacement est impossible avec les contraintes actuelles.'
+        setProposalMoveReview((current) => ({
+          ...current,
+          status: 'ready',
+          message,
+          simulation: result?.simulation || result || current?.simulation
+        }))
+        setError(message)
+      }
+    } catch (err) {
+      const message = getApiErrorMessage(err, 'Erreur lors du déplacement du TPI.')
+      setError(message)
+      console.error(err)
+    } finally {
+      setProposalMoveApplying(false)
+    }
+  }, [proposalMoveReview, loadData])
+
+  const handleInsertProposalPreference = useCallback(async (summary, slot) => {
+    const voteId = compactText(slot?.voteId)
+    const slotId = compactText(slot?.slotId)
+    const actionKey = `${voteId || summary?.role || 'vote'}:${slotId || 'slot'}`
+
+    if (!voteId) {
+      setError('Impossible d’identifier le vote à ajouter aux dates idéales.')
+      return
+    }
+
+    setPreferenceActionLoadingKey(actionKey)
+    setError(null)
+
+    try {
+      const result = await voteService.addProposalToPreferences(voteId)
+      const voterName = compactText(result?.voter?.name) || compactText(summary?.voterName) || summary?.roleLabel || 'Votant'
+      const message = result?.added
+        ? `${voterName}: proposition ajoutée aux dates idéales.`
+        : `${voterName}: proposition déjà présente dans les dates idéales.`
+
+      toast.success(message)
+      setSuccessMessage(message)
+      await loadData()
+    } catch (err) {
+      const message = getApiErrorMessage(err, 'Impossible d’ajouter cette proposition aux dates idéales.')
+      setError(message)
+      console.error(err)
+    } finally {
+      setPreferenceActionLoadingKey('')
     }
   }, [loadData])
 
@@ -1538,11 +1888,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       ]
     }
 
-    // Onglets pour le suivi de votes admin (planning/{year}?tab=votes)
     return [
-      { id: 'votes', label: 'Suivi des votes', icon: <VoteIcon className='page-tools-tab-icon-svg' />, count: voteTrackingTpis.length },
-      { id: 'list', label: 'TPI', icon: <ListIcon className='page-tools-tab-icon-svg' />, count: stats.total },
-      { id: 'conflicts', label: 'Manuels', icon: <WrenchIcon className='page-tools-tab-icon-svg' />, count: stats.conflicts }
+      { id: 'votes', label: 'Votes', icon: <VoteIcon className='page-tools-tab-icon-svg' />, count: voteTrackingTpis.length },
+      { id: 'conflicts', label: 'À forcer', icon: <WrenchIcon className='page-tools-tab-icon-svg' />, count: stats.conflicts }
     ]
   }, [isScopedVoteViewer, stats.pendingVotes, stats.total, stats.conflicts, voteTrackingTpis.length])
 
@@ -1563,7 +1911,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         done: isPublishedState,
         active: isVotingState,
         warning: isVotingState && hasManualRequired
-          ? `${manualRequiredCount} TPI en manuel`
+          ? `${manualRequiredCount} TPI à forcer`
           : ''
       },
       {
@@ -1600,88 +1948,39 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     ? activePlanningSiteLabels.join(', ')
     : `Aucun site actif pour ${year}`
   const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || STATUS_FILTER_LABELS.all
+  const activeViewLabel = activeTabMeta?.label || (activeTab === 'list' ? 'Liste complète' : 'Votes')
   const activeViewCount = activeTab === 'list'
     ? filteredTpis.length
     : activeTab === 'votes'
       ? (isAdmin ? filteredVoteTrackingTpis.length : pendingVotes.length)
       : conflicts.length
-  const planningHeroLead = useMemo(() => {
-    if (isScopedVoteViewer) {
-      return 'Vue personnelle de vote: retrouve tes TPI, reponds vite et garde une lecture claire des propositions de creneaux.'
-    }
-
-    if (!isAdmin) {
-      return 'Cette page sert de poste de vote. Tu y trouves uniquement les TPI qui te concernent et l etat de la campagne.'
-    }
-
-    if (isPublishedState) {
-      return 'La planification est publiee. Les actions restantes concernent surtout la diffusion et le suivi final des soutenances.'
-    }
-
-    if (isVotingState) {
-      return 'La campagne de votes est ouverte. Surveille les reponses, traite les cas manuels et prepare la publication.'
-    }
-
-    return 'Prepare les creneaux, verifie les conflits puis gele le snapshot avant l ouverture des votes.'
-  }, [isAdmin, isPublishedState, isScopedVoteViewer, isVotingState])
-  const heroSignalCards = useMemo(() => ([
-    {
-      key: 'workflow',
-      label: 'Workflow',
-      value: workflowLabel,
-      helper: hasActiveSnapshot ? `Snapshot v${activeSnapshot.version}` : 'Aucun snapshot gele',
-      tone: isPublishedState ? 'ready' : isVotingState ? 'info' : 'warning'
-    },
-    {
-      key: 'perimeter',
-      label: 'Perimetre',
-      value: activePlanningSiteLabels.length > 0
-        ? `${activePlanningSiteLabels.length} site${activePlanningSiteLabels.length > 1 ? 's' : ''}`
-        : '0 site',
-      helper: activeSitesSummary,
-      tone: activePlanningSiteLabels.length > 0 ? 'ready' : 'muted'
-    },
-    {
-      key: 'attention',
-      label: isAdmin ? 'Exceptions' : 'Votes',
-      value: isAdmin
-        ? `${manualRequiredCount} manuel${manualRequiredCount > 1 ? 's' : ''}`
-        : `${pendingVotes.length} en attente`,
-      helper: isAdmin
-        ? `${validationAnnotations.totalIssues} anomalie${validationAnnotations.totalIssues > 1 ? 's' : ''} de verification`
-        : `${stats.pendingVotes} dossier${stats.pendingVotes > 1 ? 's' : ''} visible${stats.pendingVotes > 1 ? 's' : ''}`,
-      tone: (isAdmin ? manualRequiredCount : pendingVotes.length) > 0 ? 'warning' : 'ready'
-    },
-    {
-      key: 'current-view',
-      label: 'Vue active',
-      value: activeTabMeta?.label || 'TPI',
-      helper: `${activeViewCount} element${activeViewCount > 1 ? 's' : ''} visible${activeViewCount > 1 ? 's' : ''}`,
-      tone: searchQuery ? 'info' : 'muted'
-    }
-  ]), [
-    activePlanningSiteLabels.length,
-    activeSitesSummary,
-    activeTabMeta?.label,
-    activeViewCount,
-    activeSnapshot?.version,
-    hasActiveSnapshot,
-    isAdmin,
-    isPublishedState,
-    isVotingState,
-    manualRequiredCount,
-    pendingVotes.length,
-    searchQuery,
-    stats.pendingVotes,
-    validationAnnotations.totalIssues,
-    workflowLabel
-  ])
   const hasDashboardNotices = Boolean(
     error ||
     successMessage ||
     hasLegacyPlanningData ||
     (isAdmin && hasLegacyOutOfScope)
   )
+  const proposalMoveSimulation = proposalMoveReview?.simulation || null
+  const proposalMoveReference = compactText(proposalMoveReview?.tpi?.reference) ||
+    compactText(proposalMoveSimulation?.tpi?.reference) ||
+    'TPI'
+  const proposalMoveVoterLabel = [
+    compactText(proposalMoveReview?.summary?.roleLabel),
+    compactText(proposalMoveReview?.summary?.voterName)
+  ].filter(Boolean).join(' - ')
+  const proposalMoveCurrentSlotLabel = getMoveSlotLabel(
+    proposalMoveSimulation?.currentSlot,
+    'Aucun créneau actuel'
+  )
+  const proposalMoveTargetSlotLabel = getMoveSlotLabel(
+    proposalMoveSimulation?.targetSlot,
+    compactText(proposalMoveReview?.slot?.label) || 'Créneau proposé'
+  )
+  const proposalMoveConflictLabels = Array.isArray(proposalMoveSimulation?.conflicts)
+    ? proposalMoveSimulation.conflicts.map(getMoveConflictLabel)
+    : []
+  const proposalMoveCanApply = proposalMoveReview?.status === 'ready' &&
+    proposalMoveSimulation?.canMove === true
 
   /**
    * Callback après import réussi
@@ -1697,7 +1996,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   }, [loadData])
 
   useEffect(() => {
-    if (requestedTab && tabs.some(tab => tab.id === requestedTab)) {
+    const isHiddenListRequest = isAdmin && requestedTab === 'list'
+
+    if (isHiddenListRequest || (requestedTab && tabs.some(tab => tab.id === requestedTab))) {
       if (activeTab !== requestedTab) {
         setActiveTab(requestedTab)
       }
@@ -1721,10 +2022,11 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
 
     const tabExists = tabs.some(tab => tab.id === activeTab)
-    if (!tabExists) {
+    const isHiddenAdminList = isAdmin && activeTab === 'list'
+    if (!tabExists && !isHiddenAdminList) {
       setActiveTab(tabs[0]?.id || 'votes')
     }
-  }, [requestedTab, isScopedVoteViewer, activeTab, tabs, navigate, location.pathname, location.search])
+  }, [requestedTab, isScopedVoteViewer, activeTab, tabs, navigate, location.pathname, location.search, isAdmin])
 
   if (isLoading) {
     return (
@@ -1753,7 +2055,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         className="planning-dashboard-tools"
         flatHeader
         title={`Planning ${year}`}
-        description="Pilotage annuel du workflow, des votes et de la publication."
+        description="Workflow, votes, publication."
         meta={
           <div className="planning-dashboard-stats">
             {dashboardStatsChips.map((stat) => (
@@ -1791,254 +2093,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
         ariaLabel="Outils de planification"
-        bodyClassName="planning-dashboard-tools-body"
-      >
-        <section className="planning-hero">
-          <div className="planning-hero-main">
-            <div className="planning-hero-copy">
-              <span className="planning-hero-kicker">
-                {isAdmin ? 'Console annuelle' : 'Vue planning'}
-              </span>
-              <h2>Planifier, suivre et publier sans perdre le fil.</h2>
-              <p>{planningHeroLead}</p>
-            </div>
-
-            <div className="planning-hero-inline-meta" aria-label={`Contexte planning ${year}`}>
-              <span className={`planning-hero-inline-chip state-${workflowState}`}>
-                Workflow {workflowLabel}
-              </span>
-              <span className="planning-hero-inline-chip">Annee {year}</span>
-              <span className="planning-hero-inline-chip">
-                {hasActiveSnapshot ? `Snapshot v${activeSnapshot.version}` : 'Aucun snapshot'}
-              </span>
-              <span className="planning-hero-inline-chip">
-                {activePlanningSiteLabels.length > 0
-                  ? `${activePlanningSiteLabels.length} site${activePlanningSiteLabels.length > 1 ? 's' : ''} actifs`
-                  : 'Sites non configures'}
-              </span>
-            </div>
-
-            <div className="planning-hero-actions">
-              <button
-                type="button"
-                className="planning-hero-action is-primary"
-                onClick={() => setActiveTab('list')}
-              >
-                <ListIcon className="button-icon" />
-                Ouvrir les TPI
-              </button>
-              {tabs.some((tab) => tab.id === 'votes') ? (
-                <button
-                  type="button"
-                  className="planning-hero-action"
-                  onClick={() => setActiveTab('votes')}
-                >
-                  <VoteIcon className="button-icon" />
-                  {isAdmin ? 'Suivre les votes' : 'Mes votes'}
-                </button>
-              ) : null}
-              {isAdmin && tabs.some((tab) => tab.id === 'conflicts') ? (
-                <button
-                  type="button"
-                  className="planning-hero-action"
-                  onClick={() => setActiveTab('conflicts')}
-                >
-                  <WrenchIcon className="button-icon" />
-                  Voir le manuel
-                </button>
-              ) : null}
-              {isAdmin ? (
-                <button
-                  type="button"
-                  className="planning-hero-action"
-                  onClick={() => navigate('/gestionTPI')}
-                >
-                  <FileTextIcon className="button-icon" />
-                  Gestion TPI
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="planning-hero-signal-grid">
-            {heroSignalCards.map((card) => (
-              <article
-                key={card.key}
-                className={`planning-hero-signal is-${card.tone}`}
-              >
-                <span>{card.label}</span>
-                <strong>{card.value}</strong>
-                <p>{card.helper}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {isScopedVoteViewer && (
-          <section className="workflow-actions workflow-actions-personal">
-            <div className="workflow-actions-copy">
-              <div className="workflow-state-badge state-voting_open">
-                Vue vote personnelle
-              </div>
-              <h3>La page est focalisée sur tes votes.</h3>
-              <p>
-                Tu peux revenir à la vue globale de l année si tu veux retrouver l ensemble du dashboard.
-              </p>
-            </div>
-            <div className="workflow-actions-inline">
-              <button
-                type="button"
-                className="workflow-btn neutral"
-                onClick={handleExitScopedVoteView}
-                title="Quitter le mode vote et revenir à la vue globale."
-              >
-                Quitter le mode vote
-              </button>
-            </div>
-          </section>
-        )}
-
-        {!isAdmin && !isScopedVoteViewer && (
-          <section className="workflow-actions workflow-actions-restricted">
-            <div className="workflow-actions-copy">
-              <div className="workflow-state-badge state-restricted">
-                Acces admin requis
-              </div>
-              <h3>Le pilotage complet du workflow est reserve a l administration.</h3>
-              <p>
-                Cette vue publique reste limitee aux actions de vote et a la consultation ciblee.
-              </p>
-            </div>
-          </section>
-        )}
-
-        {isAdmin && (
-          <section className="workflow-actions workflow-actions-admin">
-            <div className="workflow-actions-head">
-              <div className="workflow-actions-copy">
-                <div className={`workflow-state-badge state-${workflowState}`}>
-                  Workflow: {workflowLabel}
-                </div>
-                <h3>Poste de pilotage du workflow {year}</h3>
-                <p>
-                  {isPlanningState
-                    ? 'Verifie le planning et gele la version a soumettre. Le demarrage de campagne se fait dans le cockpit votes.'
-                    : isVotingState
-                      ? 'Le pilotage des reponses et de la cloture se fait dans le cockpit votes.'
-                      : 'Le planning est publie. Tu peux encore renvoyer les liens et ouvrir la vue soutenances.'}
-                </p>
-              </div>
-              <div className={`workflow-progress ${workflowActionLoading ? 'is-busy' : 'is-idle'}`}>
-                {workflowActionLoading
-                  ? `Action en cours: ${WORKFLOW_ACTION_LABELS[pendingWorkflowAction] || 'Traitement'}`
-                  : `${activeSitesSummary} • ${stats.total} TPI visibles • ${validationAnnotations.totalIssues} anomalie${validationAnnotations.totalIssues > 1 ? 's' : ''}`}
-              </div>
-            </div>
-            <div className="workflow-steps">
-              {workflowSteps.map(step => (
-                <div
-                  key={step.id}
-                  className={`workflow-step ${step.done ? 'done' : ''} ${step.warning ? 'warning' : ''}`}
-                >
-                  <span className="workflow-step-icon">
-                    {step.done ? <CheckIcon /> : <CalendarIcon />}
-                  </span>
-                  <span className="workflow-step-label">{step.label}</span>
-                  {step.warning && <span className="workflow-step-warning">{step.warning}</span>}
-                </div>
-              ))}
-            </div>
-            <div className="workflow-buttons workflow-sections-grid">
-              {/* Section Planification - visible uniquement en état Planification */}
-              {isPlanningState && (
-                <div className="workflow-section workflow-section-planification">
-                  <h4 className="section-title">
-                    <CalendarIcon className="section-title-icon" />
-                    Planification
-                  </h4>
-                  <div className="section-buttons">
-                    <button
-                      className="workflow-btn primary"
-                      onClick={handleAutomatePlanification}
-                      disabled={workflowActionLoading}
-                      title="Reconstruire automatiquement un créneau principal par TPI selon les dates, sites et contraintes configurés."
-                    >
-                      <RefreshIcon className="button-icon" />
-                      {isActionRunning('autoPlan') ? 'Automatisation...' : 'Automatiser planification'}
-                    </button>
-                    <button
-                      className="workflow-btn secondary"
-                      onClick={handleValidatePlanification}
-                      disabled={workflowActionLoading}
-                      title="Verifier les conflits dans la planification actuelle."
-                    >
-                      <SearchIcon className="button-icon" />
-                      {isActionRunning('validate') ? 'Verification...' : 'Verifier conflits'}
-                    </button>
-                    <button
-                      className="workflow-btn primary"
-                      onClick={handleFreezePlanification}
-                      disabled={workflowActionLoading || hasLegacyImportGap}
-                      title={hasLegacyImportGap
-                        ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning. Corriger avant le gel.'
-                        : 'Figer la version de planification a soumettre au vote.'}
-                    >
-                      <ArrowRightIcon className="button-icon" />
-                      {isActionRunning('freeze') ? 'Gel en cours...' : 'Geler snapshot'}
-                    </button>
-                    <Link
-                      to={`/planning/${year}?tab=votes`}
-                      className="workflow-btn open workflow-link-btn"
-                      title="Ouvrir le cockpit de campagne de votes."
-                    >
-                      <VoteIcon className="button-icon" />
-                      Cockpit votes
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {/* Section Publication - visible en états Votes ou Publication */}
-              {(isVotingState || isPublishedState) && (
-                <div className="workflow-section workflow-section-publication">
-                  <h4 className="section-title">
-                    <CheckIcon className="section-title-icon" />
-                    Publication
-                  </h4>
-                  <div className="section-buttons">
-                    <button
-                      className="workflow-btn success"
-                      onClick={handlePublishDefinitive}
-                      disabled={workflowActionLoading || !canPublish}
-                      title="Publier la version definitive vers Soutenances."
-                    >
-                      <CheckIcon className="button-icon" />
-                      {isActionRunning('publish') ? 'Publication...' : 'Publier definitif'}
-                    </button>
-                    <button
-                      className="workflow-btn neutral"
-                      onClick={handleSendPublicationLinks}
-                      disabled={workflowActionLoading}
-                      title="Renvoyer les liens de soutenance par email."
-                    >
-                      <MailIcon className="button-icon" />
-                      {isActionRunning('sendLinks') ? 'Envoi...' : 'Envoyer liens soutenance'}
-                    </button>
-                    <button
-                      className="workflow-btn open"
-                      onClick={handleOpenPublishedView}
-                      disabled={workflowActionLoading}
-                    >
-                      <PinIcon className="button-icon" />
-                      Ouvrir Soutenances
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-      </PageToolbar>
+      />
 
       {hasDashboardNotices && (
         <div className="planning-dashboard-notices">
@@ -2048,7 +2103,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <AlertIcon className="banner-icon" />
                 {error}
               </span>
-              <button onClick={() => setError(null)}>×</button>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                title="Fermer le message d'erreur."
+                aria-label="Fermer le message d'erreur."
+              >
+                ×
+              </button>
             </div>
           )}
 
@@ -2058,7 +2120,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <CheckIcon className="banner-icon" />
                 {successMessage}
               </span>
-              <button onClick={() => setSuccessMessage(null)}>×</button>
+              <button
+                type="button"
+                onClick={() => setSuccessMessage(null)}
+                title="Fermer le message de succès."
+                aria-label="Fermer le message de succès."
+              >
+                ×
+              </button>
             </div>
           )}
 
@@ -2075,6 +2144,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 type="button"
                 className="legacy-planning-button"
                 onClick={() => navigate('/gestionTPI')}
+                title="Ouvrir la gestion TPI."
+                aria-label="Ouvrir la gestion TPI."
               >
                 Ouvrir Gestion TPI
               </button>
@@ -2122,12 +2193,52 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 type="button"
                 className="legacy-planning-button legacy-planning-button-info"
                 onClick={() => navigate('/gestionTPI')}
+                title="Ouvrir Gestion TPI."
+                aria-label="Ouvrir Gestion TPI."
               >
                 Ouvrir Gestion TPI
               </button>
             </div>
           )}
         </div>
+      )}
+
+      {isScopedVoteViewer && (
+        <section className="workflow-actions workflow-actions-personal">
+          <div className="workflow-actions-copy">
+            <div className="workflow-state-badge state-voting_open">
+              Vue vote personnelle
+            </div>
+            <h3>La page est focalisée sur tes votes.</h3>
+            <p>
+              Tu peux revenir à la vue globale.
+            </p>
+          </div>
+          <div className="workflow-actions-inline">
+            <button
+              type="button"
+              className="workflow-btn neutral"
+              onClick={handleExitScopedVoteView}
+              title="Quitter le mode vote et revenir à la vue globale."
+            >
+              Quitter le mode vote
+            </button>
+          </div>
+        </section>
+      )}
+
+      {!isAdmin && !isScopedVoteViewer && (
+        <section className="workflow-actions workflow-actions-restricted">
+          <div className="workflow-actions-copy">
+            <div className="workflow-state-badge state-restricted">
+              Acces admin requis
+            </div>
+            <h3>Le pilotage complet du workflow est reserve a l administration.</h3>
+            <p>
+              Cette vue publique reste limitee aux actions de vote et a la consultation ciblee.
+            </p>
+          </div>
+        </section>
       )}
 
       <section className="planning-command-shell">
@@ -2139,7 +2250,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           </div>
           <div className="planning-command-summary">
             <span className="planning-command-chip">
-              Vue {activeTabMeta?.label || 'TPI'}
+              Vue {activeViewLabel}
             </span>
             <span className="planning-command-chip">
               {activeViewCount} element{activeViewCount > 1 ? 's' : ''} visibles
@@ -2155,12 +2266,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           </div>
         </div>
 
-        <nav className="dashboard-tabs">
+          <nav className="dashboard-tabs">
           {tabs.map(tab => (
             <button
               key={tab.id}
               className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
+              title={tab.label}
+              aria-label={tab.label}
             >
               <span className="tab-icon">{tab.icon}</span>
               <span className="tab-label">{tab.label}</span>
@@ -2186,6 +2299,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               <button
                 className="clear-search"
                 onClick={() => setSearchQuery('')}
+                title="Effacer la recherche"
+                aria-label="Effacer la recherche"
               >
                 ×
               </button>
@@ -2208,11 +2323,39 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             <button
               className="btn-refresh"
               onClick={loadData}
+              title="Actualiser les données du planning."
+              aria-label="Actualiser les données du planning."
             >
               <RefreshIcon className="button-icon" />
               Actualiser
             </button>
           )}
+
+          {isAdmin && activeTab !== 'list' ? (
+            <button
+              type="button"
+              className="btn-refresh secondary"
+              onClick={() => setActiveTab('list')}
+              title="Ouvrir la liste complète des TPI."
+              aria-label="Ouvrir la liste complète des TPI."
+            >
+              <ListIcon className="button-icon" />
+              Liste complète
+            </button>
+          ) : null}
+
+          {isAdmin && activeTab === 'list' ? (
+            <button
+              type="button"
+              className="btn-refresh secondary"
+              onClick={() => setActiveTab('votes')}
+              title="Revenir au suivi des votes."
+              aria-label="Revenir au suivi des votes."
+            >
+              <VoteIcon className="button-icon" />
+              Retour votes
+            </button>
+          ) : null}
         </div>
 
         {requestedFocus && (
@@ -2222,7 +2365,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               <p>
                 {hasFocusWithoutMatch
                   ? `Aucun TPI visible ne correspond à ${requestedFocus} pour l'année ${year}.`
-                  : `La liste et le panneau détail sont centrés sur ${focusedTpiMatch?.reference || requestedFocus}.`}
+                  : `Vue centrée sur ${focusedTpiMatch?.reference || requestedFocus}.`}
               </p>
             </div>
 
@@ -2232,6 +2375,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   type="button"
                   className="planning-focus-banner-btn"
                   onClick={() => setSelectedTpi(focusedTpiMatch)}
+                  title={`Ouvrir la fiche ${focusedTpiMatch.reference || focusedTpiMatch.refTpi || 'ciblée'}.`}
+                  aria-label={`Ouvrir la fiche ${focusedTpiMatch.reference || focusedTpiMatch.refTpi || 'ciblée'}.`}
                 >
                   Ouvrir le TPI ciblé
                 </button>
@@ -2240,6 +2385,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 type="button"
                 className="planning-focus-banner-btn secondary"
                 onClick={clearFocusedSearch}
+                title="Annuler le focus sur la recherche."
+                aria-label="Annuler le focus sur la recherche."
               >
                 Effacer le focus
               </button>
@@ -2288,14 +2435,16 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   <div className="validation-feedback-orphans">
                     <div className="validation-feedback-orphans-head">
                       <strong>TPI absents de la liste Planning</strong>
-                      <button
-                        type="button"
-                        className="validation-feedback-link"
-                        onClick={() => navigate('/gestionTPI')}
-                      >
-                        Ouvrir Gestion TPI
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="validation-feedback-link"
+                      onClick={() => navigate('/gestionTPI')}
+                      title="Ouvrir la gestion TPI."
+                      aria-label="Ouvrir la gestion TPI."
+                    >
+                      Ouvrir Gestion TPI
+                    </button>
+                  </div>
                     <div className="validation-feedback-orphan-list">
                       {validationAnnotations.orphanIssues.map((issue, index) => {
                         const issueReference = compactText(issue?.reference || issue?.legacyRef) || 'TPI sans référence'
@@ -2328,6 +2477,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               planningCatalogSites={planningCatalogSites}
               validationIssuesByTpiId={validationAnnotations.byTpiId}
               prioritizeValidationIssues={validationAnnotations.impactedTpiCount > 0}
+              showVoteRoleDetails={isScopedVoteViewer}
             />
           </>
         )}
@@ -2342,8 +2492,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   Campagne de votes {year}
                 </h2>
                 <p>
-                  Cette vue sert uniquement a piloter la campagne: ouvrir les votes,
-                  relancer les personnes en attente, clore, puis traiter les cas manuels.
+                  Ouvrir, relancer, clore, traiter.
                 </p>
               </div>
 
@@ -2396,7 +2545,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <p>{voteWorkflowStats.proposalTpis} avec proposition ou demande</p>
               </article>
               <article className={`vote-workflow-metric ${voteWorkflowStats.manualTpis > 0 ? 'is-warning' : ''}`}>
-                <span>Manuels</span>
+                <span>À forcer</span>
                 <strong>{voteWorkflowStats.manualTpis}</strong>
                 <p>{voteWorkflowStats.confirmedTpis} TPI confirme{voteWorkflowStats.confirmedTpis > 1 ? 's' : ''}</p>
               </article>
@@ -2481,10 +2630,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <button
                   type="button"
                   className="workflow-btn open"
-                  onClick={() => setActiveTab('conflicts')}
+                  onClick={() => {
+                    setManualFocusTpiId('')
+                    setActiveTab('conflicts')
+                  }}
+                  title="Ouvrir la vue pour forcer les créneaux manuels."
+                  aria-label="Ouvrir la vue pour forcer les créneaux manuels."
                 >
                   <WrenchIcon className="button-icon" />
-                  Traiter manuels
+                  Forcer créneaux
                 </button>
               ) : null}
 
@@ -2493,6 +2647,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   type="button"
                   className="workflow-btn success"
                   onClick={handleOpenPublishedView}
+                  title="Afficher la vue de publication des soutenances."
+                  aria-label="Ouvrir soutenances."
                 >
                   <CheckIcon className="button-icon" />
                   Ouvrir soutenances
@@ -2544,13 +2700,28 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                                 <strong>{row.reference}</strong>
                                 <p>{row.candidate}</p>
                               </div>
-                              <button
-                                type="button"
-                                className="vote-workflow-open"
-                                onClick={() => setSelectedTpi(row.tpi)}
-                              >
-                                Ouvrir fiche
-                              </button>
+                              <div className="vote-workflow-row-actions">
+                                {row.bucket === 'manual' ? (
+                                  <button
+                                    type="button"
+                                    className="vote-workflow-open is-force"
+                                    onClick={() => openManualResolver(row.tpi)}
+                                    title={`Forcer un créneau pour ${row.reference}.`}
+                                    aria-label={`Forcer un créneau pour ${row.reference}.`}
+                                  >
+                                    Forcer
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="vote-workflow-open"
+                                  onClick={() => setSelectedTpi(row.tpi)}
+                                  title={`Afficher le résumé ${row.reference}.`}
+                                  aria-label={`Afficher le résumé ${row.reference}.`}
+                                >
+                                  Détails
+                                </button>
+                              </div>
                             </div>
 
                             <div className="vote-workflow-slot">
@@ -2574,6 +2745,187 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                                 )
                               })}
                             </div>
+
+                            {row.proposalSummaries.length > 0 ? (
+                              <div
+                                className="vote-proposal-summary is-compact"
+                                aria-label={`Propositions reçues ${row.reference}`}
+                              >
+                                <div className="vote-proposal-summary-head">
+                                  <strong>Propositions reçues</strong>
+                                  <span>
+                                    {row.proposalSummaries.length} votant{row.proposalSummaries.length > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+
+                                <div className="vote-proposal-summary-list">
+                                  {row.proposalSummaries.map((summary) => {
+                                    const voterLabel = [
+                                      summary.roleLabel,
+                                      summary.voterName
+                                    ].map(compactText).filter(Boolean).join(' - ')
+                                    const specialDateLabel = formatSpecialRequestDate(summary.specialRequestDate)
+                                    const specialDateShortLabel = formatVoteDate(summary.specialRequestDate)
+                                    const hasSpecialRequest = Boolean(
+                                      summary.hasAvailabilityException ||
+                                      compactText(summary.specialRequestReason) ||
+                                      specialDateLabel
+                                    )
+                                    const specialPreview = [
+                                      specialDateShortLabel,
+                                      compactText(summary.specialRequestReason)
+                                    ].filter(Boolean).join(' · ')
+
+                                    return (
+                                      <div
+                                        key={`${row.id}-${summary.role}`}
+                                        className="vote-proposal-summary-item"
+                                      >
+                                        <span className="vote-proposal-person" title={voterLabel || summary.roleLabel}>
+                                          <strong>{summary.roleLabel}</strong>
+                                          {summary.voterName ? <span>{summary.voterName}</span> : null}
+                                        </span>
+                                        <div className="vote-proposal-summary-chips">
+                                          {summary.slots.length > 0 ? (
+                                            <div className="vote-proposal-choice-list">
+                                              {summary.slots.map((slot, slotIndex) => {
+                                                const choiceLabel = slot.priority
+                                                  ? `Choix ${slot.priority}`
+                                                  : `Choix ${slotIndex + 1}`
+                                                const moveKey = `${row.id}:${slot.slotId}:move`
+                                                const preferenceKey = `${slot.voteId || summary.role}:${slot.slotId}`
+                                                const isMoveLoading = proposalMoveLoadingKey === `${row.id}:${slot.slotId}` ||
+                                                  proposalMoveLoadingKey === `${compactText(row.tpi?._id)}:${slot.slotId}`
+                                                const isPreferenceLoading = preferenceActionLoadingKey === preferenceKey
+
+                                                return (
+                                                  <div
+                                                    key={`${summary.role}-${slot.slotId}`}
+                                                    className="vote-proposal-choice"
+                                                  >
+                                                    <span
+                                                      className="vote-proposal-chip is-normal"
+                                                      title={`${choiceLabel}: ${slot.label}`}
+                                                    >
+                                                      {choiceLabel}: {slot.label}
+                                                    </span>
+                                                    <button
+                                                      type="button"
+                                                      className="vote-proposal-mini-action"
+                                                      onClick={(event) => {
+                                                        event.stopPropagation()
+                                                        handleReviewVoteProposalMove(row.tpi, summary, slot)
+                                                      }}
+                                                      disabled={isMoveLoading || proposalMoveApplying}
+                                                      title={`Simuler le déplacement de ${row.reference} vers ${slot.label}.`}
+                                                      aria-label={`Simuler le déplacement de ${row.reference} vers ${slot.label}.`}
+                                                      data-action-key={moveKey}
+                                                    >
+                                                      <ArrowRightIcon className="button-icon" />
+                                                      {isMoveLoading ? '...' : 'Déplacer'}
+                                                    </button>
+                                                    {slot.voteId ? (
+                                                      <button
+                                                        type="button"
+                                                        className="vote-proposal-mini-action is-preference"
+                                                        onClick={(event) => {
+                                                          event.stopPropagation()
+                                                          handleInsertProposalPreference(summary, slot)
+                                                        }}
+                                                        disabled={isPreferenceLoading}
+                                                        title="Ajouter ce choix aux dates idéales du votant."
+                                                        aria-label={`Ajouter ${slot.label} aux dates idéales de ${summary.voterName || summary.roleLabel}.`}
+                                                      >
+                                                        <PinIcon className="button-icon" />
+                                                        {isPreferenceLoading ? '...' : 'Dates idéales'}
+                                                      </button>
+                                                    ) : null}
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          ) : null}
+
+                                          {hasSpecialRequest ? (
+                                            <span
+                                              className="vote-proposal-chip is-special"
+                                              title={[
+                                                specialDateLabel,
+                                                summary.specialRequestReason
+                                              ].map(compactText).filter(Boolean).join(' - ')}
+                                            >
+                                              Perso.{specialPreview ? ` ${specialPreview}` : ''}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {row.decisionSlots.length > 0 ? (
+                              <div className="vote-decision-board" aria-label={`Créneaux votés ${row.reference}`}>
+                                <div className="vote-decision-head">
+                                  <strong>Créneaux votés</strong>
+                                  <span>Les 3 rôles doivent être d'accord. L'admin peut trancher.</span>
+                                </div>
+                                <div className="vote-decision-slot-list">
+                                  {row.decisionSlots.map((slot) => (
+                                    <div
+                                      key={slot.slotId}
+                                      className={`vote-decision-slot ${slot.isFixed ? 'is-fixed' : 'is-proposal'} ${slot.positiveCount >= 3 ? 'has-consensus' : ''}`}
+                                    >
+                                      <div className="vote-decision-slot-main">
+                                        <div>
+                                          <strong>{slot.label}</strong>
+                                          <span>{slot.isFixed ? 'Créneau fixé' : 'Proposition'}</span>
+                                        </div>
+                                        <span className={`vote-decision-score ${slot.positiveCount >= 3 ? 'is-ok' : slot.positiveCount === 2 ? 'is-warning' : ''}`}>
+                                          {slot.positiveCount}/3 accord
+                                        </span>
+                                      </div>
+
+                                      <div className="vote-decision-role-list">
+                                        {slot.roleDecisions.map((decision) => {
+                                          const tone = getSlotDecisionTone(decision.decision)
+                                          const title = [
+                                            decision.voterName,
+                                            decision.comment,
+                                            decision.specialRequestReason
+                                          ].map(compactText).filter(Boolean).join(' · ')
+
+                                          return (
+                                            <span
+                                              key={`${slot.slotId}-${decision.role}`}
+                                              className={`vote-decision-role is-${tone}`}
+                                              title={title || undefined}
+                                            >
+                                              <strong>{getVoterRoleLabel(decision.role)}</strong>
+                                              <span>{getSlotDecisionLabel(decision.decision, slot.isFixed)}</span>
+                                            </span>
+                                          )
+                                        })}
+                                      </div>
+
+                                      {normalizePlanningStatus(row.tpi?.status) !== PLANNING_STATUS.CONFIRMED ? (
+                                        <button
+                                          type="button"
+                                          className="vote-decision-force"
+                                          onClick={() => handleForceVoteSlot(row.tpi, slot)}
+                                          disabled={workflowActionLoading}
+                                          title={`${getAdminSlotActionLabel(slot)} ${slot.label}.`}
+                                          aria-label={`${getAdminSlotActionLabel(slot)} ${slot.label} pour ${row.reference}.`}
+                                        >
+                                          {getAdminSlotActionLabel(slot)}
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
 
                             <div className="vote-workflow-row-foot">
                               <span>{row.respondedCount}/3 reponses</span>
@@ -2608,9 +2960,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   TPI non intégrés au workflow ({notImportedLegacyTpisByPlanningPerimeter.length})
                 </h3>
                 <p className="not-imported-hint">
-                  Ces TPI existent dans GestionTPI mais n'ont pas encore été intégrés au workflow de planification.
-                  Les fiches hors périmètre de planification sont exclues volontairement de cette liste.
-                  Vérifiez que toutes les parties prenantes (candidat, 2 experts, chef de projet) sont renseignées.
+                  Présents dans GestionTPI, absents du workflow. Complétez les parties prenantes.
                 </p>
                 <div className="not-imported-list">
                   {notImportedLegacyTpisByPlanningPerimeter.map((tpi) => {
@@ -2654,11 +3004,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             <div className="manual-header">
               <h2>
                 <WrenchIcon className="section-title-icon" />
-                TPI nécessitant une action manuelle
+                Créneaux à forcer
               </h2>
               <p>
-                Ces TPI n'ont pas pu être clôturés automatiquement après les votes.
-                Vous devez forcer un créneau ou marquer comme validé manuellement.
+                Sélectionne le TPI, choisis le créneau à imposer, puis indique la raison.
               </p>
             </div>
             <ConflictResolver
@@ -2666,10 +3015,149 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               calendarData={calendarData}
               onForceSlot={handleForceSlot}
               onReload={loadData}
+              focusTpiId={manualFocusTpiId}
             />
           </section>
         )}
       </main>
+
+      {proposalMoveReview && (
+        <>
+          <button
+            type="button"
+            className="tpi-detail-panel-backdrop"
+            aria-label="Fermer la simulation de déplacement"
+            onClick={() => {
+              if (!proposalMoveApplying) {
+                setProposalMoveReview(null)
+              }
+            }}
+            title="Fermer la simulation."
+          />
+
+          <aside
+            className="tpi-detail-panel vote-move-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vote-move-panel-title"
+          >
+            <div className="panel-header">
+              <div className="panel-header-copy">
+                <span className="panel-kicker">Proposition votant</span>
+                <h3 id="vote-move-panel-title">
+                  <ArrowRightIcon className="section-title-icon" />
+                  Simulation déplacement
+                </h3>
+                <p className="panel-candidate">{proposalMoveReference}</p>
+                {proposalMoveVoterLabel ? (
+                  <p className="panel-subject">{proposalMoveVoterLabel}</p>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                className="close-panel"
+                onClick={() => setProposalMoveReview(null)}
+                disabled={proposalMoveApplying}
+                aria-label="Fermer la simulation"
+                title="Fermer"
+              >
+                <CloseIcon className="section-title-icon" />
+              </button>
+            </div>
+
+            <div className="panel-content vote-move-content">
+              {proposalMoveReview.status === 'loading' ? (
+                <div className="vote-move-state">Simulation des contraintes en cours...</div>
+              ) : null}
+
+              {proposalMoveReview.status === 'error' ? (
+                <div className="vote-move-state is-error">
+                  {proposalMoveReview.message || 'Simulation impossible.'}
+                </div>
+              ) : null}
+
+              {proposalMoveSimulation ? (
+                <>
+                  <section className="vote-move-card">
+                    <h4>Créneaux</h4>
+                    <dl className="vote-move-slots">
+                      <div>
+                        <dt>Actuel</dt>
+                        <dd>{proposalMoveCurrentSlotLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>Proposé</dt>
+                        <dd>{proposalMoveTargetSlotLabel}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className={`vote-move-card ${proposalMoveCanApply ? 'is-ready' : 'is-blocked'}`}>
+                    <h4>{proposalMoveCanApply ? 'Déplacement possible' : 'Déplacement bloqué'}</h4>
+                    <p>{proposalMoveSimulation.message}</p>
+
+                    {proposalMoveConflictLabels.length > 0 ? (
+                      <ul className="vote-move-conflicts">
+                        {proposalMoveConflictLabels.map((label, index) => (
+                          <li key={`${label}-${index}`}>{label}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </section>
+
+                  {proposalMoveSimulation.swapCandidate ? (
+                    <section className={`vote-move-card ${proposalMoveSimulation.swapCandidate.canSwap ? 'is-swap' : 'is-blocked'}`}>
+                      <h4>{proposalMoveSimulation.swapCandidate.canSwap ? 'Inversion possible' : 'Inversion bloquée'}</h4>
+                      <p>{proposalMoveSimulation.swapCandidate.message}</p>
+                      {proposalMoveSimulation.swapCandidate.tpi?.reference ? (
+                        <p className="vote-move-muted">
+                          TPI concerné: {proposalMoveSimulation.swapCandidate.tpi.reference}
+                        </p>
+                      ) : null}
+                    </section>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+
+            <div className="panel-actions vote-move-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setProposalMoveReview(null)}
+                disabled={proposalMoveApplying}
+              >
+                Annuler
+              </button>
+              {proposalMoveCanApply ? (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleApplyVoteProposalMove}
+                  disabled={proposalMoveApplying}
+                >
+                  <CheckIcon className="button-icon" />
+                  {proposalMoveApplying ? 'Déplacement...' : 'Déplacer et confirmer'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    openManualResolver(proposalMoveReview.tpi)
+                    setProposalMoveReview(null)
+                  }}
+                  disabled={proposalMoveReview.status === 'loading'}
+                >
+                  <WrenchIcon className="button-icon" />
+                  Ouvrir le forçage
+                </button>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
 
       {/* Panel de détails TPI (sidebar) */}
       {selectedTpi && (
@@ -2679,6 +3167,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             className="tpi-detail-panel-backdrop"
             aria-label="Fermer les détails"
             onClick={() => setSelectedTpi(null)}
+            title="Fermer le panneau de détails."
           />
 
           <aside
@@ -2700,7 +3189,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   <span className={`panel-pill is-${selectedTpiStatusMeta.tone}`}>
                     {selectedTpiStatusMeta.label}
                   </span>
-                  <span className={`panel-pill is-${selectedTpiSlotLabel === 'Aucun créneau' ? 'warning' : 'ready'}`}>
+                  <span className={`panel-pill is-${selectedTpiHasSlot ? 'ready' : 'warning'}`}>
                     {selectedTpiSlotLabel}
                   </span>
                   <span className={`panel-pill is-${selectedTpiIssueCount > 0 ? 'warning' : 'ready'}`}>
@@ -2723,33 +3212,90 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             </div>
 
             <div className="panel-content">
-              {selectedTpiDossierLoading ? (
-                <div className="tpi-detail-panel-state">
-                  Chargement de la lecture croisée GestionTPI / Planning.
-                </div>
-              ) : null}
+              <div className="planning-detail-quick">
+                <section className="planning-detail-card">
+                  <h4>Participants</h4>
+                  <dl className="planning-detail-list">
+                    <div>
+                      <dt>Expert 1</dt>
+                      <dd>{formatPersonName(selectedTpi.expert1, 'Non renseigné')}</dd>
+                    </div>
+                    <div>
+                      <dt>Expert 2</dt>
+                      <dd>{formatPersonName(selectedTpi.expert2, 'Non renseigné')}</dd>
+                    </div>
+                    <div>
+                      <dt>Chef de projet</dt>
+                      <dd>{formatPersonName(selectedTpi.chefProjet, 'Non renseigné')}</dd>
+                    </div>
+                  </dl>
+                </section>
 
-              {selectedTpiDossierError ? (
-                <div className="tpi-detail-panel-state error">
-                  {selectedTpiDossierError}
-                </div>
-              ) : null}
+                <section className="planning-detail-card">
+                  <h4>Votes</h4>
+                  <div className="planning-detail-vote-status">
+                    <strong>{selectedTpiRespondedVoteCount}/3 réponses</strong>
+                    <span>{selectedTpiManualAction ? 'Forçage requis' : selectedTpiStatusMeta.label}</span>
+                  </div>
+                  <div className="planning-detail-role-grid">
+                    {selectedTpiVoteEntries.map((entry) => {
+                      const tone = getVoteRoleTone(entry.status)
 
-              <TpiDetailSections
-                dossier={selectedTpiDisplayDossier}
-                supplementalIssues={selectedTpiValidationMessages}
-                showSummary
-                showOverview={false}
-                className='is-panel'
-                variant='panel'
-              />
+                      return (
+                        <span key={entry.role} className={`planning-detail-role is-${tone}`}>
+                          <strong>{entry.label}</strong>
+                          <span>{getVoteRoleStatusLabel(entry.status)}</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                </section>
+
+                <section className="planning-detail-card">
+                  <h4>Créneau</h4>
+                  <p className="planning-detail-slot">{selectedTpiSlotLabel}</p>
+                  {Array.isArray(selectedTpi.proposedSlots) && selectedTpi.proposedSlots.length > 1 ? (
+                    <p className="planning-detail-muted">
+                      {selectedTpi.proposedSlots.length - 1} alternative{selectedTpi.proposedSlots.length > 2 ? 's' : ''} disponible{selectedTpi.proposedSlots.length > 2 ? 's' : ''}.
+                    </p>
+                  ) : null}
+                </section>
+
+                {selectedTpiIssueCount > 0 ? (
+                  <section className="planning-detail-card is-warning">
+                    <h4>À corriger</h4>
+                    {selectedTpiValidationMessages.length > 0 ? (
+                      <ul className="planning-detail-issues">
+                        {selectedTpiValidationMessages.slice(0, 3).map((message, index) => (
+                          <li key={`${message}-${index}`}>{message}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="planning-detail-muted">Intervention manuelle nécessaire.</p>
+                    )}
+                  </section>
+                ) : null}
+              </div>
             </div>
 
             <div className="panel-actions">
+              {isAdmin && selectedTpiManualAction ? (
+                <button
+                  className="btn-primary"
+                  onClick={() => openManualResolver(selectedTpi)}
+                  title="Ouvrir le formulaire de forçage pour ce TPI."
+                  aria-label="Forcer un créneau pour ce TPI."
+                >
+                  <WrenchIcon className="button-icon" />
+                  Forcer un créneau
+                </button>
+              ) : null}
               {isAdmin ? (
                 <Link
                   className="btn-secondary"
                   to={selectedTpiDetailLink}
+                  title="Ouvrir la fiche complète du TPI dans la gestion."
+                  aria-label="Ouvrir la fiche complète du TPI."
                 >
                   Ouvrir la fiche complète
                 </Link>
@@ -2758,6 +3304,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <button
                   className="btn-primary"
                   onClick={() => handleProposeSlots(selectedTpi._id)}
+                  title="Lancer le processus de vote pour ce TPI."
+                  aria-label="Lancer le processus de vote pour ce TPI."
                 >
                   <VoteIcon className="button-icon" />
                   Lancer le vote

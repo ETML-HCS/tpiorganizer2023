@@ -41,6 +41,14 @@ function getPersonDisplayName(person) {
   return String(person._id || person.id || 'Personne inconnue')
 }
 
+function toIdString(value) {
+  if (!value) {
+    return ''
+  }
+
+  return String(value?._id || value?.id || value)
+}
+
 /**
  * Génère tous les créneaux pour une période donnée
  * @param {Number} year - Année de soutenance
@@ -476,7 +484,127 @@ async function findBestCompromiseSlot(tpiPlanningId) {
 /**
  * Confirme un créneau pour un TPI
  */
-async function confirmSlotForTpi(tpiPlanningId, slotId) {
+function getSlotId(value) {
+  return toIdString(value?.slot || value)
+}
+
+function getTpiSlotIds(tpi) {
+  const slotIds = new Set()
+  const confirmedSlotId = getSlotId(tpi?.confirmedSlot)
+
+  if (confirmedSlotId) {
+    slotIds.add(confirmedSlotId)
+  }
+
+  for (const proposedSlot of Array.isArray(tpi?.proposedSlots) ? tpi.proposedSlots : []) {
+    const proposedSlotId = getSlotId(proposedSlot)
+    if (proposedSlotId) {
+      slotIds.add(proposedSlotId)
+    }
+  }
+
+  return Array.from(slotIds)
+}
+
+function getTpiCurrentSlotId(tpi) {
+  const confirmedSlotId = getSlotId(tpi?.confirmedSlot)
+  if (confirmedSlotId) {
+    return confirmedSlotId
+  }
+
+  const fixedProposal = Array.isArray(tpi?.proposedSlots)
+    ? tpi.proposedSlots.find((proposedSlot) => getSlotId(proposedSlot))
+    : null
+
+  return getSlotId(fixedProposal)
+}
+
+function getTpiAssignmentPayload(tpi) {
+  return {
+    candidat: tpi.candidat,
+    expert1: tpi.expert1,
+    expert2: tpi.expert2,
+    chefProjet: tpi.chefProjet
+  }
+}
+
+async function releaseTpiSlotsExcept(tpi, selectedSlotId) {
+  const targetTpiId = toIdString(tpi?._id)
+  const selectedId = toIdString(selectedSlotId)
+  const slotIdsToRelease = getTpiSlotIds(tpi).filter((slotId) => slotId && slotId !== selectedId)
+
+  if (!targetTpiId || slotIdsToRelease.length === 0) {
+    return
+  }
+
+  await Slot.updateMany(
+    {
+      _id: { $in: slotIdsToRelease },
+      $or: [
+        { assignedTpi: tpi._id },
+        { assignedTpi: null },
+        { assignedTpi: { $exists: false } }
+      ]
+    },
+    {
+      $set: {
+        status: 'available',
+        assignedTpi: null,
+        assignments: {}
+      }
+    }
+  )
+}
+
+function formatSlotLabel(slot) {
+  if (!slot) {
+    return ''
+  }
+
+  const date = new Date(slot.date)
+  const dateLabel = Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleDateString('fr-CH')
+  const timeLabel = [slot.startTime, slot.endTime].filter(Boolean).join('-')
+  const roomLabel = slot.room?.name || ''
+
+  return [dateLabel, timeLabel, roomLabel].filter(Boolean).join(' · ')
+}
+
+function serializeSlotForPlanning(slot) {
+  if (!slot) {
+    return null
+  }
+
+  const rawSlot = typeof slot.toObject === 'function'
+    ? slot.toObject()
+    : slot
+  const assignedTpi = rawSlot.assignedTpi && typeof rawSlot.assignedTpi === 'object'
+    ? rawSlot.assignedTpi
+    : null
+
+  return {
+    _id: toIdString(rawSlot),
+    label: formatSlotLabel(rawSlot),
+    date: rawSlot.date || null,
+    period: rawSlot.period || null,
+    startTime: rawSlot.startTime || '',
+    endTime: rawSlot.endTime || '',
+    room: rawSlot.room || null,
+    status: rawSlot.status || '',
+    assignedTpi: assignedTpi
+      ? {
+          _id: toIdString(assignedTpi),
+          reference: assignedTpi.reference || '',
+          candidat: getPersonDisplayName(assignedTpi.candidat)
+        }
+      : rawSlot.assignedTpi
+        ? { _id: toIdString(rawSlot.assignedTpi) }
+        : null
+  }
+}
+
+async function confirmSlotForTpi(tpiPlanningId, slotId, options = {}) {
   const tpi = await TpiPlanning.findById(tpiPlanningId)
   const slot = await Slot.findById(slotId)
   
@@ -485,7 +613,9 @@ async function confirmSlotForTpi(tpiPlanningId, slotId) {
   }
   
   // Vérifier une dernière fois les conflits
-  const finalCheck = await checkFinalConflicts(tpi, slot)
+  const finalCheck = await checkFinalConflicts(tpi, slot, {
+    ignoreSlotIds: options.ignoreSlotIds || []
+  })
   
   if (!finalCheck.valid) {
     return {
@@ -494,39 +624,38 @@ async function confirmSlotForTpi(tpiPlanningId, slotId) {
       conflicts: finalCheck.conflicts
     }
   }
+
+  const alreadyHadConfirmedSlot = Boolean(getSlotId(tpi.confirmedSlot))
+
+  await releaseTpiSlotsExcept(tpi, slot._id)
   
   // Confirmer le créneau
   slot.status = 'confirmed'
   slot.assignedTpi = tpi._id
-  slot.assignments = {
-    candidat: tpi.candidat,
-    expert1: tpi.expert1,
-    expert2: tpi.expert2,
-    chefProjet: tpi.chefProjet
-  }
+  slot.assignments = getTpiAssignmentPayload(tpi)
   await slot.save()
   
   // Mettre à jour le TPI
   tpi.status = 'confirmed'
   tpi.confirmedSlot = slot._id
   tpi.soutenanceDateTime = slot.date
-  tpi.soutenanceRoom = slot.room.name
-  
-  // Libérer les autres créneaux proposés
-  for (const proposedSlot of tpi.proposedSlots) {
-    if (!proposedSlot.slot.equals(slotId)) {
-      await Slot.findByIdAndUpdate(proposedSlot.slot, { status: 'available' })
-    }
+  tpi.soutenanceRoom = slot.room?.name || ''
+
+  if (options.manualOverride) {
+    tpi.manualOverride = options.manualOverride
   }
   
-  await tpi.addHistory('slot_confirmed', null, {
+  await tpi.addHistory(options.historyAction || 'slot_confirmed', options.historyUser || null, {
     slotId: slot._id,
     date: slot.date,
-    room: slot.room.name
+    room: slot.room?.name || '',
+    ...(options.historyDetails || {})
   })
   
   // Mettre à jour les statistiques des personnes
-  await updatePersonStats(tpi, slot)
+  await updatePersonStats(tpi, slot, {
+    incrementCounts: !alreadyHadConfirmedSlot
+  })
   
   return {
     success: true,
@@ -539,10 +668,28 @@ async function confirmSlotForTpi(tpiPlanningId, slotId) {
 /**
  * Vérifie les conflits finaux avant confirmation
  */
-async function checkFinalConflicts(tpi, slot) {
+async function checkFinalConflicts(tpi, slot, options = {}) {
   const conflicts = []
   const personIds = [tpi.candidat, tpi.expert1, tpi.expert2, tpi.chefProjet]
   const compatibility = getRoomCompatibilityReport(slot?.room, tpi)
+  const slotAssignedTpi = toIdString(slot?.assignedTpi)
+  const targetTpiId = toIdString(tpi?._id)
+  const ignoredSlotIds = new Set(
+    (Array.isArray(options.ignoreSlotIds) ? options.ignoreSlotIds : [])
+      .map(toIdString)
+      .filter(Boolean)
+  )
+  const slotId = toIdString(slot)
+
+  if (slotAssignedTpi && targetTpiId && slotAssignedTpi !== targetTpiId && !ignoredSlotIds.has(slotId)) {
+    conflicts.push({
+      type: 'room_overlap',
+      roomName: slot?.room?.name || '',
+      roomSite: slot?.room?.site || '',
+      conflictingTpi: slotAssignedTpi,
+      description: 'Ce créneau est déjà réservé par un autre TPI.'
+    })
+  }
 
   if (!compatibility.compatible) {
     conflicts.push({
@@ -556,7 +703,7 @@ async function checkFinalConflicts(tpi, slot) {
   
   for (const personId of personIds) {
     const conflict = await Slot.findOne({
-      _id: { $ne: slot._id },
+      _id: { $nin: [slot._id, ...Array.from(ignoredSlotIds)] },
       date: slot.date,
       period: slot.period,
       status: { $in: OCCUPIED_SLOT_STATUSES },
@@ -572,7 +719,7 @@ async function checkFinalConflicts(tpi, slot) {
       const person = await Person.findById(personId)
       conflicts.push({
         type: 'person_overlap',
-        person: person.fullName,
+        person: getPersonDisplayName(person),
         conflictingSlot: conflict._id
       })
     }
@@ -582,6 +729,8 @@ async function checkFinalConflicts(tpi, slot) {
     valid: conflicts.length === 0,
     reason: conflicts.some((conflict) => conflict.type === 'room_class_mismatch')
       ? 'Incompatibilité de salle détectée'
+      : conflicts.some((conflict) => conflict.type === 'room_overlap')
+        ? 'Créneau déjà réservé par un autre TPI'
       : conflicts.length > 0
         ? 'Conflit de personnes détecté'
         : '',
@@ -589,10 +738,138 @@ async function checkFinalConflicts(tpi, slot) {
   }
 }
 
+async function getMoveSimulationContext(tpiPlanningId, slotId) {
+  const tpi = await TpiPlanning.findById(tpiPlanningId)
+    .populate('confirmedSlot')
+    .populate('proposedSlots.slot')
+
+  const targetSlot = await Slot.findById(slotId)
+    .populate({
+      path: 'assignedTpi',
+      select: 'reference candidat',
+      populate: {
+        path: 'candidat',
+        select: 'firstName lastName'
+      }
+    })
+
+  if (!tpi || !targetSlot) {
+    throw new Error('TPI ou créneau non trouvé')
+  }
+
+  return {
+    tpi,
+    targetSlot,
+    currentSlotId: getTpiCurrentSlotId(tpi),
+    ownedSlotIds: getTpiSlotIds(tpi)
+  }
+}
+
+async function simulateTpiMoveToSlot(tpiPlanningId, slotId) {
+  const { tpi, targetSlot, currentSlotId, ownedSlotIds } = await getMoveSimulationContext(tpiPlanningId, slotId)
+  const targetSlotId = toIdString(targetSlot)
+
+  const finalCheck = await checkFinalConflicts(tpi, targetSlot, {
+    ignoreSlotIds: ownedSlotIds.filter((ownedSlotId) => ownedSlotId !== targetSlotId)
+  })
+
+  const blockingOccupant = targetSlot.assignedTpi &&
+    toIdString(targetSlot.assignedTpi) !== toIdString(tpi._id)
+      ? targetSlot.assignedTpi
+      : null
+
+  let swapCandidate = null
+  if (blockingOccupant && currentSlotId) {
+    const currentSlot = await Slot.findById(currentSlotId)
+    const occupantTpi = await TpiPlanning.findById(blockingOccupant._id || blockingOccupant)
+
+    if (currentSlot && occupantTpi) {
+      const swapCheck = await checkFinalConflicts(occupantTpi, currentSlot, {
+        ignoreSlotIds: [targetSlotId, currentSlotId]
+      })
+
+      swapCandidate = {
+        canSwap: swapCheck.valid,
+        tpi: {
+          _id: toIdString(occupantTpi),
+          reference: occupantTpi.reference || ''
+        },
+        targetSlot: serializeSlotForPlanning(currentSlot),
+        conflicts: swapCheck.conflicts || [],
+        message: swapCheck.valid
+          ? 'Inversion théoriquement possible avec le créneau actuel du TPI.'
+          : `Inversion bloquée: ${swapCheck.reason || 'conflit détecté'}.`
+      }
+    }
+  }
+
+  return {
+    success: true,
+    canMove: finalCheck.valid,
+    status: finalCheck.valid ? 'clear' : 'blocked',
+    message: finalCheck.valid
+      ? 'Déplacement possible sans conflit détecté.'
+      : `Déplacement bloqué: ${finalCheck.reason || 'conflit détecté'}.`,
+    tpi: {
+      _id: toIdString(tpi),
+      reference: tpi.reference || ''
+    },
+    currentSlot: serializeSlotForPlanning(tpi.confirmedSlot || tpi.proposedSlots?.[0]?.slot),
+    targetSlot: serializeSlotForPlanning(targetSlot),
+    conflicts: finalCheck.conflicts || [],
+    swapCandidate
+  }
+}
+
+async function moveTpiToSlot(tpiPlanningId, slotId, adminId, reason = '') {
+  const simulation = await simulateTpiMoveToSlot(tpiPlanningId, slotId)
+
+  if (!simulation.canMove) {
+    return {
+      ...simulation,
+      success: false
+    }
+  }
+
+  const tpi = await TpiPlanning.findById(tpiPlanningId)
+  if (!tpi) {
+    throw new Error('TPI non trouvé')
+  }
+
+  const overriddenBy = adminId && mongoose.Types.ObjectId.isValid(adminId)
+    ? new mongoose.Types.ObjectId(adminId)
+    : null
+  const targetReason = reason || `Déplacement admin suite à proposition de vote vers ${simulation.targetSlot?.label || slotId}.`
+
+  const result = await confirmSlotForTpi(tpiPlanningId, slotId, {
+    ignoreSlotIds: getTpiSlotIds(tpi).filter((ownedSlotId) => ownedSlotId !== toIdString(slotId)),
+    historyAction: 'slot_moved_from_vote_proposal',
+    historyUser: overriddenBy,
+    manualOverride: {
+      isManual: true,
+      reason: targetReason,
+      overriddenBy,
+      overriddenAt: new Date()
+    },
+    historyDetails: {
+      reason: targetReason,
+      previousSlotId: simulation.currentSlot?._id || null,
+      source: 'vote_proposal'
+    }
+  })
+
+  return {
+    ...result,
+    simulation,
+    moved: Boolean(result?.success)
+  }
+}
+
 /**
  * Met à jour les statistiques des personnes après confirmation
  */
-async function updatePersonStats(tpi, slot) {
+async function updatePersonStats(tpi, slot, options = {}) {
+  const incrementCounts = options.incrementCounts !== false
   const updates = [
     { id: tpi.expert1, field: 'tpiAsExpert' },
     { id: tpi.expert2, field: 'tpiAsExpert' },
@@ -600,10 +877,15 @@ async function updatePersonStats(tpi, slot) {
   ]
   
   for (const update of updates) {
-    await Person.findByIdAndUpdate(update.id, {
-      $inc: { [`stats.${update.field}`]: 1 },
+    const updatePayload = {
       $set: { 'stats.lastTpiDate': slot.date }
-    })
+    }
+
+    if (incrementCounts) {
+      updatePayload.$inc = { [`stats.${update.field}`]: 1 }
+    }
+
+    await Person.findByIdAndUpdate(update.id, updatePayload)
   }
 }
 
@@ -620,17 +902,20 @@ async function forceSlotManually(tpiPlanningId, slotId, adminId, reason) {
   const overriddenBy = adminId && mongoose.Types.ObjectId.isValid(adminId)
     ? new mongoose.Types.ObjectId(adminId)
     : null
-  
-  tpi.manualOverride = {
-    isManual: true,
-    reason,
-    overriddenBy,
-    overriddenAt: new Date()
-  }
-  
-  await tpi.save()
-  
-  return await confirmSlotForTpi(tpiPlanningId, slotId)
+
+  return await confirmSlotForTpi(tpiPlanningId, slotId, {
+    manualOverride: {
+      isManual: true,
+      reason,
+      overriddenBy,
+      overriddenAt: new Date()
+    },
+    historyUser: overriddenBy,
+    historyDetails: {
+      reason,
+      source: 'manual_override'
+    }
+  })
 }
 
 module.exports = {
@@ -640,6 +925,8 @@ module.exports = {
   registerVoteAndCheckValidation,
   confirmSlotForTpi,
   forceSlotManually,
+  simulateTpiMoveToSlot,
+  moveTpiToSlot,
   checkPersonAvailability,
   checkConsecutiveRule,
   MAX_CONSECUTIVE_TPI,
