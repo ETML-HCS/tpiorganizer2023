@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 import TpiList from './TpiList.jsx'
+import { ROUTES } from '../../config/appConfig'
 
 const mockTpiForm = jest.fn(() => <div data-testid='mock-tpi-form' />)
 
@@ -363,7 +364,7 @@ describe('TpiList', () => {
 
     expect(screen.getByRole('link', { name: 'Ouvrir la fiche de Chasi Sanchez Dario Jhesuanj' })).toHaveAttribute(
       'href',
-      '/partiesPrenantes?personId=2163-candidat&name=Chasi+Sanchez+Dario+Jhesuanj&role=candidat&tab=create&year=2026&returnTo=%2FgestionTPI%3Fyear%3D2026%26focus%3D2163%26edit%3D1'
+      `${ROUTES.PARTIES_PRENANTES}?personId=2163-candidat&name=Chasi+Sanchez+Dario+Jhesuanj&role=candidat&tab=create&year=2026&returnTo=%2Fgestion-tpi%3Fyear%3D2026%26focus%3D2163%26edit%3D1`
     )
   })
 

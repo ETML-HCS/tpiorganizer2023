@@ -6,6 +6,7 @@ import { toast } from 'react-toastify'
 import PlanningDashboard from './PlanningDashboard'
 import * as planningServices from '../../services/planningService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
+import { ROUTES } from '../../config/appConfig'
 
 jest.mock('../../config/appConfig', () => {
   const actual = jest.requireActual('../../config/appConfig')
@@ -361,7 +362,7 @@ describe('PlanningDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('location-display')).toHaveTextContent(
-        `/genTokens?year=${targetYear}&type=vote&auto=1`
+        `${ROUTES.GEN_TOKENS}?year=${targetYear}&type=vote&auto=1`
       )
     })
   })

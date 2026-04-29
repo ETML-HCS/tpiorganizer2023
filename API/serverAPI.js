@@ -107,7 +107,7 @@ app.post('/api/send-email', async (req, res) => {
 // Définir un endpoint pour récupérer le contenu d'un fichier PDF
 app.get('/api/get-pdf', async (req, res) => {
   try {
-    const configuredPdfPath = process.env.TPI_EVAL_PDF_PATH || './models/mEvalV3.pdf'
+    const configuredPdfPath = process.env.TPI_EVAL_PDF_PATH || './API/models/mEvalV3.pdf'
     const pdfFilePath = path.isAbsolute(configuredPdfPath)
       ? configuredPdfPath
       : path.resolve(rootDir, configuredPdfPath)

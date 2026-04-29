@@ -139,7 +139,7 @@ npm start
 
 ## 📝 Notes
 
-- **PDF Hardcodé** : [API/serverAPI.js L79](API/serverAPI.js#L79) utilise `./models/mEvalV3.pdf` → À configurer via variable d'env
+- **PDF évaluation** : [API/serverAPI.js](API/serverAPI.js) utilise `./API/models/mEvalV3.pdf` par défaut, surchargeable avec `TPI_EVAL_PDF_PATH`
 - **Collections MongoDB** : Une par année au lieu de champ `year` → À refactoriser pour scalabilité
 - **Pagination manquante** : GET `/api/get-tpi` retourne tout → Ajouter limits
 - **Magic Links** : Vérifier les liens d'expiration pour prod
