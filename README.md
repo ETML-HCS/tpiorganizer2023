@@ -4,12 +4,12 @@ TPIorganizer 2023 est une application React conçue pour faciliter l'organisatio
 
 ## Screenshot
 ![HomeO](/captures/HomeO.png)
-![ListOfTpis](/captures/ListOfTpis.png)
+![ListeOfTpis](/captures/ListeOfTpis.png)
 ![NewSubscriber](/captures/NewSubscriber.png)
-![NewTpi](/captures//NewTpi.png)
-![RoomsEmpty](/captures//RoomsEmpty.png)
-![RoomsWithData](/captures//RoomsWithData.png)
-![SelectTpiCandidat](/captures//SelectTpiCandidat.png)
+![NewTpi](/captures/NewTpi.png)
+![RoomsEmpty](/captures/RoomsEmpty.png)
+![RoomsWithData](/captures/RoomsWithData.png)
+![SelectTpiCandidat](/captures/SelectTpiCandidat.png)
 ![SoutenanceValidation.png](/captures/SoutenanceValidation.png)
 
 ## Points forts

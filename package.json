@@ -3,10 +3,6 @@
   "version": "26.4.19",
   "private": true,
   "dependencies": {
-    "@fortawesome/free-solid-svg-icons": "^6.5.2",
-    "@fortawesome/react-fontawesome": "^0.2.2",
-    "@testing-library/jest-dom": "^5.17.0",
-    "@testing-library/react": "^13.4.0",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -26,7 +22,6 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.23.1",
-    "react-scripts": "5.0.1",
     "react-toastify": "^10.0.5"
   },
   "scripts": {
@@ -37,7 +32,6 @@
     "client": "cross-env REACT_APP_DEBUG=true vite --open",
     "test": "react-scripts test",
     "test:api": "node --test API/utils/availability.test.js API/tests/*.test.js",
-    "eject": "react-scripts eject",
     "check-env-prod": "node ./scripts/check-prod-config.js",
     "backend": "cross-env PORT=5001 REACT_APP_DEBUG=true node ./API/serverAPI.js",
     "backend:watch": "cross-env PORT=5001 REACT_APP_DEBUG=true node --watch ./API/serverAPI.js",
@@ -63,9 +57,12 @@
     ]
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
+    "react-scripts": "5.0.1",
     "vite": "^8.0.1"
   }
 }

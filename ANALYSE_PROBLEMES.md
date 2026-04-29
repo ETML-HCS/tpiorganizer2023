@@ -320,34 +320,17 @@ Correction recommandee: charger la meme logique d'env que l'API dans le check, a
 
 ## P2 - Dette technique et maintenabilite
 
-### 10. Deux lockfiles et gestionnaire de paquets melanges
+### 10. Gestionnaire de paquets clarifie
 
-Emplacements:
+Statut: resolu lors du nettoyage. Le depot garde `package-lock.json` et les commandes `npm`; `pnpm-lock.yaml` a ete supprime. `node_modules` reste un artefact local ignore.
 
-- `package-lock.json`
-- `pnpm-lock.yaml`
-- `node_modules/.pnpm`
-- `package.json`
+Point de vigilance: conserver un seul gestionnaire de paquets pour les audits et les deploiements reproductibles.
 
-Probleme: le depot contient `package-lock.json` et `pnpm-lock.yaml`, les commandes sont en `npm`, mais `node_modules` est gere par pnpm. Exemple: `package-lock.json` reference `multer@2.0.2`, alors que `pnpm-lock.yaml`/`node_modules` reference `multer@2.1.1`.
+### 11. CI/deploiement obsoletes retires
 
-Impact: audits et installs non reproductibles; un deploiement npm et un deploiement pnpm ne resolvent pas forcement les memes versions.
+Statut: nettoye. Les anciens fichiers `.github/build.yml`, `.github/workflows` et `.github/automatisation.md` etaient des notes ou workflows places au mauvais endroit, donc non executes comme CI GitHub valide.
 
-Correction recommandee: choisir npm ou pnpm, supprimer l'autre lockfile, puis regenerer proprement.
-
-### 11. CI/deploiement incomplets
-
-Emplacements:
-
-- `.github/build.yml:1`
-- `.github/workflows:1`
-- `.github/automatisation.md`
-
-Probleme: `.github/build.yml` ne contient que `name/on`, sans jobs. `.github/workflows` est un fichier et non un workflow YAML valide dans `.github/workflows/*.yml`.
-
-Impact: les checks qui auraient attrape lint, audit, build Linux et tests ne tournent pas automatiquement.
-
-Correction recommandee: creer `.github/workflows/ci.yml` avec install, lint, tests API/front, build, audit minimal et verification de casse.
+Correction recommandee si la CI est remise en place: creer `.github/workflows/ci.yml` avec install, tests API/front, build, audit minimal et verification de casse.
 
 ### 12. Composants et routes trop volumineux
 

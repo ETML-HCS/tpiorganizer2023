@@ -49,10 +49,6 @@ module.exports = defineConfig(({ mode }) => {
               return 'dnd-vendor'
             }
 
-            if (id.includes('@fortawesome')) {
-              return 'icons-vendor'
-            }
-
             if (id.includes('pdf-lib')) {
               return 'pdf-vendor'
             }
