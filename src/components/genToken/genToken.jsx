@@ -10,7 +10,7 @@ import '../../css/genToken/genToken.css'
 const LINK_TYPE_FILTERS = [
   { value: 'all', label: 'Tous les liens' },
   { value: 'vote', label: 'Votes' },
-  { value: 'soutenance', label: 'Soutenances' }
+  { value: 'soutenance', label: 'Défenses' }
 ]
 
 const LINK_TYPE_FILTER_VALUES = new Set(LINK_TYPE_FILTERS.map((filter) => filter.value))
@@ -91,7 +91,53 @@ async function copyToClipboard(value) {
   document.body.removeChild(textarea)
 }
 
-const LinkRow = ({ label, subtitle, badges = [], url, expiresAt, onCopy, onOpen }) => (
+function getVoteLinkTpiEntries(link) {
+  return Array.isArray(link?.tpis) ? link.tpis : []
+}
+
+function getVoteLinkTpiCount(link) {
+  const tpis = getVoteLinkTpiEntries(link)
+  return tpis.length > 0 ? tpis.length : 1
+}
+
+function formatVoteLinkLabel(link) {
+  const tpis = getVoteLinkTpiEntries(link)
+
+  if (tpis.length > 1) {
+    return `${tpis.length} TPI à traiter`
+  }
+
+  if (tpis.length === 1) {
+    return tpis[0]?.reference || link?.reference || 'Vote'
+  }
+
+  return link?.reference || 'Vote'
+}
+
+function formatVoteLinkSubtitle(link) {
+  const tpis = getVoteLinkTpiEntries(link)
+
+  if (tpis.length > 1) {
+    return tpis.map((tpi) => tpi.reference).filter(Boolean).join(', ')
+  }
+
+  const candidateName = tpis[0]?.candidateName || link?.candidateName
+  return candidateName ? `Candidat: ${candidateName}` : ''
+}
+
+function buildVoteLinkDetails(link) {
+  return getVoteLinkTpiEntries(link).map((tpi) => ({
+    key: tpi.tpiId || tpi.reference,
+    label: tpi.reference || 'TPI',
+    text: [
+      tpi.candidateName,
+      tpi.roleLabel,
+      tpi.subject
+    ].filter(Boolean).join(' · ')
+  }))
+}
+
+const LinkRow = ({ label, subtitle, badges = [], details = [], url, expiresAt, onCopy, onOpen }) => (
   <article className='token-access-link-row'>
     <div className='token-access-link-copy'>
       <div className='token-access-link-head'>
@@ -112,7 +158,25 @@ const LinkRow = ({ label, subtitle, badges = [], url, expiresAt, onCopy, onOpen 
         </div>
       ) : null}
 
-      <a href={url} target='_blank' rel='noopener noreferrer' className='token-access-link-url'>
+      {details.length > 0 ? (
+        <div className='token-access-link-details'>
+          {details.map((detail) => (
+            <span key={detail.key || detail.label} className='token-access-link-detail'>
+              <strong>{detail.label}</strong>
+              {detail.text ? <span>{detail.text}</span> : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <a
+        href={url}
+        target='_blank'
+        rel='noopener noreferrer'
+        className='token-access-link-url'
+        title={`Ouvrir le lien : ${label}`}
+        aria-label={`Ouvrir le lien ${label}`}
+      >
         {url}
       </a>
 
@@ -121,11 +185,23 @@ const LinkRow = ({ label, subtitle, badges = [], url, expiresAt, onCopy, onOpen 
       </span>
     </div>
 
-    <div className='token-access-link-actions'>
-      <button type='button' className='token-access-btn secondary' onClick={onCopy}>
+      <div className='token-access-link-actions'>
+      <button
+        type='button'
+        className='token-access-btn secondary'
+        onClick={onCopy}
+        title={`Copier le lien : ${url}`}
+        aria-label={`Copier le lien ${label}`}
+      >
         Copier
       </button>
-      <button type='button' className='token-access-btn primary' onClick={onOpen}>
+      <button
+        type='button'
+        className='token-access-btn primary'
+        onClick={onOpen}
+        title={`Ouvrir le lien : ${url}`}
+        aria-label={`Ouvrir le lien ${label}`}
+      >
         Ouvrir
       </button>
     </div>
@@ -138,6 +214,7 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
     : []
   const voteLinks = Array.isArray(entry?.voteLinks) ? entry.voteLinks : []
   const soutenanceLinks = Array.isArray(entry?.soutenanceLinks) ? entry.soutenanceLinks : []
+  const voteTpiCount = voteLinks.reduce((total, link) => total + getVoteLinkTpiCount(link), 0)
 
   return (
     <article className='token-access-person-card'>
@@ -149,10 +226,10 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
 
         <div className='token-access-person-meta'>
           <span className='token-access-count-chip'>
-            {voteLinks.length} vote{voteLinks.length > 1 ? 's' : ''}
+            {voteTpiCount} TPI à voter
           </span>
           <span className='token-access-count-chip'>
-            {soutenanceLinks.length} soutenance{soutenanceLinks.length > 1 ? 's' : ''}
+            {soutenanceLinks.length} défense{soutenanceLinks.length > 1 ? 's' : ''}
           </span>
         </div>
       </header>
@@ -172,20 +249,21 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
       <section className='token-access-link-group'>
         <div className='token-access-section-head'>
           <h3>Liens de vote</h3>
-          <span>{voteLinks.length}</span>
+          <span>{voteTpiCount} TPI</span>
         </div>
 
         {voteLinks.length > 0 ? (
           <div className='token-access-link-list'>
             {voteLinks.map((link) => (
               <LinkRow
-                key={`${link.tpiId}-${link.role}-${link.url}`}
-                label={link.reference || 'Vote'}
-                subtitle={link.candidateName ? `Candidat: ${link.candidateName}` : ''}
+                key={link.url}
+                label={formatVoteLinkLabel(link)}
+                subtitle={formatVoteLinkSubtitle(link)}
                 badges={[
                   { label: link.roleLabel || formatRoleLabel(link.role), variant: 'vote' },
                   link.redirectPath ? { label: link.redirectPath, variant: 'neutral' } : null
                 ].filter(Boolean)}
+                details={buildVoteLinkDetails(link)}
                 url={link.url}
                 expiresAt={link.expiresAt}
                 onCopy={() => onCopy(link.url)}
@@ -202,7 +280,7 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
 
       <section className='token-access-link-group'>
         <div className='token-access-section-head'>
-          <h3>Liens de consultation des soutenances</h3>
+          <h3>Liens de consultation des défenses</h3>
           <span>{soutenanceLinks.length}</span>
         </div>
 
@@ -212,9 +290,9 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
               <LinkRow
                 key={`${entry?.person?.id}-publication-${link.publicationVersion || 0}`}
                 label={`Publication ${link.publicationVersion || 'active'}`}
-                subtitle='Vue filtrée sur les soutenances publiées'
+                subtitle='Vue filtrée sur les défenses publiées'
                 badges={[
-                  { label: 'Soutenance', variant: 'soutenance' },
+                  { label: 'Défense', variant: 'soutenance' },
                   link.redirectPath ? { label: link.redirectPath, variant: 'neutral' } : null
                 ].filter(Boolean)}
                 url={link.url}
@@ -226,7 +304,7 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
           </div>
         ) : (
           <p className='token-access-empty-inline'>
-            Aucun lien de soutenance disponible pour cette personne.
+            Aucun lien de défense disponible pour cette personne.
           </p>
         )}
       </section>
@@ -306,7 +384,13 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
           link.reference,
           link.candidateName,
           link.roleLabel,
-          link.subject
+          link.subject,
+          ...(getVoteLinkTpiEntries(link).flatMap((tpi) => [
+            tpi.reference,
+            tpi.candidateName,
+            tpi.roleLabel,
+            tpi.subject
+          ]))
         ]),
         ...(entry?.soutenanceLinks || []).map((link) =>
           link.publicationVersion ? `publication ${link.publicationVersion}` : 'publication active'
@@ -333,7 +417,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
       setPreviewPayload(preview)
       setSuccessMessage(
-        `${preview?.summary?.peopleCount || 0} personne(s) préparée(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) soutenance.`
+        `${preview?.summary?.peopleCount || 0} personne(s) préparée(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense.`
       )
     } catch (error) {
       setPreviewPayload(null)
@@ -384,7 +468,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         className='token-generator-tools'
         eyebrow='Accès'
         title='Aperçu des magic links'
-        description='Générez les vrais liens `vote` et `soutenance` par personne pour une année donnée.'
+        description='Liens vote et défense.'
         meta={
           <div className='token-access-toolbar-meta'>
             <span className='page-tools-chip'>{workflowLabel}</span>
@@ -448,6 +532,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
               className='page-tools-action-btn primary'
               onClick={handleGeneratePreview}
               disabled={isGenerating}
+              title={isGenerating ? 'Génération des liens en cours.' : 'Générer les liens d’accès.'}
+              aria-label={isGenerating ? 'Génération des liens en cours.' : 'Générer les liens d’accès.'}
             >
               {isGenerating ? 'Génération...' : 'Générer les liens'}
             </button>
@@ -455,8 +541,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         </div>
 
         <div className='token-access-toolbar-note'>
-          Chaque génération crée de nouveaux magic links. Pour vérifier le rendu réel d’un lien externe,
-          ouvrez-le dans une fenêtre privée ou sans session admin.
+          Les liens générés remplacent les précédents.
         </div>
       </PageToolbar>
 
@@ -487,7 +572,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
               </article>
 
               <article className='token-access-summary-card'>
-                <span>Liens soutenance</span>
+                <span>Liens défense</span>
                 <strong>{previewSummary.soutenanceLinkCount || 0}</strong>
               </article>
 
@@ -502,8 +587,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
             <div className='token-generator-empty-state'>
               <h3>Aucun aperçu généré</h3>
               <p>
-                Choisissez une année puis lancez la génération pour obtenir les liens réellement
-                utilisables par les personnes externes.
+                Choisissez une année, puis générez.
               </p>
             </div>
           ) : filteredPeople.length === 0 ? (

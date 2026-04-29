@@ -196,7 +196,7 @@ Supprimer la dette technique résiduelle.
 - campagne de votes
 - détection de consensus
 - freeze du planning
-- publication des soutenances
+- publication des défenses
 - rollback d'une publication
 - cohérence des conflits et des index
 

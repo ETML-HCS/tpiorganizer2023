@@ -41,6 +41,7 @@ jest.mock('../shared/PageToolbar', () => {
 
 const baseProps = {
   onToggleEditing: jest.fn(),
+  onDeleteAllRooms: jest.fn(),
   onSave: jest.fn(),
   onSendBD: jest.fn(),
   onExport: jest.fn(),
@@ -131,6 +132,17 @@ describe('TpiScheduleButtons - Données', () => {
 
     expect(baseProps.onToggleEditing).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: /Édition activée/i })).toHaveTextContent('3/10')
+  })
+
+  test('affiche la suppression complète uniquement en mode édition', () => {
+    renderButtons()
+
+    expect(screen.queryByRole('button', { name: /Supprimer tout/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Mode édition/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Supprimer tout/i }))
+
+    expect(baseProps.onDeleteAllRooms).toHaveBeenCalledTimes(1)
   })
 
   test('importe un fichier JSON via le sélecteur', async () => {
@@ -439,6 +451,27 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(openVotesWithoutEmailsButton)
 
     expect(onOpenVotesWithoutEmails).toHaveBeenCalledTimes(1)
+  })
+
+  test('permet la publication directe quand le planning est gelé et valide', () => {
+    const onPublishDefinitive = jest.fn()
+
+    renderButtons({
+      activeSnapshotVersion: 3,
+      onPublishDefinitive
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Finalisation/i }))
+
+    const publishButton = screen.getByRole('button', {
+      name: /Publier sans votes/i
+    })
+    expect(publishButton).toBeEnabled()
+
+    fireEvent.click(publishButton)
+
+    expect(onPublishDefinitive).toHaveBeenCalledTimes(1)
   })
 
   test('déclenche l aperçu des liens de vote en mode debug', () => {

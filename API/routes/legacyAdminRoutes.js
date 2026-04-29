@@ -424,7 +424,7 @@ router.post(
   '/overwrite-tpi-rooms/:year',
   requireAppAuth,
   requireYearParam('year'),
-  requireNonEmptyBody('Données de soutenance requises.'),
+  requireNonEmptyBody('Données de défense requises.'),
   async (req, res) => {
   const year = req.params.year
   const collectionNameSoutenance = `tpiSoutenance_${year}`

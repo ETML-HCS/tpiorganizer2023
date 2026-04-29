@@ -87,7 +87,7 @@ app.use('/api', tpiDossierRoutes)
 // Auth via magic links (v2)
 app.use('/api/magic-link', magicLinkRoutes)
 
-// Soutenances (backward compatible with legacy tokens + new magic links)
+// Défenses (backward compatible with legacy tokens + new magic links)
 app.use('/api', legacySoutenanceRoutes)
 
 // Planning workflow (modern system)
@@ -285,7 +285,7 @@ app.put(
       return res.status(400).json({ error: 'Référence TPI invalide.' })
     }
 
-    // Récupérez les données de soutenance à partir de l'API
+    // Récupérez les données de défense à partir de l'API
     const collectionName = `tpiSoutenance_${year}`
     const DataRooms = createCustomTpiRoomModel(collectionName)
     const soutenanceData = await DataRooms.find()
@@ -318,7 +318,7 @@ app.put(
 
         res
           .status(200)
-          .json({ message: 'Soutenance data updated successfully' })
+          .json({ message: 'Défense data updated successfully' })
       } else {
         console.error('tpiDatas is not an object')
         res.status(400).json({ error: 'tpiDatas is not an object' })

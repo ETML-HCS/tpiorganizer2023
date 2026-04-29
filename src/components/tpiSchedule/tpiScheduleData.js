@@ -50,6 +50,29 @@ function normalizePlanningColor(value) {
   return ''
 }
 
+function normalizeOptionalPlanningColor(source = {}, fallback = {}, keys = ["tpiColor", "tpiCardColor"]) {
+  const sourceObject = source && typeof source === "object" ? source : {}
+  const fallbackObject = fallback && typeof fallback === "object" ? fallback : {}
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(sourceObject, key)) {
+      return normalizePlanningColor(sourceObject[key])
+    }
+  }
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(fallbackObject, key)) {
+      return normalizePlanningColor(fallbackObject[key])
+    }
+  }
+
+  return ""
+}
+
+function normalizeOptionalSoutenanceColor(source = {}, fallback = {}) {
+  return normalizeOptionalPlanningColor(source, fallback, ["soutenanceColor", "defenseColor", "defenceColor"])
+}
+
 function getDefaultPlanningColor(seed = '', fallbackIndex = 0) {
   const normalizedSeed = compactText(seed).toUpperCase()
 
@@ -254,6 +277,8 @@ function normalizeSiteConfig(siteConfig = {}, fallbackSiteConfig = DEFAULT_SITE_
       fallback.color ||
       getDefaultPlanningColor(siteCode || label)
     ),
+    tpiColor: normalizeOptionalPlanningColor(source, fallback),
+    soutenanceColor: normalizeOptionalSoutenanceColor(source, fallback),
     breaklineMinutes,
     tpiTimeMinutes,
     firstTpiStartTime,

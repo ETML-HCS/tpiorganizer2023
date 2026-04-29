@@ -24,7 +24,7 @@ then
     echo "Le serveur Node.js est déjà en cours d'exécution."
 else
     # Démarrer le serveur Node.js en arrière-plan
-    node server.js &
+    node API/serverAPI.js &
 fi
 
 # Afficher un message de confirmation

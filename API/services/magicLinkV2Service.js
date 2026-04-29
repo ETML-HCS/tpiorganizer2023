@@ -2,10 +2,11 @@ const crypto = require('crypto')
 
 const Person = require('../models/personModel')
 const { MagicLink } = require('../models/magicLinkModel')
+const { buildDefensePublicPath } = require('../utils/publicRoutes')
 
 const DEFAULT_EXPIRY_HOURS = Object.freeze({
   vote: 24 * 7,
-  soutenance: 24 * 30
+  soutenance: 24 * 4
 })
 
 const DEFAULT_MAX_USES = Object.freeze({
@@ -131,6 +132,7 @@ async function createTypedMagicLink({
   return {
     id: String(created._id),
     token,
+    redirectPath,
     url: buildMagicLinkUrl(baseUrl, redirectPath, token),
     expiresAt: expiry,
     type
@@ -170,7 +172,7 @@ async function createSoutenanceMagicLink({
     type: 'soutenance',
     year,
     baseUrl,
-    redirectPath: redirectPath || `/Soutenances/${year}`,
+    redirectPath: redirectPath || buildDefensePublicPath(year),
     person,
     recipientEmail,
     role: null,

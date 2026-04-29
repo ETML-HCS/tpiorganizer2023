@@ -1,6 +1,13 @@
+const mongoose = require('mongoose')
+
 const WorkflowAuditEvent = require('../models/workflowAuditEventModel')
 const PlanningSnapshot = require('../models/planningSnapshotModel')
 const { WorkflowYear, WORKFLOW_STATES } = require('../models/workflowYearModel')
+const TpiPlanning = require('../models/tpiPlanningModel')
+const Slot = require('../models/slotModel')
+const Vote = require('../models/voteModel')
+const PublicationVersion = require('../models/publicationVersionModel')
+const { MagicLink } = require('../models/magicLinkModel')
 
 const WORKFLOW_TRANSITIONS = Object.freeze({
   planning: ['voting_open'],
@@ -33,7 +40,11 @@ function isWorkflowState(value) {
   return typeof value === 'string' && WORKFLOW_STATES.includes(value)
 }
 
-function isTransitionAllowed(from, to) {
+function isTransitionAllowed(from, to, options = {}) {
+  if (options?.allowDirectPublication === true && from === 'planning' && to === 'published') {
+    return true
+  }
+
   return getAllowedTransitions(from).includes(to)
 }
 
@@ -113,7 +124,12 @@ async function getWorkflowYearState(year) {
   return toPublicWorkflow(workflow)
 }
 
-async function transitionWorkflowYear({ year, targetState, user }) {
+async function transitionWorkflowYear({
+  year,
+  targetState,
+  user,
+  allowDirectPublication = false
+}) {
   if (!isWorkflowState(targetState)) {
     throw new Error('Etat workflow invalide.')
   }
@@ -128,7 +144,7 @@ async function transitionWorkflowYear({ year, targetState, user }) {
     }
   }
 
-  if (!isTransitionAllowed(currentState, targetState)) {
+  if (!isTransitionAllowed(currentState, targetState, { allowDirectPublication })) {
     const error = new WorkflowTransitionError('Transition workflow invalide.', {
       currentState,
       targetState,
@@ -139,11 +155,13 @@ async function transitionWorkflowYear({ year, targetState, user }) {
 
   const now = new Date()
 
-  if (targetState === 'voting_open') {
+  if (targetState === 'voting_open' || (targetState === 'published' && currentState === 'planning')) {
     const activeSnapshot = await hasActivePlanningSnapshot(year)
     if (!activeSnapshot) {
       const error = new WorkflowTransitionError(
-        'Impossible d\'ouvrir le vote sans snapshot gele.',
+        targetState === 'published'
+          ? 'Impossible de publier sans snapshot gele.'
+          : 'Impossible d\'ouvrir le vote sans snapshot gele.',
         {
           currentState,
           targetState,
@@ -222,6 +240,98 @@ async function listWorkflowAuditEvents(year, limit = 100) {
     .lean()
 }
 
+async function clearCollectionIfExists(collectionName) {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    return {
+      collection: collectionName,
+      existed: false,
+      deletedCount: 0,
+      skipped: true
+    }
+  }
+
+  const exists = await mongoose.connection.db
+    .listCollections({ name: collectionName })
+    .hasNext()
+
+  if (!exists) {
+    return {
+      collection: collectionName,
+      existed: false,
+      deletedCount: 0,
+      skipped: false
+    }
+  }
+
+  const collection = mongoose.connection.db.collection(collectionName)
+  const result = await collection.deleteMany({})
+
+  return {
+    collection: collectionName,
+    existed: true,
+    deletedCount: result.deletedCount || 0,
+    skipped: false
+  }
+}
+
+async function resetWorkflowYear({ year, user }) {
+  const tpis = await TpiPlanning.find({ year })
+    .select('_id')
+    .lean()
+  const tpiIds = tpis.map(tpi => tpi._id)
+  const slots = await Slot.find({ year })
+    .select('_id')
+    .lean()
+  const slotIds = slots.map(slot => slot._id)
+  const voteFilters = []
+
+  if (tpiIds.length > 0) {
+    voteFilters.push({ tpiPlanning: { $in: tpiIds } })
+  }
+
+  if (slotIds.length > 0) {
+    voteFilters.push({ slot: { $in: slotIds } })
+  }
+
+  const votesResult = voteFilters.length > 0
+    ? await Vote.deleteMany({ $or: voteFilters })
+    : { deletedCount: 0 }
+  const slotsResult = await Slot.deleteMany({ year })
+  const tpiPlanningResult = await TpiPlanning.deleteMany({ year })
+  const snapshotsResult = await PlanningSnapshot.deleteMany({ year })
+  const publicationVersionsResult = await PublicationVersion.deleteMany({ year })
+  const magicLinksResult = await MagicLink.deleteMany({ year })
+  const workflowYearsResult = await WorkflowYear.deleteMany({ year })
+  const legacyCollections = await Promise.all([
+    clearCollectionIfExists(`tpiRooms_${year}`),
+    clearCollectionIfExists(`tpiSoutenance_${year}`)
+  ])
+
+  const deleted = {
+    votes: votesResult.deletedCount || 0,
+    slots: slotsResult.deletedCount || 0,
+    tpiPlannings: tpiPlanningResult.deletedCount || 0,
+    planningSnapshots: snapshotsResult.deletedCount || 0,
+    publicationVersions: publicationVersionsResult.deletedCount || 0,
+    magicLinks: magicLinksResult.deletedCount || 0,
+    workflowYears: workflowYearsResult.deletedCount || 0,
+    legacyCollections
+  }
+
+  await writeAuditEvent({
+    year,
+    action: 'workflow.reset',
+    user,
+    payload: deleted,
+    success: true
+  })
+
+  return {
+    year,
+    deleted
+  }
+}
+
 module.exports = {
   WORKFLOW_STATES,
   WORKFLOW_TRANSITIONS,
@@ -233,6 +343,7 @@ module.exports = {
   transitionWorkflowYear,
   safeAuditTransitionFailure,
   listWorkflowAuditEvents,
+  resetWorkflowYear,
   logWorkflowAuditEvent: writeAuditEvent,
   hasActivePlanningSnapshot
 }

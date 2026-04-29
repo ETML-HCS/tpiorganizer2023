@@ -593,6 +593,177 @@ test('POST /api/workflow/:year/publication/publish enforces admin role', async (
   }
 })
 
+test('POST /api/workflow/:year/publication/publish waits until all votes are resolved', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const TpiPlanning = require('../models/tpiPlanningModel')
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'voting_open' })),
+    patchMethod(TpiPlanning, 'countDocuments', async (query) => {
+      assert.equal(query.year, 2026)
+      assert.deepEqual(query.status.$in, ['voting', 'pending_validation', 'manual_required'])
+      return 1
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/publish`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    assert.equal(response.status, 409)
+    const body = await response.json()
+    assert.equal(
+      body.error,
+      'Publication bloquee tant que des TPI restent en vote ou en intervention manuelle.'
+    )
+    assert.equal(body.details.blockingCount, 1)
+    assert.deepEqual(body.details.blockingStatuses, ['voting', 'pending_validation', 'manual_required'])
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/publication/publish can publish directly from a validated planning snapshot', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const planningValidationService = require('../services/planningValidationService')
+  const schedulingService = require('../services/schedulingService')
+  const publishedSoutenanceService = require('../services/publishedSoutenanceService')
+  const votingCampaignService = require('../services/votingCampaignService')
+  const TpiPlanning = require('../models/tpiPlanningModel')
+
+  const tpiId = '507f1f77bcf86cd799439012'
+  const slotId = '507f1f77bcf86cd799439013'
+  const snapshot = {
+    year: 2026,
+    version: 4,
+    entries: [
+      {
+        tpiId,
+        reference: 'TPI-2026-001',
+        slot: { slotId }
+      }
+    ]
+  }
+  const confirmCalls = []
+  let transitionPayload = null
+
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'planning' })),
+    patchMethod(planningValidationService, 'getActiveSnapshot', async () => snapshot),
+    patchMethod(planningValidationService, 'validatePlanningForYear', async () => ({
+      year: 2026,
+      summary: { isValid: true, issueCount: 0 },
+      issues: [],
+      entries: snapshot.entries
+    })),
+    patchMethod(planningValidationService, 'isValidationAlignedWithSnapshot', () => true),
+    patchMethod(TpiPlanning, 'find', (query) => {
+      assert.equal(query.year, 2026)
+      assert.deepEqual(query._id.$in, [tpiId])
+
+      return {
+        select() {
+          return {
+            lean: async () => ([
+              {
+                _id: tpiId,
+                reference: 'TPI-2026-001',
+                status: 'pending_slots',
+                confirmedSlot: null
+              }
+            ])
+          }
+        }
+      }
+    }),
+    patchMethod(schedulingService, 'confirmSlotForTpi', async (receivedTpiId, receivedSlotId, options) => {
+      confirmCalls.push({ receivedTpiId, receivedSlotId, options })
+      return { success: true }
+    }),
+    patchMethod(TpiPlanning, 'countDocuments', async (query) => {
+      assert.equal(query.year, 2026)
+      assert.deepEqual(query.status.$in, ['voting', 'pending_validation', 'manual_required'])
+      return 0
+    }),
+    patchMethod(publishedSoutenanceService, 'publishConfirmedPlanningSoutenances', async () => ({
+      rooms: [{ idRoom: 1 }],
+      publicationVersion: { version: 2 }
+    })),
+    patchMethod(workflowService, 'transitionWorkflowYear', async (payload) => {
+      transitionPayload = payload
+      return {
+        changed: true,
+        workflow: { state: 'published' }
+      }
+    }),
+    patchMethod(votingCampaignService, 'sendSoutenanceLinksForYear', async () => ({
+      emailsSent: 4,
+      emailsSucceeded: 4
+    })),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/publish`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.roomsCount, 1)
+    assert.equal(body.targetUrl, '/defenses/2026')
+    assert.deepEqual(body.directPublication, {
+      snapshotVersion: 4,
+      plannedCount: 1,
+      confirmedCount: 1,
+      alreadyConfirmedCount: 0
+    })
+    assert.equal(confirmCalls.length, 1)
+    assert.equal(confirmCalls[0].receivedTpiId, tpiId)
+    assert.equal(confirmCalls[0].receivedSlotId, slotId)
+    assert.equal(confirmCalls[0].options.historyAction, 'slot_confirmed_direct_publication')
+    assert.equal(transitionPayload.targetState, 'published')
+    assert.equal(transitionPayload.allowDirectPublication, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/publication/send-links requires authentication', async () => {
   const jwtSecret = 'test-jwt-secret'
   const { app, restoreEnv } = loadTestApp({
@@ -612,6 +783,96 @@ test('POST /api/workflow/:year/publication/send-links requires authentication', 
 
     assert.equal(response.status, 401)
   } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/reset validates confirmation phrase', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/reset`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ confirmation: 'RECOMMENCER' })
+    })
+
+    assert.equal(response.status, 400)
+    const body = await response.json()
+    assert.equal(body.error, 'Confirmation de reset invalide.')
+    assert.equal(body.details.expectedConfirmation, 'RECOMMENCER 2026')
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/reset resets workflow and returns planning state', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  let resetPayload = null
+  const restore = [
+    patchMethod(workflowService, 'resetWorkflowYear', async payload => {
+      resetPayload = payload
+      return {
+        deleted: {
+          votes: 3,
+          slots: 2,
+          tpiPlannings: 1,
+          planningSnapshots: 1,
+          publicationVersions: 0,
+          magicLinks: 2,
+          workflowYears: 1,
+          legacyCollections: []
+        }
+      }
+    }),
+    patchMethod(workflowService, 'getWorkflowYearState', async year => ({
+      year,
+      state: 'planning',
+      allowedTransitions: ['voting_open']
+    }))
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/reset`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ confirmation: 'RECOMMENCER 2026' })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.workflow.state, 'planning')
+    assert.equal(resetPayload.year, 2026)
+    assert.equal(resetPayload.user.email, 'planner@example.com')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
     await new Promise(resolve => server.close(resolve))
     restoreEnv()
   }

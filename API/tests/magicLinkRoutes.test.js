@@ -15,6 +15,12 @@ async function startServer(app) {
   })
 }
 
+test('soutenance magic links are valid for 4 days by default', () => {
+  const { DEFAULT_EXPIRY_HOURS } = require('../services/magicLinkV2Service')
+
+  assert.equal(DEFAULT_EXPIRY_HOURS.soutenance, 24 * 4)
+})
+
 test('GET /api/magic-link/resolve rejects missing token', async () => {
   const { app, restoreEnv } = loadTestApp({
     NODE_ENV: 'development',

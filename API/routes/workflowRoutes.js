@@ -6,16 +6,14 @@ const { requireNonEmptyBody, requireYearParam } = require('../middleware/request
 const { authMiddleware, requireRole } = require('../services/magicLinkService')
 const magicLinkV2Service = require('../services/magicLinkV2Service')
 const emailService = require('../services/emailService')
-const {
-  publishConfirmedPlanningSoutenances,
-  rollbackPublicationVersion,
-  getActivePublicationVersion
-} = require('../services/publishedSoutenanceService')
+const publishedSoutenanceService = require('../services/publishedSoutenanceService')
 const planningAutomationService = require('../services/planningAutomationService')
 const planningValidationService = require('../services/planningValidationService')
+const schedulingService = require('../services/schedulingService')
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
 const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
+const { buildDefensePublicPath } = require('../utils/publicRoutes')
 const {
   syncLegacyCatalogToPlanning,
   rebuildWorkflowFromLegacyPlanning
@@ -171,6 +169,163 @@ function buildVoteSlotsPayload(votes = []) {
   return slots
 }
 
+function createDirectPublicationError(message, details = {}, statusCode = 409) {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  error.details = details
+  return error
+}
+
+function extractDirectPublicationTargets(snapshot) {
+  const targetsByTpiId = new Map()
+  const entries = Array.isArray(snapshot?.entries) ? snapshot.entries : []
+
+  for (const entry of entries) {
+    const tpiId = compactText(entry?.tpiId)
+    const slotId = compactText(entry?.slot?.slotId)
+
+    if (!tpiId || !slotId || targetsByTpiId.has(tpiId)) {
+      continue
+    }
+
+    targetsByTpiId.set(tpiId, {
+      tpiId,
+      slotId,
+      reference: compactText(entry?.reference)
+    })
+  }
+
+  return Array.from(targetsByTpiId.values())
+}
+
+async function getValidatedSnapshotForDirectPublication(year) {
+  const snapshot = await planningValidationService.getActiveSnapshot(year)
+
+  if (!snapshot) {
+    throw createDirectPublicationError(
+      'Un snapshot actif est requis avant la publication directe. Geler d abord la planification.',
+      { year, hasSnapshot: false }
+    )
+  }
+
+  const validation = await planningValidationService.validatePlanningForYear(year)
+
+  if (!validation.summary?.isValid) {
+    throw createDirectPublicationError(
+      'La planification courante contient encore des erreurs bloquantes. Corrigez-les puis regeler la planification.',
+      {
+        year,
+        snapshotVersion: snapshot?.version || null,
+        summary: validation.summary,
+        issues: validation.issues
+      }
+    )
+  }
+
+  if (!planningValidationService.isValidationAlignedWithSnapshot(snapshot, validation)) {
+    throw createDirectPublicationError(
+      'La planification a été modifiée depuis le dernier snapshot. Geler une nouvelle version avant publication directe.',
+      {
+        year,
+        snapshotVersion: snapshot?.version || null,
+        summary: validation.summary,
+        issues: validation.issues
+      }
+    )
+  }
+
+  return { snapshot, validation }
+}
+
+async function confirmSnapshotForDirectPublication({ year, snapshot }) {
+  const targets = extractDirectPublicationTargets(snapshot)
+
+  if (targets.length === 0) {
+    throw createDirectPublicationError(
+      'Aucun créneau planifié dans le snapshot actif.',
+      {
+        year,
+        snapshotVersion: snapshot?.version || null
+      }
+    )
+  }
+
+  const tpis = await TpiPlanning.find({
+    year,
+    _id: { $in: targets.map(target => target.tpiId) }
+  })
+    .select('_id reference status confirmedSlot')
+    .lean()
+
+  const tpisById = new Map(tpis.map(tpi => [String(tpi._id), tpi]))
+  const failures = []
+  let confirmedCount = 0
+  let alreadyConfirmedCount = 0
+
+  for (const target of targets) {
+    const tpi = tpisById.get(target.tpiId)
+
+    if (!tpi) {
+      failures.push({
+        tpiId: target.tpiId,
+        slotId: target.slotId,
+        reference: target.reference,
+        message: 'TPI introuvable dans la planification.'
+      })
+      continue
+    }
+
+    const confirmedSlotId = compactText(tpi.confirmedSlot)
+    if (compactText(tpi.status) === 'confirmed' && confirmedSlotId === target.slotId) {
+      alreadyConfirmedCount += 1
+      continue
+    }
+
+    const result = await schedulingService.confirmSlotForTpi(target.tpiId, target.slotId, {
+      historyAction: 'slot_confirmed_direct_publication',
+      historyDetails: {
+        source: 'direct_publication',
+        snapshotVersion: snapshot?.version || null
+      }
+    })
+
+    if (result?.success) {
+      confirmedCount += 1
+      continue
+    }
+
+    failures.push({
+      tpiId: target.tpiId,
+      slotId: target.slotId,
+      reference: target.reference || compactText(tpi.reference),
+      message: result?.message || 'Confirmation du créneau impossible.',
+      conflicts: result?.conflicts || []
+    })
+  }
+
+  if (failures.length > 0) {
+    throw createDirectPublicationError(
+      'Publication directe bloquee: certains créneaux n ont pas pu être confirmés.',
+      {
+        year,
+        snapshotVersion: snapshot?.version || null,
+        plannedCount: targets.length,
+        confirmedCount,
+        alreadyConfirmedCount,
+        failureCount: failures.length,
+        failures
+      }
+    )
+  }
+
+  return {
+    snapshotVersion: snapshot?.version || null,
+    plannedCount: targets.length,
+    confirmedCount,
+    alreadyConfirmedCount
+  }
+}
+
 async function findDevVoteLinkTarget(year, requestedReference = '') {
   const tpis = await TpiPlanning.find({
     year,
@@ -224,7 +379,7 @@ async function findDevVoteLinkTarget(year, requestedReference = '') {
 }
 
 async function findDevSoutenanceLinkTarget(year, requestedReference = '') {
-  const activePublication = await getActivePublicationVersion(year)
+  const activePublication = await publishedSoutenanceService.getActivePublicationVersion(year)
   const rooms = Array.isArray(activePublication?.rooms) ? activePublication.rooms : []
 
   for (const room of rooms) {
@@ -793,7 +948,7 @@ async function handleDevVoteLinks(req, res) {
         role: vote.voterRole,
         scope: {
           year,
-          tpiId: String(target.tpi._id),
+          kind: 'stakeholder_votes',
           reference: target.tpi.reference
         },
         baseUrl,
@@ -888,7 +1043,7 @@ async function handleDevVoteEmails(req, res) {
         role: vote.voterRole,
         scope: {
           year,
-          tpiId: String(target.tpi._id),
+          kind: 'stakeholder_votes',
           reference: target.tpi.reference,
           source: 'dev_vote_email'
         },
@@ -969,7 +1124,7 @@ async function handleDevSoutenanceEmails(req, res) {
 
     if (workflow.state !== 'published') {
       return res.status(409).json({
-        error: 'Le mode test soutenance est disponible uniquement apres publication.',
+        error: 'Le mode test défense est disponible uniquement apres publication.',
         details: {
           year,
           state: workflow.state,
@@ -983,13 +1138,13 @@ async function handleDevSoutenanceEmails(req, res) {
     if (!target) {
       return res.status(404).json({
         error: requestedReference
-          ? `Aucune soutenance publiee disponible pour ${requestedReference}.`
-          : 'Aucune soutenance publiee disponible pour cette annee.'
+          ? `Aucune défense publiee disponible pour ${requestedReference}.`
+          : 'Aucune défense publiee disponible pour cette annee.'
       })
     }
 
     const baseUrl = getFrontendBaseUrl(req)
-    const redirectPath = buildRedirectPath(`/Soutenances/${year}`, {
+    const redirectPath = buildRedirectPath(buildDefensePublicPath(year), {
       focus: target.reference || ''
     })
     const links = []
@@ -1061,9 +1216,9 @@ async function handleDevSoutenanceEmails(req, res) {
       links
     })
   } catch (error) {
-    console.error('Erreur envoi emails de test soutenance:', error)
+    console.error('Erreur envoi emails de test défense:', error)
     return res.status(500).json({
-      error: 'Erreur lors de l envoi des emails de test de soutenance.'
+      error: 'Erreur lors de l envoi des emails de test de défense.'
     })
   }
 }
@@ -1098,7 +1253,7 @@ router.post(
   requireYearParam('year'),
   authMiddleware,
   requireRole('admin'),
-  requireNonEmptyBody('Donnees de test soutenance requises.'),
+  requireNonEmptyBody('Donnees de test défense requises.'),
   handleDevSoutenanceEmails
 )
 
@@ -1236,17 +1391,26 @@ router.post(
   requireRole('admin'),
   async (req, res) => {
     const year = req.validatedParams.year
+    let directPublication = null
 
     try {
       const workflow = await workflowService.getWorkflowYearState(year)
-      if (!['voting_open', 'published'].includes(workflow.state)) {
+      if (!['planning', 'voting_open', 'published'].includes(workflow.state)) {
         return res.status(409).json({
           error: 'Publication impossible dans l\'etat courant.',
           details: {
             year,
             state: workflow.state,
-            requiredStates: ['voting_open', 'published']
+            requiredStates: ['planning', 'voting_open', 'published']
           }
+        })
+      }
+
+      if (workflow.state === 'planning') {
+        const { snapshot } = await getValidatedSnapshotForDirectPublication(year)
+        directPublication = await confirmSnapshotForDirectPublication({
+          year,
+          snapshot
         })
       }
 
@@ -1268,7 +1432,8 @@ router.post(
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`
-      const publishedResult = await publishConfirmedPlanningSoutenances(year, req.user)
+      const defenseTargetUrl = buildDefensePublicPath(year)
+      const publishedResult = await publishedSoutenanceService.publishConfirmedPlanningSoutenances(year, req.user)
       const roomCount = Array.isArray(publishedResult?.rooms)
         ? publishedResult.rooms.length
         : 0
@@ -1278,7 +1443,8 @@ router.post(
         await workflowService.transitionWorkflowYear({
           year,
           targetState: 'published',
-          user: req.user
+          user: req.user,
+          allowDirectPublication: workflow.state === 'planning'
         })
       }
 
@@ -1296,7 +1462,8 @@ router.post(
           publicationVersion: publicationVersion?.version || null,
           roomsCount: roomCount,
           sentLinks,
-          targetUrl: `/Soutenances/${year}`
+          directPublication,
+          targetUrl: defenseTargetUrl
         },
         success: true
       })
@@ -1307,12 +1474,31 @@ router.post(
         roomsCount: roomCount,
         publicationVersion,
         sentLinks,
-        targetUrl: `/Soutenances/${year}`,
+        directPublication,
+        targetUrl: defenseTargetUrl,
         message: roomCount > 0
-          ? `${roomCount} salles publiees depuis le planning confirme`
-          : 'Aucune soutenance confirmee a publier'
+          ? `${roomCount} salles publiees depuis le planning confirme${directPublication ? ' sans campagne de votes' : ''}`
+          : 'Aucune défense confirmee a publier'
       })
     } catch (error) {
+      if (error?.statusCode) {
+        await workflowService.logWorkflowAuditEvent({
+          year,
+          action: 'workflow.publication.publish',
+          user: req.user,
+          payload: {
+            directPublication
+          },
+          success: false,
+          error: error.message
+        })
+
+        return res.status(error.statusCode).json({
+          error: error.message,
+          details: error.details
+        })
+      }
+
       console.error('Erreur publication workflow:', error)
       return res.status(500).json({ error: 'Erreur lors de la publication definitive.' })
     }
@@ -1345,7 +1531,8 @@ router.post(
         })
       }
 
-      const rollbackResult = await rollbackPublicationVersion(year, version)
+      const rollbackResult = await publishedSoutenanceService.rollbackPublicationVersion(year, version)
+      const defenseTargetUrl = buildDefensePublicPath(year)
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -1353,7 +1540,7 @@ router.post(
         user: req.user,
         payload: {
           publicationVersion: rollbackResult?.publicationVersion?.version || version,
-          targetUrl: `/Soutenances/${year}`
+          targetUrl: defenseTargetUrl
         },
         success: true
       })
@@ -1362,7 +1549,7 @@ router.post(
         success: true,
         year,
         publicationVersion: rollbackResult?.publicationVersion || null,
-        targetUrl: `/Soutenances/${year}`
+        targetUrl: defenseTargetUrl
       })
     } catch (error) {
       if (error?.statusCode) {
@@ -1415,8 +1602,57 @@ router.post(
         sentLinks
       })
     } catch (error) {
-      console.error('Erreur envoi liens soutenances:', error)
-      return res.status(500).json({ error: 'Erreur lors de l\'envoi des liens soutenances.' })
+      console.error('Erreur envoi liens défenses:', error)
+      return res.status(500).json({ error: 'Erreur lors de l\'envoi des liens défenses.' })
+    }
+  }
+)
+
+router.post(
+  '/:year/reset',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  requireNonEmptyBody('Confirmation de reset requise.'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+    const confirmation = compactText(req.body?.confirmation).toUpperCase()
+    const expectedConfirmation = `RECOMMENCER ${year}`
+
+    if (confirmation !== expectedConfirmation) {
+      return res.status(400).json({
+        error: 'Confirmation de reset invalide.',
+        details: {
+          expectedConfirmation
+        }
+      })
+    }
+
+    try {
+      const result = await workflowService.resetWorkflowYear({
+        year,
+        user: req.user
+      })
+      const workflow = await workflowService.getWorkflowYearState(year)
+
+      return res.status(200).json({
+        success: true,
+        year,
+        workflow,
+        deleted: result.deleted
+      })
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.reset',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+
+      console.error('Erreur reset workflow annuel:', error)
+      return res.status(500).json({ error: 'Erreur lors de la réinitialisation du workflow annuel.' })
     }
   }
 )

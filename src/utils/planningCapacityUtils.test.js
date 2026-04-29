@@ -178,7 +178,7 @@ describe("planningCapacityUtils", () => {
     expect(overview.totals.manualOverrideCount).toBe(1)
   })
 
-  it("reuses the same room names across multiple configured soutenance dates", () => {
+  it("reuses the same room names across multiple configured défense dates", () => {
     const overview = buildPlanningRoomSizingOverview({
       tpis: Array.from({ length: 16 }, (_, index) => ({
         site: "SEBEILLON",
@@ -221,7 +221,7 @@ describe("planningCapacityUtils", () => {
     expect(overview.sites[0].roomGap).toBe(0)
   })
 
-  it("sizes from configured soutenance dates even when fixed planning dates already exist", () => {
+  it("sizes from configured défense dates even when fixed planning dates already exist", () => {
     const overview = buildPlanningRoomSizingOverview({
       tpis: Array.from({ length: 9 }, (_, index) => ({
         site: "SEBEILLON",

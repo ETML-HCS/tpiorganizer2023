@@ -1,3 +1,5 @@
+import { ROUTES } from "../../config/appConfig"
+
 export function compactText(value) {
   if (value === null || value === undefined) {
     return ''
@@ -117,7 +119,7 @@ export function buildTpiDetailsLink(year, ref) {
   const normalizedRef = compactText(ref)
 
   if (!Number.isInteger(normalizedYear) || !normalizedRef) {
-    return '/gestionTPI'
+    return ROUTES.GESTION_TPI
   }
 
   return `/tpi/${normalizedYear}/${encodeURIComponent(normalizedRef)}`
@@ -141,7 +143,7 @@ export function buildGestionTpiFocusLink(year, ref, options = {}) {
   }
 
   const queryString = params.toString()
-  return queryString ? `/gestionTPI?${queryString}` : '/gestionTPI'
+  return queryString ? `${ROUTES.GESTION_TPI}?${queryString}` : ROUTES.GESTION_TPI
 }
 
 export function buildGestionTpiCreateLink(year, ref) {
@@ -160,7 +162,7 @@ export function buildGestionTpiCreateLink(year, ref) {
   params.set('new', '1')
 
   const queryString = params.toString()
-  return queryString ? `/gestionTPI?${queryString}` : '/gestionTPI'
+  return queryString ? `${ROUTES.GESTION_TPI}?${queryString}` : ROUTES.GESTION_TPI
 }
 
 export function buildPlanningTabLink(year, tab = 'list', options = {}) {
@@ -195,10 +197,10 @@ export function buildSoutenanceFocusLink(year, ref) {
   const normalizedRef = compactText(ref)
 
   if (!Number.isInteger(normalizedYear) || !normalizedRef) {
-    return `/Soutenances/${year}`
+    return `${ROUTES.SOUTENANCES}/${year}`
   }
 
-  return `/Soutenances/${normalizedYear}?focus=${encodeURIComponent(normalizedRef)}`
+  return `${ROUTES.SOUTENANCES}/${normalizedYear}?focus=${encodeURIComponent(normalizedRef)}`
 }
 
 export function getPlanningStatusMeta(status) {
@@ -272,7 +274,7 @@ export function buildPartiesPrenantesLink({
   }
 
   const queryString = params.toString()
-  return queryString ? `/partiesPrenantes?${queryString}` : '/partiesPrenantes'
+  return queryString ? `${ROUTES.PARTIES_PRENANTES}?${queryString}` : ROUTES.PARTIES_PRENANTES
 }
 
 export function extractLegacyRefFromWorkflowReference(reference, year) {

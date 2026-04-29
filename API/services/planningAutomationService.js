@@ -5,6 +5,7 @@ const { createTpiRoomModel } = require('../models/tpiRoomsModels')
 const {
   MAX_CONSECUTIVE_TPI,
   buildTimelineIndex,
+  getMaxConsecutiveTpiLimit,
   toTimeStepKey
 } = require('./planningRuleUtils')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
@@ -229,7 +230,8 @@ function buildLegacyRoomConfig(slot, maxPeriod) {
     breakline: Number(slot?.config?.breakAfter || 0) / 60,
     tpiTime: Number(slot?.config?.duration || 60) / 60,
     firstTpiStart: parseTimeToDecimal(slot?.startTime),
-    numSlots: maxPeriod
+    numSlots: maxPeriod,
+    maxConsecutiveTpi: getMaxConsecutiveTpiLimit(slot?.config?.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
   }
 }
 
@@ -397,6 +399,7 @@ function buildSiteContextIndex(catalogSites = [], planningConfig = {}) {
       numSlots: Number.isInteger(Number(configMatch?.numSlots)) && Number(configMatch.numSlots) > 0
         ? Number(configMatch.numSlots)
         : 8,
+      maxConsecutiveTpi: getMaxConsecutiveTpiLimit(configMatch?.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI),
       tpiTimeMinutes: Number.isFinite(Number(configMatch?.tpiTimeMinutes)) && Number(configMatch.tpiTimeMinutes) > 0
         ? Number(configMatch.tpiTimeMinutes)
         : 60,
@@ -641,7 +644,7 @@ function hasPersonConflictOnTimeKey(state, task, timeKey) {
   return (task.participants || []).some((participant) => occupiedPeople.has(participant.personId))
 }
 
-function exceedsConsecutiveLimit(state, timeline, personId, timeKey) {
+function exceedsConsecutiveLimit(state, timeline, personId, timeKey, maxConsecutiveTpi = MAX_CONSECUTIVE_TPI) {
   const candidateIndex = timeline.indexByKey.get(timeKey)
   if (!Number.isInteger(candidateIndex)) {
     return false
@@ -668,7 +671,7 @@ function exceedsConsecutiveLimit(state, timeline, personId, timeKey) {
   }
 
   const consecutiveCount = rightIndex - leftIndex + 1
-  return consecutiveCount > MAX_CONSECUTIVE_TPI
+  return consecutiveCount > getMaxConsecutiveTpiLimit(maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
 }
 
 function isParticipantAvailable(participant, dateKey, period) {
@@ -815,7 +818,7 @@ function enumerateCandidatePlacements(task, state, timeline) {
       }
 
       const breaksConsecutiveRule = (task.participants || []).some((participant) =>
-        exceedsConsecutiveLimit(state, timeline, participant.personId, timeKey)
+        exceedsConsecutiveLimit(state, timeline, participant.personId, timeKey, siteContext.maxConsecutiveTpi)
       )
       if (breaksConsecutiveRule) {
         continue
@@ -977,7 +980,7 @@ function computeAutomaticAssignments(tasks = []) {
     }
 
     if (!Array.isArray(task.allowedDateKeys) || task.allowedDateKeys.length === 0) {
-      manualRequired.push(createManualIssue(task, 'Aucune date de soutenance configuree pour cette classe.'))
+      manualRequired.push(createManualIssue(task, 'Aucune date de défense configuree pour cette classe.'))
       continue
     }
 
@@ -1084,7 +1087,8 @@ function buildAutomaticSlotDocuments(assignments = [], generatedRoomsBySiteDate 
           },
           config: {
             duration: Number(siteContext.tpiTimeMinutes || 60),
-            breakAfter: Number(siteContext.breaklineMinutes || 10)
+            breakAfter: Number(siteContext.breaklineMinutes || 10),
+            maxConsecutiveTpi: getMaxConsecutiveTpiLimit(siteContext.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
           }
         })
       }

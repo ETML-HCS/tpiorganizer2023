@@ -3,8 +3,9 @@ import { useLocation } from "react-router-dom"
 
 import { soutenancesService } from "../../services/apiService"
 import { workflowPlanningService } from "../../services/planningService"
+import { getStoredAuthToken } from "../../utils/storage"
 import { showNotification } from "../Tools"
-import { formatDate, getRoomSchedule } from "./TpiSoutenanceParts"
+import { formatDate, getLegacyScheduleIndex, getRoomSchedule } from "./TpiSoutenanceParts"
 
 const defaultFilters = {
   site: "",
@@ -20,9 +21,14 @@ const defaultFilters = {
 const useToken = () => {
   const location = useLocation()
   const queryParams = new URLSearchParams(location.search)
+  const legacyToken = [queryParams.get("token"), queryParams.get("code")]
+    .find((value) => typeof value === "string" && value.trim())
+    ?.trim() || ""
+  const magicLinkToken = queryParams.get("ml")?.trim() || ""
+
   return {
-    legacyToken: queryParams.get("token"),
-    magicLinkToken: queryParams.get("ml"),
+    legacyToken,
+    magicLinkToken,
     focusReference: queryParams.get("focus") || ""
   }
 }
@@ -31,7 +37,7 @@ const fetchSoutenanceData = async (year, accessOptions = {}) => {
   try {
     return await soutenancesService.getPublishedByYear(year, accessOptions)
   } catch (error) {
-    showNotification("Erreur lors du chargement des soutenances", "error")
+    showNotification("Erreur lors du chargement des défenses", "error")
     console.error("Erreur fetchSoutenanceData:", error)
     return null
   }
@@ -50,10 +56,10 @@ const fetchTpiListExperts = async () => {
 const attachRoomIdentifiers = (rooms) =>
   rooms.map((room) => ({
     ...room,
-    tpiDatas: room.tpiDatas.map((tpi, index) => ({
+    tpiDatas: (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).map((tpi, index) => ({
       ...tpi,
       _roomId: room._id,
-      originalIndex: index
+      originalIndex: getLegacyScheduleIndex(tpi, index)
     }))
   }))
 
@@ -104,6 +110,65 @@ const normalizeText = (value) => String(value || "").toLowerCase()
 
 const normalizeReference = (value) =>
   normalizeText(value).replace(/^tpi-\d{4}-/i, "")
+
+const filterOptionCollator = new Intl.Collator("fr", {
+  sensitivity: "base",
+  numeric: true
+})
+
+export const sortFilterTextValues = (values = []) =>
+  Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  ).sort(filterOptionCollator.compare)
+
+const getDateSortValue = (dateValue) => {
+  const time = new Date(dateValue).getTime()
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER
+}
+
+export const buildDateFilterOptions = (rooms = []) =>
+  Array.from(
+    rooms.reduce((dateOptions, room) => {
+      const label = formatDate(room.date)
+      if (!label || dateOptions.has(label)) {
+        return dateOptions
+      }
+
+      dateOptions.set(label, {
+        label,
+        sortValue: getDateSortValue(room.date)
+      })
+      return dateOptions
+    }, new Map()).values()
+  )
+    .sort((left, right) =>
+      left.sortValue - right.sortValue ||
+      filterOptionCollator.compare(left.label, right.label)
+    )
+    .map((dateOption) => dateOption.label)
+
+const resolvePersonNameForAggregatedICal = (filters) => {
+  const candidateFilters = [
+    { key: "experts", value: filters?.experts || "" },
+    { key: "projectManagerButton", value: filters?.projectManagerButton || "" },
+    { key: "projectManager", value: filters?.projectManager || "" }
+  ]
+
+  const normalizedValues = candidateFilters
+    .map((entry) => normalizeText(entry.value))
+    .filter(Boolean)
+
+  if (new Set(normalizedValues).size !== 1) {
+    return ""
+  }
+
+  const firstMatch = candidateFilters.find((entry) => normalizeText(entry.value))
+  return firstMatch?.value || ""
+}
 
 export const matchesReferenceFilter = (referenceFilter, tpiReference) => {
   const normalizedFilter = normalizeReference(referenceFilter)
@@ -218,44 +283,39 @@ export const useSoutenanceData = (year) => {
 
   const uniqueSalles = useMemo(() => {
     const roomNames = soutenanceData.map((room) => room.name)
-    return [...new Set(roomNames)].sort()
+    return sortFilterTextValues(roomNames)
   }, [soutenanceData])
 
   const uniqueDates = useMemo(() => {
-    const dates = soutenanceData.map((room) => formatDate(room.date))
-    return [...new Set(dates)].sort()
+    return buildDateFilterOptions(soutenanceData)
   }, [soutenanceData])
 
   const uniqueSites = useMemo(() => {
     const sites = soutenanceData.map((room) => room.site)
-    return [...new Set(sites)].sort()
+    return sortFilterTextValues(sites)
   }, [soutenanceData])
 
   const uniqueCandidates = useMemo(() => {
-    const candidates = new Set(
-      soutenanceData.flatMap((room) => room.tpiDatas.map((tpi) => tpi.candidat))
+    const candidates = soutenanceData.flatMap((room) =>
+      (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).map((tpi) => tpi.candidat)
     )
-    return Array.from(candidates).sort()
+    return sortFilterTextValues(candidates)
   }, [soutenanceData])
 
   const uniqueExperts = useMemo(() => {
-    const experts = new Set(
-      soutenanceData.flatMap((room) =>
-        room.tpiDatas.flatMap((tpi) =>
-          [tpi.expert1?.name, tpi.expert2?.name].filter(Boolean)
-        )
+    const experts = soutenanceData.flatMap((room) =>
+      (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).flatMap((tpi) =>
+        [tpi.expert1?.name, tpi.expert2?.name]
       )
     )
-    return Array.from(experts).sort()
+    return sortFilterTextValues(experts)
   }, [soutenanceData])
 
   const uniqueProjectManagers = useMemo(() => {
-    const managers = new Set(
-      soutenanceData.flatMap((room) =>
-        room.tpiDatas.map((tpi) => tpi.boss?.name).filter(Boolean)
-      )
+    const managers = soutenanceData.flatMap((room) =>
+      (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).map((tpi) => tpi.boss?.name)
     )
-    return Array.from(managers).sort()
+    return sortFilterTextValues(managers)
   }, [soutenanceData])
 
   const loadData = useCallback(async () => {
@@ -263,6 +323,15 @@ export const useSoutenanceData = (year) => {
     setError(null)
 
     try {
+      const hasAppSession = Boolean(getStoredAuthToken("/api/defenses"))
+
+      if (!token && !magicLinkToken && !hasAppSession) {
+        setSoutenanceData([])
+        setListOfExpertsOrBoss([])
+        setError("Code ou lien magique requis pour afficher les défenses.")
+        return
+      }
+
       const [rooms, experts] = await Promise.all([
         fetchSoutenanceData(year, {
           ml: magicLinkToken || undefined,
@@ -388,7 +457,7 @@ export const useSoutenanceData = (year) => {
   const updateSoutenanceData = useCallback(
     async (targetYear, propositions, tpiData, expertOrBossRole) => {
       if (magicLinkViewer) {
-        throw new Error("Mode lecture seule: lien soutenance.")
+        throw new Error("Mode lecture seule: lien défense.")
       }
 
       try {
@@ -403,7 +472,7 @@ export const useSoutenanceData = (year) => {
           }
         )
       } catch (updateError) {
-        showNotification("Erreur lors de la mise a jour de la soutenance", "error")
+        showNotification("Erreur lors de la mise a jour de la défense", "error")
         console.error("Erreur updateSoutenanceData:", updateError)
         throw updateError
       }
@@ -420,6 +489,11 @@ export const useSoutenanceData = (year) => {
     () =>
       filteredData.length > 0 ? getRoomSchedule(filteredData[0], schedule) : schedule,
     [filteredData, schedule]
+  )
+
+  const aggregatedICalPersonLabel = useMemo(
+    () => resolvePersonNameForAggregatedICal(filters),
+    [filters]
   )
 
   return {
@@ -443,6 +517,7 @@ export const useSoutenanceData = (year) => {
     updateSoutenanceData,
     schedule,
     displayedSchedule,
-    isFilterApplied: isFilterApplied(filters)
+    isFilterApplied: isFilterApplied(filters),
+    aggregatedICalPersonLabel
   }
 }

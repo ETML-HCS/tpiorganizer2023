@@ -1,6 +1,6 @@
-# TPIorganizer 2023 - Dernière mise à jour le 13/04/2026 | V 1.0.0-b
+# TPIorganizer 2023 - Dernière mise à jour le 26/04/2026 | V 26.4.19
 
-TPIorganizer 2023 est une application React conçue pour faciliter l'organisation des soutenances de travaux de fin d'études (TPI). Elle offre une gestion flexible des dates, des salles et du workflow de validation des plannings.
+TPIorganizer 2023 est une application React conçue pour faciliter l'organisation des défenses de travaux de fin d'études (TPI). Elle offre une gestion flexible des dates, des salles et du workflow de validation des plannings.
 
 ## Screenshot
 ![HomeO](/captures/HomeO.png)
@@ -14,22 +14,24 @@ TPIorganizer 2023 est une application React conçue pour faciliter l'organisatio
 
 ## Points forts
 
-- **Filtrage et affichage** : Vision claire des soutenances par date et salle.
-- **Gestion des créneaux** : Création et édition aisées des créneaux de soutenance.
-- **Export/import CSV** : Transfert simple des données de soutenances.
+- **Filtrage et affichage** : Vision claire des défenses par date et salle.
+- **Gestion des créneaux** : Création et édition aisées des créneaux de défense.
+- **Export/import CSV** : Transfert simple des données de défenses.
 - **Navigation intuitive** : Système de routes pour une expérience utilisateur fluide.
 - **Drag & drop** : Placement facile des TPI dans l'agenda.
 
 ## Démarrage rapide
 
 1. **Installation** : Avoir Node.js, cloner le dépôt, installer les dépendances avec `npm install`.
-2. **Utilisation** : Lancer l'app avec `npm start`, accéder via `http://localhost:3000`.
+2. **Utilisation complète** : Lancer l'app avec `npm run dev`, accéder au frontend via `http://localhost:3000`.
+3. **Frontend seul** : Lancer uniquement Vite avec `npm start`.
 
 ## Développement
 
 - Pour démarrer le backend + frontend en mode développement : `npm run dev`
 - Frontend accessible sur : `http://localhost:3000`
 - API locale exposée sur : `http://localhost:5001`
+- Pour démarrer uniquement l'API locale : `npm run backend`
 - Vérifier le code avec : `npx eslint src --ext .js,.jsx`
 
 ## Notes de maintenance
@@ -66,6 +68,6 @@ Sous licence MIT, détails dans le fichier LICENSE.
 
 - **Notifications par mail** : Mise en place d'une fonctionnalité d'envoi de mails pour une meilleure communication.
 - **Sauvegarde cloud** : Intégration d'une base de données NoSQL cloud pour une accessibilité et sécurité accrues.
-- **Publication de planning** : Création d'un bouton "Publier" pour partager facilement le planning des soutenances.
+- **Publication de planning** : Création d'un bouton "Publier" pour partager facilement le planning des défenses.
 
-L'engagement envers l'amélioration continue de TPIorganizer 2023 reste fort, avec un accent sur la fourniture d'outils pratiques et efficaces pour la gestion des soutenances TPI.
+L'engagement envers l'amélioration continue de TPIorganizer 2023 reste fort, avec un accent sur la fourniture d'outils pratiques et efficaces pour la gestion des défenses TPI.

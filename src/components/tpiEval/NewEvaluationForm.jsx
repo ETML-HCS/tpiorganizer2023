@@ -11,7 +11,7 @@ import {
 } from "../shared/InlineIcons"
 
 import { PDFDocument } from "pdf-lib"
-import { STORAGE_KEYS } from "../../config/appConfig"
+import { API_URL, STORAGE_KEYS } from "../../config/appConfig"
 import { getEvaluationStorageKey } from "./tpiEvalUtils"
 import {
   readJSONListValue,
@@ -28,13 +28,7 @@ import { Section, TablePoints } from "./headerForm/Section"
 
 import "../../css/tpiEval/newEvaluationForm.css"
 
-// Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === "true"
-
-// Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = debugMode
-  ? process.env.REACT_APP_API_URL_TRUE
-  : process.env.REACT_APP_API_URL_FALSE
+const apiUrl = API_URL
 
 function getFieldValue(inputName) {
   // Recherche de l'élément de formulaire par id

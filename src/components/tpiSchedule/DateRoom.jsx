@@ -19,7 +19,7 @@ import {
 import {
   buildPlanningSlotKey
 } from './tpiScheduleValidationMarkers'
-import { CheckIcon, PencilIcon } from '../shared/InlineIcons'
+import { CheckIcon, PencilIcon, TrashIcon } from '../shared/InlineIcons'
 
 import '../../css/tpiShedule/tpiSheduleStyle.css'
 
@@ -139,26 +139,99 @@ function hexToRgba(color, alpha = 1) {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
 
+function parseHexColor(color) {
+  const normalizedColor = normalizePlanningColor(color)
+  if (!normalizedColor) {
+    return null
+  }
+
+  const hex = normalizedColor.slice(1)
+  return {
+    red: Number.parseInt(hex.slice(0, 2), 16),
+    green: Number.parseInt(hex.slice(2, 4), 16),
+    blue: Number.parseInt(hex.slice(4, 6), 16)
+  }
+}
+
+function toHexChannel(value) {
+  return Math.max(0, Math.min(255, Math.round(value)))
+    .toString(16)
+    .padStart(2, '0')
+    .toUpperCase()
+}
+
+function rgbToHex({ red, green, blue }) {
+  return `#${toHexChannel(red)}${toHexChannel(green)}${toHexChannel(blue)}`
+}
+
+function mixHexColors(baseColor, targetColor, targetWeight = 0.5) {
+  const base = parseHexColor(baseColor)
+  const target = parseHexColor(targetColor)
+
+  if (!base || !target) {
+    return normalizePlanningColor(baseColor) || normalizePlanningColor(targetColor) || ''
+  }
+
+  const safeTargetWeight = Math.max(0, Math.min(1, Number(targetWeight) || 0))
+  const baseWeight = 1 - safeTargetWeight
+
+  return rgbToHex({
+    red: base.red * baseWeight + target.red * safeTargetWeight,
+    green: base.green * baseWeight + target.green * safeTargetWeight,
+    blue: base.blue * baseWeight + target.blue * safeTargetWeight
+  })
+}
+
+function getColorBrightness(color) {
+  const rgb = parseHexColor(color)
+  if (!rgb) {
+    return 0
+  }
+
+  return rgb.red * 0.299 + rgb.green * 0.587 + rgb.blue * 0.114
+}
+
 function getRoomThemeTextColor(color) {
   const normalizedColor = normalizePlanningColor(color)
   if (!normalizedColor) {
     return '#FFFFFF'
   }
 
-  const hex = normalizedColor.slice(1)
-  const red = Number.parseInt(hex.slice(0, 2), 16)
-  const green = Number.parseInt(hex.slice(2, 4), 16)
-  const blue = Number.parseInt(hex.slice(4, 6), 16)
-  const brightness = red * 0.299 + green * 0.587 + blue * 0.114
+  const brightness = getColorBrightness(normalizedColor)
 
   return brightness >= 170 ? '#0F172A' : '#FFFFFF'
 }
 
-function buildRoomThemeStyle(siteCode, planningColor) {
+function getContrastingTpiColor(roomColor) {
+  const accent = normalizePlanningColor(roomColor) || '#2563EB'
+  const brightness = getColorBrightness(accent)
+
+  return brightness >= 170
+    ? mixHexColors(accent, '#0F172A', 0.68)
+    : mixHexColors(accent, '#FFFFFF', 0.82)
+}
+
+function buildTpiPalette(accent, tpiColor) {
+  const tpiAccent = normalizePlanningColor(tpiColor) || getContrastingTpiColor(accent)
+  const candidateBg = tpiAccent
+  const expertsBg = mixHexColors(tpiAccent, accent, 0.10)
+  const bossBg = mixHexColors(tpiAccent, accent, 0.18)
+  const textColor = getRoomThemeTextColor(expertsBg)
+
+  return {
+    '--site-textColor': textColor,
+    '--tpi-card-candidat-bgColor': candidateBg,
+    '--tpi-card-experts-bgColor': expertsBg,
+    '--tpi-card-boss-bgColor': bossBg
+  }
+}
+
+function buildRoomThemeStyle(siteCode, planningColor, tpiColor) {
   const normalizedSiteCode = String(siteCode || '').trim().toUpperCase()
   const explicitColor = normalizePlanningColor(planningColor)
+  const explicitTpiColor = normalizePlanningColor(tpiColor)
 
-  if (!explicitColor && ['ETML', 'CFPV'].includes(normalizedSiteCode)) {
+  if (!explicitColor && !explicitTpiColor && ['ETML', 'CFPV'].includes(normalizedSiteCode)) {
     return undefined
   }
 
@@ -179,9 +252,7 @@ function buildRoomThemeStyle(siteCode, planningColor) {
     '--breakLine-badgeBorderColor': hexToRgba(accent, 0.22),
     '--breakLine-badgeBgColor': 'rgba(255, 255, 255, 0.94)',
     '--tpi-timeSlot-textColor': '#0F172A',
-    '--tpi-card-candidat-bgColor': hexToRgba(accent, 0.10),
-    '--tpi-card-experts-bgColor': hexToRgba(accent, 0.16),
-    '--tpi-card-boss-bgColor': hexToRgba(accent, 0.22)
+    ...buildTpiPalette(accent, explicitTpiColor)
   }
 }
 
@@ -275,8 +346,8 @@ const DateRoom = ({
     [roomClassMode]
   )
   const roomThemeStyle = useMemo(
-    () => buildRoomThemeStyle(safeRoomData.site, safeConfigSite.planningColor),
-    [safeConfigSite.planningColor, safeRoomData.site]
+    () => buildRoomThemeStyle(safeRoomData.site, safeConfigSite.planningColor, safeConfigSite.tpiColor),
+    [safeConfigSite.planningColor, safeConfigSite.tpiColor, safeRoomData.site]
   )
   const selectedDateKey = toDateInputValue(draftDate || safeRoomData.date)
   const occupiedRoomNameKeys = useMemo(() => {
@@ -588,6 +659,7 @@ const DateRoom = ({
                             onClick={handleDeleteRoom}
                             role='menuitem'
                           >
+                            <TrashIcon className='date-room-action-icon' />
                             Supprimer
                           </button>
                         </div>

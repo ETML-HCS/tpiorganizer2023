@@ -725,3 +725,29 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Final module harmonization */
+.planning-calendar,
+.planning-calendar .draggable-tpi,
+.planning-calendar .calendar-header,
+.planning-calendar .calendar-row,
+.planning-calendar .slot-cell,
+.planning-calendar .nav-btn {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.planning-calendar .calendar-navigation,
+.planning-calendar .tpi-drag-source {
+  background: var(--app-surface, #ffffff);
+}
+
+.planning-calendar .draggable-tpi {
+  min-height: 124px;
+}
+
+.planning-calendar .current-week {
+  letter-spacing: 0;
+}

@@ -1,6 +1,17 @@
 const OCCUPIED_SLOT_STATUSES = Object.freeze(['confirmed', 'pending_votes', 'proposed'])
 const MAX_CONSECUTIVE_TPI = 4
 
+function getMaxConsecutiveTpiLimit(value, fallback = MAX_CONSECUTIVE_TPI) {
+  const fallbackLimit = Number.isInteger(Number(fallback)) && Number(fallback) > 0
+    ? Number(fallback)
+    : MAX_CONSECUTIVE_TPI
+  const limit = Number(value)
+
+  return Number.isInteger(limit) && limit > 0
+    ? limit
+    : fallbackLimit
+}
+
 function normalizeDateKey(dateValue) {
   const date = new Date(dateValue)
 
@@ -77,6 +88,7 @@ function buildOccupiedStepKeys(slots, personId) {
 module.exports = {
   buildOccupiedStepKeys,
   buildTimelineIndex,
+  getMaxConsecutiveTpiLimit,
   MAX_CONSECUTIVE_TPI,
   normalizeDateKey,
   OCCUPIED_SLOT_STATUSES,

@@ -161,6 +161,7 @@ describe('DateRoom', () => {
           date: '2026-06-10',
           configSite: {
             planningColor: '#14532d',
+            tpiColor: '#fee2e2',
             numSlots: 1,
             breaklineMinutes: 10,
             tpiTimeMinutes: 60,
@@ -180,6 +181,8 @@ describe('DateRoom', () => {
     const roomElement = screen.getByText('Vennes - A101').closest('.date-room')
 
     expect(roomElement?.style.getPropertyValue('--dateRoom-bgColor')).toBe('#14532D')
+    expect(roomElement?.style.getPropertyValue('--tpi-card-candidat-bgColor')).toBe('#FEE2E2')
+    expect(roomElement?.style.getPropertyValue('--site-textColor')).toBe('#0F172A')
     expect(roomElement).toHaveClass('site_vennes')
   })
 })

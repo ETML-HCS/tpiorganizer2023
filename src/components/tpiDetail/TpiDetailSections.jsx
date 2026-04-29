@@ -2,12 +2,6 @@ import React, { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRightIcon,
-  CandidateIcon,
-  ExpertIcon,
-  ProjectLeadIcon,
-  UsersIcon,
-  VoteIcon,
-  WorkflowIcon,
   CloseIcon,
   FileTextIcon,
   RefreshIcon,
@@ -50,39 +44,37 @@ const DetailItem = ({ label, value, tone = '' }) => (
   </article>
 )
 
-const SignalCard = ({ label, value, helper = '', tone = '' }) => (
-  <article className={`tpi-detail-signal-card ${tone ? `is-${tone}` : ''}`.trim()}>
-    <span>{label}</span>
-    <strong>{value || '—'}</strong>
-    {helper ? <p>{helper}</p> : null}
-  </article>
-)
+const CollapsibleSection = ({
+  id,
+  title,
+  description,
+  children,
+  defaultOpen = true,
+  meta = null,
+  className = ''
+}) => (
+  <details
+    id={id}
+    className={`tpi-detail-section-card tpi-detail-collapsible-section ${className}`.trim()}
+    open={defaultOpen}
+  >
+    <summary className='tpi-detail-collapsible-summary'>
+      <span className='tpi-detail-collapsible-copy'>
+        <span className='tpi-detail-collapsible-title'>{title}</span>
+        {description ? (
+          <span className='tpi-detail-collapsible-description'>{description}</span>
+        ) : null}
+      </span>
+      <span className='tpi-detail-collapsible-summary-side'>
+        {meta}
+        <ArrowRightIcon className='tpi-detail-action-icon' aria-hidden='true' />
+      </span>
+    </summary>
 
-const StageCard = ({ icon: Icon, label, value, helper = '', tone = '' }) => (
-  <article className={`tpi-detail-stage-card ${tone ? `is-${tone}` : ''}`.trim()}>
-    <div className='tpi-detail-stage-icon' aria-hidden='true'>
-      {Icon ? <Icon /> : null}
+    <div className='tpi-detail-collapsible-body'>
+      {children}
     </div>
-    <div className='tpi-detail-stage-copy'>
-      <span>{label}</span>
-      <strong>{value || '—'}</strong>
-      {helper ? <p>{helper}</p> : null}
-    </div>
-  </article>
-)
-
-const ShortcutLink = ({ label, href }) => (
-  <a className='tpi-detail-shortcut-link' href={href}>
-    <span>{label}</span>
-    <ArrowRightIcon className='tpi-detail-shortcut-icon' />
-  </a>
-)
-
-const AnchorPill = ({ label, href, count = '' }) => (
-  <a className='tpi-detail-anchor-link' href={href}>
-    <span>{label}</span>
-    {count ? <strong>{count}</strong> : null}
-  </a>
+  </details>
 )
 
 function getCompletenessLabel(stakeholderState, hasLegacyData) {
@@ -552,6 +544,13 @@ function buildHealthSummary({
   }
 }
 
+const ActionLinkContent = ({ label }) => (
+  <>
+    <span>{label}</span>
+    <ArrowRightIcon className='tpi-detail-action-icon' aria-hidden='true' />
+  </>
+)
+
 const ActionLink = ({ action, className }) => {
   const key = compactText(action?.key) || compactText(action?.label)
   const label = compactText(action?.label)
@@ -567,9 +566,11 @@ const ActionLink = ({ action, className }) => {
         key={key}
         className={`${className} is-${tone}`}
         to={action.to}
+        aria-label={label}
+        title={label}
         state={action.state}
       >
-        {label}
+        <ActionLinkContent label={label} />
       </Link>
     )
   }
@@ -581,9 +582,11 @@ const ActionLink = ({ action, className }) => {
         className={`${className} is-${tone}`}
         href={action.href}
         target='_blank'
+        aria-label={label}
+        title={label}
         rel='noreferrer'
       >
-        {label}
+        <ActionLinkContent label={label} />
       </a>
     )
   }
@@ -641,9 +644,6 @@ const TpiDetailSections = ({
   const tags = Array.isArray(legacyTpi?.tags) ? legacyTpi.tags.filter(Boolean) : []
   const candidateName = formatPersonName(planningTpi?.candidat, compactText(legacyTpi?.candidat))
   const subject = compactText(planningTpi?.sujet) || compactText(legacyTpi?.sujet) || 'Sujet non renseigné'
-  const expert1Name = formatPersonName(planningTpi?.expert1, getLegacyExpert(legacyTpi, '1'))
-  const expert2Name = formatPersonName(planningTpi?.expert2, getLegacyExpert(legacyTpi, '2'))
-  const projectLeadName = formatPersonName(planningTpi?.chefProjet, compactText(legacyTpi?.boss))
   const depositLink = compactText(legacyTpi?.lienDepot)
   const classValue = compactText(planningTpi?.classe) || compactText(legacyTpi?.classe)
   const siteValue = compactText(planningTpi?.site) || compactText(legacyTpi?.site) || compactText(legacyTpi?.lieu?.site)
@@ -671,30 +671,7 @@ const TpiDetailSections = ({
   const pendingVotesCount = Number(voteSummary.pendingVotes || 0)
   const respondedVotesCount = Number(voteSummary.respondedVotes || 0)
   const favorableVotesCount = Number(voteSummary.acceptedVotes || 0) + Number(voteSummary.preferredVotes || 0)
-  const visibleOverviewPills = [
-    {
-      key: 'planning-status',
-      className: `tpi-detail-pill is-${planningStatusMeta.tone}`,
-      label: planningStatusMeta.label
-    },
-    mergedIssues.length > 0 ? {
-      key: 'issues',
-      className: 'tpi-detail-pill is-warning',
-      label: `${mergedIssues.length} anomalie${mergedIssues.length > 1 ? 's' : ''}`
-    } : null,
-    plannedSlot ? {
-      key: 'slot',
-      className: 'tpi-detail-pill is-ready',
-      label: plannedSlotLabel
-    } : null
-  ].filter(Boolean)
   const defaultOverviewActions = [
-    dossier?.legacy?.exists && focusReference ? {
-      key: 'gestion',
-      label: 'Voir dans Gestion TPI',
-      to: buildGestionTpiFocusLink(dossier?.year, focusReference),
-      tone: 'secondary'
-    } : null,
     !dossier?.legacy?.exists && focusReference ? {
       key: 'gestion-create',
       label: 'Créer dans Gestion TPI',
@@ -702,12 +679,6 @@ const TpiDetailSections = ({
       state: {
         prefillTpi: buildLegacyPrefillFromDossier(dossier)
       },
-      tone: 'warning'
-    } : null,
-    dossier?.legacy?.exists && focusReference ? {
-      key: 'gestion-edit',
-      label: 'Modifier dans Gestion TPI',
-      to: buildGestionTpiFocusLink(dossier?.year, focusReference, { edit: true }),
       tone: 'warning'
     } : null,
     focusReference ? {
@@ -718,8 +689,14 @@ const TpiDetailSections = ({
     } : null,
     planningStatus.toLowerCase() === 'published' && focusReference ? {
       key: 'soutenance',
-      label: 'Voir dans Soutenances',
+      label: 'Voir dans Défenses',
       to: buildSoutenanceFocusLink(dossier?.year, focusReference),
+      tone: 'secondary'
+    } : null,
+    dossier?.legacy?.exists && focusReference ? {
+      key: 'gestion-edit',
+      label: 'Modifier dans Gestion TPI',
+      to: buildGestionTpiFocusLink(dossier?.year, focusReference, { edit: true }),
       tone: 'secondary'
     } : null,
     isLikelyUrl(depositLink) ? {
@@ -801,25 +778,6 @@ const TpiDetailSections = ({
     plannedSlot,
     planningStatusMeta
   })
-  const stakeholderSummaryTone = !dossier?.legacy?.exists
-    ? 'muted'
-    : stakeholderState?.isResolved
-      ? 'ready'
-      : stakeholderState?.isComplete
-        ? 'secondary'
-        : 'warning'
-  const [comparisonFilter, setComparisonFilter] = useState(
-    comparisonAttentionCount > 0 ? 'attention' : 'all'
-  )
-  const isPanelVariant = variant === 'panel'
-  const shouldRenderSummaryGrid = showSummary && !showOverview
-  const showAnchorNav = !isPanelVariant
-  const showHealthSection = !isPanelVariant
-  const showDirectActionsSection = !isPanelVariant && directActionsEnabled
-  const showRemediationSection = !isPanelVariant && remediationCards.length > 0
-  const showComparisonSection = !isPanelVariant
-  const showStakeholderShortcuts = !isPanelVariant
-  const showVotesTable = !isPanelVariant
   const quickEditFields = useMemo(() => ([
     { key: 'sujet', label: 'Sujet', type: 'text', placeholder: 'Sujet du TPI' },
     { key: 'classe', label: 'Classe', type: 'text', placeholder: 'Classe' },
@@ -838,267 +796,28 @@ const TpiDetailSections = ({
       )).length,
     [quickEditDefaults, quickEditFields, quickEditPlanningValues]
   )
-  const overviewFacts = useMemo(() => ([
-    {
-      key: 'workflow-ref',
-      label: 'Référence workflow',
-      value: workflowReference || 'Non créée',
-      helper: workflowReference ? 'Identifiant du workflow Planning' : 'Aucune référence Planning visible',
-      tone: workflowReference ? 'ready' : 'warning'
-    },
-    {
-      key: 'legacy-ref',
-      label: 'Référence legacy',
-      value: legacyRef || 'Non créée',
-      helper: dossier?.legacy?.exists ? 'Fiche GestionTPI trouvée' : 'Création legacy encore nécessaire',
-      tone: dossier?.legacy?.exists ? 'ready' : 'warning'
-    },
-    {
-      key: 'class-site',
-      label: 'Classe / site',
-      value: [classValue, siteValue].filter(Boolean).join(' · ') || 'Non renseignés',
-      helper: companyValue || 'Entreprise non renseignée',
-      tone: hasClass && hasSite ? 'ready' : hasClass || hasSite ? 'secondary' : 'warning'
-    },
-    {
-      key: 'slot',
-      label: 'Créneau',
-      value: plannedSlotLabel,
-      helper: dossier?.planning?.exists ? planningStatusMeta.label : 'Workflow absent',
-      tone: plannedSlot ? 'ready' : dossier?.planning?.exists ? 'warning' : 'muted'
-    },
-    {
-      key: 'votes',
-      label: 'Votes',
-      value: totalVotesCount > 0 ? `${respondedVotesCount}/${totalVotesCount} reçus` : 'Aucun vote',
-      helper: pendingVotesCount > 0
-        ? `${pendingVotesCount} en attente`
-        : totalVotesCount > 0
-          ? `${favorableVotesCount} favorable(s)`
-          : 'Campagne non démarrée',
-      tone: pendingVotesCount > 0 ? 'warning' : totalVotesCount > 0 ? 'ready' : 'muted'
-    },
-    {
-      key: 'coherence',
-      label: 'Contrôles',
-      value: mergedIssues.length > 0
-        ? `${mergedIssues.length} anomalie${mergedIssues.length > 1 ? 's' : ''}`
-        : 'Aucune alerte',
-      helper: healthSummary.tone === 'ready'
-        ? 'Dossier exploitable immédiatement'
-        : healthSummary.tone === 'warning'
-          ? 'Intervention prioritaire encore visible'
-          : 'Quelques ajustements restent à prévoir',
-      tone: mergedIssues.length > 0 ? 'warning' : 'ready'
-    }
-  ]), [
-    classValue,
-    companyValue,
-    dossier?.legacy?.exists,
-    dossier?.planning?.exists,
-    favorableVotesCount,
-    hasClass,
-    hasSite,
-    healthSummary.label,
-    legacyRef,
-    mergedIssues.length,
-    pendingVotesCount,
-    plannedSlot,
-    plannedSlotLabel,
-    planningStatusMeta.label,
-    respondedVotesCount,
-    siteValue,
-    totalVotesCount,
-    workflowReference
-  ])
-  const stageItems = useMemo(() => {
-    const stakeholderValue = !dossier?.legacy?.exists
-      ? 'En attente de fiche'
-      : stakeholderState?.isResolved
-        ? 'Référentiel validé'
-        : stakeholderState?.isComplete
-          ? 'Liaisons à confirmer'
-          : 'Parties à compléter'
-    const stakeholderHelper = stakeholderState?.missingRoles?.length
-      ? `Rôles manquants: ${stakeholderState.missingRoles.join(', ')}`
-      : stakeholderState?.unresolvedRoles?.length
-        ? `Rôles à relier: ${stakeholderState.unresolvedRoles.join(', ')}`
-        : dossier?.legacy?.exists
-          ? 'Les personnes clés sont exploitables'
-          : 'Le référentiel dépend de la fiche source'
-    const planningTone = !dossier?.planning?.exists
-      ? 'warning'
-      : plannedSlot
-        ? 'ready'
-        : planningStatusMeta.tone === 'warning'
-          ? 'warning'
-          : 'secondary'
-    const votingValue = totalVotesCount > 0
-      ? `${respondedVotesCount}/${totalVotesCount} votes`
-      : dossier?.planning?.exists
-        ? 'Votes non démarrés'
-        : 'En attente de planning'
-    const votingHelper = plannedSlot
-      ? `Créneau ${plannedSlotLabel}`
-      : dossier?.planning?.exists
-        ? 'Créneau encore à confirmer'
-        : 'Publier le TPI avant la campagne de votes'
-    const votingTone = plannedSlot && pendingVotesCount === 0 && totalVotesCount > 0
-      ? 'ready'
-      : plannedSlot || totalVotesCount > 0
-        ? 'secondary'
-        : 'muted'
-
-    return [
-      {
-        key: 'legacy',
-        icon: FileTextIcon,
-        label: '1. Fiche source',
-        value: dossier?.legacy?.exists ? 'GestionTPI prête' : 'À créer',
-        helper: dossier?.legacy?.exists
-          ? (legacyRef || 'Référence legacy détectée')
-          : 'Création possible depuis les données Planning',
-        tone: dossier?.legacy?.exists ? 'ready' : 'warning'
-      },
-      {
-        key: 'stakeholders',
-        icon: UsersIcon,
-        label: '2. Référentiel',
-        value: stakeholderValue,
-        helper: stakeholderHelper,
-        tone: stakeholderSummaryTone
-      },
-      {
-        key: 'planning',
-        icon: WorkflowIcon,
-        label: '3. Planning',
-        value: dossier?.planning?.exists ? planningStatusMeta.label : 'Non importé',
-        helper: dossier?.planning?.exists
-          ? (plannedSlot ? plannedSlotLabel : 'Aucun créneau confirmé')
-          : 'Le TPI n’apparaît pas dans le workflow',
-        tone: planningTone
-      },
-      {
-        key: 'votes',
-        icon: VoteIcon,
-        label: '4. Votes / soutenance',
-        value: votingValue,
-        helper: votingHelper,
-        tone: votingTone
-      }
-    ]
-  }, [
-    dossier?.legacy?.exists,
-    dossier?.planning?.exists,
-    legacyRef,
-    pendingVotesCount,
-    plannedSlot,
-    plannedSlotLabel,
-    planningStatusMeta.label,
-    planningStatusMeta.tone,
-    respondedVotesCount,
-    stakeholderState,
-    stakeholderSummaryTone,
-    totalVotesCount
-  ])
-  const overviewShortcuts = useMemo(() => {
-    const correctionHref = directActionsEnabled
-      ? '#tpi-detail-direct-actions'
-      : remediationCards.length > 0
-        ? '#tpi-detail-correction'
-        : '#tpi-detail-comparison'
-
-    return [
-      {
-        key: 'correction',
-        label: directActionsEnabled || remediationCards.length > 0
-          ? 'Aller aux corrections'
-          : 'Voir la lecture croisée',
-        href: correctionHref
-      },
-      { key: 'stakeholders', label: 'Parties prenantes', href: '#tpi-detail-stakeholders' },
-      { key: 'planning', label: 'Planning et votes', href: '#tpi-detail-planning' },
-      { key: 'issues', label: 'Contrôles', href: '#tpi-detail-issues' }
-    ]
-  }, [directActionsEnabled, remediationCards.length])
-  const overviewPeople = useMemo(() => ([
-    {
-      key: 'candidate',
-      icon: CandidateIcon,
-      label: 'Candidat',
-      value: candidateName || 'Non renseigné'
-    },
-    {
-      key: 'expert1',
-      icon: ExpertIcon,
-      label: 'Expert 1',
-      value: expert1Name || 'Non renseigné'
-    },
-    {
-      key: 'expert2',
-      icon: ExpertIcon,
-      label: 'Expert 2',
-      value: expert2Name || 'Non renseigné'
-    },
-    {
-      key: 'project-lead',
-      icon: ProjectLeadIcon,
-      label: 'Chef de projet',
-      value: projectLeadName || 'Non renseigné'
-    }
-  ]), [candidateName, expert1Name, expert2Name, projectLeadName])
-  const correctionSectionTarget = directActionsEnabled
-    ? '#tpi-detail-direct-actions'
-    : remediationCards.length > 0
-      ? '#tpi-detail-correction'
-      : '#tpi-detail-comparison'
-  const anchorLinks = useMemo(() => ([
-    { key: 'health', label: 'État', href: '#tpi-detail-health' },
-    {
-      key: 'correction',
-      label: directActionsEnabled || remediationCards.length > 0 ? 'Corrections' : 'Lecture croisée',
-      href: correctionSectionTarget,
-      count: directActionsEnabled
-        ? 'direct'
-        : remediationCards.length > 0
-          ? String(remediationCards.length)
-          : ''
-    },
-    {
-      key: 'comparison',
-      label: 'Lecture croisée',
-      href: '#tpi-detail-comparison',
-      count: comparisonAttentionCount > 0 ? String(comparisonAttentionCount) : ''
-    },
-    {
-      key: 'stakeholders',
-      label: 'Parties prenantes',
-      href: '#tpi-detail-stakeholders',
-      count: Number(stakeholderState?.missingRoles?.length || 0) + Number(stakeholderState?.unresolvedRoles?.length || 0) > 0
-        ? String(Number(stakeholderState?.missingRoles?.length || 0) + Number(stakeholderState?.unresolvedRoles?.length || 0))
-        : ''
-    },
-    {
-      key: 'planning',
-      label: 'Planning / votes',
-      href: '#tpi-detail-planning',
-      count: pendingVotesCount > 0 ? String(pendingVotesCount) : ''
-    },
-    {
-      key: 'issues',
-      label: 'Contrôles',
-      href: '#tpi-detail-issues',
-      count: mergedIssues.length > 0 ? String(mergedIssues.length) : ''
-    }
-  ]), [
-    comparisonAttentionCount,
-    correctionSectionTarget,
-    directActionsEnabled,
-    mergedIssues.length,
-    pendingVotesCount,
-    remediationCards.length,
-    stakeholderState
-  ])
+  const shouldOfferLegacyQuickEdit =
+    !dossier?.legacy?.exists ||
+    availablePlanningSuggestionCount > 0 ||
+    !hasSubject ||
+    !hasClass ||
+    !hasSite ||
+    !hasCompany ||
+    !hasDepositLink
+  const [comparisonFilter, setComparisonFilter] = useState(
+    comparisonAttentionCount > 0 ? 'attention' : 'all'
+  )
+  const isPanelVariant = variant === 'panel'
+  const shouldRenderSummaryGrid = showSummary && !showOverview
+  const showDirectActionsSection =
+    !isPanelVariant &&
+    directActionsEnabled &&
+    (shouldOfferLegacyQuickEdit || Boolean(quickActionFeedback))
+  const showRemediationSection = !isPanelVariant && remediationCards.length > 0
+  const showComparisonSection = !isPanelVariant && comparisonAttentionCount > 0
+  const showStakeholderShortcuts = !isPanelVariant
+  const showVotesTable = !isPanelVariant
+  const showIssuesSection = mergedIssues.length > 0
   const filteredComparisonRows = useMemo(() => {
     if (comparisonFilter === 'attention') {
       return comparisonRows.filter((row) => row.status !== 'aligned')
@@ -1168,39 +887,118 @@ const TpiDetailSections = ({
     await quickActions.onCreateLegacy()
   }
 
+  const planningVotesSection = (
+    <CollapsibleSection
+      id='tpi-detail-planning'
+      title='Planning et votes'
+      description='Créneau, statut workflow et réponses.'
+    >
+      <div className='tpi-detail-grid'>
+        <DetailItem label='Statut workflow' value={planningStatusMeta.label} tone={planningStatusMeta.tone} />
+        <DetailItem label='Créneau retenu' value={plannedSlotLabel} tone={plannedSlot ? 'ready' : 'warning'} />
+        <DetailItem
+          label='Votes reçus'
+          value={`${respondedVotesCount}/${totalVotesCount}`}
+        />
+        <DetailItem
+          label='Votes en attente'
+          value={String(pendingVotesCount)}
+          tone={pendingVotesCount > 0 ? 'warning' : 'ready'}
+        />
+        <DetailItem
+          label='Acceptés + préférés'
+          value={String(favorableVotesCount)}
+        />
+        <DetailItem
+          label='Refusés'
+          value={String(Number(voteSummary.rejectedVotes || 0))}
+        />
+      </div>
+
+      {workflowVoteSummary ? (
+        <div className='tpi-detail-inline-list'>
+          <span>
+            <span className='tpi-detail-inline-label'>Expert 1</span>
+            <strong>{workflowVoteSummary.expert1Voted ? 'voté' : 'en attente'}</strong>
+          </span>
+          <span>
+            <span className='tpi-detail-inline-label'>Expert 2</span>
+            <strong>{workflowVoteSummary.expert2Voted ? 'voté' : 'en attente'}</strong>
+          </span>
+          <span>
+            <span className='tpi-detail-inline-label'>Chef de projet</span>
+            <strong>{workflowVoteSummary.chefProjetVoted ? 'voté' : 'en attente'}</strong>
+          </span>
+        </div>
+      ) : null}
+
+      {votes.length > 0 && showVotesTable ? (
+        <div className='tpi-detail-table-shell'>
+          <table className='tpi-detail-table'>
+            <thead>
+              <tr>
+                <th>Rôle</th>
+                <th>Décision</th>
+                <th>Votant</th>
+                <th>Créneau</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {votes.map((vote) => (
+                <tr key={compactText(vote?._id) || `${vote?.voterRole}-${vote?.slot?._id || vote?.slot}`}>
+                  <td>{formatVoteRole(vote?.voterRole)}</td>
+                  <td>{formatVoteDecision(vote?.decision)}</td>
+                  <td>{formatPersonName(vote?.voter, '—')}</td>
+                  <td>{getPlannedSlotLabel(vote?.slot)}</td>
+                  <td>{formatDateTime(vote?.votedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : votes.length > 0 ? (
+        <p className='tpi-detail-empty'>Le détail complet des votes est disponible dans la fiche complète.</p>
+      ) : (
+        <p className='tpi-detail-empty'>Aucun vote enregistré pour ce dossier.</p>
+      )}
+    </CollapsibleSection>
+  )
+
   return (
     <div className={`tpi-detail-sections ${className}`.trim()}>
       {showOverview ? (
-        <section className='tpi-detail-section-card tpi-detail-overview'>
-          <div className='tpi-detail-overview-main'>
-            <div className='tpi-detail-overview-copy'>
-              <span className='tpi-detail-overview-kicker'>
-                {displayReference ? `Fiche ${displayReference}` : 'Fiche TPI'}
-              </span>
-              <h2 className='tpi-detail-overview-title'>{candidateName || 'Candidat non renseigné'}</h2>
-              <p className='tpi-detail-overview-subtitle'>{subject}</p>
-            </div>
+        <section id='tpi-detail-overview' className='tpi-detail-overview'>
+          <div className='tpi-detail-overview-copy'>
+            <span className='tpi-detail-overview-kicker'>
+              {displayReference ? `Fiche ${displayReference}` : 'Fiche TPI'}
+            </span>
+            <h2 className='tpi-detail-overview-title'>{candidateName || 'Candidat non renseigné'}</h2>
+            <p className='tpi-detail-overview-subtitle'>{subject}</p>
+          </div>
 
-            <div className='tpi-detail-overview-people'>
-              {overviewPeople.map((person) => (
-                <article key={person.key} className='tpi-detail-overview-persona'>
-                  <div className='tpi-detail-overview-persona-icon' aria-hidden='true'>
-                    <person.icon />
-                  </div>
-                  <div className='tpi-detail-overview-persona-copy'>
-                    <strong>{person.label}</strong>
-                    <span>{person.value}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <div className='tpi-detail-overview-pills'>
-              {visibleOverviewPills.map((pill) => (
-                <span key={pill.key} className={pill.className}>
-                  {pill.label}
-                </span>
-              ))}
+          <div className='tpi-detail-overview-side'>
+            <div className='tpi-detail-overview-facts'>
+              <DetailItem
+                label='État'
+                value={healthSummary.label}
+                tone={healthSummary.tone}
+              />
+              <DetailItem
+                label='Créneau'
+                value={plannedSlotLabel}
+                tone={plannedSlot ? 'ready' : dossier?.planning?.exists ? 'warning' : 'muted'}
+              />
+              <DetailItem
+                label='Classe / site'
+                value={[classValue, siteValue].filter(Boolean).join(' · ') || 'Non renseignés'}
+                tone={hasClass && hasSite ? '' : hasClass || hasSite ? 'secondary' : 'warning'}
+              />
+              <DetailItem
+                label='Contrôles'
+                value={mergedIssues.length > 0 ? `${mergedIssues.length} à corriger` : 'OK'}
+                tone={mergedIssues.length > 0 ? 'warning' : 'ready'}
+              />
             </div>
 
             {resolvedOverviewActions.length > 0 ? (
@@ -1214,148 +1012,71 @@ const TpiDetailSections = ({
                 ))}
               </div>
             ) : null}
-
-            <div className='tpi-detail-overview-shortcuts'>
-              {overviewShortcuts.map((shortcut) => (
-                <ShortcutLink key={shortcut.key} label={shortcut.label} href={shortcut.href} />
-              ))}
-            </div>
           </div>
 
-          <aside className='tpi-detail-overview-panel'>
-            <div className='tpi-detail-overview-facts'>
-              {overviewFacts.map((fact) => (
-                <SignalCard
-                  key={fact.key}
-                  label={fact.label}
-                  value={fact.value}
-                  helper={fact.helper}
-                  tone={fact.tone}
+          {healthSummary.nextCard ? (
+            <div className={`tpi-detail-next-action is-${healthSummary.tone}`}>
+              <div className='tpi-detail-next-action-copy'>
+                <span className={`tpi-detail-priority-pill is-${getRemediationPriorityMeta(healthSummary.nextCard.priority).tone}`}>
+                  {getRemediationPriorityMeta(healthSummary.nextCard.priority).label}
+                </span>
+                <strong>{healthSummary.nextCard.title}</strong>
+                <p>{healthSummary.nextCard.description}</p>
+              </div>
+
+              {healthSummary.nextAction ? (
+                <ActionLink
+                  action={healthSummary.nextAction}
+                  className='tpi-detail-remediation-link'
                 />
-              ))}
+              ) : null}
             </div>
+          ) : null}
 
-            <div className='tpi-detail-stage-shell'>
-              <div className='tpi-detail-stage-head'>
-                <span>Lecture du dossier</span>
-                <strong>Parcours opérationnel</strong>
-              </div>
-
-              <div className='tpi-detail-stage-list'>
-                {stageItems.map((item) => (
-                  <StageCard
-                    key={item.key}
-                    icon={item.icon}
-                    label={item.label}
-                    value={item.value}
-                    helper={item.helper}
-                    tone={item.tone}
-                  />
-                ))}
-              </div>
-            </div>
-          </aside>
         </section>
-      ) : null}
-
-      {showAnchorNav ? (
-        <nav className='tpi-detail-anchor-nav' aria-label='Navigation interne de la fiche'>
-          {anchorLinks.map((link) => (
-            <AnchorPill
-              key={link.key}
-              label={link.label}
-              href={link.href}
-              count={link.count}
-            />
-          ))}
-        </nav>
       ) : null}
 
       {shouldRenderSummaryGrid ? (
-        <section className='tpi-detail-summary-grid'>
-          <DetailItem
-            label='Référence workflow'
-            value={workflowReference || 'Non créée'}
-            tone={workflowReference ? '' : 'warning'}
-          />
-          <DetailItem
-            label='Référence legacy'
-            value={legacyRef || 'Non créée'}
-            tone={legacyRef ? '' : 'warning'}
-          />
-          <DetailItem
-            label='Statut planning'
-            value={planningStatusMeta.label}
-          />
-          <DetailItem
-            label='Créneau'
-            value={plannedSlotLabel}
-            tone={plannedSlot ? 'ready' : 'warning'}
-          />
-        </section>
+        <>
+          {isPanelVariant ? (
+            <h2 className='tpi-detail-panel-summary-title'>Projet et références</h2>
+          ) : null}
+          <section className='tpi-detail-summary-grid'>
+            <DetailItem
+              label='Référence workflow'
+              value={workflowReference || 'Non créée'}
+              tone={workflowReference ? '' : 'warning'}
+            />
+            <DetailItem
+              label='Référence legacy'
+              value={legacyRef || 'Non créée'}
+              tone={legacyRef ? '' : 'warning'}
+            />
+            <DetailItem
+              label='Statut planning'
+              value={planningStatusMeta.label}
+              tone={planningStatusMeta.tone}
+            />
+            <DetailItem
+              label='Créneau'
+              value={plannedSlotLabel}
+              tone={plannedSlot ? 'ready' : 'warning'}
+            />
+          </section>
+        </>
       ) : null}
 
       <div className={`tpi-detail-layout ${isPanelVariant ? 'is-panel-layout' : ''}`.trim()}>
         {!isPanelVariant ? (
           <div className='tpi-detail-layout-primary'>
-            {showHealthSection ? (
-              <section
-                id='tpi-detail-health'
-                className={`tpi-detail-section-card tpi-detail-health is-${healthSummary.tone}`}
-              >
-                <div className='tpi-detail-section-head'>
-                  <div className='tpi-detail-health-copy'>
-                    <span className={`tpi-detail-health-kicker is-${healthSummary.tone}`}>Santé du dossier</span>
-                    <h2>{healthSummary.label}</h2>
-                    <p>{healthSummary.summary}</p>
-                  </div>
-                </div>
-
-                <div className='tpi-detail-health-grid'>
-                  {healthSummary.checkpoints.map((checkpoint) => (
-                    <DetailItem
-                      key={checkpoint.key}
-                      label={checkpoint.label}
-                      value={checkpoint.value}
-                      tone={checkpoint.tone}
-                    />
-                  ))}
-                </div>
-
-                {healthSummary.nextCard ? (
-                  <div className='tpi-detail-health-next-step'>
-                    <div className='tpi-detail-health-next-copy'>
-                      <span className={`tpi-detail-health-next-pill is-${getRemediationPriorityMeta(healthSummary.nextCard.priority).tone}`}>
-                        {getRemediationPriorityMeta(healthSummary.nextCard.priority).label}
-                      </span>
-                      <strong>{healthSummary.nextCard.title}</strong>
-                      <p>
-                        {healthSummary.nextAction
-                          ? 'Commencer par cette action. Les autres compléments restent listés plus bas sur la fiche.'
-                          : 'Point principal à traiter sur cette fiche.'}
-                      </p>
-                    </div>
-
-                    {healthSummary.nextAction ? (
-                      <div className='tpi-detail-health-next-actions'>
-                        <ActionLink
-                          action={healthSummary.nextAction}
-                          className='tpi-detail-remediation-link'
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
+            {planningVotesSection}
 
             {showDirectActionsSection ? (
-              <section id='tpi-detail-direct-actions' className='tpi-detail-section-card'>
-                <div className='tpi-detail-section-head'>
-                  <h2>Correction directe</h2>
-                  <p>Actions rapides possibles sans quitter la fiche. Le reste continue de pointer vers les écrans métier spécialisés.</p>
-                </div>
-
+              <CollapsibleSection
+                id='tpi-detail-direct-actions'
+                title='Correction directe'
+                description='Actions rapides utiles sans ouvrir un autre écran.'
+              >
                 {quickActionFeedback ? (
                   <div className={`tpi-detail-inline-feedback is-${quickActionFeedback.tone || 'info'}`}>
                     <strong>{quickActionFeedback.tone === 'success' ? 'Opération réussie' : 'Action impossible'}</strong>
@@ -1367,34 +1088,25 @@ const TpiDetailSections = ({
                   <div className='tpi-detail-direct-action-card'>
                     <div className='tpi-detail-direct-action-copy'>
                       <strong>Créer une fiche GestionTPI de base ici</strong>
-                      <p>
-                        La fiche sera initialisée avec la référence, les parties prenantes et les informations Planning déjà disponibles.
-                      </p>
+                      <p>Initialise la fiche avec la référence, les personnes et les informations Planning disponibles.</p>
                     </div>
 
-                    <div className='tpi-detail-direct-action-buttons'>
-                      <button
-                        type='button'
-                        className='tpi-detail-direct-button is-warning'
-                        onClick={handleQuickCreate}
-                        disabled={isQuickActionPending}
-                        title='Créer la fiche de base ici'
-                      >
-                        <FileTextIcon className='tpi-detail-direct-button-icon' />
-                        <span>{isQuickActionPending ? 'Création...' : 'Créer la fiche'}</span>
-                        <span className='sr-only'>
-                          {isQuickActionPending ? 'Création...' : 'Créer la fiche de base ici'}
-                        </span>
-                      </button>
-                    </div>
+                    <button
+                      type='button'
+                      className='tpi-detail-direct-button is-warning'
+                      onClick={handleQuickCreate}
+                      disabled={isQuickActionPending}
+                      title='Créer la fiche de base ici'
+                    >
+                      <FileTextIcon className='tpi-detail-direct-button-icon' />
+                      <span>{isQuickActionPending ? 'Création...' : 'Créer la fiche de base ici'}</span>
+                    </button>
                   </div>
-                ) : (
+                ) : shouldOfferLegacyQuickEdit ? (
                   <div className='tpi-detail-direct-action-card'>
                     <div className='tpi-detail-direct-action-copy'>
                       <strong>Édition rapide des champs legacy</strong>
-                      <p>
-                        Tu peux corriger ici les champs les plus courants sans ouvrir `GestionTPI`.
-                      </p>
+                      <p>Corrige uniquement les champs qui bloquent souvent la suite du workflow.</p>
                     </div>
 
                     {availablePlanningSuggestionCount > 0 ? (
@@ -1408,8 +1120,7 @@ const TpiDetailSections = ({
                           title='Reprendre toutes les valeurs Planning disponibles'
                         >
                           <RefreshIcon className='tpi-detail-direct-button-icon' />
-                          <span>Reprendre Planning</span>
-                          <span className='sr-only'>Reprendre toutes les valeurs Planning</span>
+                          <span>Reprendre toutes les valeurs Planning</span>
                         </button>
                       </div>
                     ) : null}
@@ -1448,7 +1159,8 @@ const TpiDetailSections = ({
                             />
                             {compactText(quickEditPlanningValues[field.key]) ? (
                               <small className='tpi-detail-quick-edit-hint'>
-                                Planning: {quickEditPlanningValues[field.key]}
+                                <span>Planning</span>
+                                <strong>{quickEditPlanningValues[field.key]}</strong>
                               </small>
                             ) : null}
                           </div>
@@ -1465,7 +1177,6 @@ const TpiDetailSections = ({
                         >
                           <CloseIcon className='tpi-detail-direct-button-icon' />
                           <span>Réinitialiser</span>
-                          <span className='sr-only'>Réinitialiser</span>
                         </button>
                         <button
                           type='submit'
@@ -1474,45 +1185,31 @@ const TpiDetailSections = ({
                           title='Enregistrer sur la fiche'
                         >
                           <SaveIcon className='tpi-detail-direct-button-icon' />
-                          <span>{isQuickActionPending ? 'Enregistrement...' : 'Enregistrer'}</span>
-                          <span className='sr-only'>
-                            {isQuickActionPending ? 'Enregistrement...' : 'Enregistrer sur la fiche'}
-                          </span>
+                          <span>{isQuickActionPending ? 'Enregistrement...' : 'Enregistrer sur la fiche'}</span>
                         </button>
                       </div>
                     </form>
                   </div>
-                )}
-              </section>
+                ) : null}
+              </CollapsibleSection>
             ) : null}
 
             {showRemediationSection ? (
-              <section id='tpi-detail-correction' className='tpi-detail-section-card'>
-                <div className='tpi-detail-section-head'>
-                  <h2>Correction et complétion</h2>
-                  <p>Raccourcis ciblés pour corriger les anomalies ou compléter les données de cette fiche.</p>
-                </div>
-
+              <CollapsibleSection
+                id='tpi-detail-correction'
+                title='Correction et complétion'
+                description='Actions nécessaires avant de considérer la fiche exploitable.'
+              >
                 <div className='tpi-detail-remediation-grid'>
                   {remediationCards.map((card) => (
                     <article key={card.key} className={`tpi-detail-remediation-card is-${card.tone || 'secondary'}`}>
                       <div className='tpi-detail-remediation-copy'>
-                        <span className={`tpi-detail-health-next-pill is-${getRemediationPriorityMeta(card.priority).tone}`}>
+                        <span className={`tpi-detail-priority-pill is-${getRemediationPriorityMeta(card.priority).tone}`}>
                           {getRemediationPriorityMeta(card.priority).label}
                         </span>
                         <h3>{card.title}</h3>
                         <p>{card.description}</p>
                       </div>
-
-                      {Array.isArray(card.tags) && card.tags.length > 0 ? (
-                        <div className='tpi-detail-remediation-tags'>
-                          {card.tags.map((tag) => (
-                            <span key={`${card.key}-${tag}`} className='tpi-detail-remediation-tag'>
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
 
                       <div className='tpi-detail-remediation-actions'>
                         {card.actions.map((action) => (
@@ -1526,44 +1223,16 @@ const TpiDetailSections = ({
                     </article>
                   ))}
                 </div>
-              </section>
+              </CollapsibleSection>
             ) : null}
 
             {showComparisonSection ? (
-              <section id='tpi-detail-comparison' className='tpi-detail-section-card'>
-                <div className='tpi-detail-section-head'>
-                  <h2>Lecture croisée GestionTPI / Planning</h2>
-                  <p>Vue comparative des champs critiques pour repérer immédiatement les écarts entre la fiche legacy et le workflow.</p>
-                </div>
-
-                <div className='tpi-detail-section-meta tpi-detail-comparison-stats'>
-                  {comparisonSummary.aligned > 0 ? (
-                    <span className='tpi-detail-comparison-pill is-ready'>
-                      {comparisonSummary.aligned} aligné{comparisonSummary.aligned > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
-                  {comparisonSummary.mismatch > 0 ? (
-                    <span className='tpi-detail-comparison-pill is-warning'>
-                      {comparisonSummary.mismatch} écart{comparisonSummary.mismatch > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
-                  {comparisonSummary.legacy_only > 0 ? (
-                    <span className='tpi-detail-comparison-pill is-secondary'>
-                      {comparisonSummary.legacy_only} legacy seul{comparisonSummary.legacy_only > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
-                  {comparisonSummary.planning_only > 0 ? (
-                    <span className='tpi-detail-comparison-pill is-secondary'>
-                      {comparisonSummary.planning_only} planning seul{comparisonSummary.planning_only > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
-                  {comparisonSummary.missing > 0 ? (
-                    <span className='tpi-detail-comparison-pill is-muted'>
-                      {comparisonSummary.missing} absent{comparisonSummary.missing > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
-                </div>
-
+              <CollapsibleSection
+                id='tpi-detail-comparison'
+                title='Lecture croisée GestionTPI / Planning'
+                description='Uniquement les champs qui servent à décider ou corriger.'
+                defaultOpen={comparisonAttentionCount > 0}
+              >
                 <div className='tpi-detail-comparison-toolbar'>
                   <div className='tpi-detail-filter-strip' role='group' aria-label='Filtrer la lecture croisée'>
                     <button
@@ -1581,7 +1250,7 @@ const TpiDetailSections = ({
                       aria-pressed={comparisonFilter === 'all'}
                       onClick={() => setComparisonFilter('all')}
                     >
-                      Vue complète
+                      Tous
                       <strong>{comparisonRows.length}</strong>
                     </button>
                     <button
@@ -1595,72 +1264,83 @@ const TpiDetailSections = ({
                     </button>
                   </div>
 
-                  <p className='tpi-detail-comparison-helper'>
-                    {comparisonFilter === 'attention'
-                      ? 'Affiche uniquement les champs à vérifier ou à compléter.'
-                      : comparisonFilter === 'aligned'
-                        ? 'Affiche uniquement les champs cohérents entre GestionTPI et Planning.'
-                        : 'Affiche l’ensemble des champs comparés.'}
-                  </p>
+                  <div className='tpi-detail-section-meta tpi-detail-comparison-stats'>
+                    {comparisonSummary.mismatch > 0 ? (
+                      <span className='tpi-detail-comparison-pill is-warning'>
+                        {comparisonSummary.mismatch} écart{comparisonSummary.mismatch > 1 ? 's' : ''}
+                      </span>
+                    ) : null}
+                    {comparisonSummary.legacy_only + comparisonSummary.planning_only > 0 ? (
+                      <span className='tpi-detail-comparison-pill is-secondary'>
+                        {comparisonSummary.legacy_only + comparisonSummary.planning_only} source unique
+                      </span>
+                    ) : null}
+                    {comparisonSummary.missing > 0 ? (
+                      <span className='tpi-detail-comparison-pill is-muted'>
+                        {comparisonSummary.missing} absent{comparisonSummary.missing > 1 ? 's' : ''}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className='tpi-detail-table-shell'>
-                  <table className='tpi-detail-table tpi-detail-comparison-table'>
-                    <thead>
-                      <tr>
-                        <th>Champ</th>
-                        <th>GestionTPI</th>
-                        <th>Planning</th>
-                        <th>Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredComparisonRows.length > 0 ? (
-                        filteredComparisonRows.map((row) => (
-                          <tr key={row.key}>
-                            <td>{row.label}</td>
-                            <td>{row.legacyValue}</td>
-                            <td>{row.planningValue}</td>
-                            <td>
-                              <span className={`tpi-detail-comparison-pill is-${row.statusMeta.tone}`}>
-                                {row.statusMeta.label}
-                              </span>
+                <details className='tpi-detail-disclosure' open={comparisonAttentionCount > 0}>
+                  <summary>
+                    <span>
+                      {comparisonAttentionCount > 0
+                        ? `${comparisonAttentionCount} champ(s) à vérifier`
+                        : 'Afficher les champs comparés'}
+                    </span>
+                    <ArrowRightIcon className='tpi-detail-action-icon' aria-hidden='true' />
+                  </summary>
+
+                  <div className='tpi-detail-table-shell'>
+                    <table className='tpi-detail-table tpi-detail-comparison-table'>
+                      <thead>
+                        <tr>
+                          <th>Champ</th>
+                          <th>GestionTPI</th>
+                          <th>Planning</th>
+                          <th>Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredComparisonRows.length > 0 ? (
+                          filteredComparisonRows.map((row) => (
+                            <tr key={row.key}>
+                              <td>{row.label}</td>
+                              <td>{row.legacyValue}</td>
+                              <td>{row.planningValue}</td>
+                              <td>
+                                <span className={`tpi-detail-comparison-pill is-${row.statusMeta.tone}`}>
+                                  {row.statusMeta.label}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan='4'>
+                              <p className='tpi-detail-empty tpi-detail-table-empty'>
+                                Aucun champ ne correspond à ce filtre.
+                              </p>
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan='4'>
-                            <p className='tpi-detail-empty tpi-detail-table-empty'>
-                              Aucun champ ne correspond à ce filtre.
-                            </p>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              </CollapsibleSection>
             ) : null}
           </div>
         ) : null}
 
         <div className='tpi-detail-layout-secondary'>
-          <section id='tpi-detail-project' className='tpi-detail-section-card'>
-            <div className='tpi-detail-section-head'>
-              <h2>Projet et références</h2>
-              <p>Les repères utiles du dossier, sans répéter le suivi workflow déjà visible plus haut.</p>
-            </div>
-
-            <div className='tpi-detail-section-meta'>
-              <span className={`tpi-detail-pill is-${workflowReference ? 'ready' : 'warning'}`}>
-                {workflowReference ? 'Workflow lié' : 'Workflow absent'}
-              </span>
-              <span className={`tpi-detail-pill is-${legacyRef ? 'ready' : 'warning'}`}>
-                {legacyRef ? 'Référence legacy trouvée' : 'Référence legacy absente'}
-              </span>
-            </div>
-
+          <CollapsibleSection
+            id='tpi-detail-project'
+            title='Infos utiles'
+            description='Références et contexte indispensables.'
+          >
             <div className='tpi-detail-grid'>
               <DetailItem
                 label='Référence workflow'
@@ -1708,29 +1388,30 @@ const TpiDetailSections = ({
               />
             </div>
 
-            <div className='tpi-detail-tag-row'>
-              {tags.length > 0 ? tags.map((tag) => (
-                <span key={tag} className='tpi-detail-tag'>{tag}</span>
-              )) : (
-                <span className='tpi-detail-empty'>Aucun tag enregistré.</span>
-              )}
-            </div>
-          </section>
+            {tags.length > 0 ? (
+              <div className='tpi-detail-tag-row'>
+                {tags.map((tag) => (
+                  <span key={tag} className='tpi-detail-tag'>{tag}</span>
+                ))}
+              </div>
+            ) : null}
+          </CollapsibleSection>
 
-          <section id='tpi-detail-stakeholders' className='tpi-detail-section-card'>
-            <div className='tpi-detail-section-head'>
-              <h2>Parties prenantes</h2>
-              <p>Statut de complétude, résolution dans le référentiel et accès direct aux fiches parties prenantes.</p>
-            </div>
-
-            <div className='tpi-detail-section-meta'>
-              <span className={`tpi-detail-pill is-${stakeholderState?.isComplete === false ? 'warning' : dossier?.legacy?.exists ? 'ready' : 'muted'}`}>
-                {getCompletenessLabel(stakeholderState, dossier?.legacy?.exists)}
+          <CollapsibleSection
+            id='tpi-detail-stakeholders'
+            title='Parties prenantes'
+            description='Personnes nécessaires au suivi et au vote.'
+            meta={(
+              <span className='tpi-detail-section-meta'>
+                <span className={`tpi-detail-pill is-${stakeholderState?.isComplete === false ? 'warning' : dossier?.legacy?.exists ? 'ready' : 'muted'}`}>
+                  {getCompletenessLabel(stakeholderState, dossier?.legacy?.exists)}
+                </span>
+                <span className={`tpi-detail-pill is-${stakeholderState?.isResolved === false ? 'warning' : dossier?.legacy?.exists ? 'ready' : 'muted'}`}>
+                  {getResolutionLabel(stakeholderState, dossier?.legacy?.exists)}
+                </span>
               </span>
-              <span className={`tpi-detail-pill is-${stakeholderState?.isResolved === false ? 'warning' : dossier?.legacy?.exists ? 'ready' : 'muted'}`}>
-                {getResolutionLabel(stakeholderState, dossier?.legacy?.exists)}
-              </span>
-            </div>
+            )}
+          >
 
             <div className='tpi-detail-grid'>
               {stakeholderTargets.map((target) => (
@@ -1771,16 +1452,6 @@ const TpiDetailSections = ({
 
             <div className='tpi-detail-state-grid'>
               <DetailItem
-                label='Complétude'
-                value={getCompletenessLabel(stakeholderState, dossier?.legacy?.exists)}
-                tone={stakeholderState?.isComplete === false ? 'warning' : ''}
-              />
-              <DetailItem
-                label='Résolution référentiel'
-                value={getResolutionLabel(stakeholderState, dossier?.legacy?.exists)}
-                tone={stakeholderState?.isResolved === false ? 'warning' : ''}
-              />
-              <DetailItem
                 label='Rôles manquants'
                 value={stakeholderState?.missingRoles?.join(', ') || 'Aucun'}
                 tone={stakeholderState?.missingRoles?.length ? 'warning' : 'ready'}
@@ -1791,98 +1462,20 @@ const TpiDetailSections = ({
                 tone={stakeholderState?.unresolvedRoles?.length ? 'warning' : 'ready'}
               />
             </div>
-          </section>
+          </CollapsibleSection>
 
-          <section id='tpi-detail-planning' className='tpi-detail-section-card'>
-            <div className='tpi-detail-section-head'>
-              <h2>Planning et votes</h2>
-              <p>État workflow, créneau retenu et réponses de vote visibles.</p>
-            </div>
+          {showIssuesSection ? (
+            <CollapsibleSection
+              id='tpi-detail-issues'
+              title='Contrôles de cohérence'
+              description='Écarts GestionTPI / Planning.'
+              meta={(
+                <span className='tpi-detail-pill is-warning'>
+                  {mergedIssues.length} point(s) à corriger
+                </span>
+              )}
+            >
 
-            <div className='tpi-detail-section-meta'>
-              <span className={`tpi-detail-pill is-${planningStatusMeta.tone}`}>{planningStatusMeta.label}</span>
-              <span className={`tpi-detail-pill is-${pendingVotesCount > 0 ? 'warning' : totalVotesCount > 0 ? 'ready' : 'muted'}`}>
-                {pendingVotesCount > 0 ? `${pendingVotesCount} vote(s) en attente` : totalVotesCount > 0 ? 'Votes à jour' : 'Campagne vide'}
-              </span>
-            </div>
-
-            <div className='tpi-detail-grid'>
-              <DetailItem label='Statut workflow' value={planningStatusMeta.label} />
-              <DetailItem label='Créneau retenu' value={plannedSlotLabel} tone={plannedSlot ? 'ready' : 'warning'} />
-              <DetailItem
-                label='Votes reçus'
-                value={`${respondedVotesCount}/${totalVotesCount}`}
-              />
-              <DetailItem
-                label='Votes en attente'
-                value={String(pendingVotesCount)}
-                tone={pendingVotesCount > 0 ? 'warning' : 'ready'}
-              />
-              <DetailItem
-                label='Acceptés + préférés'
-                value={String(favorableVotesCount)}
-              />
-              <DetailItem
-                label='Refusés'
-                value={String(Number(voteSummary.rejectedVotes || 0))}
-              />
-            </div>
-
-            {workflowVoteSummary ? (
-              <div className='tpi-detail-inline-list'>
-                <span>Expert 1: {workflowVoteSummary.expert1Voted ? 'voté' : 'en attente'}</span>
-                <span>Expert 2: {workflowVoteSummary.expert2Voted ? 'voté' : 'en attente'}</span>
-                <span>Chef de projet: {workflowVoteSummary.chefProjetVoted ? 'voté' : 'en attente'}</span>
-              </div>
-            ) : null}
-
-            {votes.length > 0 && showVotesTable ? (
-              <div className='tpi-detail-table-shell'>
-                <table className='tpi-detail-table'>
-                  <thead>
-                    <tr>
-                      <th>Rôle</th>
-                      <th>Décision</th>
-                      <th>Votant</th>
-                      <th>Créneau</th>
-                      <th>Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {votes.map((vote) => (
-                      <tr key={compactText(vote?._id) || `${vote?.voterRole}-${vote?.slot?._id || vote?.slot}`}>
-                        <td>{formatVoteRole(vote?.voterRole)}</td>
-                        <td>{formatVoteDecision(vote?.decision)}</td>
-                        <td>{formatPersonName(vote?.voter, '—')}</td>
-                        <td>{getPlannedSlotLabel(vote?.slot)}</td>
-                        <td>{formatDateTime(vote?.votedAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : votes.length > 0 ? (
-              <p className='tpi-detail-empty'>Le détail complet des votes est disponible dans la fiche complète.</p>
-            ) : (
-              <p className='tpi-detail-empty'>Aucun vote enregistré pour ce dossier.</p>
-            )}
-          </section>
-
-          <section id='tpi-detail-issues' className='tpi-detail-section-card'>
-            <div className='tpi-detail-section-head'>
-              <h2>Contrôles de cohérence</h2>
-              <p>Écarts visibles entre GestionTPI et Planning pour cette fiche.</p>
-            </div>
-
-            <div className='tpi-detail-section-meta'>
-              <span className={`tpi-detail-pill is-${mergedIssues.length > 0 ? 'warning' : 'ready'}`}>
-                {mergedIssues.length > 0
-                  ? `${mergedIssues.length} point(s) à corriger`
-                  : 'Aucune incohérence détectée'}
-              </span>
-            </div>
-
-            {mergedIssues.length > 0 ? (
               <ul className='tpi-detail-issue-list'>
                 {mergedIssues.map((issue) => (
                   <li key={issue.key}>
@@ -1891,10 +1484,8 @@ const TpiDetailSections = ({
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className='tpi-detail-empty'>Aucune incohérence bloquante détectée sur cette fiche.</p>
-            )}
-          </section>
+            </CollapsibleSection>
+          ) : null}
         </div>
       </div>
     </div>

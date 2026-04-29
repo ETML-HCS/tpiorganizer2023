@@ -250,7 +250,7 @@ export const expertsService = {
     apiService.get('/api/experts/listExpertsOrBoss'),
   
   getByToken: (token) => 
-    apiService.get(`/api/experts/getNameByToken?token=${token}`),
+    apiService.get(`/api/experts/getNameByToken?token=${encodeURIComponent(String(token || ''))}`),
   
   getEmails: () => 
     apiService.get('/api/experts/emails')
@@ -263,34 +263,35 @@ export const evaluationsService = {
   getByYear: (year) => 
     apiService.get(`/load-tpiEvals/${year}`),
   
-  save: (year, evalData) => 
-    apiService.post(`/api/evaluations/${year}`, evalData)
+  save: (_year, evalData) => 
+    apiService.post('/save-tpiEval', evalData)
 }
 
 /**
- * Service Soutenances
+ * Service Défenses
  */
 export const soutenancesService = {
   getByYear: (year) => 
-    apiService.get(`/api/soutenances/${year}`),
+    apiService.get(`/api/defenses/${year}`),
 
   getPublishedByYear: (year, options = {}) => {
     const params = new URLSearchParams()
     if (options.ml) params.append('ml', options.ml)
     if (options.token) params.append('token', options.token)
+    if (options.code) params.append('code', options.code)
 
     const query = params.toString()
-    return apiService.get(`/api/soutenances/${year}${query ? `?${query}` : ''}`)
+    return apiService.get(`/api/defenses/${year}${query ? `?${query}` : ''}`)
   },
 
   getExpertsOrBoss: () =>
     expertsService.getAll(),
 
   publishRoom: (year, roomData) =>
-    apiService.post(`/api/soutenances/${year}/publish-room`, roomData),
+    apiService.post(`/api/defenses/${year}/publish-room`, roomData),
 
   publishFromPlanning: (year) =>
-    apiService.post(`/api/soutenances/${year}/publish-from-planning`, {}),
+    apiService.post(`/api/defenses/${year}/publish-from-planning`, {}),
 
   updateOffers: (
     year,
@@ -303,18 +304,19 @@ export const soutenancesService = {
     const params = new URLSearchParams()
     if (options.ml) params.append('ml', options.ml)
     if (options.token) params.append('token', options.token)
+    if (options.code) params.append('code', options.code)
 
     const query = params.toString()
 
     return apiService.put(
-      `/api/soutenances/${year}/rooms/${roomId}/tpis/${tpiDataId}/offres/${expertOrBoss}${query ? `?${query}` : ''}`,
+      `/api/defenses/${year}/rooms/${roomId}/tpis/${tpiDataId}/offres/${expertOrBoss}${query ? `?${query}` : ''}`,
       propositions
     )
   },
 
   updateProposition: (year, roomId, tpiDataId, expertOrBoss, propositions) =>
     apiService.put(
-      `/api/soutenances/${year}/rooms/${roomId}/tpis/${tpiDataId}/offres/${expertOrBoss}`,
+      `/api/defenses/${year}/rooms/${roomId}/tpis/${tpiDataId}/offres/${expertOrBoss}`,
       propositions
     )
 }

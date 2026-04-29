@@ -40,7 +40,7 @@ const emailTemplates = {
    * Email avec magic link pour voter
    */
   voteRequest: (data) => ({
-    subject: `[TPI Organizer] Votez pour les créneaux de soutenance - ${data.candidateName}`,
+    subject: `[TPI Organizer] Votez pour les créneaux de défense - ${data.candidateName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -64,7 +64,7 @@ const emailTemplates = {
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
             
-            <p>Vous êtes invité(e) à voter pour les créneaux de soutenance du TPI de <strong>${data.candidateName}</strong>.</p>
+            <p>Vous êtes invité(e) à voter pour les créneaux de défense du TPI de <strong>${data.candidateName}</strong>.</p>
             
             <h3>📋 Informations du TPI</h3>
             <ul>
@@ -102,7 +102,7 @@ const emailTemplates = {
       
       Bonjour ${data.recipientName},
       
-      Vous êtes invité(e) à voter pour les créneaux de soutenance du TPI de ${data.candidateName}.
+      Vous êtes invité(e) à voter pour les créneaux de défense du TPI de ${data.candidateName}.
       
       Référence: ${data.tpiReference}
       Sujet: ${data.tpiSubject || 'Non défini'}
@@ -117,10 +117,10 @@ const emailTemplates = {
   }),
 
   /**
-   * Email d'acces a la vue finale des soutenances
+   * Email d'acces a la vue finale des défenses
    */
   soutenanceAccess: (data) => ({
-    subject: `[TPI Organizer] Acces Soutenances ${data.year}`,
+    subject: `[TPI Organizer] Acces Défenses ${data.year}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -137,13 +137,13 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎓 Soutenances publiees</h1>
+            <h1>🎓 Défenses publiees</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
-            <p>La version definitive des soutenances ${data.year} est disponible.</p>
+            <p>La version definitive des défenses ${data.year} est disponible.</p>
             <p style="text-align: center;">
-              <a href="${data.magicLinkUrl}" class="button">Ouvrir ma vue Soutenances</a>
+              <a href="${data.magicLinkUrl}" class="button">Ouvrir ma vue Défenses</a>
             </p>
             <p class="deadline">Validite du lien: ${data.deadline}</p>
             <p><small>Ce lien est personnel et ne doit pas etre partage.</small></p>
@@ -153,13 +153,83 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      Soutenances publiees ${data.year}
+      Défenses publiees ${data.year}
 
       Bonjour ${data.recipientName},
 
-      La version definitive des soutenances est disponible.
+      La version definitive des défenses est disponible.
       Ouvrir ma vue: ${data.magicLinkUrl}
       Validite du lien: ${data.deadline}
+    `
+  }),
+
+  /**
+   * Email avec un magic link unique pour tous les votes d'une partie prenante.
+   */
+  voteRequestDigest: (data) => ({
+    subject: `[TPI Organizer] Votes de défense à traiter - ${data.year}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+          .header { background: #007bff; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .button { display: inline-block; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+          .tpi { background: white; padding: 14px; margin: 12px 0; border-left: 4px solid #007bff; }
+          .slots { margin: 8px 0 0 0; padding-left: 18px; }
+          .deadline { color: #dc3545; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🎓 TPI Organizer</h1>
+          </div>
+          <div class="content">
+            <p>Bonjour ${data.recipientName},</p>
+            <p>Vous avez <strong>${data.tpiCount}</strong> TPI à traiter pour la campagne de votes ${data.year}.</p>
+
+            ${(data.tpis || []).map(tpi => `
+              <div class="tpi">
+                <p><strong>${tpi.reference}</strong> - ${tpi.candidateName || 'Candidat non renseigné'}<br>
+                  <em>${tpi.subject || 'Sujet non défini'} · ${tpi.roleLabel || 'Rôle non défini'}</em>
+                </p>
+                <ul class="slots">
+                  ${(tpi.slots || []).map(slot => `
+                    <li>${slot.date} - Période ${slot.period} (${slot.startTime} - ${slot.endTime}) · ${slot.room}</li>
+                  `).join('')}
+                </ul>
+              </div>
+            `).join('')}
+
+            <p class="deadline">⏰ Date limite pour voter : ${data.deadline}</p>
+            <p style="text-align: center;">
+              <a href="${data.magicLinkUrl}" class="button">Ouvrir mes votes</a>
+            </p>
+            <p><small>Ce lien est personnel. Il ouvre uniquement les TPI où votre réponse est attendue.</small></p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+      TPI Organizer - Votes de défense
+
+      Bonjour ${data.recipientName},
+
+      Vous avez ${data.tpiCount} TPI à traiter pour la campagne ${data.year}.
+
+      ${(data.tpis || []).map(tpi => `
+      - ${tpi.reference} - ${tpi.candidateName || 'Candidat non renseigné'} (${tpi.roleLabel || 'Rôle non défini'})
+        Sujet: ${tpi.subject || 'Non défini'}
+      `).join('')}
+
+      Date limite: ${data.deadline}
+
+      Ouvrir mes votes: ${data.magicLinkUrl}
     `
   }),
 
@@ -214,10 +284,64 @@ const emailTemplates = {
   }),
 
   /**
-   * Email de confirmation de soutenance
+   * Rappel avec un lien unique pour tous les votes encore attendus.
+   */
+  voteReminderDigest: (data) => ({
+    subject: `[RAPPEL] Votes TPI en attente - ${data.year}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+          .header { background: #ffc107; color: #333; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .button { display: inline-block; padding: 12px 24px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px; }
+          .urgent { color: #dc3545; font-size: 18px; }
+          .tpi { background: white; padding: 12px; margin: 10px 0; border-left: 4px solid #ffc107; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>⚠️ Rappel - Votes en attente</h1>
+          </div>
+          <div class="content">
+            <p>Bonjour ${data.recipientName},</p>
+            <p class="urgent">Votre réponse est toujours attendue pour <strong>${data.tpiCount}</strong> TPI.</p>
+            ${(data.tpis || []).map(tpi => `
+              <div class="tpi">
+                <strong>${tpi.reference}</strong> - ${tpi.candidateName || 'Candidat non renseigné'}<br>
+                <em>${tpi.roleLabel || 'Rôle non défini'}</em>
+              </div>
+            `).join('')}
+            <p><strong>Date limite :</strong> ${data.deadline}</p>
+            <p style="text-align: center;">
+              <a href="${data.magicLinkUrl}" class="button">Ouvrir mes votes</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+      RAPPEL - Votes en attente
+
+      Bonjour ${data.recipientName},
+
+      Votre réponse est toujours attendue pour ${data.tpiCount} TPI.
+      Date limite: ${data.deadline}
+
+      Ouvrir mes votes: ${data.magicLinkUrl}
+    `
+  }),
+
+  /**
+   * Email de confirmation de défense
    */
   soutenanceConfirmation: (data) => ({
-    subject: `[CONFIRMÉ] Soutenance TPI - ${data.candidateName} - ${data.date}`,
+    subject: `[CONFIRMÉ] Défense TPI - ${data.candidateName} - ${data.date}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -234,15 +358,15 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>✅ Soutenance Confirmée</h1>
+            <h1>✅ Défense Confirmée</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
             
-            <p>La soutenance du TPI a été <strong>confirmée</strong> avec succès.</p>
+            <p>La défense du TPI a été <strong>confirmée</strong> avec succès.</p>
             
             <div class="details">
-              <h3>📋 Détails de la soutenance</h3>
+              <h3>📋 Détails de la défense</h3>
               <p><strong>Candidat :</strong> ${data.candidateName}</p>
               <p><strong>Référence :</strong> ${data.tpiReference}</p>
               <p><strong>Date :</strong> ${data.date}</p>
@@ -267,11 +391,11 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      Soutenance Confirmée
+      Défense Confirmée
       
       Bonjour ${data.recipientName},
       
-      La soutenance du TPI a été confirmée.
+      La défense du TPI a été confirmée.
       
       Candidat: ${data.candidateName}
       Référence: ${data.tpiReference}
@@ -311,7 +435,7 @@ const emailTemplates = {
           <div class="content">
             <p>Bonjour,</p>
             
-            <p>Le système n'a pas pu trouver de créneau commun pour la soutenance du TPI de <strong>${data.candidateName}</strong>.</p>
+            <p>Le système n'a pas pu trouver de créneau commun pour la défense du TPI de <strong>${data.candidateName}</strong>.</p>
             
             <div class="conflict">
               <h3>Raison du conflit</h3>
@@ -390,12 +514,36 @@ async function sendVoteRequests(tpi, magicLinks) {
   return results
 }
 
+async function sendVoteDigestRequests(targets, options = {}) {
+  const results = []
+  const template = options.reminder === true ? 'voteReminderDigest' : 'voteRequestDigest'
+
+  for (const target of Array.isArray(targets) ? targets : []) {
+    if (!target?.email) {
+      continue
+    }
+
+    const result = await sendEmail(target.email, template, {
+      recipientName: target.personName,
+      year: target.year,
+      tpiCount: Array.isArray(target.tpis) ? target.tpis.length : 0,
+      tpis: target.tpis || [],
+      deadline: target.deadline || '',
+      magicLinkUrl: target.url
+    })
+
+    results.push({ email: target.email, ...result })
+  }
+
+  return results
+}
+
 function canReceiveAutomaticEmail(recipient) {
   return Boolean(recipient?.email) && recipient?.sendEmails !== false
 }
 
 /**
- * Envoie les confirmations de soutenance
+ * Envoie les confirmations de défense
  */
 async function sendSoutenanceConfirmations(tpi, slot, recipients) {
   const results = []
@@ -431,6 +579,7 @@ async function sendSoutenanceConfirmations(tpi, slot, recipients) {
 
 module.exports = {
   sendEmail,
+  sendVoteDigestRequests,
   sendVoteRequests,
   sendSoutenanceConfirmations,
   emailTemplates

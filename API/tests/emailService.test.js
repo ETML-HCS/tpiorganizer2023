@@ -28,8 +28,8 @@ test('Email templates should have required fields', async () => {
       text: `Vote for ${data.candidateName} ${data.magicLinkUrl}`
     }),
     confirmation: (data) => ({
-      subject: `Confirmation de soutenance - ${data.candidateName}`,
-      html: `<div><h1>Soutenance confirmée</h1><p>Bonjour ${data.recipientName}</p></div>`,
+      subject: `Confirmation de défense - ${data.candidateName}`,
+      html: `<div><h1>Défense confirmée</h1><p>Bonjour ${data.recipientName}</p></div>`,
       text: `Confirmed for ${data.candidateName}`
     })
   }

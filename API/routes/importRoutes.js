@@ -96,7 +96,7 @@ router.post('/ical', upload.single('file'), async (req, res) => {
 /**
  * POST /api/import/ical/batch
  * Upload multiple fichiers iCal (un par enseignant)
- * Accepte optionnellement des dates spécifiques de soutenances
+ * Accepte optionnellement des dates spécifiques de défenses
  */
 router.post('/ical/batch', upload.array('files', 50), async (req, res) => {
   try {
@@ -113,7 +113,7 @@ router.post('/ical/batch', upload.array('files', 50), async (req, res) => {
     if (specificDates) {
       try {
         targetDates = JSON.parse(specificDates)
-        console.log(`📅 Dates spécifiques de soutenances: ${targetDates.length} jours`)
+        console.log(`📅 Dates spécifiques de défenses: ${targetDates.length} jours`)
       } catch (e) {
         console.warn('Erreur parsing specificDates:', e)
       }

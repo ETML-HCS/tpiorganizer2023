@@ -40,7 +40,7 @@ function createPerson(id, firstName, lastName, email, roles = ['expert']) {
   }
 }
 
-test('buildAccessLinkPreview groups vote and soutenance links by person', async () => {
+test('buildAccessLinkPreview groups vote and défense links by person', async () => {
   const expert1 = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
   const expert2A = createPerson('p2', 'Bob', 'Expert', 'bob@example.com', ['expert'])
   const boss = createPerson('p3', 'Carla', 'Boss', 'carla@example.com', ['chef_projet'])
@@ -117,17 +117,17 @@ test('buildAccessLinkPreview groups vote and soutenance links by person', async 
       },
       getActivePublication: async () => publication,
       magicLinks: {
-        async createVoteMagicLink({ year, person, role, scope }) {
+        async createVoteMagicLink({ year, person, scope }) {
           return {
-            token: `${person._id}-${role}-${scope.tpiId}`,
-            url: `http://localhost:3000/planning/${year}?ml=${person._id}-${role}-${scope.tpiId}`,
+            token: `${person._id}-${scope.kind}`,
+            url: `http://localhost:3000/planning/${year}?ml=${person._id}-${scope.kind}`,
             expiresAt: new Date('2026-05-01T12:00:00Z')
           }
         },
         async createSoutenanceMagicLink({ year, person }) {
           return {
             token: `${person._id}-soutenance`,
-            url: `http://localhost:3000/Soutenances/${year}?ml=${person._id}-soutenance`,
+            url: `http://localhost:3000/defenses/${year}?ml=${person._id}-soutenance`,
             expiresAt: new Date('2026-06-01T12:00:00Z')
           }
         }
@@ -137,9 +137,10 @@ test('buildAccessLinkPreview groups vote and soutenance links by person', async 
 
   assert.equal(preview.year, 2026)
   assert.equal(preview.summary.peopleCount, 6)
-  assert.equal(preview.summary.voteLinkCount, 6)
+  assert.equal(preview.summary.voteLinkCount, 4)
   assert.equal(preview.summary.soutenanceLinkCount, 6)
   assert.equal(preview.contexts.vote.tpiCount, 2)
+  assert.equal(preview.contexts.vote.linkCount, 4)
   assert.equal(preview.contexts.soutenance.publicationVersion, 3)
 
   const alice = preview.people.find((entry) => entry.person.id === 'p1')
@@ -147,10 +148,17 @@ test('buildAccessLinkPreview groups vote and soutenance links by person', async 
 
   assert.ok(alice)
   assert.ok(eva)
-  assert.equal(alice.voteLinks.length, 2)
+  assert.equal(alice.voteLinks.length, 1)
+  assert.equal(alice.voteLinks[0].roleLabel, 'Partie prenante')
+  assert.equal(alice.voteLinks[0].tpis.length, 2)
+  assert.deepEqual(
+    alice.voteLinks[0].tpis.map((tpi) => tpi.reference),
+    ['TPI-2026-001', 'TPI-2026-002']
+  )
   assert.equal(alice.soutenanceLinks.length, 1)
   assert.equal(eva.voteLinks.length, 0)
   assert.equal(eva.soutenanceLinks.length, 1)
   assert.match(alice.voteLinks[0].url, /planning\/2026\?ml=/)
-  assert.match(eva.soutenanceLinks[0].url, /Soutenances\/2026\?ml=/)
+  assert.equal(eva.soutenanceLinks[0].redirectPath, '/defenses/2026')
+  assert.match(eva.soutenanceLinks[0].url, /defenses\/2026\?ml=/)
 })

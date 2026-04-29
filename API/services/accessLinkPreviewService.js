@@ -3,6 +3,7 @@ const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
 const magicLinkV2Service = require('./magicLinkV2Service')
 const { getActivePublicationVersion } = require('./publishedSoutenanceService')
+const { buildDefensePublicPath } = require('../utils/publicRoutes')
 
 function formatPersonName(person) {
   return [person?.firstName, person?.lastName]
@@ -89,6 +90,29 @@ function sortVoteLinks(links = []) {
   })
 }
 
+function addVotePreviewTpi(target, vote, tpi) {
+  const tpiId = tpi?._id ? String(tpi._id) : ''
+  if (!tpiId) {
+    return
+  }
+
+  if (!target.tpisById.has(tpiId)) {
+    target.tpisById.set(tpiId, {
+      tpiId,
+      reference: tpi.reference || '',
+      subject: tpi.sujet || '',
+      candidateName: formatPersonName(tpi.candidat),
+      status: tpi.status || '',
+      roleLabels: new Set()
+    })
+  }
+
+  const entry = target.tpisById.get(tpiId)
+  if (vote?.voterRole) {
+    entry.roleLabels.add(formatRoleLabel(vote.voterRole))
+  }
+}
+
 function sortSoutenanceLinks(links = []) {
   return [...links].sort((left, right) => {
     return Number(right?.publicationVersion || 0) - Number(left?.publicationVersion || 0)
@@ -134,20 +158,24 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
   for (const vote of pendingVotes || []) {
     const tpiId = vote?.tpiPlanning ? String(vote.tpiPlanning) : ''
     const voterId = vote?.voter?._id ? String(vote.voter._id) : ''
-    const voterRole = String(vote?.voterRole || '').trim()
 
-    if (!tpiId || !voterId || !voterRole) {
+    if (!tpiId || !voterId) {
       continue
     }
 
-    const groupingKey = `${tpiId}:${voterId}:${voterRole}`
-    if (!groupedPendingVotes.has(groupingKey)) {
-      groupedPendingVotes.set(groupingKey, {
-        tpi: tpiById.get(tpiId) || null,
+    const tpi = tpiById.get(tpiId) || null
+    if (!tpi) {
+      continue
+    }
+
+    if (!groupedPendingVotes.has(voterId)) {
+      groupedPendingVotes.set(voterId, {
         voter: vote.voter,
-        voterRole
+        tpisById: new Map()
       })
     }
+
+    addVotePreviewTpi(groupedPendingVotes.get(voterId), vote, tpi)
   }
 
   const uniqueRecipients = new Set()
@@ -155,7 +183,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
   let linkCount = 0
 
   for (const item of groupedPendingVotes.values()) {
-    if (!item?.tpi || !item?.voter?.email) {
+    if (!item?.voter?.email || item.tpisById.size === 0) {
       continue
     }
 
@@ -167,25 +195,33 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     const link = await magicLinks.createVoteMagicLink({
       year,
       person: item.voter,
-      role: item.voterRole,
+      role: null,
       scope: {
         year,
-        tpiId: String(item.tpi._id),
-        reference: item.tpi.reference || null,
+        kind: 'stakeholder_votes',
         source: 'admin_access_preview'
       },
       baseUrl
     })
 
+    const tpis = Array.from(item.tpisById.values())
+      .map((tpiEntry) => ({
+        ...tpiEntry,
+        roleLabel: Array.from(tpiEntry.roleLabels).filter(Boolean).join(', '),
+        roleLabels: undefined
+      }))
+      .sort((left, right) => String(left.reference).localeCompare(String(right.reference)))
+
     entry.voteLinks.push({
       type: 'vote',
-      role: item.voterRole,
-      roleLabel: formatRoleLabel(item.voterRole),
-      reference: item.tpi.reference || '',
-      subject: item.tpi.sujet || '',
-      candidateName: formatPersonName(item.tpi.candidat),
-      status: item.tpi.status || '',
-      tpiId: String(item.tpi._id),
+      role: null,
+      roleLabel: 'Partie prenante',
+      reference: tpis.map((tpiEntry) => tpiEntry.reference).filter(Boolean).join(', '),
+      subject: tpis.length > 1 ? `${tpis.length} TPI à traiter` : (tpis[0]?.subject || ''),
+      candidateName: tpis.length > 1 ? '' : (tpis[0]?.candidateName || ''),
+      status: '',
+      tpiId: null,
+      tpis,
       redirectPath: link.redirectPath || `/planning/${year}`,
       expiresAt: link.expiresAt,
       token: link.token,
@@ -193,7 +229,9 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     })
 
     uniqueRecipients.add(String(item.voter._id))
-    uniqueTpis.add(String(item.tpi._id))
+    for (const tpiEntry of tpis) {
+      uniqueTpis.add(String(tpiEntry.tpiId))
+    }
     linkCount += 1
   }
 
@@ -290,7 +328,7 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     entry.soutenanceLinks.push({
       type: 'soutenance',
       publicationVersion: publicationVersion.version || null,
-      redirectPath: link.redirectPath || `/Soutenances/${year}`,
+      redirectPath: link.redirectPath || buildDefensePublicPath(year),
       expiresAt: link.expiresAt,
       token: link.token,
       url: link.url

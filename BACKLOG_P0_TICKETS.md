@@ -136,7 +136,7 @@
 - Type: Story
 - Priorite: P0
 - Estimation: 3 pts
-- Description: En tant qu'admin, je veux empecher 2 soutenances dans la meme salle au meme slot.
+- Description: En tant qu'admin, je veux empecher 2 défenses dans la meme salle au meme slot.
 - Criteres d'acceptation:
 1. Detection par `site + room + date + period`.
 2. Freeze refuse si collision de salle.
@@ -224,7 +224,7 @@
 - Type: Story
 - Priorite: P0
 - Estimation: 5 pts
-- Description: En tant qu'admin, je veux publier uniquement les soutenances confirmees.
+- Description: En tant qu'admin, je veux publier uniquement les défenses confirmees.
 - Criteres d'acceptation:
 1. `POST /api/workflow/:year/publication/publish` cree `PublicationVersion`.
 2. Exclusion automatique des TPI non confirmes.
@@ -277,14 +277,14 @@
 1. Tests unitaires hash/verify/expiry.
 2. Revue securite validee.
 
-### WF-502 - Scope strict vote vs soutenance
+### WF-502 - Scope strict vote vs défense
 
 - Type: Story
 - Priorite: P0
 - Estimation: 5 pts
 - Description: En tant que systeme, je veux 2 types de magic links etanches.
 - Criteres d'acceptation:
-1. Type `vote` ne peut pas ouvrir la vue soutenance.
+1. Type `vote` ne peut pas ouvrir la vue défense.
 2. Type `soutenance` ne peut pas ouvrir la vue vote.
 3. Rejet explicite `403/401` en cas de scope mismatch.
 - DoD:

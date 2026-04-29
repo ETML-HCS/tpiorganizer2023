@@ -86,6 +86,18 @@ const planningSiteScheduleSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    planningColor: {
+      type: String,
+      default: ''
+    },
+    tpiColor: {
+      type: String,
+      default: ''
+    },
+    soutenanceColor: {
+      type: String,
+      default: ''
+    },
     breaklineMinutes: {
       type: Number,
       default: 10
@@ -101,6 +113,10 @@ const planningSiteScheduleSchema = new mongoose.Schema(
     numSlots: {
       type: Number,
       default: 8
+    },
+    maxConsecutiveTpi: {
+      type: Number,
+      default: 4
     },
     manualRoomTarget: {
       type: Number,

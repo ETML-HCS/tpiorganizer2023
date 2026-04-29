@@ -11,6 +11,7 @@ const mongoose = require('mongoose')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
 const Vote = require('../models/voteModel')
+const schedulingService = require('../services/schedulingService')
 
 const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
 
@@ -153,6 +154,104 @@ test('GET /api/planning/availability/:year/:tpiId returns available slots', asyn
   }
 })
 
+test('POST /api/planning/tpi/:id/move-to-slot/:slotId/simulate retourne la simulation de déplacement', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const tpiId = new mongoose.Types.ObjectId().toString()
+  const slotId = new mongoose.Types.ObjectId().toString()
+  const calls = []
+  const restore = patchMethod(schedulingService, 'simulateTpiMoveToSlot', async (receivedTpiId, receivedSlotId) => {
+    calls.push({ tpiId: receivedTpiId, slotId: receivedSlotId })
+    return {
+      success: true,
+      canMove: true,
+      status: 'clear',
+      message: 'Déplacement possible sans conflit détecté.'
+    }
+  })
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: 'development'
+  })
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/tpi/${tpiId}/move-to-slot/${slotId}/simulate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(calls, [{ tpiId, slotId }])
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.canMove, true)
+    assert.equal(body.message, 'Déplacement possible sans conflit détecté.')
+  } finally {
+    restore()
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/planning/tpi/:id/move-to-slot/:slotId retourne 409 quand le déplacement est bloqué', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const tpiId = new mongoose.Types.ObjectId().toString()
+  const slotId = new mongoose.Types.ObjectId().toString()
+  const calls = []
+  const restore = patchMethod(schedulingService, 'moveTpiToSlot', async (receivedTpiId, receivedSlotId, userId, reason) => {
+    calls.push({
+      tpiId: receivedTpiId,
+      slotId: receivedSlotId,
+      userId: String(userId),
+      reason
+    })
+    return {
+      success: false,
+      canMove: false,
+      message: 'Le déplacement est bloqué par un conflit.',
+      conflicts: [{ type: 'room_overlap' }]
+    }
+  })
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: 'development'
+  })
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/tpi/${tpiId}/move-to-slot/${slotId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reason: '  Depuis proposition de vote  ' })
+    })
+
+    assert.equal(response.status, 409)
+    assert.deepEqual(calls, [{
+      tpiId,
+      slotId,
+      userId: VALID_OBJECT_ID,
+      reason: 'Depuis proposition de vote'
+    }])
+    const body = await response.json()
+    assert.equal(body.success, false)
+    assert.equal(body.message, 'Le déplacement est bloqué par un conflit.')
+  } finally {
+    restore()
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
 test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates existing choices', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
@@ -215,6 +314,72 @@ test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates exis
       { date: '2026-06-12', period: 1 }
     ])
     assert.equal(voter.preferredSoutenanceChoices.length, 3)
+  } finally {
+    restore()
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/planning/votes/:id/preferred-soutenance-choice précise une date idéale existante', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const voteId = new mongoose.Types.ObjectId()
+  const slotId = new mongoose.Types.ObjectId()
+  const voterId = new mongoose.Types.ObjectId()
+  const voter = {
+    _id: voterId,
+    firstName: 'Carla',
+    lastName: 'Expert',
+    email: 'carla@example.test',
+    preferredSoutenanceChoices: [
+      { date: new Date('2026-06-12T00:00:00.000Z'), period: null }
+    ],
+    preferredSoutenanceDates: [],
+    save: async function save() {
+      return this
+    }
+  }
+  const vote = {
+    _id: voteId,
+    decision: 'preferred',
+    slot: {
+      _id: slotId,
+      date: new Date('2026-06-12T13:00:00.000Z'),
+      period: 2,
+      startTime: '13:00',
+      endTime: '17:00',
+      room: { name: 'B202' }
+    },
+    voter
+  }
+  const restore = patchMethod(Vote, 'findById', () => makeQueryResult(vote))
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: 'development'
+  })
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/votes/${voteId}/preferred-soutenance-choice`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+
+    assert.equal(body.success, true)
+    assert.equal(body.added, true)
+    assert.deepEqual(body.preferredSoutenanceChoices, [
+      { date: '2026-06-12', period: 2 }
+    ])
+    assert.equal(voter.preferredSoutenanceChoices.length, 1)
+    assert.equal(voter.preferredSoutenanceChoices[0].period, 2)
   } finally {
     restore()
     await new Promise(resolve => server.close(resolve))

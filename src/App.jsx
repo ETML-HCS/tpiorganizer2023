@@ -21,7 +21,8 @@ import {
   SUCCESS_MESSAGES,
   ERROR_MESSAGES,
   IS_ADMIN_UI_ENABLED,
-  YEARS_CONFIG
+  YEARS_CONFIG,
+  ROUTES
 } from "./config/appConfig"
 import {
   getStoredAuthToken,
@@ -48,13 +49,25 @@ const PlanningDashboard = lazy(() => import("./components/tpiPlanning/PlanningDa
 
 // Chemins exclus de l'en-tête
 const HEADER_EXCLUDED_PATHS = ['/', '/login']
-const SOUTENANCE_PATH_REGEX = /^\/Soutenances\/\d{4}$/i
+const SOUTENANCE_PATH_REGEX = /^\/(?:defenses?|soutenance(?:s)?)\/\d{4}$/i
+const SOUTENANCE_ROUTE_ALIASES = [
+  ROUTES.SOUTENANCES_LEGACY,
+  ROUTES.SOUTENANCES_LEGACY_LOWER,
+  ROUTES.SOUTENANCE_LEGACY,
+  ROUTES.SOUTENANCE_LEGACY_LOWER,
+  ROUTES.DEFENSE_LEGACY
+]
 const TOOLBAR_DEFAULT_OPEN_PATHS = [
-  '/planification',
-  '/gestionTPI',
-  '/partiesPrenantes',
-  '/genTokens',
-  '/TpiEval'
+  ROUTES.PLANIFICATION,
+  ROUTES.GESTION_TPI,
+  '/configuration',
+  ROUTES.PARTIES_PRENANTES,
+  ROUTES.GEN_TOKENS,
+  ROUTES.TPI_EVAL,
+  ROUTES.GESTION_TPI_LEGACY,
+  ROUTES.PARTIES_PRENANTES_LEGACY,
+  ROUTES.GEN_TOKENS_LEGACY,
+  ROUTES.TPI_EVAL_LEGACY
 ]
 
 const isToolbarPage = (pathname) =>
@@ -204,6 +217,41 @@ const RouteLoadingFallback = () => (
   </div>
 )
 
+const SoutenanceRedirect = ({ preferredYear }) => {
+  const { year } = useParams()
+  const location = useLocation()
+  const routeYear = Number.parseInt(year, 10)
+  const targetYear = YEARS_CONFIG.isSupportedYear(routeYear)
+    ? routeYear
+    : preferredYear
+
+  return (
+    <Navigate
+      to={`${ROUTES.SOUTENANCES}/${targetYear}${location.search || ''}`}
+      replace
+    />
+  )
+}
+
+const hasSoutenanceAccessParam = (search = "") => {
+  const queryParams = new URLSearchParams(search)
+
+  return ['ml', 'token', 'code'].some((key) =>
+    typeof queryParams.get(key) === 'string' &&
+    queryParams.get(key).trim().length > 0
+  )
+}
+
+const SoutenanceRoute = ({ isAuthenticated }) => {
+  const location = useLocation()
+
+  if (!isAuthenticated && !hasSoutenanceAccessParam(location.search)) {
+    return <Navigate to='/login' replace />
+  }
+
+  return <TpiSoutenance />
+}
+
 //#region Layout
 const Layout = ({ isAuthenticated, login, logout }) => {
   const location = useLocation()
@@ -314,7 +362,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 
       rootElement.style.setProperty("--app-header-height", `${Math.max(headerHeight, 0)}px`)
       rootElement.style.setProperty("--app-tools-height", `${Math.max(toolsHeight, 0)}px`)
-      if (location.pathname === "/planification") {
+      if (location.pathname === ROUTES.PLANIFICATION) {
         rootElement.style.setProperty("--room-padding-top", isArrowUp ? "210px" : "30px")
       } else {
         rootElement.style.setProperty("--room-padding-top", `${contentOffset}px`)
@@ -473,7 +521,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
             <>
               <Route path='/' element={<Home />} />
               <Route
-                path='/planification'
+                path={ROUTES.PLANIFICATION}
                 element={
                   <TpiSchedule
                     toggleArrow={toggleArrow}
@@ -483,14 +531,14 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path='/planification/legacy'
-                element={<Navigate to='/planification' replace />}
+                element={<Navigate to={ROUTES.PLANIFICATION} replace />}
               />
               <Route
                 path='/configuration'
                 element={<PlanningConfiguration />}
               />
               <Route
-                path='/gestionTPI'
+                path={ROUTES.GESTION_TPI}
                 element={
                   <TpiManagement
                     toggleArrow={toggleArrow}
@@ -499,7 +547,16 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 }
               />
               <Route
-                path='/partiesPrenantes'
+                path={ROUTES.GESTION_TPI_LEGACY}
+                element={
+                  <TpiManagement
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path={ROUTES.PARTIES_PRENANTES}
                 element={
                   <PartiesPrenantes
                     toggleArrow={toggleArrow}
@@ -508,17 +565,47 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 }
               />
               <Route
-                path='/suiviEtudiants'
+                path={ROUTES.PARTIES_PRENANTES_LEGACY}
+                element={
+                  <PartiesPrenantes
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path={ROUTES.SUIVI_ETUDIANTS}
                 element={<TpiTracker />}
               />
               <Route
-                path='/genTokens'
+                path={ROUTES.SUIVI_ETUDIANTS_LEGACY}
+                element={<TpiTracker />}
+              />
+              <Route
+                path={ROUTES.GEN_TOKENS}
                 element={
                   <TokenGenerator
                     toggleArrow={toggleArrow}
                     isArrowUp={isArrowUp}
                   />
                 }
+              />
+              <Route
+                path={ROUTES.GEN_TOKENS_LEGACY}
+                element={
+                  <TokenGenerator
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
+              />
+              <Route
+                path={ROUTES.TPI_EVAL}
+                element={<TpiEval toggleArrow={toggleArrow} isArrowUp={isArrowUp} />}
+              />
+              <Route
+                path={ROUTES.TPI_EVAL_LEGACY}
+                element={<TpiEval toggleArrow={toggleArrow} isArrowUp={isArrowUp} />}
               />
               <Route
                 path='/tpi/:year/:ref'
@@ -539,7 +626,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
             element={<Navigate to={`/planning/${preferredPlanningYear}`} replace />}
           />
           <Route
-            path='/planning/:year'
+            path={`${ROUTES.PLANNING}/:year`}
             element={
               <PlanningVotesRoute
                 isAuthenticated={isAuthenticated}
@@ -549,7 +636,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
             }
           />
           <Route
-            path='/planification-votes/:year'
+            path={ROUTES.PLANIFICATION_VOTES}
             element={
               <PlanningVotesRoute
                 isAuthenticated={isAuthenticated}
@@ -558,11 +645,40 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
             }
           />
-          <Route path='/Soutenances/:year' element={<TpiSoutenance />} />
           <Route
-            path='/TpiEval'
-            element={<TpiEval toggleArrow={toggleArrow} isArrowUp={isArrowUp} />}
+            path={ROUTES.PLANIFICATION_VOTES_LEGACY}
+            element={
+              <PlanningVotesRoute
+                isAuthenticated={isAuthenticated}
+                toggleArrow={toggleArrow}
+                isArrowUp={isArrowUp}
+              />
+            }
           />
+          <Route
+            path={ROUTES.SOUTENANCES}
+            element={
+              <SoutenanceRedirect preferredYear={preferredPlanningYear} />
+            }
+          />
+          {SOUTENANCE_ROUTE_ALIASES.map((routePath) => (
+            <Route
+              key={routePath}
+              path={routePath}
+              element={<SoutenanceRedirect preferredYear={preferredPlanningYear} />}
+            />
+          ))}
+          <Route
+            path={`${ROUTES.SOUTENANCES}/:year`}
+            element={<SoutenanceRoute isAuthenticated={isAuthenticated} />}
+          />
+          {SOUTENANCE_ROUTE_ALIASES.map((routePath) => (
+            <Route
+              key={`${routePath}/:year`}
+              path={`${routePath}/:year`}
+              element={<SoutenanceRedirect preferredYear={preferredPlanningYear} />}
+            />
+          ))}
         </Routes>
       </Suspense>
 

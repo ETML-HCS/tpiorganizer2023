@@ -17,10 +17,19 @@ test('buildDefaultPlanningCatalog retourne un catalogue partage vide et reutilis
 test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les classes par site', () => {
   const catalog = normalizeStoredCatalog({
     key: 'shared',
+    stakeholderIcons: {
+      candidate: 'candidate',
+      expert1: 'candidate',
+      expert2: 'participant',
+      projectManager: 'participant'
+    },
     sites: [
       {
         code: 'ETML',
         label: 'ETML Sébeillon',
+        planningColor: '#14532d',
+        tpiColor: '#fee2e2',
+        soutenanceColor: '#0f766e',
         address: {
           street: 'Avenue de Sévelin 32',
           zip: '1004',
@@ -63,6 +72,15 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
   assert.ok(etml)
   assert.ok(cfpv)
   assert.equal(etml.label, 'ETML Sébeillon')
+  assert.equal(etml.planningColor, '#14532D')
+  assert.equal(etml.tpiColor, '#FEE2E2')
+  assert.equal(etml.soutenanceColor, '#0F766E')
+  assert.deepEqual(catalog.stakeholderIcons, {
+    candidate: 'candidate',
+    expert1: 'candidate',
+    expert2: 'participant',
+    projectManager: 'participant'
+  })
   assert.deepEqual(etml.rooms, ['N101', 'N102'])
   assert.equal(etml.roomDetails.length, 2)
   assert.equal(etml.roomDetails[0].code, 'N101')

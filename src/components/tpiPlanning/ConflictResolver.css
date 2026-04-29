@@ -662,3 +662,29 @@
     padding-right: 14px;
   }
 }
+
+/* Final module harmonization */
+.conflict-resolver,
+.conflict-resolver .resolver-header,
+.conflict-resolver .conflict-card,
+.conflict-resolver .participants-section,
+.conflict-resolver .votes-summary-section,
+.conflict-resolver .resolution-section,
+.conflict-resolver .slot-vote-summary,
+.conflict-resolver .empty-state {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.conflict-resolver .conflict-card.selected,
+.conflict-resolver .slot-vote-summary.selected {
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.12);
+}
+
+.conflict-resolver .btn-secondary,
+.conflict-resolver .btn-cancel,
+.conflict-resolver .btn-resolve {
+  border-radius: var(--app-radius-card, 8px);
+}

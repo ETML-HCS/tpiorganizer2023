@@ -94,7 +94,7 @@
 
 #tpiEval .evaluation-list {
   width: 100%;
-  max-width: none;
+  max-width: var(--app-content-width);
   margin: 20px auto 0;
   padding: 0 var(--app-page-gutter);
   box-sizing: border-box;
@@ -102,7 +102,7 @@
 
 #tpiEval #newEvalForm {
   width: 100%;
-  max-width: none;
+  max-width: var(--app-content-width);
   margin: 18px auto 0;
   padding: 0 var(--app-page-gutter);
   box-sizing: border-box;
@@ -474,5 +474,80 @@
   #tpiEval .evaluation-list-shell .evaluation-list,
   #tpiEval .evaluation-form-body {
     overflow-x: clip;
+  }
+}
+
+/* Final module harmonization */
+#tpiEval::before,
+#tpiEval::after {
+  display: none;
+}
+
+#tools.tpi-eval-tools {
+  border: 1px solid var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-panel, 10px);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+}
+
+#tpiEval .evaluation-list,
+#tpiEval #newEvalForm,
+#tpiEval #newEvalForm.evaluation-form-shell,
+#tpiEval .evaluation-list-shell {
+  max-width: var(--app-content-width);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#tpiEval .evaluation-form-head,
+#tpiEval .evaluation-form-body,
+#tpiEval .evaluation-list-shell .evaluation-list,
+#tpiEval .evaluation-item,
+#tpiEval .evaluation-empty-state,
+#tpiEval .evaluation-expert1,
+#tpiEval .evaluation-expert2,
+#tpiEval .evaluation-company {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+#tpiEval .evaluation-form-head {
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px) var(--app-radius-card, 8px) 0 0;
+}
+
+#tpiEval .evaluation-form-body {
+  padding: 18px;
+  border-top: 0;
+  border-radius: 0 0 var(--app-radius-card, 8px) var(--app-radius-card, 8px);
+}
+
+#tpiEval .evaluation-list-shell .evaluation-list {
+  padding: 18px;
+}
+
+#tpiEval .evaluation-list-copy h2,
+#tpiEval .evaluation-form-copy h2 {
+  font-size: 1.12rem;
+}
+
+#tpiEval .evaluation-item {
+  min-height: 176px;
+  padding: 14px;
+}
+
+#tpiEval .evaluation-item:hover {
+  transform: none;
+  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+}
+
+@media (max-width: 767px) {
+  #tpiEval #newEvalForm.evaluation-form-shell,
+  #tpiEval .evaluation-list-shell {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 }

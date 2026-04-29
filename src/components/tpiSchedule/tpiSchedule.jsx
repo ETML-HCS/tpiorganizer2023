@@ -22,7 +22,8 @@ import {
   CloseIcon,
   ConfigurationIcon,
   RefreshIcon,
-  TimeIcon
+  TimeIcon,
+  TrashIcon
 } from "../shared/InlineIcons"
 import {
   combinedScheduleConfig,
@@ -35,6 +36,7 @@ import {
 import {
   normalizeSoutenanceDateEntries,
 } from "./soutenanceDateUtils"
+import { ROUTES } from "../../config/appConfig"
 import {
   optimizePlanningRooms,
   summarizeLocalPersonConflicts
@@ -511,14 +513,121 @@ function catalogToRoomCatalog(catalog, fallbackCatalog = {}) {
   return normalizeRoomCatalog(catalog, fallbackCatalog)
 }
 
+function catalogToSiteConfigOverrides(catalog) {
+  if (!catalog || typeof catalog !== "object" || !Array.isArray(catalog.sites)) {
+    return []
+  }
+
+  return catalog.sites
+    .map((site) => {
+      const siteCode = compactText(site?.code || site?.siteCode || site?.label).toUpperCase()
+      const siteId = compactText(site?.id || site?.siteId || siteCode).toLowerCase()
+
+      if (!siteCode && !siteId) {
+        return null
+      }
+
+      return {
+        siteId,
+        siteCode,
+        label: compactText(site?.label || site?.name || siteCode),
+        planningColor: compactText(site?.planningColor || site?.color || ""),
+        tpiColor: compactText(site?.tpiColor || site?.tpiCardColor || ""),
+        soutenanceColor: compactText(site?.soutenanceColor || site?.defenseColor || site?.defenceColor || "")
+      }
+    })
+    .filter(Boolean)
+}
+
+function mergePlanningConfigWithCatalogColors(config, catalogSiteConfigs = [], year = null) {
+  const baseConfig = buildPlanningConfigForYear(config || {}, year)
+  const catalogEntries = Array.isArray(catalogSiteConfigs) ? catalogSiteConfigs : []
+
+  if (catalogEntries.length === 0) {
+    return baseConfig
+  }
+
+  const overridesById = new Map()
+  const overridesByCode = new Map()
+
+  catalogEntries.forEach((entry) => {
+    const siteId = compactText(entry?.siteId || entry?.id || "").toLowerCase()
+    const siteCode = compactText(entry?.siteCode || entry?.code || "").toUpperCase()
+
+    if (siteId) {
+      overridesById.set(siteId, entry)
+    }
+
+    if (siteCode) {
+      overridesByCode.set(siteCode, entry)
+    }
+  })
+
+  const seen = new Set()
+  const mergedSiteConfigs = (Array.isArray(baseConfig.siteConfigs) ? baseConfig.siteConfigs : [])
+    .map((siteConfig) => {
+      const siteId = compactText(siteConfig?.siteId || siteConfig?.id || "").toLowerCase()
+      const siteCode = compactText(siteConfig?.siteCode || siteConfig?.code || "").toUpperCase()
+      const override = overridesById.get(siteId) || overridesByCode.get(siteCode)
+
+      if (!override) {
+        if (siteId || siteCode) {
+          seen.add(siteId || siteCode)
+        }
+        return siteConfig
+      }
+
+      const overrideId = compactText(override.siteId || override.id || "").toLowerCase()
+      const overrideCode = compactText(override.siteCode || override.code || "").toUpperCase()
+      seen.add(overrideId || overrideCode)
+
+      return {
+        ...siteConfig,
+        siteId: siteConfig.siteId || override.siteId,
+        siteCode: siteConfig.siteCode || override.siteCode,
+        label: override.label || siteConfig.label,
+        planningColor: override.planningColor || siteConfig.planningColor,
+        tpiColor: override.tpiColor || "",
+        soutenanceColor: override.soutenanceColor || ""
+      }
+    })
+
+  catalogEntries.forEach((entry) => {
+    const siteId = compactText(entry?.siteId || entry?.id || "").toLowerCase()
+    const siteCode = compactText(entry?.siteCode || entry?.code || "").toUpperCase()
+    const dedupeKey = siteId || siteCode
+
+    if (!dedupeKey || seen.has(dedupeKey)) {
+      return
+    }
+
+    seen.add(dedupeKey)
+    mergedSiteConfigs.push(entry)
+  })
+
+  return buildPlanningConfigForYear(
+    {
+      ...baseConfig,
+      siteConfigs: mergedSiteConfigs
+    },
+    year
+  )
+}
+
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const navigate = useNavigate()
+  const [selectedYear, setSelectedYear] = useState(() => getInitialSelectedYear())
   const [configData, setConfigData] = useState(() =>
     buildPlanningConfigForYear({}, getInitialSelectedYear())
   )
+  const [catalogSiteConfigOverrides, setCatalogSiteConfigOverrides] = useState([])
+  const effectiveConfigData = useMemo(
+    () => mergePlanningConfigWithCatalogColors(configData, catalogSiteConfigOverrides, selectedYear),
+    [catalogSiteConfigOverrides, configData, selectedYear]
+  )
   const defaultSoutenanceDates = useMemo(
-    () => normalizeSoutenanceDateEntries(configData?.soutenanceDates || []),
-    [configData]
+    () => normalizeSoutenanceDateEntries(effectiveConfigData?.soutenanceDates || []),
+    [effectiveConfigData]
   )
   const defaultRoomCatalogBySite = useMemo(
     () => normalizeRoomCatalog({}),
@@ -527,7 +636,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   const [newRooms, setNewRooms] = useState([])
   const [isEditing, setIsEditing] = useState(false)
-  const [selectedYear, setSelectedYear] = useState(() => getInitialSelectedYear())
   const [tpiCardDetailLevel, setTpiCardDetailLevel] = useState(() => getInitialTpiCardDetailLevel())
   const [roomFilters, setRoomFilters] = useState({
     site: "",
@@ -548,6 +656,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [pendingWorkflowAction, setPendingWorkflowAction] = useState("")
   const [pendingYearChange, setPendingYearChange] = useState(null)
   const [isReplacingPlanningYear, setIsReplacingPlanningYear] = useState(false)
+  const [isDeleteAllRoomsDialogOpen, setIsDeleteAllRoomsDialogOpen] = useState(false)
+  const [isResettingWorkflowYear, setIsResettingWorkflowYear] = useState(false)
   const [soutenanceDates, setSoutenanceDates] = useState(defaultSoutenanceDates)
   const [roomCatalogBySite, setRoomCatalogBySite] = useState(defaultRoomCatalogBySite)
   const [availableTpiModels, setAvailableTpiModels] = useState(null)
@@ -585,9 +695,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
 
     return availableTpiModels.filter((model) =>
-      getPlanningPerimeterState(model, configData?.siteConfigs, selectedYear).isPlanifiable
+      getPlanningPerimeterState(model, effectiveConfigData?.siteConfigs, selectedYear).isPlanifiable
     )
-  }, [availableTpiModels, configData?.siteConfigs, selectedYear])
+  }, [availableTpiModels, effectiveConfigData?.siteConfigs, selectedYear])
 
   const tpiUsageSummary = useMemo(() => {
     if (!Array.isArray(planifiableTpiModels)) {
@@ -631,10 +741,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [])
 
   useEffect(() => {
-    if (!configData) {
+    if (!effectiveConfigData) {
       notify("Erreur lors du chargement du fichier de configuration.", "error")
     }
-  }, [configData, notify])
+  }, [effectiveConfigData, notify])
 
   const fetchData = async () => {
     const savedRooms = readJSONListValue(STORAGE_KEYS.ORGANIZER_DATA, [], [
@@ -753,17 +863,17 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   useEffect(() => {
     setSoutenanceDates(
-      normalizeSoutenanceDateEntries(configData?.soutenanceDates || defaultSoutenanceDates)
+      normalizeSoutenanceDateEntries(effectiveConfigData?.soutenanceDates || defaultSoutenanceDates)
     )
-  }, [configData, defaultSoutenanceDates])
+  }, [defaultSoutenanceDates, effectiveConfigData])
 
   useEffect(() => {
-    if (!configData || roomEntries.length === 0) {
+    if (!effectiveConfigData || roomEntries.length === 0) {
       return
     }
 
     const normalizedRooms = roomEntries.map((room, index) =>
-      normalizeRoom(room, index, configData)
+      normalizeRoom(room, index, effectiveConfigData)
     )
 
     const currentSnapshot = JSON.stringify(roomEntries)
@@ -773,7 +883,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       setNewRooms(normalizedRooms)
       writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, normalizedRooms)
     }
-  }, [configData, roomEntries])
+  }, [effectiveConfigData, roomEntries])
 
   useEffect(() => {
     let isCancelled = false
@@ -787,11 +897,13 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
         if (!isCancelled) {
           setRoomCatalogBySite(catalogToRoomCatalog(catalog, defaultRoomCatalogBySite))
+          setCatalogSiteConfigOverrides(catalogToSiteConfigOverrides(catalog))
         }
       } catch (error) {
         if (!isCancelled) {
           console.error("Erreur lors du chargement du catalogue partagé :", error)
           setRoomCatalogBySite(defaultRoomCatalogBySite)
+          setCatalogSiteConfigOverrides([])
         }
       }
     }
@@ -1338,7 +1450,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         : []
 
       if (generatedLegacyRooms.length > 0) {
-        const normalizedRooms = normalizeOrganizerRooms(generatedLegacyRooms, configData)
+        const normalizedRooms = normalizeOrganizerRooms(generatedLegacyRooms, effectiveConfigData)
 
         removeStorageValue(STORAGE_KEYS.ORGANIZER_DATA)
         writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, normalizedRooms)
@@ -1478,7 +1590,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       actionKey: "sendLinks",
       run: () => workflowPlanningService.sendPublicationLinks(selectedYear),
       successMessage: (result) =>
-        `Liens soutenance envoyes: ${result?.sentLinks?.emailsSucceeded || 0}/${result?.sentLinks?.emailsSent || 0}.`
+        `Liens défense envoyes: ${result?.sentLinks?.emailsSucceeded || 0}/${result?.sentLinks?.emailsSent || 0}.`
     })
   }
 
@@ -1493,19 +1605,24 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       auto: '1'
     })
 
-    navigate(`/genTokens?${query.toString()}`)
+    navigate(`${ROUTES.GEN_TOKENS}?${query.toString()}`)
   }, [navigate, selectedYear])
 
   const handlePublish = async (year) => {
-    const soutenancePageUrl = `/Soutenances/${year}`
+    const normalizedYear = Number.parseInt(year, 10)
+    const soutenancePageUrl = Number.isInteger(normalizedYear)
+      ? `${ROUTES.SOUTENANCES}/${normalizedYear}`
+      : ROUTES.SOUTENANCES
 
     try {
       const planningPublication = await publishSoutenancesFromPlanning(year)
 
       if (planningPublication?.count > 0) {
-        window.location.href = soutenancePageUrl
+        if (Number.isInteger(normalizedYear)) {
+          navigate(soutenancePageUrl)
+        }
         notify(
-          `Les soutenances confirmées ont été publiées depuis le planning. Voir: ${soutenancePageUrl}`,
+          `Les défenses confirmées ont été publiées depuis le planning. Voir: ${soutenancePageUrl}`,
           "success"
         )
         return
@@ -1514,7 +1631,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       if (roomEntries.length > 0) {
         for (const room of roomEntries) {
           try {
-            await createTpiCollectionForYear(year, updateTpiDatas(room, configData))
+            await createTpiCollectionForYear(year, updateTpiDatas(room, effectiveConfigData))
           } catch (error) {
             console.error(
               "Erreur lors de la création de la salle de TPI : ",
@@ -1524,18 +1641,20 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           }
         }
 
-        window.location.href = soutenancePageUrl
-        notify(`Les soutenances ont été publiées. Voir: ${soutenancePageUrl}`, "success")
+        if (Number.isInteger(normalizedYear)) {
+          navigate(soutenancePageUrl)
+        }
+        notify(`Les défenses ont été publiées. Voir: ${soutenancePageUrl}`, "success")
         return
       }
 
       notify(
-        "Aucune soutenance confirmée dans le planning et aucune salle legacy à publier.",
+        "Aucune défense confirmée dans le planning et aucune salle legacy à publier.",
         "error"
       )
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde des soutenances :", error)
-      notify("Erreur lors de la publication des soutenances.", "error")
+      console.error("Erreur lors de la sauvegarde des défenses :", error)
+      notify("Erreur lors de la publication des défenses.", "error")
     }
   }
 
@@ -1558,6 +1677,104 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }
 
+  const clearLocalPlanningRooms = () => {
+    clearValidationState()
+    clearRoomFilters()
+    setRoomsHashAtFreeze(null)
+    setNewRooms([])
+    setIsEditing(false)
+    removeStorageValue(STORAGE_KEYS.ORGANIZER_DATA)
+  }
+
+  const handleDeleteAllRooms = () => {
+    try {
+      const roomCount = roomEntries.length
+
+      if (roomCount === 0) {
+        notify("Aucune salle à supprimer.", "info")
+        return false
+      }
+
+      setIsDeleteAllRoomsDialogOpen(true)
+      return false
+    } catch (error) {
+      console.error("Erreur lors de la suppression complète du planning :", error)
+      notify(`Erreur lors de la suppression complète du planning : ${error.message}`, "error")
+      return false
+    }
+  }
+
+  const handleCancelDeleteAllRooms = () => {
+    if (isResettingWorkflowYear) {
+      return
+    }
+
+    setIsDeleteAllRoomsDialogOpen(false)
+    notify("Suppression de la planification annulée.", "info")
+  }
+
+  const handleDeleteRoomsOnly = () => {
+    const roomCount = roomEntries.length
+
+    if (roomCount === 0) {
+      setIsDeleteAllRoomsDialogOpen(false)
+      notify("Aucune salle à supprimer.", "info")
+      return
+    }
+
+    clearLocalPlanningRooms()
+    setIsDeleteAllRoomsDialogOpen(false)
+    notify(`${roomCount} salle(s) supprimée(s) du planning ${selectedYear}.`, "success")
+  }
+
+  const handleRestartWorkflowYear = async () => {
+    if (isResettingWorkflowYear) {
+      return
+    }
+
+    const roomCount = roomEntries.length
+    setIsResettingWorkflowYear(true)
+
+    try {
+      const result = await workflowPlanningService.resetYear(selectedYear)
+      const deleted = result?.deleted || {}
+      const legacyDeletedCount = Array.isArray(deleted.legacyCollections)
+        ? deleted.legacyCollections.reduce((total, item) => total + Number(item?.deletedCount || 0), 0)
+        : 0
+      const totalDeleted = [
+        deleted.votes,
+        deleted.slots,
+        deleted.tpiPlannings,
+        deleted.planningSnapshots,
+        deleted.publicationVersions,
+        deleted.magicLinks,
+        deleted.workflowYears,
+        legacyDeletedCount
+      ].reduce((total, value) => total + Number(value || 0), 0)
+
+      clearLocalPlanningRooms()
+      setWorkflowState(result?.workflow?.state || "planning")
+      setActiveSnapshotVersion(null)
+      setIsDeleteAllRoomsDialogOpen(false)
+      await refreshWorkflowContext(selectedYear)
+
+      notify(
+        `Workflow ${selectedYear} réinitialisé: ${roomCount} room(s) locale(s) effacée(s), ${totalDeleted} élément(s) serveur supprimé(s).`,
+        "success",
+        5000
+      )
+    } catch (error) {
+      console.error("Erreur lors de la réinitialisation du workflow :", error)
+      notify(
+        error?.data?.error || error?.message || "Erreur lors de la réinitialisation du workflow.",
+        "error",
+        5000
+      )
+    } finally {
+      setIsResettingWorkflowYear(false)
+    }
+  }
+
   const handleUpdateRoom = (roomIndex, updates = {}) => {
     try {
       clearValidationState()
@@ -1573,7 +1790,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           lastUpdate: Date.now()
         },
         roomIndex,
-        configData
+        effectiveConfigData
       )
       const updatedRoomKey = buildPlanningRoomKey(
         updatedRoom?.site,
@@ -1673,7 +1890,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       .filter(([site, rooms]) => site && rooms.length > 0)
 
     if (availableDates.length === 0) {
-      notify("Aucune date de soutenance disponible pour générer les salles.", "error")
+      notify("Aucune date de défense disponible pour générer les salles.", "error")
       return
     }
 
@@ -1683,7 +1900,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
 
     clearValidationState()
-    const normalizedExistingRooms = normalizeOrganizerRooms(roomEntries, configData)
+    const normalizedExistingRooms = normalizeOrganizerRooms(roomEntries, effectiveConfigData)
     const existingKeys = new Set(
       normalizedExistingRooms.map((room) =>
         buildPlanningRoomKey(room?.site, room?.date, room?.name || room?.nameRoom)
@@ -1712,7 +1929,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                 tpiDatas: []
               },
               normalizedExistingRooms.length + createdRooms.length,
-              configData
+              effectiveConfigData
             )
           )
         }
@@ -1731,7 +1948,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       `${createdRooms.length} salle(s) de planning générée(s) depuis Configuration.`,
       "success"
     )
-  }, [configData, notify, roomCatalogBySite, roomEntries, selectedYear, soutenanceDates])
+  }, [effectiveConfigData, notify, roomCatalogBySite, roomEntries, selectedYear, soutenanceDates])
 
   const handleExport = async () => {
     if (roomEntries.length === 0) {
@@ -1741,7 +1958,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     try {
       const normalizedRooms = roomEntries.map((room, index) =>
-        normalizeRoom(room, index, configData)
+        normalizeRoom(room, index, effectiveConfigData)
       )
 
       setNewRooms(normalizedRooms)
@@ -1773,7 +1990,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleLoadConfig = (jsonData) => {
     try {
       const parsedData = JSON.parse(jsonData)
-      const normalizedRooms = normalizeOrganizerRooms(parsedData, configData)
+      const normalizedRooms = normalizeOrganizerRooms(parsedData, effectiveConfigData)
 
       if (normalizedRooms.length > 0) {
         resetPlanningViewState()
@@ -1884,7 +2101,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       }
 
       const roomConfigData = await response.json() // Convertir la réponse en JSON
-      const normalizedRooms = normalizeOrganizerRooms(roomConfigData, configData)
+      const normalizedRooms = normalizeOrganizerRooms(roomConfigData, effectiveConfigData)
 
       removeStorageValue(STORAGE_KEYS.ORGANIZER_DATA)
       writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, normalizedRooms)
@@ -1989,11 +2206,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     <div className={`planning-schedule-page ${isRoomsFocusMode ? "planning-schedule-page--focus" : ""} ${isRoomsWrapModeEffective ? "planning-schedule-page--wrap" : ""}`.trim()}>
       {!isRoomsFocusMode ? (
         <TpiScheduleButtons
-          configData={configData}
+          configData={effectiveConfigData}
           selectedYear={selectedYear}
           onYearChange={handleYearChangeRequest}
           availableYears={YEARS_CONFIG.getAvailableYears()}
           onToggleEditing={toggleEditing}
+          onDeleteAllRooms={handleDeleteAllRooms}
           onSave={handleSave}
           onSendBD={handleTransmitToDatabase}
           onExport={handleExport}
@@ -2017,9 +2235,15 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           onSendSoutenanceLinks={handleSendSoutenanceLinks}
           onOpenVotesTracking={handleOpenVoteTracking}
           onOpenSoutenances={() => {
-            window.location.href = `/Soutenances/${selectedYear}`
+            const normalizedYear = Number.parseInt(selectedYear, 10)
+            if (!Number.isInteger(normalizedYear)) {
+              return
+            }
+
+            navigate(`${ROUTES.SOUTENANCES}/${normalizedYear}`)
           }}
           roomsCount={visibleRooms.length}
+          totalRoomsCount={roomEntries.length}
           usedTpiCount={tpiUsageSummary.usedTpiCount}
           totalTpiCount={tpiUsageSummary.totalTpiCount}
           nonImportableTpiCount={nonImportableTpiRefs.length}
@@ -2129,13 +2353,118 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           )
         : null}
 
+      {isDeleteAllRoomsDialogOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="planning-year-change-overlay planning-delete-rooms-overlay"
+              role="presentation"
+              onClick={isResettingWorkflowYear ? undefined : handleCancelDeleteAllRooms}
+            >
+              <div
+                className="planning-year-change-dialog planning-delete-rooms-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="planning-delete-rooms-title"
+                aria-describedby="planning-delete-rooms-description"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="planning-year-change-close icon-button"
+                  aria-label="Fermer"
+                  title="Fermer"
+                  onClick={handleCancelDeleteAllRooms}
+                  disabled={isResettingWorkflowYear}
+                >
+                  <IconButtonContent label='Fermer' icon={CloseIcon} />
+                </button>
+                <div className="planning-year-change-icon planning-delete-rooms-icon" aria-hidden="true">
+                  <AlertIcon />
+                </div>
+                <div className="planning-year-change-copy">
+                  <h3 id="planning-delete-rooms-title">Supprimer toutes les rooms ?</h3>
+                  <p id="planning-delete-rooms-description">
+                    Choisis si c’est une erreur, un simple nettoyage local, ou un vrai redémarrage du workflow{" "}
+                    <strong>{selectedYear}</strong>.
+                  </p>
+                </div>
+
+                <div className="planning-year-change-summary planning-delete-rooms-summary">
+                  <div className="planning-year-change-summary-item">
+                    <span>Rooms locales</span>
+                    <strong>{roomEntries.length}</strong>
+                  </div>
+                  <div className="planning-year-change-summary-item">
+                    <span>Workflow</span>
+                    <strong>{workflowState}</strong>
+                  </div>
+                  <div className="planning-year-change-summary-item">
+                    <span>Snapshot</span>
+                    <strong>{activeSnapshotVersion ? `v${activeSnapshotVersion}` : "aucun"}</strong>
+                  </div>
+                </div>
+
+                <div className="planning-delete-rooms-choices">
+                  <button
+                    type="button"
+                    className="planning-delete-rooms-choice secondary"
+                    onClick={handleCancelDeleteAllRooms}
+                    disabled={isResettingWorkflowYear}
+                  >
+                    <span className="planning-delete-rooms-choice-main">
+                      <CloseIcon className="ui-button-icon" />
+                      <span>Annuler</span>
+                    </span>
+                    <span className="planning-delete-rooms-choice-detail">
+                      Erreur de clic, ne rien changer.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="planning-delete-rooms-choice warning"
+                    onClick={handleDeleteRoomsOnly}
+                    disabled={isResettingWorkflowYear || roomEntries.length === 0}
+                  >
+                    <span className="planning-delete-rooms-choice-main">
+                      <TrashIcon className="ui-button-icon" />
+                      <span>Rooms uniquement</span>
+                    </span>
+                    <span className="planning-delete-rooms-choice-detail">
+                      Efface seulement la vue locale; l’état workflow reste inchangé.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="planning-delete-rooms-choice danger"
+                    onClick={handleRestartWorkflowYear}
+                    disabled={isResettingWorkflowYear}
+                  >
+                    <span className="planning-delete-rooms-choice-main">
+                      {isResettingWorkflowYear ? (
+                        <TimeIcon className="ui-button-icon" />
+                      ) : (
+                        <RefreshIcon className="ui-button-icon" />
+                      )}
+                      <span>{isResettingWorkflowYear ? "Redémarrage..." : "Recommencer"}</span>
+                    </span>
+                    <span className="planning-delete-rooms-choice-detail">
+                      Réinitialise rooms, votes, snapshots, publication et état annuel.
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+
       {roomEntries.length === 0 ? (
         <div className='planning-empty-state'>
           <h2>Aucune salle chargée</h2>
           <p>
-            Le stockage local ne contient pas encore de planning compatible.
+            Aucun planning compatible en local.
           </p>
-          <p>Ouvre Configuration pour préparer les dates, les sites et les salles.</p>
+          <p>Prépare dates, sites et salles dans Configuration.</p>
           <button
             type='button'
             className='icon-button'
@@ -2145,14 +2474,25 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           >
             <IconButtonContent label='Ouvrir Configuration' icon={ConfigurationIcon} />
           </button>
+          {workflowState !== "planning" || activeSnapshotVersion ? (
+            <button
+              type='button'
+              className='icon-button'
+              onClick={() => setIsDeleteAllRoomsDialogOpen(true)}
+              aria-label='Recommencer workflow'
+              title='Recommencer le workflow'
+            >
+              <IconButtonContent label='Recommencer workflow' icon={RefreshIcon} />
+            </button>
+          ) : null}
         </div>
       ) : visibleRooms.length === 0 ? (
         <div className='planning-empty-state'>
           <h2>Aucune salle correspondante</h2>
           <p>
-            Les filtres actuels ne renvoient aucune colonne.
+            Aucune colonne pour ces filtres.
           </p>
-          <p>Réinitialise le filtre site, date ou salle pour revoir les colonnes.</p>
+          <p>Réinitialise site, date ou salle.</p>
           <button
             type='button'
             className='icon-button'

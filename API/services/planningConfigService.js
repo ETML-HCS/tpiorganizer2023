@@ -3,6 +3,10 @@ const mongoose = require('mongoose')
 const { ensureDatabaseConnection } = require('../config/dbConfig')
 const PlanningConfig = require('../models/planningConfigModel')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
+const {
+  getMaxConsecutiveTpiLimit,
+  MAX_CONSECUTIVE_TPI
+} = require('./planningRuleUtils')
 
 const DEFAULT_SCHEMA_VERSION = 2
 const DEFAULT_SITE_SCHEDULE = {
@@ -10,6 +14,7 @@ const DEFAULT_SITE_SCHEDULE = {
   tpiTimeMinutes: 60,
   firstTpiStartTime: '08:00',
   numSlots: 8,
+  maxConsecutiveTpi: MAX_CONSECUTIVE_TPI,
   manualRoomTarget: null,
   active: true
 }
@@ -53,6 +58,29 @@ function normalizePlanningColor(value) {
   }
 
   return ''
+}
+
+function normalizeOptionalPlanningColor(source = {}, fallback = {}, keys = ['tpiColor', 'tpiCardColor']) {
+  const sourceObject = source && typeof source === 'object' ? source : {}
+  const fallbackObject = fallback && typeof fallback === 'object' ? fallback : {}
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(sourceObject, key)) {
+      return normalizePlanningColor(sourceObject[key])
+    }
+  }
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(fallbackObject, key)) {
+      return normalizePlanningColor(fallbackObject[key])
+    }
+  }
+
+  return ''
+}
+
+function normalizeOptionalSoutenanceColor(source = {}, fallback = {}) {
+  return normalizeOptionalPlanningColor(source, fallback, ['soutenanceColor', 'defenseColor', 'defenceColor'])
 }
 
 function getDefaultPlanningColor(seed = '', fallbackIndex = 0) {
@@ -428,6 +456,8 @@ function normalizeSiteScheduleDefinition(value, fallback = {}) {
       fallbackSource.color ||
       getDefaultPlanningColor(siteCode || label)
     ),
+    tpiColor: normalizeOptionalPlanningColor(source, fallbackSource),
+    soutenanceColor: normalizeOptionalSoutenanceColor(source, fallbackSource),
     breaklineMinutes: normalizeMinuteValue(
       source.breaklineMinutes,
       Number.isFinite(Number(fallbackSource.breaklineMinutes)) ? Number(fallbackSource.breaklineMinutes) : DEFAULT_SITE_SCHEDULE.breaklineMinutes,
@@ -447,6 +477,10 @@ function normalizeSiteScheduleDefinition(value, fallback = {}) {
       : Number.isInteger(Number(fallbackSource.numSlots)) && Number(fallbackSource.numSlots) > 0
         ? Number(fallbackSource.numSlots)
         : DEFAULT_SITE_SCHEDULE.numSlots,
+    maxConsecutiveTpi: getMaxConsecutiveTpiLimit(
+      source.maxConsecutiveTpi,
+      getMaxConsecutiveTpiLimit(fallbackSource.maxConsecutiveTpi, DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi)
+    ),
     manualRoomTarget: Number.isFinite(Number(source.manualRoomTarget)) && Number(source.manualRoomTarget) >= 0
       ? Number(source.manualRoomTarget)
       : Number.isFinite(Number(fallbackSource.manualRoomTarget)) && Number(fallbackSource.manualRoomTarget) >= 0
@@ -501,6 +535,7 @@ function buildLegacySiteAlias(siteConfigs, siteCode) {
     tpiTime: siteConfig ? siteConfig.tpiTimeMinutes / 60 : DEFAULT_SITE_SCHEDULE.tpiTimeMinutes / 60,
     firstTpiStart: firstStart,
     numSlots: siteConfig ? siteConfig.numSlots : DEFAULT_SITE_SCHEDULE.numSlots,
+    maxConsecutiveTpi: siteConfig ? siteConfig.maxConsecutiveTpi : DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
     label: siteConfig ? siteConfig.label : code
   }
 }
@@ -574,7 +609,9 @@ function normalizeSiteScheduleEntries(values, fallbackSiteConfigs = [], catalogS
           siteId,
           siteCode,
           label: compactText(site?.label || site?.name || siteCode),
-          planningColor: compactText(site?.planningColor || site?.color || '')
+          planningColor: compactText(site?.planningColor || site?.color || ''),
+          tpiColor: compactText(site?.tpiColor || site?.tpiCardColor || ''),
+          soutenanceColor: compactText(site?.soutenanceColor || site?.defenseColor || site?.defenceColor || '')
         },
         {
           ...fallbackEntry,
@@ -586,6 +623,22 @@ function normalizeSiteScheduleEntries(values, fallbackSiteConfigs = [], catalogS
             site?.color ||
             fallbackEntry?.planningColor ||
             fallbackEntry?.color ||
+            ''
+          ),
+          tpiColor: compactText(
+            site?.tpiColor ||
+            site?.tpiCardColor ||
+            fallbackEntry?.tpiColor ||
+            fallbackEntry?.tpiCardColor ||
+            ''
+          ),
+          soutenanceColor: compactText(
+            site?.soutenanceColor ||
+            site?.defenseColor ||
+            site?.defenceColor ||
+            fallbackEntry?.soutenanceColor ||
+            fallbackEntry?.defenseColor ||
+            fallbackEntry?.defenceColor ||
             ''
           )
         }
@@ -666,6 +719,7 @@ function buildDefaultPlanningConfig(year, catalogSites = []) {
     tpiTimeMinutes: DEFAULT_SITE_SCHEDULE.tpiTimeMinutes,
     firstTpiStartTime: DEFAULT_SITE_SCHEDULE.firstTpiStartTime,
     numSlots: DEFAULT_SITE_SCHEDULE.numSlots,
+    maxConsecutiveTpi: DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
     manualRoomTarget: DEFAULT_SITE_SCHEDULE.manualRoomTarget,
     active: entry.active !== false
   }))

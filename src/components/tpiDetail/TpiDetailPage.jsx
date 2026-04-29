@@ -7,6 +7,7 @@ import { tpiDossierService } from '../../services/tpiDossierService'
 import { createTpiModel, updateTpiModel } from '../tpiControllers/TpiController.jsx'
 import TpiDetailSections from './TpiDetailSections'
 import { compactText, buildLegacyPayloadFromDossier } from './tpiDetailUtils'
+import { ROUTES } from '../../config/appConfig'
 
 const TpiDetailPage = ({ toggleArrow, isArrowUp }) => {
   const { year, ref } = useParams()
@@ -128,20 +129,35 @@ const TpiDetailPage = ({ toggleArrow, isArrowUp }) => {
         className='tpi-detail-tools'
         eyebrow='Fiche TPI'
         title={displayReference ? `Dossier ${displayReference}` : 'Dossier TPI'}
-        description='Lecture croisée de la fiche GestionTPI et du workflow Planning.'
+        description='Données utiles, corrections et planning.'
         navigationLinks={navigationLinks}
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
         actions={(
           <div className='tpi-detail-toolbar-actions'>
-            <Link className='tpi-detail-toolbar-link' to='/gestionTPI'>
+            <Link
+              className='tpi-detail-toolbar-link'
+              to={ROUTES.GESTION_TPI}
+              aria-label='Ouvrir la gestion des TPI'
+              title='Ouvrir la gestion des TPI'
+            >
               Gestion TPI
             </Link>
-            <Link className='tpi-detail-toolbar-link' to={`/planning/${year}`}>
+            <Link
+              className='tpi-detail-toolbar-link'
+              to={`/planning/${year}`}
+              aria-label={`Ouvrir le planning ${year}`}
+              title={`Ouvrir le planning ${year}`}
+            >
               Planning {year}
             </Link>
-            <Link className='tpi-detail-toolbar-link' to={`/Soutenances/${year}`}>
-              Soutenances {year}
+            <Link
+              className='tpi-detail-toolbar-link'
+              to={`${ROUTES.SOUTENANCES}/${year}`}
+              aria-label={`Ouvrir les défenses ${year}`}
+              title={`Ouvrir les défenses ${year}`}
+            >
+              Défenses {year}
             </Link>
           </div>
         )}
@@ -151,7 +167,7 @@ const TpiDetailPage = ({ toggleArrow, isArrowUp }) => {
         {isLoading ? (
           <section className='tpi-detail-state-card'>
             <h2>Chargement</h2>
-            <p>Récupération du dossier TPI en cours.</p>
+            <p>Récupération de la fiche TPI.</p>
           </section>
         ) : null}
 

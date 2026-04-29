@@ -12,7 +12,9 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
       id: 'site-etml',
       code: 'ETML',
       label: 'ETML Sébeillon',
-      planningColor: '#14532d'
+      planningColor: '#14532d',
+      tpiColor: '#fee2e2',
+      soutenanceColor: '#0f766e'
     }
   ])
 
@@ -28,10 +30,13 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
   assert.equal(config.siteConfigs[0].siteCode, 'ETML')
   assert.equal(config.siteConfigs[0].label, 'ETML Sébeillon')
   assert.equal(config.siteConfigs[0].planningColor, '#14532D')
+  assert.equal(config.siteConfigs[0].tpiColor, '#FEE2E2')
+  assert.equal(config.siteConfigs[0].soutenanceColor, '#0F766E')
   assert.equal(config.siteConfigs[0].breaklineMinutes, 10)
   assert.equal(config.siteConfigs[0].tpiTimeMinutes, 60)
   assert.equal(config.siteConfigs[0].firstTpiStartTime, '08:00')
   assert.equal(config.siteConfigs[0].numSlots, 8)
+  assert.equal(config.siteConfigs[0].maxConsecutiveTpi, 4)
   assert.equal(config.siteConfigs[0].manualRoomTarget, null)
 })
 
@@ -68,6 +73,7 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
           tpiTimeMinutes: 90,
           firstTpiStartTime: '08:30',
           numSlots: 9,
+          maxConsecutiveTpi: 3,
           manualRoomTarget: 4
         }
       ]
@@ -79,7 +85,9 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
         id: 'site-etml',
         code: 'ETML',
         label: 'ETML Sébeillon',
-        planningColor: '#14532d'
+          planningColor: '#14532d',
+          tpiColor: '#fee2e2',
+          soutenanceColor: '#0f766e'
       }
     ]
   )
@@ -101,12 +109,16 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
   assert.equal(config.siteConfigs[0].siteId, 'site-etml')
   assert.equal(config.siteConfigs[0].siteCode, 'ETML')
   assert.equal(config.siteConfigs[0].planningColor, '#14532D')
+  assert.equal(config.siteConfigs[0].tpiColor, '#FEE2E2')
+  assert.equal(config.siteConfigs[0].soutenanceColor, '#0F766E')
   assert.equal(config.siteConfigs[0].breaklineMinutes, 15)
   assert.equal(config.siteConfigs[0].tpiTimeMinutes, 90)
   assert.equal(config.siteConfigs[0].firstTpiStartTime, '08:30')
   assert.equal(config.siteConfigs[0].numSlots, 9)
+  assert.equal(config.siteConfigs[0].maxConsecutiveTpi, 3)
   assert.equal(config.siteConfigs[0].manualRoomTarget, 4)
   assert.equal(config.siteConfigsByCode.ETML.numSlots, 9)
+  assert.equal(config.siteConfigsByCode.ETML.maxConsecutiveTpi, 3)
 })
 
 test('normalizeStoredConfig supprime les types custom absents du payload explicite', () => {

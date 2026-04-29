@@ -2,10 +2,10 @@ export const TRACKER_ROLE_CONFIG = {
   student: {
     label: "Étudiant",
     className: "student",
-    summary: "Consulte ses TPI, suit les soutenances et garde un accès simple à son parcours.",
+    summary: "Consulte ses TPI, suit les défenses et garde un accès simple à son parcours.",
     highlights: [
       "Consulter les projets liés au compte",
-      "Préparer les soutenances",
+      "Préparer les défenses",
       "Vérifier les informations de suivi"
     ]
   },
@@ -32,10 +32,10 @@ export const TRACKER_ROLE_CONFIG = {
   expert: {
     label: "Expert",
     className: "expert",
-    summary: "Accède aux soutenances et aux projets qui nécessitent son expertise.",
+    summary: "Accède aux défenses et aux projets qui nécessitent son expertise.",
     highlights: [
       "Retrouver les projets à traiter",
-      "Préparer les soutenances",
+      "Préparer les défenses",
       "Vérifier les accès du compte"
     ]
   }

@@ -456,6 +456,12 @@ export const workflowPlanningService = {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/send-links`, {})
   },
 
+  resetYear: async (year) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/reset`, {
+      confirmation: `RECOMMENCER ${year}`
+    })
+  },
+
   rollbackPublication: async (year, version) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/rollback/${version}`, {})
   },

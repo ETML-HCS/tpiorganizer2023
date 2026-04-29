@@ -25,7 +25,8 @@ const TpiSoutenanceActionButtons = ({
   listOfPerson,
   token,
   onAccept,
-  onProposition
+  onProposition,
+  isDisabled = false
 }) => {
   const offers = tpiData[expertOrBoss]?.offres
   const isValidated = offers?.isValidated
@@ -46,14 +47,20 @@ const TpiSoutenanceActionButtons = ({
         : ""
 
   const isCurrentParticipant = participantToken === token
+  const isActionDisabled = isDisabled
 
   return (
     <div className={`action-buttons${invitationClass}`}>
       <button
         type='button'
-        title={`Validation\nEn attente: a valider\nValide: creneau confirme\nRefuse: creneau refuse`}
+        title={
+          isActionDisabled
+            ? "Validation indisponible (fonction obsolète)"
+            : "Validation\nEn attente: a valider\nValide: creneau confirme\nRefuse: creneau refuse"
+        }
         className={`button-${validationClass}`}
-        onClick={() => isCurrentParticipant && onAccept(tpiData, expertOrBoss)}
+        disabled={isActionDisabled}
+        onClick={() => !isActionDisabled && isCurrentParticipant && onAccept?.(tpiData, expertOrBoss)}
       >
         {validationClass === "true" ? (
           <CheckIcon />
@@ -65,10 +72,17 @@ const TpiSoutenanceActionButtons = ({
       </button>
       <button
         type='button'
-        title={getProposedSlotTitle(submittedOffers)}
+        title={
+          isActionDisabled
+            ? "Proposition de créneau indisponible (fonction obsolète)"
+            : getProposedSlotTitle(submittedOffers)
+        }
         className={`button-${submitClass}`}
+        disabled={isActionDisabled}
         onClick={() =>
-          isCurrentParticipant && onProposition(tpiData, expertOrBoss, submittedOffers)
+          !isActionDisabled &&
+          isCurrentParticipant &&
+          onProposition?.(tpiData, expertOrBoss, submittedOffers)
         }
       >
         {submitClass === "has-values" ? <ListIcon /> : submitClass === "empty" ? <PencilIcon /> : null}

@@ -760,3 +760,27 @@
     padding: 16px;
   }
 }
+
+/* Final module harmonization */
+.import-panel,
+.import-panel .panel-header,
+.import-panel .config-section,
+.import-panel .import-section,
+.import-panel .validation-result,
+.import-panel .import-results,
+.import-panel .file-input-wrapper,
+.import-panel .form-group input,
+.import-panel .form-group select,
+.import-panel .dates-selection input,
+.import-panel .date-chip {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.import-panel .btn-primary,
+.import-panel .btn-secondary {
+  border-radius: var(--app-radius-card, 8px);
+  box-shadow: none;
+}

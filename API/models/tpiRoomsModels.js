@@ -66,7 +66,17 @@ const tpiRoomSchema = new mongoose.Schema({
     breakline: Number,
     tpiTime: Number,
     firstTpiStart: Number,
-    numSlots: Number
+    numSlots: Number,
+    maxConsecutiveTpi: Number,
+    planningColor: String,
+    tpiColor: String,
+    soutenanceColor: String,
+    stakeholderIcons: {
+      candidate: String,
+      expert1: String,
+      expert2: String,
+      projectManager: String
+    }
   },
   tpiDatas: [tpiDataSchema]
 })

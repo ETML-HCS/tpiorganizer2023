@@ -281,11 +281,22 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
 
   const overviewChips = useMemo(
     () => [
-      { label: 'Fiches', value: tpiList.length },
-      { label: 'Entreprises', value: overviewStats.companies || 0 },
-      { label: 'Soutenances', value: overviewStats.soutenances || 0 }
+      { label: 'TPI', value: tpiList.length, tone: 'neutral' },
+      { label: 'Entr.', value: overviewStats.companies || 0, tone: 'neutral' },
+      { label: 'Déf.', value: overviewStats.soutenances || 0, tone: 'neutral' },
+      { label: 'Planif.', value: overviewStats.planifiable || 0, tone: 'success' },
+      {
+        label: 'PP',
+        value: overviewStats.missingStakeholders || 0,
+        tone: overviewStats.missingStakeholders > 0 ? 'warning' : 'neutral'
+      },
+      {
+        label: 'Hors pér.',
+        value: overviewStats.outOfScope || 0,
+        tone: overviewStats.outOfScope > 0 ? 'scope' : 'neutral'
+      }
     ],
-    [overviewStats, tpiList.length, year]
+    [overviewStats, tpiList.length]
   )
 
   return (
@@ -301,14 +312,17 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
       />
 
       <div className='container tpi-management-page'>
-        <section className='tpi-management-hero'>
+        <section className='tpi-management-hero' aria-labelledby='tpi-management-title'>
           <div className='tpi-management-hero-copy'>
             <span className='tpi-management-kicker'>Catalogue TPI</span>
-            <h1>Fiches de l&apos;année {year}</h1>
+            <h1 id='tpi-management-title'>Fiches de l&apos;année {year}</h1>
 
             <div className='tpi-management-chips' aria-label='Contexte'>
               {overviewChips.map((chip) => (
-                <span key={chip.label} className='tpi-management-chip'>
+                <span
+                  key={chip.label}
+                  className={`tpi-management-chip tpi-management-chip-${chip.tone}`.trim()}
+                >
                   <strong>{chip.value}</strong>
                   <span>{chip.label}</span>
                 </span>
@@ -324,6 +338,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
 
           <div className='tpi-management-hero-side'>
             <div className='tpi-management-year-panel'>
+              <span className='tpi-management-year-label'>Millésime</span>
               <div className='tpi-management-year-picker'>
                 {availableYears.map((availableYear) => (
                   <button
@@ -343,7 +358,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
                 className='tpi-management-hero-search'
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder='Recher.'
+                placeholder='Rechercher'
                 aria-label='Rechercher un TPI'
               />
             </div>
@@ -357,7 +372,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
                 <span className='tpi-management-toolbar-label'>Creation</span>
                 <h2>Nouveau TPI</h2>
               </div>
-              <p>Les quatre parties prenantes sont requises: candidat, expert 1, expert 2 et chef de projet.</p>
+              <p>Candidat, deux experts et chef de projet requis.</p>
             </div>
 
             <TpiForm
@@ -376,7 +391,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
           {isLoading && (
             <div className='tpi-management-state-card'>
               <h3>Chargement en cours</h3>
-              <p>Recuperation des fiches TPI de l&apos;annee {year}.</p>
+              <p>Récupération des fiches {year}.</p>
             </div>
           )}
 

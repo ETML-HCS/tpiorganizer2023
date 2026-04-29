@@ -435,6 +435,16 @@
   color: #475569;
 }
 
+.slot-queue-chip {
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
 .slot-info > div {
   font-size: 0.9rem;
 }
@@ -455,6 +465,54 @@
 .slot-room,
 .voter-role {
   color: #475569;
+}
+
+.slot-time > span {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slot-time-detail {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.hover-detail {
+  position: relative;
+  cursor: help;
+}
+
+.hover-detail::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  white-space: pre-line;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.hover-detail:hover::after,
+.hover-detail:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .slot-icon {
@@ -984,4 +1042,32 @@
     padding-left: 14px;
     padding-right: 14px;
   }
+}
+
+/* Final module harmonization */
+.voting-panel,
+.voting-panel .panel-header,
+.voting-panel .vote-card,
+.voting-panel .voting-list,
+.special-request-panel,
+.special-request-field input,
+.special-request-field textarea {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.voting-panel .panel-header {
+  padding: 18px;
+}
+
+.voting-panel .vote-card:hover {
+  transform: none;
+  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+}
+
+.voting-panel h2,
+.voting-panel h3 {
+  letter-spacing: 0;
 }

@@ -17,6 +17,7 @@ function makeSiteContext(overrides = {}) {
     roomNames: ['A101'],
     roomCapacityByName: new Map([['A101', 18]]),
     numSlots: 4,
+    maxConsecutiveTpi: 4,
     tpiTimeMinutes: 60,
     breaklineMinutes: 10,
     firstTpiStartTime: '08:00',
@@ -140,7 +141,7 @@ test('buildAutomaticSlotDocuments cree une salle supplementaire si un seul crene
   )
 })
 
-test('computeAutomaticAssignments etale une 5e soutenance sur une autre date pour eviter 5 TPI consecutifs', () => {
+test('computeAutomaticAssignments etale une 5e défense sur une autre date pour eviter 5 TPI consecutifs', () => {
   const siteContext = makeSiteContext({
     numSlots: 4
   })
@@ -165,6 +166,95 @@ test('computeAutomaticAssignments etale une 5e soutenance sur une autre date pou
   assert.equal(assignedDates.size, 2)
   assert.ok(assignedDates.has('2026-06-10'))
   assert.ok(assignedDates.has('2026-06-11'))
+})
+
+test('computeAutomaticAssignments respecte la limite configurable de TPI consecutifs du site', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 4,
+    maxConsecutiveTpi: 2
+  })
+  const sharedExpert = makeParticipant('expert-shared', 'Expert Shared', { role: 'expert1' })
+  const tasks = Array.from({ length: 3 }, (_, index) =>
+    makeTask(index + 1, siteContext, {
+      participants: [
+        makeParticipant(`cand-${index + 1}`, `Candidate ${index + 1}`, { role: 'candidat' }),
+        sharedExpert,
+        makeParticipant(`expert-b-${index + 1}`, `Expert B ${index + 1}`, { role: 'expert2' }),
+        makeParticipant(`boss-${index + 1}`, `Boss ${index + 1}`, { role: 'chefProjet' })
+      ]
+    })
+  )
+
+  const result = computeAutomaticAssignments(tasks)
+  const assignedPeriods = result.assignments
+    .map((entry) => entry.placement.period)
+    .sort((left, right) => left - right)
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments.length, 3)
+  assert.deepEqual(assignedPeriods, [1, 2, 4])
+})
+
+test('computeAutomaticAssignments passe en manuel quand la limite consecutive ne laisse aucun creneau', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 3,
+    maxConsecutiveTpi: 2
+  })
+  const sharedExpert = makeParticipant('expert-shared', 'Expert Shared', { role: 'expert1' })
+  const tasks = Array.from({ length: 3 }, (_, index) =>
+    makeTask(index + 1, siteContext, {
+      participants: [
+        makeParticipant(`cand-${index + 1}`, `Candidate ${index + 1}`, { role: 'candidat' }),
+        sharedExpert,
+        makeParticipant(`expert-b-${index + 1}`, `Expert B ${index + 1}`, { role: 'expert2' }),
+        makeParticipant(`boss-${index + 1}`, `Boss ${index + 1}`, { role: 'chefProjet' })
+      ]
+    })
+  )
+
+  const result = computeAutomaticAssignments(tasks)
+
+  assert.equal(result.assignments.length, 2)
+  assert.equal(result.manualRequired.length, 1)
+  assert.match(result.manualRequired[0].reason, /Aucun créneau valide/i)
+})
+
+test('computeAutomaticAssignments interdit le meme participant sur deux salles au meme moment', () => {
+  const siteContext = makeSiteContext({
+    roomNames: ['A101', 'A102'],
+    roomCapacityByName: new Map([
+      ['A101', 18],
+      ['A102', 18]
+    ]),
+    numSlots: 2
+  })
+  const sharedExpert = makeParticipant('expert-shared', 'Expert Shared', { role: 'expert1' })
+  const tasks = [
+    makeTask(1, siteContext, {
+      participants: [
+        makeParticipant('cand-1', 'Candidate One', { role: 'candidat' }),
+        sharedExpert,
+        makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+        makeParticipant('boss-1', 'Boss One', { role: 'chefProjet' })
+      ]
+    }),
+    makeTask(2, siteContext, {
+      participants: [
+        makeParticipant('cand-2', 'Candidate Two', { role: 'candidat' }),
+        sharedExpert,
+        makeParticipant('expert-b-2', 'Expert B Two', { role: 'expert2' }),
+        makeParticipant('boss-2', 'Boss Two', { role: 'chefProjet' })
+      ]
+    })
+  ]
+
+  const result = computeAutomaticAssignments(tasks)
+  const assignedPeriods = result.assignments
+    .map((entry) => entry.placement.period)
+    .sort((left, right) => left - right)
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.deepEqual(assignedPeriods, [1, 2])
 })
 
 test('computeAutomaticAssignments privilegie une date ideale quand deux TPI se disputent les memes creneaux', () => {
@@ -235,6 +325,52 @@ test('computeAutomaticAssignments privilegie un creneau exact quand la date est 
   assert.equal(result.assignments.length, 2)
   assert.equal(assignmentByReference.get('TPI-2026-001'), 2)
   assert.equal(assignmentByReference.get('TPI-2026-002'), 1)
+})
+
+test('computeAutomaticAssignments respecte les indisponibilites declarees des participants', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 2
+  })
+  const task = makeTask(1, siteContext, {
+    participants: [
+      makeParticipant('cand-1', 'Candidate One', {
+        role: 'candidat',
+        isAvailableOn: (_date, period) => Number(period) === 2
+      }),
+      makeParticipant('expert-a-1', 'Expert A One', { role: 'expert1' }),
+      makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+      makeParticipant('boss-1', 'Boss One', { role: 'chefProjet' })
+    ]
+  })
+
+  const result = computeAutomaticAssignments([task])
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments.length, 1)
+  assert.equal(result.assignments[0].placement.period, 2)
+})
+
+test('computeAutomaticAssignments marque manuel quand un participant est indisponible partout', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 2
+  })
+  const task = makeTask(1, siteContext, {
+    participants: [
+      makeParticipant('cand-1', 'Candidate One', {
+        role: 'candidat',
+        isAvailableOn: () => false
+      }),
+      makeParticipant('expert-a-1', 'Expert A One', { role: 'expert1' }),
+      makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+      makeParticipant('boss-1', 'Boss One', { role: 'chefProjet' })
+    ]
+  })
+
+  const result = computeAutomaticAssignments([task])
+
+  assert.equal(result.assignments.length, 0)
+  assert.equal(result.manualRequired.length, 1)
+  assert.equal(result.manualRequired[0].reference, 'TPI-2026-001')
 })
 
 test('computeAutomaticAssignments treats participants without declared availability as unconstrained', () => {
@@ -310,6 +446,7 @@ test('buildLegacyRoomsFromAutomaticSlots reconstruit le format legacy attendu pa
   assert.equal(legacyRooms[0].site, 'ETML')
   assert.equal(legacyRooms[0].name, 'A101')
   assert.equal(legacyRooms[0].configSite.numSlots, 3)
+  assert.equal(legacyRooms[0].configSite.maxConsecutiveTpi, 4)
   assert.equal(legacyRooms[0].tpiDatas.length, 3)
   assert.equal(legacyRooms[0].tpiDatas[0].refTpi, '2163')
   assert.equal(legacyRooms[0].tpiDatas[0].id, 'TPI-2026-2163')

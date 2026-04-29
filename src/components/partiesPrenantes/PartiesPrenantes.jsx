@@ -4,16 +4,23 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import BinaryToggle from '../shared/BinaryToggle'
 import {
+  AlertIcon,
   BanIcon as DisableIcon,
   CandidateIcon as CandidateRoleIcon,
   CheckIcon,
   ChevronDownIcon,
+  ClipboardIcon,
   ExpertIcon as ExpertRoleIcon,
   MailIcon,
   MailOffIcon as NoEmailIcon,
   PencilIcon as EditIcon,
+  PlusIcon,
   ProjectLeadIcon as ChefProjetRoleIcon,
-  UserIcon
+  RefreshIcon,
+  SearchIcon,
+  UploadIcon,
+  UserIcon,
+  UsersIcon
 } from '../shared/InlineIcons'
 import { personService, planningConfigService } from '../../services/planningService'
 import { STORAGE_KEYS, YEARS_CONFIG } from '../../config/appConfig'
@@ -48,6 +55,11 @@ const WORKBENCH_TABS = [
   { value: 'draft', label: 'Complétion' },
   { value: 'import', label: 'Import' }
 ]
+const WORKBENCH_TAB_ICONS = {
+  create: PlusIcon,
+  draft: ClipboardIcon,
+  import: UploadIcon
+}
 const DRAFT_STATUS_FILTER_OPTIONS = [
   { value: 'actionable', label: 'À traiter' },
   { value: 'enrich', label: 'À enrichir' },
@@ -766,6 +778,18 @@ function parseTimeToMinutes(value = '', fallbackMinutes = 8 * 60) {
   return fallbackMinutes
 }
 
+function formatMinutesAsClockTime(value) {
+  if (!Number.isFinite(Number(value))) {
+    return ''
+  }
+
+  const safeMinutes = Math.max(0, Math.round(Number(value)))
+  const hours = Math.floor(safeMinutes / 60)
+  const minutes = safeMinutes % 60
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
 function buildPreferredSoutenanceSlotSchedule(siteConfig = {}, fallbackSlotCount = 8) {
   return {
     breaklineMinutes: Number.isFinite(Number(siteConfig?.breaklineMinutes)) && Number(siteConfig.breaklineMinutes) >= 0
@@ -781,11 +805,11 @@ function buildPreferredSoutenanceSlotSchedule(siteConfig = {}, fallbackSlotCount
   }
 }
 
-function resolvePreferredSoutenanceSlotHalfDay(period, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
+function resolvePreferredSoutenanceSlotTiming(period, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
   const normalizedPeriod = Number.parseInt(period, 10)
 
   if (!Number.isInteger(normalizedPeriod) || normalizedPeriod <= 0) {
-    return ''
+    return null
   }
 
   const firstTpiStartMinutes = parseTimeToMinutes(schedule?.firstTpiStartTime, 8 * 60)
@@ -796,8 +820,46 @@ function resolvePreferredSoutenanceSlotHalfDay(period, schedule = DEFAULT_PREFER
     ? Number(schedule.breaklineMinutes)
     : DEFAULT_PREFERRED_SLOT_SCHEDULE.breaklineMinutes
   const startMinutes = firstTpiStartMinutes + (normalizedPeriod - 1) * (tpiTimeMinutes + breaklineMinutes)
+  const endMinutes = startMinutes + tpiTimeMinutes
 
-  return startMinutes >= AFTERNOON_START_MINUTES ? 'PM' : 'AM'
+  return {
+    normalizedPeriod,
+    halfDayLabel: startMinutes >= AFTERNOON_START_MINUTES ? 'PM' : 'AM',
+    startTime: formatMinutesAsClockTime(startMinutes),
+    endTime: formatMinutesAsClockTime(endMinutes)
+  }
+}
+
+function resolvePreferredSoutenanceSlotHalfDay(period, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
+  return resolvePreferredSoutenanceSlotTiming(period, schedule)?.halfDayLabel || ''
+}
+
+function formatPreferredSoutenanceSlotOptionLabel(period, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
+  const timing = resolvePreferredSoutenanceSlotTiming(period, schedule)
+
+  if (!timing) {
+    return String(period || '')
+  }
+
+  return timing.halfDayLabel
+    ? `${timing.normalizedPeriod} · ${timing.halfDayLabel}`
+    : String(timing.normalizedPeriod)
+}
+
+function formatPreferredSoutenanceSlotHoverLabel(period, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
+  const timing = resolvePreferredSoutenanceSlotTiming(period, schedule)
+
+  if (!timing) {
+    return ''
+  }
+
+  return [
+    `Créneau ${timing.normalizedPeriod}`,
+    timing.halfDayLabel,
+    timing.startTime && timing.endTime ? `${timing.startTime}-${timing.endTime}` : ''
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function buildPreferredSoutenanceSlotOptions(slotCount, schedule = DEFAULT_PREFERRED_SLOT_SCHEDULE) {
@@ -810,7 +872,7 @@ function buildPreferredSoutenanceSlotOptions(slotCount, schedule = DEFAULT_PREFE
     return {
       value: slotValue,
       halfDayLabel,
-      label: halfDayLabel ? `${slotValue} · ${halfDayLabel}` : slotValue
+      label: formatPreferredSoutenanceSlotOptionLabel(slotValue, schedule)
     }
   })
 }
@@ -886,11 +948,8 @@ function resolvePreferredSoutenanceSlotContext(planningConfig, siteValue = '') {
       slotCount: fallbackSlotCount,
       label: '',
       slotSummary: formatPreferredSoutenanceSlotSummary(fallbackSlotOptions),
-      getSlotLabel: (slotValue) => {
-        const normalizedSlot = Number.parseInt(slotValue, 10)
-        const halfDayLabel = resolvePreferredSoutenanceSlotHalfDay(normalizedSlot, fallbackSchedule)
-        return halfDayLabel ? `${normalizedSlot} · ${halfDayLabel}` : String(slotValue)
-      }
+      getSlotLabel: (slotValue) => formatPreferredSoutenanceSlotOptionLabel(slotValue, fallbackSchedule),
+      getSlotTitle: (slotValue) => formatPreferredSoutenanceSlotHoverLabel(slotValue, fallbackSchedule)
     }
   }
 
@@ -920,11 +979,8 @@ function resolvePreferredSoutenanceSlotContext(planningConfig, siteValue = '') {
     slotCount: resolvedSlotCount,
     label: normalizeWhitespace(resolvedSiteConfig?.label || siteValue),
     slotSummary: formatPreferredSoutenanceSlotSummary(resolvedSlotOptions),
-    getSlotLabel: (slotValue) => {
-      const normalizedSlot = Number.parseInt(slotValue, 10)
-      const halfDayLabel = resolvePreferredSoutenanceSlotHalfDay(normalizedSlot, resolvedSchedule)
-      return halfDayLabel ? `${normalizedSlot} · ${halfDayLabel}` : String(slotValue)
-    }
+    getSlotLabel: (slotValue) => formatPreferredSoutenanceSlotOptionLabel(slotValue, resolvedSchedule),
+    getSlotTitle: (slotValue) => formatPreferredSoutenanceSlotHoverLabel(slotValue, resolvedSchedule)
   }
 }
 
@@ -1207,6 +1263,7 @@ function StakeholderEditorPanel({
   preferredSlotContextLabel,
   preferredSlotLabelResolver,
   preferredSlotSummary,
+  preferredSlotTitleResolver,
   handleSubmit,
   selectedPerson
 }) {
@@ -1280,7 +1337,40 @@ function StakeholderEditorPanel({
               <input value={form.phone} onChange={(event) => handleChange('phone', event.target.value)} />
             </label>
           </div>
-        </section>
+          <div className='stakeholders-toggle-row stakeholders-toggle-row--vertical'>
+            <label className='stakeholders-active-toggle'>
+              <span className='stakeholders-active-label'>Personne active</span>
+              <BinaryToggle
+                value={Boolean(form.isActive)}
+                onChange={(nextValue) => handleChange('isActive', nextValue)}
+                name='stakeholder-is-active'
+                className='stakeholders-binary-toggle'
+                ariaLabel='Personne active'
+                iconOnly
+                trueLabel='Active'
+                falseLabel='Inactive'
+                trueIcon={CheckIcon}
+                falseIcon={DisableIcon}
+              />
+            </label>
+
+            <label className='stakeholders-email-toggle'>
+              <span className='stakeholders-email-label'>Reçoit les emails</span>
+              <BinaryToggle
+                value={Boolean(form.sendEmails)}
+                onChange={(nextValue) => handleChange('sendEmails', nextValue)}
+                name='stakeholder-send-emails'
+                className='stakeholders-binary-toggle'
+                ariaLabel='Reçoit les emails automatiques'
+                iconOnly
+                trueLabel='Emails activés'
+                falseLabel='Emails désactivés'
+                trueIcon={MailIcon}
+                falseIcon={NoEmailIcon}
+              />
+            </label>
+          </div>
+          </section>
 
         <section className='stakeholders-form-section'>
           <div className='stakeholders-form-section-head'>
@@ -1297,51 +1387,64 @@ function StakeholderEditorPanel({
             </label>
             <div className='stakeholders-preferred-dates full'>
               <div className='stakeholders-preferred-dates-head'>
-                <span>Dates idéales de soutenance</span>
+                <span>Dates idéales de défense</span>
                 <small>
-                  Optionnel. Jusqu à 3 préférences prises en compte lors de la planification.
-                  {' '}
-                  Créneaux disponibles: 1 à {availablePreferredSlotCount}
-                  {preferredSlotContextLabel ? ` pour ${preferredSlotContextLabel}` : ''}.
-                  {preferredSlotSummary ? ` Repère: ${preferredSlotSummary}.` : ''}
+                  Ajouter si nécessaire 3 préférences créneau optionnel
                 </small>
               </div>
               <div className='stakeholders-preferred-dates-grid'>
-                {PREFERRED_SOUTENANCE_CHOICE_FIELDS.map(({ dateField, slotField, label }) => (
-                  <div key={dateField} className='stakeholders-preferred-date-choice'>
-                    <span className='stakeholders-preferred-date-choice-title'>{label}</span>
-                    <label>
-                      Date
-                      <input
-                        type='date'
-                        value={form[dateField]}
-                        onChange={(event) => handlePreferredChoiceDateChange(dateField, slotField, event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Créneau
-                      <select
-                        value={form[slotField]}
-                        onChange={(event) => handleChange(slotField, event.target.value)}
-                        disabled={!form[dateField]}
-                      >
-                        <option value=''>Non précisé</option>
-                        {Array.from({
-                          length: Math.max(availablePreferredSlotCount, Number.parseInt(form[slotField], 10) || 0)
-                        }, (_, index) => {
-                          const slotValue = String(index + 1)
-                          return (
-                            <option key={slotValue} value={slotValue}>
-                              {preferredSlotLabelResolver(slotValue)}
-                            </option>
-                          )
-                        })}
-                      </select>
-                    </label>
-                  </div>
-                ))}
+                {PREFERRED_SOUTENANCE_CHOICE_FIELDS.map(({ dateField, slotField }) => {
+                  const selectedSlotTitle = preferredSlotTitleResolver(form[slotField])
+                  const slotSelectTitle = form[slotField] && selectedSlotTitle
+                    ? selectedSlotTitle
+                    : preferredSlotSummary
+                      ? `Repère: ${preferredSlotSummary}`
+                      : 'Sélectionnez un créneau.'
+
+                  return (
+                    <div key={dateField} className='stakeholders-preferred-date-choice'>
+                      <label>
+                        Date
+                        <input
+                          type='date'
+                          value={form[dateField]}
+                          onChange={(event) => handlePreferredChoiceDateChange(dateField, slotField, event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Créneau
+                        <select
+                          value={form[slotField]}
+                          onChange={(event) => handleChange(slotField, event.target.value)}
+                          disabled={!form[dateField]}
+                          title={slotSelectTitle}
+                        >
+                          <option value=''>Non précisé</option>
+                          {Array.from({
+                            length: Math.max(availablePreferredSlotCount, Number.parseInt(form[slotField], 10) || 0)
+                          }, (_, index) => {
+                            const slotValue = String(index + 1)
+                            return (
+                              <option
+                                key={slotValue}
+                                value={slotValue}
+                                title={preferredSlotTitleResolver(slotValue)}
+                              >
+                                {preferredSlotLabelResolver(slotValue)}
+                              </option>
+                            )
+                          })}
+                        </select>
+                      </label>
+                    </div>
+                  )
+                })}
               </div>
             </div>
+          </div>
+          </section>
+
+          <section className='stakeholders-form-section'>
             <div className='stakeholders-form-section-head full'>
               <h3>Rôles</h3>
               <span className='stakeholders-role-hint'>Sélectionnez un ou plusieurs rôles</span>
@@ -1384,42 +1487,7 @@ function StakeholderEditorPanel({
                 )
               })}
             </div>
-          </div>
-        </section>
-
-        <div className='stakeholders-toggle-row'>
-          <label className='stakeholders-active-toggle'>
-            <span className='stakeholders-active-label'>Personne active</span>
-            <BinaryToggle
-              value={Boolean(form.isActive)}
-              onChange={(nextValue) => handleChange('isActive', nextValue)}
-              name='stakeholder-is-active'
-              className='stakeholders-binary-toggle'
-              ariaLabel='Personne active'
-              iconOnly
-              trueLabel='Active'
-              falseLabel='Inactive'
-              trueIcon={CheckIcon}
-              falseIcon={DisableIcon}
-            />
-          </label>
-
-          <label className='stakeholders-email-toggle'>
-            <span className='stakeholders-email-label'>Reçoit les emails</span>
-            <BinaryToggle
-              value={Boolean(form.sendEmails)}
-              onChange={(nextValue) => handleChange('sendEmails', nextValue)}
-              name='stakeholder-send-emails'
-              className='stakeholders-binary-toggle'
-              ariaLabel='Reçoit les emails automatiques'
-              iconOnly
-              trueLabel='Emails activés'
-              falseLabel='Emails désactivés'
-              trueIcon={MailIcon}
-              falseIcon={NoEmailIcon}
-            />
-          </label>
-        </div>
+          </section>
 
         {/* Années candidat - visible uniquement si le rôle candidat est sélectionné */}
         {form.roles.includes('candidat') && (
@@ -1494,8 +1562,7 @@ function StakeholderDraftPanel({
         <div className='stakeholders-draft-panel-copy'>
           <h2>Complétion depuis Gestion TPI</h2>
           <p>
-            Les TPIs peuvent être importés avant la création complète des fiches.
-            Finalisez ici les emails, rôles et années candidates manquantes.
+            Finalisez emails, rôles et années manquants.
           </p>
         </div>
         <div className='stakeholders-draft-actions-top'>
@@ -1672,8 +1739,7 @@ function StakeholderImportPanel({
         <div className='stakeholders-import-head-copy'>
           <h2>Import utilisateurs</h2>
           <p>
-            Chargez un CSV/TSV ou collez son contenu. Les rôles cochés et le site par défaut
-            sont appliqués aux lignes importées.
+            Chargez un CSV/TSV, puis appliquez rôles et site.
           </p>
         </div>
         <div className='stakeholders-import-actions-top'>
@@ -2264,6 +2330,53 @@ const PartiesPrenantes = () => {
       people.filter((person) => duplicateIdentitySet.has(getPersonIdentityKey(person)))
     )
   }, [duplicateIdentitySet, people, showOnlyDuplicates])
+
+  const stakeholderOverviewStats = useMemo(() => {
+    const activePeopleCount = people.filter((person) => person?.isActive !== false).length
+    const hasActiveFilters = Boolean(search.trim() || roleFilter || siteFilter || emailFilter || showOnlyDuplicates)
+
+    return [
+      {
+        label: 'Fiches',
+        value: people.length,
+        detail: `${activePeopleCount} active${activePeopleCount === 1 ? '' : 's'}`,
+        tone: 'primary',
+        Icon: UsersIcon
+      },
+      {
+        label: 'À compléter',
+        value: draftStatusCounts.actionable,
+        detail: `${draftStatusCounts.resolved} couverte${draftStatusCounts.resolved === 1 ? '' : 's'}`,
+        tone: draftStatusCounts.actionable > 0 ? 'warning' : 'success',
+        Icon: ClipboardIcon
+      },
+      {
+        label: 'Doublons',
+        value: duplicateGroups.length,
+        detail: showOnlyDuplicates ? 'vue dédiée' : 'groupes détectés',
+        tone: duplicateGroups.length > 0 ? 'duplicate' : 'neutral',
+        Icon: AlertIcon
+      },
+      {
+        label: 'Affichées',
+        value: visiblePeople.length,
+        detail: hasActiveFilters ? 'après filtres' : 'liste actuelle',
+        tone: 'neutral',
+        Icon: SearchIcon
+      }
+    ]
+  }, [
+    draftStatusCounts.actionable,
+    draftStatusCounts.resolved,
+    duplicateGroups.length,
+    emailFilter,
+    people,
+    roleFilter,
+    search,
+    showOnlyDuplicates,
+    siteFilter,
+    visiblePeople.length
+  ])
 
   const mergePreviewData = useMemo(() => {
     if (!mergePreview) {
@@ -3027,9 +3140,26 @@ const PartiesPrenantes = () => {
           <span className='stakeholders-eyebrow'>Référentiel</span>
           <h1>Parties prenantes</h1>
           <p>
-            Référentiel unique des candidats, experts et chefs de projet.
-            Chaque fiche est identifiée par un email unique.
+            Pilotez les contacts, rôles, brouillons Gestion TPI et doublons depuis un seul espace.
           </p>
+        </div>
+        <div className='stakeholders-page-stats' aria-label='Synthèse des parties prenantes'>
+          {stakeholderOverviewStats.map((stat) => {
+            const StatIcon = stat.Icon
+
+            return (
+              <article key={stat.label} className={`stakeholders-page-stat is-${stat.tone}`}>
+                <span className='stakeholders-page-stat-icon-shell' aria-hidden='true'>
+                  <StatIcon className='stakeholders-page-stat-icon' />
+                </span>
+                <span className='stakeholders-page-stat-copy'>
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                  <small>{stat.detail}</small>
+                </span>
+              </article>
+            )
+          })}
         </div>
       </header>
 
@@ -3060,6 +3190,7 @@ const PartiesPrenantes = () => {
           <div className='stakeholders-workbench-tabs' role='tablist' aria-label='Création, complétion et import'>
             {WORKBENCH_TABS.map((tab) => {
               const isActive = activeStakeholderTab === tab.value
+              const TabIcon = WORKBENCH_TAB_ICONS[tab.value] || UserIcon
               const tabCount = tab.value === 'draft'
                 ? draftStatusCounts.actionable > 0
                   ? draftStatusCounts.actionable
@@ -3077,6 +3208,7 @@ const PartiesPrenantes = () => {
                   aria-controls={`stakeholders-panel-${tab.value}`}
                   onClick={() => handleTabChange(tab.value)}
                 >
+                  <TabIcon className='stakeholders-workbench-tab-icon' />
                   <span>{tab.label}</span>
                   {tabCount > 0 ? (
                     <span className='stakeholders-workbench-tab-count'>{tabCount}</span>
@@ -3113,6 +3245,7 @@ const PartiesPrenantes = () => {
                   preferredSlotContextLabel={preferredSoutenanceSlotContext.label}
                   preferredSlotLabelResolver={preferredSoutenanceSlotContext.getSlotLabel}
                   preferredSlotSummary={preferredSoutenanceSlotContext.slotSummary}
+                  preferredSlotTitleResolver={preferredSoutenanceSlotContext.getSlotTitle}
                   handleSubmit={handleSubmit}
                   selectedPerson={selectedPerson}
                 />
@@ -3162,54 +3295,86 @@ const PartiesPrenantes = () => {
         </div>
       </section>
 
-      <section className='stakeholders-filters'>
-        <input
-          type='search'
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder='Rechercher un nom, email, entreprise ou ID E-001'
-        />
-        <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
-          <option value=''>Tous les rôles</option>
-          {ROLE_OPTIONS.map((role) => (
-            <option key={role.value} value={role.value}>
-              {role.label}
-            </option>
-          ))}
-        </select>
-        <select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}>
-          <option value=''>Tous les sites</option>
-          {SITE_OPTIONS.map((site) => (
-            <option key={site} value={site}>
-              {site}
-            </option>
-          ))}
-        </select>
-        <select value={emailFilter} onChange={(event) => setEmailFilter(event.target.value)}>
-          <option value=''>Tous (emails)</option>
-          <option value='yes'>Reçoit emails</option>
-          <option value='no'>Sans emails</option>
-        </select>
-        <button
-          type='button'
-          className={`secondary${showOnlyDuplicates ? ' is-active' : ''}`}
-          onClick={toggleDuplicateView}
-          disabled={isLoading && people.length === 0}
-        >
-          {showOnlyDuplicates
-            ? `Tous les contacts${people.length > 0 ? ` (${people.length})` : ''}`
-            : `Doublons${duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ''}`}
-        </button>
-        <button
-          type='button'
-          className={`secondary${isMergeMode ? ' is-active' : ''}`}
-          onClick={handleToggleMergeMode}
-        >
-          {isMergeMode ? 'Quitter fusion' : 'Mode fusion'}
-        </button>
-        <button type='button' className='secondary' onClick={() => void loadPeople()}>
-          Rechercher
-        </button>
+      <section className='stakeholders-filters' aria-label='Filtres des parties prenantes'>
+        <label className='stakeholders-filter-search'>
+          <span className='sr-only'>Recherche</span>
+          <SearchIcon className='stakeholders-filter-search-icon' />
+          <input
+            type='search'
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder='Nom, email, entreprise ou ID E-001'
+          />
+        </label>
+        <label className='stakeholders-filter-field'>
+          <span>Rôle</span>
+          <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+            <option value=''>Tous les rôles</option>
+            {ROLE_OPTIONS.map((role) => (
+              <option key={role.value} value={role.value}>
+                {role.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className='stakeholders-filter-field'>
+          <span>Site</span>
+          <select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}>
+            <option value=''>Tous les sites</option>
+            {SITE_OPTIONS.map((site) => (
+              <option key={site} value={site}>
+                {site}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className='stakeholders-filter-field'>
+          <span>Emails</span>
+          <select value={emailFilter} onChange={(event) => setEmailFilter(event.target.value)}>
+            <option value=''>Tous</option>
+            <option value='yes'>Reçoit emails</option>
+            <option value='no'>Sans emails</option>
+          </select>
+        </label>
+        <div className='stakeholders-filter-actions'>
+          <button
+            type='button'
+            className={`secondary${showOnlyDuplicates ? ' is-active' : ''} stakeholders-filter-icon-button`}
+            onClick={toggleDuplicateView}
+            disabled={isLoading && people.length === 0}
+            title={showOnlyDuplicates ? `Voir toutes les parties prenantes${people.length > 0 ? ` (${people.length})` : ''}` : `Afficher les doublons${duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ''}`}
+            aria-label={showOnlyDuplicates ? `Voir toutes les parties prenantes${people.length > 0 ? ` (${people.length})` : ''}` : `Afficher les doublons${duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ''}`}
+          >
+            <AlertIcon className='stakeholders-button-icon' />
+            <span className='sr-only'>
+              {showOnlyDuplicates
+                ? `Tous${people.length > 0 ? ` (${people.length})` : ''}`
+                : `Doublons${duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ''}`}
+            </span>
+          </button>
+          <button
+            type='button'
+            className={`secondary${isMergeMode ? ' is-active' : ''} stakeholders-filter-icon-button`}
+            onClick={handleToggleMergeMode}
+            title={isMergeMode ? 'Quitter le mode fusion' : 'Mode fusion'}
+            aria-label={isMergeMode ? 'Quitter le mode fusion' : 'Mode fusion'}
+          >
+            <UsersIcon className='stakeholders-button-icon' />
+            <span className='sr-only'>
+              {isMergeMode ? 'Quitter fusion' : 'Mode fusion'}
+            </span>
+          </button>
+          <button
+            type='button'
+            className='secondary stakeholders-filter-icon-button'
+            onClick={() => void loadPeople()}
+            title='Rechercher'
+            aria-label='Rechercher'
+          >
+            <RefreshIcon className='stakeholders-button-icon' />
+            <span className='sr-only'>Rechercher</span>
+          </button>
+        </div>
       </section>
 
       {error && (
@@ -3245,7 +3410,7 @@ const PartiesPrenantes = () => {
                 <span>
                   {mergeSelectionPeople.length > 0
                     ? `${mergeSelectionPeople.length} fiche${mergeSelectionPeople.length > 1 ? 's' : ''} sélectionnée${mergeSelectionPeople.length > 1 ? 's' : ''} pour ${getPersonDisplayName(mergePrimaryPerson) || 'une fusion manuelle'}.`
-                    : 'Coche les fiches à fusionner, puis choisis la fiche à conserver. Les doublons exacts restent signalés, mais la sélection est manuelle.'}
+                    : 'Coche les fiches, puis choisis celle à conserver.'}
                 </span>
                 {mergePrimaryPerson ? (
                   <span className='stakeholders-merge-toolbar-primary'>

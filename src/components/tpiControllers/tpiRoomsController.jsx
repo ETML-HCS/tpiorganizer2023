@@ -1,13 +1,8 @@
 import axios from 'axios'
+import { API_URL } from '../../config/appConfig'
 import { soutenancesService } from '../../services/apiService'
 
-// Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === 'true'
-
-// Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = debugMode
-  ? process.env.REACT_APP_API_URL_TRUE
-  : process.env.REACT_APP_API_URL_FALSE
+const apiUrl = API_URL
 
 const saveTpiRoomUrl = `${apiUrl}/api/save-tpi-rooms`
 const getTpiRoomsUrl = `${apiUrl}/api/get-tpi-rooms`
@@ -104,7 +99,7 @@ export const publishSoutenancesFromPlanning = async year => {
     return await soutenancesService.publishFromPlanning(year)
   } catch (error) {
     console.error(
-      `Erreur réseau lors de la publication des soutenances depuis le planning pour l'année ${year}: ${error.message}`
+      `Erreur réseau lors de la publication des défenses depuis le planning pour l'année ${year}: ${error.message}`
     )
     throw error
   }
@@ -133,10 +128,8 @@ export const updateTpiRoom = async (roomId, roomData) => {
 
   try {
     // Utilisez l'URL complète pour l'endpoint de mise à jour
-    console.log('updateTpiRoom: ', roomId, ' ici data: ', roomData)
-
     const response = await axios.put(
-      `${apiUrl}/update-tpi-room/${roomId}`,
+      `${apiUrl}/api/update-tpi-room/${roomId}`,
       roomData
     )
 
@@ -163,9 +156,8 @@ export const updateTpiRoom = async (roomId, roomData) => {
 }
 
 export const deleteTpiRoom = async roomId => {
-  console.log(roomId)
   try {
-    const response = await axios.delete(`${apiUrl}/delete-tpi-room/${roomId}`)
+    const response = await axios.delete(`${apiUrl}/api/delete-tpi-room/${roomId}`)
     return response.data
   } catch (error) {
     console.error(

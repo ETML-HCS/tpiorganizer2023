@@ -13,7 +13,7 @@ import {
   SaveIcon
 } from '../shared/InlineIcons.jsx'
 import { getPlanningClassDisplayInfo } from '../tpiPlanning/planningClassUtils.js'
-import { getActivePlanningSiteLabels, getPlanningPerimeterState } from '../../utils/planningScopeUtils.js'
+import { getPlanningPerimeterState } from '../../utils/planningScopeUtils.js'
 import {
   buildTpiTagProfile,
   formatDisplayDate,
@@ -28,6 +28,7 @@ import {
   normalizeTpiForSave,
   splitTags
 } from './tpiManagementUtils.js'
+import { ROUTES } from '../../config/appConfig'
 
 const DISPLAY_FIELDS = [
   { key: 'showTagsPreview', label: 'Tags' },
@@ -105,10 +106,10 @@ const buildStakeholderDetailsLink = (tpi, field, year) => {
       focus: tpiRef,
       edit: '1'
     })
-    params.set('returnTo', `/gestionTPI?${returnToParams.toString()}`)
+    params.set('returnTo', `${ROUTES.GESTION_TPI}?${returnToParams.toString()}`)
   }
 
-  return `/partiesPrenantes?${params.toString()}`
+  return `${ROUTES.PARTIES_PRENANTES}?${params.toString()}`
 }
 
 const StakeholderLink = ({ tpi, field, year, children }) => {
@@ -123,6 +124,9 @@ const StakeholderLink = ({ tpi, field, year, children }) => {
     <Link
       to={buildStakeholderDetailsLink(tpi, field, year)}
       className='tpi-stakeholder-link'
+      aria-label={personId
+        ? `Ouvrir la fiche de ${personName}`
+        : 'Ouvrir la recherche de la personne dans Parties prenantes'}
       title={personId ? 'Ouvrir la fiche de la personne' : 'Ouvrir la recherche de la personne dans Parties prenantes'}
     >
       {children}
@@ -285,7 +289,7 @@ const TpiList = ({
     })
 
     return [
-      { key: 'all', label: 'Tous', count: profiles.length },
+      { key: 'all', label: 'Tout', count: profiles.length },
       ...Array.from(counts.values()).sort((left, right) => {
         if (right.count !== left.count) {
           return right.count - left.count
@@ -317,21 +321,6 @@ const TpiList = ({
     [categoryFilter, planningScopeFilter, profiles, searchTerm, stakeholderFilter]
   )
 
-  const summaryStats = useMemo(() => {
-    const uniqueAxes = new Set()
-    const uniqueTags = new Set()
-
-    profiles.forEach(({ profile }) => {
-      profile.categoryKeys.forEach((key) => uniqueAxes.add(key))
-      profile.rawTags.forEach((tag) => uniqueTags.add(tag))
-    })
-
-    return {
-      axes: uniqueAxes.size,
-      tags: uniqueTags.size
-    }
-  }, [profiles])
-
   const missingStakeholderCount = useMemo(
     () => profiles.filter(({ planningPerimeter, missingStakeholders }) => planningPerimeter.isPlanifiable && missingStakeholders.length > 0).length,
     [profiles]
@@ -348,11 +337,6 @@ const TpiList = ({
     () => profiles.filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable).length,
     [profiles]
   )
-  const activePlanningSiteLabels = useMemo(
-    () => getActivePlanningSiteLabels(planningSiteConfigs),
-    [planningSiteConfigs]
-  )
-
   const hasMissingStakeholderFilter = missingStakeholderCount > 0
   const hasStakeholderIssueFilter = stakeholderIssueCount > 0
   const hasPlanningScopeFilter = outOfScopeCount > 0
@@ -388,6 +372,36 @@ const TpiList = ({
     () => getEffectiveCardColumns(cardGridWidth, cardColumns),
     [cardColumns, cardGridWidth]
   )
+  const activeFilterLabels = useMemo(() => {
+    const labels = []
+    const activeCategory = categoryOptions.find((option) => option.key === categoryFilter)
+
+    if (activeCategory && activeCategory.key !== 'all') {
+      labels.push(activeCategory.label)
+    }
+
+    if (planningScopeFilter === 'planifiable') {
+      labels.push('Planif.')
+    }
+
+    if (planningScopeFilter === 'out-of-scope') {
+      labels.push('Hors pér.')
+    }
+
+    if (stakeholderFilter === 'missing') {
+      labels.push('PP manquantes')
+    }
+
+    if (stakeholderFilter === 'issues') {
+      labels.push('PP incorrectes')
+    }
+
+    if (searchTerm) {
+      labels.push(`Recherche "${searchTerm}"`)
+    }
+
+    return labels
+  }, [categoryFilter, categoryOptions, planningScopeFilter, searchTerm, stakeholderFilter])
 
   const stakeholderFields = {
     candidat: { name: 'candidat', idName: 'candidatPersonId', role: 'candidat' },
@@ -733,16 +747,20 @@ const TpiList = ({
   const normalizedFocusedRef = normalizeManagedRef(focusedTpiRef)
   return (
     <div className='tpi-list-shell'>
-      <div className='tpi-toolbar-row'>
-        <div className='tpi-display-options' aria-label='Affichage'>
-          <div className='tpi-display-controls-top'>
-            <span>Affichage</span>
+      <div className='tpi-toolbar-row' aria-label='Pilotage de la liste'>
+        <section className='tpi-control-panel tpi-control-panel-view' aria-label='Affichage'>
+          <div className='tpi-control-panel-head'>
+            <div>
+              <span>Vue</span>
+              <h3>Affichage</h3>
+            </div>
 
-            <div className='tpi-display-toggle' role='tablist' aria-label='Mode affichage'>
+            <div className='tpi-display-toggle' role='group' aria-label='Mode affichage'>
               <button
                 type='button'
                 className={displayMode === 'cards' ? 'active' : ''}
                 onClick={() => setDisplayMode('cards')}
+                aria-pressed={displayMode === 'cards'}
               >
                 Cartes
               </button>
@@ -750,13 +768,17 @@ const TpiList = ({
                 type='button'
                 className={displayMode === 'table' ? 'active' : ''}
                 onClick={() => setDisplayMode('table')}
+                aria-pressed={displayMode === 'table'}
               >
                 Tableau
               </button>
             </div>
+          </div>
 
+          <div className='tpi-display-controls-top'>
             {displayMode === 'cards' && (
               <div className='tpi-density-toggle' aria-label='Cartes par ligne'>
+                <span>Densité</span>
                 {CARD_LAYOUT_OPTIONS.map((option) => (
                   <button
                     key={option}
@@ -777,9 +799,10 @@ const TpiList = ({
                 className={`tpi-bulk-mode-toggle ${isBulkMode ? 'active' : ''}`.trim()}
                 onClick={handleToggleBulkMode}
                 aria-pressed={isBulkMode}
+                aria-label={isBulkMode ? 'Fermer le mode lot' : 'Mode lot'}
               >
                 <ListIcon className='tpi-action-icon' />
-                <span>{isBulkMode ? 'Fermer le lot' : 'Édition multiple'}</span>
+                <span>{isBulkMode ? '×' : 'Lot'}</span>
               </button>
 
               {selectedCount > 0 ? (
@@ -792,7 +815,8 @@ const TpiList = ({
             </div>
           </div>
 
-          <div className='tpi-display-controls-bottom'>
+          <div className='tpi-display-controls-bottom' aria-label='Champs visibles'>
+            <span>Champs</span>
             {DISPLAY_FIELDS.map((field) => (
               <label key={field.key} className='tpi-option-toggle'>
                 <input
@@ -804,8 +828,23 @@ const TpiList = ({
               </label>
             ))}
           </div>
+        </section>
 
-          {hasStakeholderIssueFilter && (
+        <section className='tpi-control-panel tpi-control-panel-quality' aria-label='Qualité'>
+          <div className='tpi-control-panel-head'>
+            <div>
+              <span>Contrôles</span>
+              <h3>Qualité</h3>
+            </div>
+
+            {hasActiveFilters && (
+              <button type='button' className='tpi-clear-filters-button' onClick={clearFilters}>
+                Effacer
+              </button>
+            )}
+          </div>
+
+          {hasStakeholderIssueFilter ? (
             <div
               className='tpi-display-controls-stakeholder'
               aria-label='Filtre parties prenantes'
@@ -838,9 +877,11 @@ const TpiList = ({
                 <strong>{profiles.length}</strong>
               </button>
             </div>
+          ) : (
+            <span className='tpi-control-empty'>Parties prenantes complètes</span>
           )}
 
-          {hasPlanningScopeFilter && (
+          {hasPlanningScopeFilter ? (
             <div
               className='tpi-display-controls-planning'
               aria-label='Filtre périmètre planning'
@@ -851,7 +892,7 @@ const TpiList = ({
                 className={planningScopeFilter === 'planifiable' ? 'active' : ''}
                 onClick={() => setPlanningScopeFilter('planifiable')}
               >
-                À planifier
+                Planif.
                 <strong>{planifiableCount}</strong>
               </button>
               <button
@@ -859,7 +900,7 @@ const TpiList = ({
                 className={planningScopeFilter === 'out-of-scope' ? 'active' : ''}
                 onClick={() => setPlanningScopeFilter('out-of-scope')}
               >
-                Hors périmètre
+                Hors pér.
                 <strong>{outOfScopeCount}</strong>
               </button>
               <button
@@ -867,77 +908,57 @@ const TpiList = ({
                 className={planningScopeFilter === 'all' ? 'active' : ''}
                 onClick={() => setPlanningScopeFilter('all')}
               >
-                Toutes
+                Tout
                 <strong>{profiles.length}</strong>
               </button>
             </div>
+          ) : (
+            <span className='tpi-control-empty'>Périmètre planning complet</span>
           )}
-        </div>
+        </section>
 
-        <div className='tpi-category-strip tpi-axis-strip' aria-label='Filtre par axe'>
-          <span>Axes</span>
-          {categoryOptions.map((option) => (
-            <button
-              key={option.key}
-              type='button'
-              className={categoryFilter === option.key ? 'active' : ''}
-              onClick={() => setCategoryFilter(option.key)}
-            >
-              {option.label}
-              <strong>{option.count}</strong>
-            </button>
-          ))}
-          {hasActiveFilters && (
-            <button type='button' className='clear' onClick={clearFilters}>
-              Effacer
-            </button>
-          )}
-        </div>
-      </div>
-
-      {outOfScopeCount > 0 && (
-        <div className='tpi-planning-scope-banner'>
-          <div>
-            <strong>{outOfScopeCount} fiche(s) hors planification</strong>
-            <p>
-              Ces fiches ont un site hors de `Configuration Sites` pour {year}. Elles restent éditables ici,
-              mais ne sont pas comptées dans `PP manquantes` ou `PP incorrectes`.
-            </p>
-            {activePlanningSiteLabels.length > 0 ? (
-              <p className='tpi-planning-scope-banner-sites'>
-                Sites actifs: {activePlanningSiteLabels.join(', ')}
-              </p>
-            ) : null}
+        <section className='tpi-control-panel tpi-control-panel-axes' aria-label='Axes'>
+          <div className='tpi-control-panel-head'>
+            <div>
+              <span>Typologie</span>
+              <h3>Axes</h3>
+            </div>
           </div>
-        </div>
-      )}
 
-      <div className='tpi-list-mini-stats'>
-        <span>{summaryStats.axes} axes distincts</span>
-        <span>{summaryStats.tags} tags nettoyés</span>
-        <span>{planifiableCount} fiche(s) dans le périmètre Planning</span>
-        {outOfScopeCount > 0 ? (
-          <span>{outOfScopeCount} fiche(s) hors périmètre</span>
-        ) : null}
-        {hasMissingStakeholderFilter ? (
-          <span>{missingStakeholderCount} fiche(s) avec PP manquantes</span>
-        ) : null}
-        {hasStakeholderIssueFilter ? (
-          <span>{stakeholderIssueCount} fiche(s) avec PP incorrectes</span>
-        ) : null}
+          <div className='tpi-category-strip tpi-axis-strip' aria-label='Filtre par axe'>
+            {categoryOptions.map((option) => (
+              <button
+                key={option.key}
+                type='button'
+                className={categoryFilter === option.key ? 'active' : ''}
+                onClick={() => setCategoryFilter(option.key)}
+              >
+                {option.label}
+                <strong>{option.count}</strong>
+              </button>
+            ))}
+          </div>
+        </section>
       </div>
+
+      {activeFilterLabels.length > 0 ? (
+        <div className='tpi-list-mini-stats' aria-label='Filtres actifs'>
+          {activeFilterLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+      ) : null}
 
       {isBulkMode ? (
         <section className='tpi-bulk-editor-shell'>
           <div className='tpi-bulk-editor-head'>
             <div>
-              <span className='tpi-management-toolbar-label'>Édition multiple</span>
+              <span className='tpi-management-toolbar-label'>Lot</span>
               <h3>{selectedCount > 0 ? `${selectedCount} fiche(s) sélectionnée(s)` : 'Sélection en attente'}</h3>
             </div>
 
             <p>
-              Coche les fiches à modifier, puis active uniquement les champs à propager.
-              Un champ coché avec une valeur vide efface la donnée sur la sélection.
+              Coche les fiches puis applique.
             </p>
           </div>
 
@@ -1047,7 +1068,7 @@ const TpiList = ({
               <span className='tpi-management-toolbar-label'>Edition</span>
               <h2>TPI {editingTpiId}</h2>
             </div>
-            <p>Les modifications sont sauvegardees dans la collection de l&apos;annee active.</p>
+            <p>Sauvegarde dans l&apos;année active.</p>
           </div>
 
           <TpiForm
@@ -1065,7 +1086,7 @@ const TpiList = ({
       {filteredProfiles.length === 0 ? (
         <div className='tpi-management-state-card empty'>
           <h3>Aucun TPI à afficher</h3>
-          <p>Elargissez la recherche ou retirez le filtre actif pour retrouver les fiches.</p>
+          <p>Modifiez la recherche ou les filtres.</p>
         </div>
       ) : displayMode === 'cards' ? (
         <div
@@ -1091,11 +1112,21 @@ const TpiList = ({
             const missingStakeholderLinks = stakeholderIssues.missingLinks
             const isFocused = normalizedFocusedRef && normalizeManagedRef(tpi.refTpi) === normalizedFocusedRef
             const isSelected = selectedRefSet.has(normalizeManagedRef(tpi.refTpi))
+            const cardStateClass = !planningPerimeter.isPlanifiable
+              ? 'is-out-of-scope'
+              : stakeholderIssues.hasIssues
+                ? 'has-stakeholder-warning'
+                : 'is-ready'
+            const cardStateLabel = !planningPerimeter.isPlanifiable
+              ? planningPerimeter.reason || 'Hors planification'
+              : stakeholderIssues.hasIssues
+                ? stakeholderIssues.summary
+                : 'Prête pour le planning'
 
             return (
               <article
                 key={tpi.refTpi}
-                className={`tpi-card ${isFocused ? 'is-focused' : ''} ${isSelected ? 'is-selected' : ''}`.trim()}
+                className={`tpi-card ${cardStateClass} ${isFocused ? 'is-focused' : ''} ${isSelected ? 'is-selected' : ''}`.trim()}
               >
                 <div className='tpi-card-header'>
                   <div className='tpi-card-header-main'>
@@ -1156,12 +1187,20 @@ const TpiList = ({
                   </div>
                 </div>
 
-                <h3 className='tpi-card-candidate'>
-                  <StakeholderLink tpi={tpi} field={stakeholderFields.candidat} year={year}>
-                    {tpi.candidat || 'Candidat non renseigné'}
-                  </StakeholderLink>
-                </h3>
-                <p className='tpi-card-title'>{tpi.sujet || 'Sujet non renseigné'}</p>
+                <div className={`tpi-card-status-row ${cardStateClass}`}>
+                  <span aria-hidden='true' />
+                  <strong>{cardStateLabel}</strong>
+                </div>
+
+                <div className='tpi-card-main-copy'>
+                  <span>Candidat</span>
+                  <h3 className='tpi-card-candidate'>
+                    <StakeholderLink tpi={tpi} field={stakeholderFields.candidat} year={year}>
+                      {tpi.candidat || 'Candidat non renseigné'}
+                    </StakeholderLink>
+                  </h3>
+                  <p className='tpi-card-title'>{tpi.sujet || 'Sujet non renseigné'}</p>
+                </div>
 
                 <div className='tpi-card-summary'>
                   {displayOptions.showTagsPreview && profile.previewTags.length > 0 ? (
@@ -1256,7 +1295,9 @@ const TpiList = ({
 
                 <div className='tpi-card-footer'>
                   <span className='tpi-card-footer-hint'>
-                    {stakeholderIssues.summary}
+                    {tpi?.dates?.soutenance
+                      ? `Défense ${formatDisplayDate(tpi.dates.soutenance)}`
+                      : 'Défense à planifier'}
                   </span>
                 </div>
               </article>
@@ -1276,7 +1317,7 @@ const TpiList = ({
                 <th>Sujet</th>
                 <th>Tags</th>
                 <th>Lieu</th>
-                <th>Soutenance</th>
+                <th>Défense</th>
                 <th>Action</th>
               </tr>
             </thead>

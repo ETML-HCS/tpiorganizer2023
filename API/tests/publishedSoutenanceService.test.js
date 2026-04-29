@@ -2,6 +2,8 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
+  enrichPublishedRoomsAppearance,
+  enrichPublishedRoomsScheduleConfig,
   filterPublishedRooms,
   inferPublishedRoomClassModeFromEntries,
   syncPublishedSoutenancesToTpiCatalog
@@ -75,6 +77,86 @@ test('filterPublishedRooms falls back to participant name for legacy rooms', () 
   assert.equal(filtered[0].tpiDatas[0].id, 'room-b_0')
 })
 
+test('enrichPublishedRoomsAppearance applique la couleur et les SVG configurés', () => {
+  const enriched = enrichPublishedRoomsAppearance(
+    [
+      {
+        idRoom: 3,
+        site: 'ETML',
+        name: 'A101',
+        configSite: {
+          numSlots: 8,
+          soutenanceColor: '#123456'
+        },
+        tpiDatas: []
+      }
+    ],
+    {
+      stakeholderIcons: {
+        candidate: 'candidate',
+        expert1: 'candidate',
+        expert2: 'participant',
+        projectManager: 'participant'
+      },
+      siteAppearanceByCode: new Map([
+        ['ETML', { soutenanceColor: '#0f766e' }]
+      ])
+    }
+  )
+
+  assert.equal(enriched[0].configSite.numSlots, 8)
+  assert.equal(enriched[0].configSite.soutenanceColor, '#0F766E')
+  assert.deepEqual(enriched[0].configSite.stakeholderIcons, {
+    candidate: 'candidate',
+    expert1: 'candidate',
+    expert2: 'participant',
+    projectManager: 'participant'
+  })
+})
+
+test('enrichPublishedRoomsScheduleConfig garde le nombre total de créneaux configurés', () => {
+  const rooms = enrichPublishedRoomsScheduleConfig(
+    [
+      {
+        idRoom: 4,
+        site: 'ETML',
+        name: 'A101',
+        date: '2026-06-10',
+        configSite: {
+          numSlots: 2
+        },
+        tpiDatas: [
+          {
+            id: 'room-a_1',
+            period: 2,
+            refTpi: '2163',
+            candidat: 'Alice Candidate'
+          }
+        ]
+      }
+    ],
+    {
+      siteConfigs: [
+        {
+          siteCode: 'ETML',
+          breaklineMinutes: 10,
+          tpiTimeMinutes: 60,
+          firstTpiStartTime: '08:00',
+          numSlots: 4,
+          active: true
+        }
+      ]
+    }
+  )
+
+  assert.equal(rooms[0].configSite.numSlots, 4)
+  assert.equal(rooms[0].configSite.firstTpiStart, 8)
+  assert.equal(rooms[0].tpiDatas.length, 4)
+  assert.equal(rooms[0].tpiDatas[1].refTpi, '2163')
+  assert.equal(rooms[0].tpiDatas[0].refTpi, null)
+  assert.equal(rooms[0].tpiDatas[3].refTpi, null)
+})
+
 test('inferPublishedRoomClassModeFromEntries returns matu only for homogeneous MATU rooms', () => {
   assert.equal(
     inferPublishedRoomClassModeFromEntries([
@@ -93,7 +175,7 @@ test('inferPublishedRoomClassModeFromEntries returns matu only for homogeneous M
   )
 })
 
-test('syncPublishedSoutenancesToTpiCatalog updates soutenance dates in the TPI catalog', async () => {
+test('syncPublishedSoutenancesToTpiCatalog updates défense dates in the TPI catalog', async () => {
   const bulkWrites = []
   const modelFactory = () => ({
     bulkWrite: async (operations) => {

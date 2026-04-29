@@ -48,7 +48,7 @@ const ImportPanel = ({ year, onImportComplete }) => {
   const [csvLoading, setCsvLoading] = useState(false)
   const [debugInfo, setDebugInfo] = useState(null)
   
-  // Période de soutenance
+  // Période de défense
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [site, setSite] = useState('Vennes')
@@ -56,7 +56,7 @@ const ImportPanel = ({ year, onImportComplete }) => {
   // Les dates sont connues dès qu'un CSV valide est détecté
   const datesLocked = useMemo(() => Boolean(csvValidation?.valid), [csvValidation])
   
-  // Dates spécifiques des soutenances (sélection manuelle)
+  // Dates spécifiques des défenses (sélection manuelle)
   const [selectedDates, setSelectedDates] = useState([])
   const [useSpecificDates, setUseSpecificDates] = useState(false)
   
@@ -195,7 +195,7 @@ const ImportPanel = ({ year, onImportComplete }) => {
     if (csvInputRef.current) csvInputRef.current.value = ''
   }, [])
 
-  // Préremplir les dates de soutenance avec l'année de la route si vides
+  // Préremplir les dates de défense avec l'année de la route si vides
   useEffect(() => {
     const yearStr = year.toString()
     if (!startDate) setStartDate(`${yearStr}-01-01`)
@@ -245,7 +245,7 @@ const ImportPanel = ({ year, onImportComplete }) => {
             <input type="text" value={year} readOnly />
           </div>
           <div className="form-group">
-            <label>Date début soutenances</label>
+            <label>Date début défenses</label>
             <input
               type="date"
               value={startDate}
@@ -257,7 +257,7 @@ const ImportPanel = ({ year, onImportComplete }) => {
             />
           </div>
           <div className="form-group">
-            <label>Date fin soutenances</label>
+            <label>Date fin défenses</label>
             <input
               type="date"
               value={endDate}
@@ -278,19 +278,19 @@ const ImportPanel = ({ year, onImportComplete }) => {
           </div>
         </div>
         
-        {/* Sélection des dates spécifiques de soutenances */}
+        {/* Sélection des dates spécifiques de défenses */}
         {availableWorkDays.length > 0 && (
           <div className="dates-selection">
             <div className="dates-header">
               <div className="dates-toggle-copy">
-                <span className="dates-toggle-label">Sélectionner les jours spécifiques des soutenances</span>
+                <span className="dates-toggle-label">Sélectionner les jours spécifiques des défenses</span>
               </div>
               <BinaryToggle
                 value={useSpecificDates}
                 onChange={setUseSpecificDates}
                 name="import-specific-dates"
                 className="import-binary-toggle"
-                ariaLabel="Sélectionner les jours spécifiques des soutenances"
+                ariaLabel="Sélectionner les jours spécifiques des défenses"
                 iconOnly
                 trueLabel="Jours spécifiques"
                 falseLabel="Tous les jours ouvrés"
@@ -337,7 +337,7 @@ const ImportPanel = ({ year, onImportComplete }) => {
             {useSpecificDates && selectedDates.length > 0 && (
               <p className="dates-summary">
                 <CalendarIcon className="dates-summary-icon" />
-                {selectedDates.length} jour{selectedDates.length > 1 ? 's' : ''} de soutenance sélectionné{selectedDates.length > 1 ? 's' : ''}
+                {selectedDates.length} jour{selectedDates.length > 1 ? 's' : ''} de défense sélectionné{selectedDates.length > 1 ? 's' : ''}
               </p>
             )}
             

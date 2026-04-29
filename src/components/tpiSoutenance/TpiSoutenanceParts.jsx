@@ -1,7 +1,5 @@
 import React, { Fragment, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
-
-import { buildTpiDetailsLink } from "../tpiDetail/tpiDetailUtils"
+import { buildSoutenanceRoomAppearance } from "../../config/soutenanceAppearance"
 
 function TruncatedText({ text = "", maxLength }) {
   const isTruncated = text.length > maxLength
@@ -43,16 +41,94 @@ function formatTimeRange(startTime, endTime) {
 }
 
 function getRoomClassLabel(room) {
-  return room?.roomClassMode === "matu" ? "SPECIAL" : ""
+  const roomClassMode = String(room?.roomClassMode || "").toLowerCase()
+
+  if (roomClassMode === "matu") {
+    return "matu"
+  }
+
+  if (roomClassMode === "special") {
+    return "SPECIAL"
+  }
+
+  return ""
+}
+
+function getRoomClassBadgeClass(label) {
+  const normalizedLabel = String(label || "").toLowerCase()
+
+  if (normalizedLabel === "matu") {
+    return "is-matu"
+  }
+
+  if (normalizedLabel === "special") {
+    return "is-special"
+  }
+
+  return ""
+}
+
+function getPositiveInteger(value) {
+  const parsedValue = Number.parseInt(value, 10)
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null
+}
+
+function getNonNegativeInteger(value) {
+  const parsedValue = Number.parseInt(value, 10)
+  return Number.isInteger(parsedValue) && parsedValue >= 0 ? parsedValue : null
+}
+
+function buildScheduleFromRoomConfig(room) {
+  if (!room?.configSite) {
+    return []
+  }
+
+  const totalSlots = getPositiveInteger(room.configSite.numSlots) || 0
+  const breakDuration = Number(room.configSite.breakline) || 0
+  const slotDuration = Number(room.configSite.tpiTime) || 0
+  let currentTime = Number(room.configSite.firstTpiStart) || 0
+
+  if (totalSlots <= 0 || slotDuration <= 0) {
+    return []
+  }
+
+  return Array.from({ length: totalSlots }, (_, index) => {
+    const startTime = currentTime
+    const endTime = currentTime + slotDuration
+    const startHours = Math.floor(startTime)
+    const startMinutes = Math.floor((startTime % 1) * 60)
+    const endHours = Math.floor(endTime)
+    const endMinutes = Math.floor((endTime % 1) * 60)
+
+    currentTime = index < totalSlots - 1
+      ? endTime + breakDuration
+      : endTime
+
+    return {
+      startTime: `${startHours < 10 ? `0${startHours}` : startHours}:${String(startMinutes).padStart(2, "0")}`,
+      endTime: `${endHours < 10 ? `0${endHours}` : endHours}:${String(endMinutes).padStart(2, "0")}`
+    }
+  })
+}
+
+function getScheduleForRoom(room, schedule = []) {
+  const roomSchedule = buildScheduleFromRoomConfig(room)
+  return roomSchedule.length > 0 ? roomSchedule : schedule
 }
 
 function getLegacyScheduleIndex(tpiData, fallbackIndex = 0) {
-  if (Number.isInteger(tpiData?.originalIndex)) {
-    return tpiData.originalIndex
+  const originalIndex = getNonNegativeInteger(tpiData?.originalIndex)
+  if (originalIndex !== null) {
+    return originalIndex
   }
 
-  const parsedIndex = parseInt(tpiData?.id?.split("_").pop(), 10)
-  return Number.isNaN(parsedIndex) ? fallbackIndex : parsedIndex
+  const period = getPositiveInteger(tpiData?.period)
+  if (period !== null) {
+    return period - 1
+  }
+
+  const parsedIndex = getNonNegativeInteger(tpiData?.id?.split("_").pop())
+  return parsedIndex === null ? fallbackIndex : parsedIndex
 }
 
 function getDisplayedSlot(tpiData, schedule, fallbackIndex = 0) {
@@ -63,106 +139,240 @@ function getDisplayedSlot(tpiData, schedule, fallbackIndex = 0) {
     }
   }
 
-  return schedule[getLegacyScheduleIndex(tpiData, fallbackIndex)] || {
+  const safeSchedule = Array.isArray(schedule) ? schedule : []
+
+  return safeSchedule[getLegacyScheduleIndex(tpiData, fallbackIndex)] || {
     startTime: "",
     endTime: ""
   }
 }
 
 function getRoomSchedule(room, schedule) {
-  if (!room?.tpiDatas?.length) {
-    return schedule
-  }
-
-  return room.tpiDatas.map((tpiData, index) => getDisplayedSlot(tpiData, schedule, index))
+  return getRoomSlots(room, schedule).map((slot) => slot.displayedSlot)
 }
 
-const MobileMesTpiFilter = ({ mesTpi, hasToken, year }) => {
-  useEffect(() => {
-    const msgClass = document.querySelector(".message-smartphone")
-    const filtersClass = document.querySelector(".filters-smartphone")
-    if (msgClass) {
-      msgClass.remove()
-    }
-    if (filtersClass) {
-      filtersClass.remove()
-    }
-  }, [])
+function getRoomSlotCount(room, schedule = []) {
+  const roomSchedule = getScheduleForRoom(room, schedule)
+  const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+  const configuredSlots = getPositiveInteger(room?.configSite?.numSlots) || 0
+  const maxTpiIndex = tpiDatas.reduce(
+    (maxIndex, tpiData, index) => Math.max(maxIndex, getLegacyScheduleIndex(tpiData, index)),
+    -1
+  )
 
+  return Math.max(
+    configuredSlots,
+    roomSchedule.length,
+    tpiDatas.length,
+    maxTpiIndex + 1,
+    0
+  )
+}
+
+function getRoomSlots(room, schedule = []) {
+  const roomSchedule = getScheduleForRoom(room, schedule)
+  const slotCount = getRoomSlotCount(room, roomSchedule)
+  const slots = Array.from({ length: slotCount }, (_, index) => ({
+    index,
+    tpiData: null,
+    displayedSlot: roomSchedule[index] || { startTime: "", endTime: "" }
+  }))
+
+  const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+  tpiDatas.forEach((tpiData, fallbackIndex) => {
+    const slotIndex = getLegacyScheduleIndex(tpiData, fallbackIndex)
+
+    if (slotIndex < 0 || slotIndex >= slots.length) {
+      return
+    }
+
+    slots[slotIndex] = {
+      index: slotIndex,
+      tpiData,
+      displayedSlot: getDisplayedSlot(tpiData, roomSchedule, slotIndex)
+    }
+  })
+
+  return slots
+}
+
+const MobileMesTpiFilter = ({ mesTpi, hasToken, year, focusReference }) => {
   if (!hasToken) {
     return <div>Chargement en cours...</div>
   }
 
   return (
-    <Fragment>
-      <h1 className='title'>Soutenance TPI - Version mobile</h1>
-      <br />
+    <section className='mobile-mes-tpi' aria-label='Mes défenses'>
+      <header className='soutenance-mobile-head'>
+        <h1 className='title'>Défense TPI - Version mobile</h1>
+      </header>
       <div className='salles-container-smartphone'>
-        {mesTpi.map((salle, indexSalle) => (
-          <div key={indexSalle} className={`salle ${salle.site}`}>
-            <div className={`header_${indexSalle}`}>
-              <h3>{formatDate(salle.date)}</h3>
-              <h4>{salle.name}</h4>
-            </div>
+        {mesTpi.map((salle, indexSalle) => {
+          const roomClassLabel = getRoomClassLabel(salle)
+          const roomClassBadgeClass = getRoomClassBadgeClass(roomClassLabel)
+          const roomAppearance = buildSoutenanceRoomAppearance(salle)
 
-            {salle.tpiDatas.map((tpi, indexTpi) => {
-              const { candidat, expert1, expert2, boss } = tpi || {}
-              return (
-                <Fragment key={`${indexSalle}-${indexTpi}`}>
-                  <div className='tpi-data mobile-tpi-data' id={tpi?.id}>
-                    {tpi?.refTpi ? (
-                      <Link
-                        className='btnTpiDossier'
-                        to={buildTpiDetailsLink(year, tpi.refTpi)}
-                        title={`Ouvrir la fiche ${tpi.refTpi}`}
-                      >
-                        Fiche
-                      </Link>
-                    ) : null}
+          return (
+            <div
+              key={indexSalle}
+              className={`salle ${salle.site} ${roomAppearance.className}`.trim()}
+              style={{
+                "--room-reveal-index": indexSalle,
+                ...(roomAppearance.style || {})
+              }}
+            >
+              <header className={`room-header ${roomClassLabel ? "has-room-badge" : ""}`}>
+                <div className='room-header-badges'>
+                  <span className='site'>{salle.site}</span>
+                  {roomClassLabel ? (
+                    <span
+                      className={`soutenance-room-class-badge ${roomClassBadgeClass}`.trim()}
+                      title={`Salle ${roomClassLabel}`}
+                      aria-label={`Salle ${roomClassLabel}`}
+                    >
+                      {roomClassLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <div className='room-header-date'>{formatDate(salle.date)}</div>
+                <div className='soutenance-room-title-row'>
+                  <div className='room-header-name'>{salle.name}</div>
+                </div>
+              </header>
 
-                    <div className='tpi-container'>
-                      <div className='tpi-entry'>
-                        <div className='tpi-candidat'>{candidat}</div>
-                      </div>
-                      <div className='tpi-entry'>
-                        <div className='tpi-expert1'>{expert1.name}</div>
-                      </div>
-                      <div className='tpi-entry'>
-                        <div className='tpi-expert2'>{expert2.name}</div>
-                      </div>
+              {salle.tpiDatas.map((tpi, indexTpi) => {
+                const { candidat, expert1, expert2, boss } = tpi || {}
+                return (
+                  <Fragment key={`${indexSalle}-${indexTpi}`}>
+                    <div
+                      className={`tpi-data mobile-tpi-data ${focusReference === tpi?.refTpi ? "is-selected" : ""}`.trim()}
+                      id={tpi?.id}
+                      style={{ "--slot-reveal-index": indexTpi }}
+                    >
+                      <div className='tpi-container'>
+                        <div className='tpi-entry'>
+                          <div className='tpi-candidat'>{candidat}</div>
+                        </div>
+                        <div className='tpi-entry'>
+                          <div className='tpi-expert1'>{expert1.name}</div>
+                        </div>
+                        <div className='tpi-entry'>
+                          <div className='tpi-expert2'>{expert2.name}</div>
+                        </div>
 
-                      <div className='tpi-entry'>
-                        <div className='tpi-boss'>
-                          {" "}
-                          cdp {" > "}
-                          {boss.name}
+                        <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+                          <div>{boss?.name}</div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </Fragment>
-              )
-            })}
-          </div>
-        ))}
+                  </Fragment>
+                )
+              })}
+            </div>
+          )
+        })}
       </div>
-    </Fragment>
+    </section>
   )
 }
 
-const MobileRoomFilter = ({ rooms, schedule, year }) => {
-  const [roomIndex, setRoomIndex] = useState(0)
+const PdfPreviewIcon = () => (
+  <svg
+    aria-hidden='true'
+    className='soutenance-toolbar-icon'
+    viewBox='0 0 24 24'
+    fill='none'
+    xmlns='http://www.w3.org/2000/svg'
+  >
+    <path
+      d='M1.5 12c2.4-4 5.7-6 10.5-6s8.1 2 10.5 6c-2.4 4-5.7 6-10.5 6S3.9 16 1.5 12Z'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+    <path
+      d='M9.5 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0Z'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+  </svg>
+)
 
-  useEffect(() => {
-    const msgClass = document.querySelector(".message-smartphone")
-    const filtersClass = document.querySelector(".filters-smartphone")
-    if (msgClass) {
-      msgClass.remove()
-    }
-    if (filtersClass) {
-      filtersClass.remove()
-    }
-  }, [])
+const PdfFileIcon = () => (
+  <svg
+    aria-hidden='true'
+    className='soutenance-toolbar-icon'
+    viewBox='0 0 24 24'
+    fill='none'
+    xmlns='http://www.w3.org/2000/svg'
+  >
+    <path
+      d='M6 3h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+    <path
+      d='M14 3v5h5'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+    <path
+      d='M8 13h8M8 17h8M9 9h1.5M9 14.5h1.5'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+    />
+  </svg>
+)
+
+const FullscreenIcon = () => (
+  <svg
+    aria-hidden='true'
+    className='soutenance-fullscreen-action-icon'
+    viewBox='0 0 24 24'
+    fill='none'
+    xmlns='http://www.w3.org/2000/svg'
+  >
+    <path
+      d='M8 3H4a1 1 0 0 0-1 1v4M16 3h4a1 1 0 0 1 1 1v4M8 21H4a1 1 0 0 1-1-1v-4M16 21h4a1 1 0 0 0 1-1v-4'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+    <path
+      d='M9 8H6V5M15 8h3V5M9 16H6v3M15 16h3v3'
+      stroke='currentColor'
+      strokeWidth='1.7'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+  </svg>
+)
+
+const getFullscreenElement = () => {
+  if (typeof document === "undefined") {
+    return null
+  }
+
+  return document.fullscreenElement || document.webkitFullscreenElement || null
+}
+
+const MobileRoomFilter = ({
+  rooms,
+  schedule,
+  year,
+  focusReference,
+  showEmptySlots = true
+}) => {
+  const [roomIndex, setRoomIndex] = useState(0)
 
   useEffect(() => {
     if (!rooms.length) {
@@ -178,8 +388,13 @@ const MobileRoomFilter = ({ rooms, schedule, year }) => {
 
   const safeRoomIndex = Math.min(roomIndex, rooms.length - 1)
   const currentRoom = rooms[safeRoomIndex]
-  const currentRoomSchedule = getRoomSchedule(currentRoom, schedule)
+  const currentRoomSlots = getRoomSlots(currentRoom, schedule)
+  const visibleCurrentRoomSlots = showEmptySlots
+    ? currentRoomSlots
+    : currentRoomSlots.filter(({ tpiData }) => Boolean(tpiData?.refTpi))
   const roomClassLabel = getRoomClassLabel(currentRoom)
+  const roomCounter = `${safeRoomIndex + 1}/${rooms.length}`
+  const roomAppearance = buildSoutenanceRoomAppearance(currentRoom)
 
   const handleNextRoom = () => {
     setRoomIndex((prevIndex) => (prevIndex + 1) % rooms.length)
@@ -190,70 +405,107 @@ const MobileRoomFilter = ({ rooms, schedule, year }) => {
   }
 
   return (
-    <div className='mobile-room-filter'>
-      <div key={safeRoomIndex} className={`salle ${currentRoom.site}`}>
-        <span className='site'>{currentRoom.site}</span>
-        <div className={`header_${safeRoomIndex}`}>
-          <h3>{formatDate(currentRoom.date)}</h3>
-          <div className='soutenance-room-title-row'>
-            <h4>{currentRoom.name}</h4>
+    <div className='mobile-room-filter' aria-label={`Salles (${rooms.length})`}>
+      <div
+        key={safeRoomIndex}
+        className={`salle ${currentRoom.site} ${roomAppearance.className}`.trim()}
+        style={{
+          "--room-reveal-index": safeRoomIndex,
+          ...(roomAppearance.style || {})
+        }}
+      >
+        <div className='mobile-room-filter-head'>
+          <span className='mobile-room-counter'>Salle {roomCounter}</span>
+        </div>
+        <header className={`room-header ${roomClassLabel ? "has-room-badge" : ""}`}>
+          <div className='room-header-badges'>
+            <span className='site'>{currentRoom.site}</span>
             {roomClassLabel ? (
               <span
-                className='soutenance-room-class-badge is-matu'
-                title='Salle SPECIAL'
-                aria-label='Salle SPECIAL'
+                className={`soutenance-room-class-badge ${getRoomClassBadgeClass(roomClassLabel)}`.trim()}
+                title={`Salle ${roomClassLabel}`}
+                aria-label={`Salle ${roomClassLabel}`}
               >
                 {roomClassLabel}
               </span>
             ) : null}
           </div>
-        </div>
-        {currentRoom.tpiDatas.map((tpiData, index) => {
-          const displayedSlot = currentRoomSchedule[index] || {
-            startTime: "",
-            endTime: ""
-          }
-          const { candidat, expert1, expert2, boss } = tpiData
+          <div className='room-header-date'>{formatDate(currentRoom.date)}</div>
+          <div className='soutenance-room-title-row'>
+            <div className='room-header-name'>{currentRoom.name}</div>
+          </div>
+        </header>
+        {visibleCurrentRoomSlots.map(({ tpiData, index, displayedSlot }) => {
+          const { candidat, expert1, expert2, boss } = tpiData || {}
+          const hasPublishedTpi = Boolean(tpiData?.refTpi)
+          const ficheUrl = hasPublishedTpi ? `/tpi/${year}/${tpiData.refTpi}` : null
           return (
             <React.Fragment key={index}>
-              <div className='tpi-data' id={tpiData.id}>
-                {tpiData?.refTpi ? (
-                  <Link
-                    className='btnTpiDossier'
-                    to={buildTpiDetailsLink(year, tpiData.refTpi)}
-                    title={`Ouvrir la fiche ${tpiData.refTpi}`}
-                  >
-                    Fiche
-                  </Link>
-                ) : null}
-
+              <div
+                className={`tpi-data ${!hasPublishedTpi ? "is-slot-empty" : ""} ${focusReference === tpiData?.refTpi ? "is-selected" : ""}`.trim()}
+                id={tpiData?.id}
+                style={{ "--slot-reveal-index": index }}
+              >
                 <div className='time-label'>
                   {formatTimeRange(displayedSlot.startTime, displayedSlot.endTime)}
                 </div>
-                <div className='tpi-container'>
-                  <div className='tpi-entry tpi-candidat'>
-                    <TruncatedText text={candidat} maxLength={20} />
-                  </div>
-                  <div className='tpi-entry'>
-                    <div className='tpi-expert1'>Expert1: </div>
-                    <TruncatedText text={expert1?.name} maxLength={20} />
-                  </div>
-                  <div className='tpi-entry'>
-                    <div className='tpi-expert2'>Expert2: </div>
-                    <TruncatedText text={expert2?.name} maxLength={20} />
-                  </div>
-                  <div className='tpi-entry'>
-                    <div className='tpi-boss'>CDP {">>"}</div>
-                    <TruncatedText text={boss?.name} maxLength={20} />
-                  </div>
+                <div className={`tpi-container ${!hasPublishedTpi ? "tpi-container--empty" : ""}`.trim()}>
+                  {hasPublishedTpi ? (
+                    <>
+                      <div className='tpi-entry tpi-candidat'>
+                        <TruncatedText text={candidat} maxLength={20} />
+                      </div>
+                      <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+                        <TruncatedText text={expert1?.name} maxLength={20} />
+                      </div>
+                      <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+                        <TruncatedText text={expert2?.name} maxLength={20} />
+                      </div>
+                      <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+                        <TruncatedText text={boss?.name} maxLength={20} />
+                      </div>
+                      {ficheUrl ? (
+                        <a className='tpi-room-fiche-link' href={ficheUrl}>
+                          fiche
+                        </a>
+                      ) : null}
+                    </>
+                  ) : (
+                    [0, 1, 2, 3].map((placeholderIndex) => (
+                      <div
+                        key={placeholderIndex}
+                        className='tpi-entry tpi-entry--empty'
+                        aria-hidden='true'
+                      />
+                    ))
+                  )}
                 </div>
               </div>
             </React.Fragment>
           )
         })}
       </div>
-      <button onClick={handlePreviousRoom}>Gauche</button>
-      <button onClick={handleNextRoom}>Droite</button>
+      <div className='mobile-room-filter-nav'>
+        <button
+          className='mobile-room-filter-btn'
+          onClick={handlePreviousRoom}
+          title="Voir la salle précédente"
+          aria-label="Salle précédente"
+        >
+          ◀︎
+        </button>
+        <span className='mobile-room-filter-counter' aria-live='polite'>
+          {roomCounter}
+        </span>
+        <button
+          className='mobile-room-filter-btn'
+          onClick={handleNextRoom}
+          title="Voir la salle suivante"
+          aria-label="Salle suivante"
+        >
+          ▶︎
+        </button>
+      </div>
     </div>
   )
 }
@@ -288,7 +540,6 @@ const ToggleFilterButton = ({ isOn, setIsOn, updateFilter, expertOrBoss }) => {
 }
 
 const SoutenanceDesktopHeader = ({
-  isScrolled,
   isDemo,
   year,
   expertOrBoss,
@@ -296,6 +547,14 @@ const SoutenanceDesktopHeader = ({
   setIsOn,
   updateFilter,
   filters,
+  onGeneratePdf,
+  onPreviewPdf,
+  isPrintEnabled,
+  pdfViewMode,
+  onPdfViewModeChange,
+  pdfOrientationMode,
+  onPdfOrientationModeChange,
+  hasToken,
   uniqueExperts,
   uniqueProjectManagers,
   uniqueCandidates,
@@ -303,43 +562,182 @@ const SoutenanceDesktopHeader = ({
   uniqueSites,
   uniqueSalles
 }) => {
+  const userGreeting = hasToken
+    ? `Bonjour ${expertOrBoss?.name || "Collaborateur"}`
+    : "Bonjour Visiteur"
+  const [isFullscreen, setIsFullscreen] = useState(Boolean(getFullscreenElement()))
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsFullscreen(Boolean(getFullscreenElement()))
+    }
+
+    document.addEventListener("fullscreenchange", syncFullscreenState)
+    document.addEventListener("webkitfullscreenchange", syncFullscreenState)
+    syncFullscreenState()
+
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreenState)
+      document.removeEventListener("webkitfullscreenchange", syncFullscreenState)
+    }
+  }, [])
+
+  const handleFullscreenClick = async (event) => {
+    const fullscreenElement = getFullscreenElement()
+
+    if (fullscreenElement) {
+      const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen
+      if (exitFullscreen) {
+        await exitFullscreen.call(document)
+      }
+      return
+    }
+
+    const fullscreenTarget =
+      document.getElementById("soutenances") ||
+      event.currentTarget.closest(".tpi-soutenance-page") ||
+      document.documentElement
+    const requestFullscreen =
+      fullscreenTarget.requestFullscreen ||
+      fullscreenTarget.webkitRequestFullscreen
+
+    if (requestFullscreen) {
+      await requestFullscreen.call(fullscreenTarget)
+    }
+  }
+
   return (
-    <div className={`header-soutenance${isScrolled ? "hidden" : ""}`}>
-      <div className={isDemo ? "demo" : "title"}>
-        {" "}
-        Soutenances de {year}
+    <header className='soutenance-toolbar'>
+      <div className={`soutenance-toolbar-head soutenance-toolbar-hero has-fullscreen-action ${isFullscreen ? "is-fullscreen-active" : ""}`.trim()}>
+        <div className='soutenance-toolbar-hero-content'>
+          <div className={isDemo ? "demo" : "title"}>
+            Défenses de {year}
+          </div>
+          <p className='soutenance-toolbar-greeting'>{userGreeting}</p>
+        </div>
+
+        <button
+          type='button'
+          className='soutenance-hero-fullscreen-action'
+          onClick={handleFullscreenClick}
+          title={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran"}
+          aria-label={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran"}
+        >
+          <FullscreenIcon />
+        </button>
+
+        {isDemo ? <span className='soutenance-hero-status'>Version démo active</span> : null}
       </div>
 
-      {expertOrBoss && expertOrBoss.name !== null && (
-        <div className='welcom'>
-          <p>Bonjour {expertOrBoss.name}</p>
-        </div>
-      )}
-      {!expertOrBoss && (
-        <div className='welcom'>
-          <p>Bonjour Visiteur</p>
-        </div>
-      )}
+      <div className='soutenance-toolbar-filters'>
+        <div className='soutenance-filter-actions'>
+          <div className='soutenance-pdf-split'>
+            <button
+              type='button'
+              className='btnPrint btnPrint--ghost btnPdfSplit btnPdfSplit--left'
+              onClick={onPreviewPdf}
+              disabled={!isPrintEnabled}
+              title='Prévisualiser le PDF'
+              aria-label='Prévisualiser le PDF'
+            >
+              <PdfPreviewIcon />
+              <span className='soutenance-sr-only'>Prévisualiser PDF</span>
+            </button>
+            <button
+              type='button'
+              className='btnPrint btnPdfSplit btnPdfSplit--right'
+              onClick={onGeneratePdf}
+              disabled={!isPrintEnabled}
+              title='Générer le PDF'
+              aria-label='Générer le PDF'
+            >
+              <PdfFileIcon />
+              <span className='soutenance-sr-only'>Générer PDF</span>
+            </button>
+          </div>
+          <label className='soutenance-filter-block soutenance-filter-block--inline'>
+            <select
+              aria-label='Vue PDF'
+              value={pdfViewMode}
+              onChange={(e) => onPdfViewModeChange(e.target.value)}
+            >
+              <option value='general'>Vue générale</option>
+              <option value='rooms'>Par salle</option>
+              <option value='roomGrid'>Planning salles</option>
+              <option value='people'>Par expert/CDP</option>
+            </select>
+          </label>
+          <label className='soutenance-filter-block soutenance-filter-block--inline'>
+            <select
+              aria-label='Orientation PDF'
+              value={pdfOrientationMode}
+              onChange={(e) => onPdfOrientationModeChange(e.target.value)}
+            >
+              <option value='auto'>Auto (ajusté)</option>
+              <option value='portrait'>Portrait</option>
+              <option value='landscape'>Paysage</option>
+            </select>
+          </label>
 
-      <div className='filters'>
-        {expertOrBoss && expertOrBoss.name !== null && (
-          <>
-            <div>
-              {expertOrBoss.role !== "candidate" && (
-                <ToggleFilterButton
-                  isOn={isOn}
-                  setIsOn={setIsOn}
-                  updateFilter={updateFilter}
-                  expertOrBoss={expertOrBoss}
-                />
-              )}
-            </div>
-          </>
-        )}
+          {expertOrBoss && expertOrBoss.name !== null && expertOrBoss.role !== "candidate" && (
+            <ToggleFilterButton
+              isOn={isOn}
+              setIsOn={setIsOn}
+              updateFilter={updateFilter}
+              expertOrBoss={expertOrBoss}
+            />
+          )}
+        </div>
+
+        <label className='soutenance-filter-block'>
+          <select
+            aria-label='Filtrer par date'
+            value={filters.date}
+            onChange={(e) => updateFilter("date", e.target.value)}
+          >
+            <option value=''>Toutes les dates</option>
+            {uniqueDates.map((date) => (
+              <option key={date} value={date}>
+                {date}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className='soutenance-filter-block'>
+          <select
+            aria-label='Filtrer par site'
+            value={filters.site}
+            onChange={(e) => updateFilter("site", e.target.value)}
+          >
+            <option value=''>Tous les sites</option>
+            {uniqueSites.map((site) => (
+              <option key={site} value={site}>
+                {site}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className='soutenance-filter-block'>
+          <select
+            aria-label='Filtrer par salle'
+            value={filters.nameRoom}
+            onChange={(e) => updateFilter("nameRoom", e.target.value)}
+          >
+            <option value=''>Toutes les salles</option>
+            {uniqueSalles.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {!expertOrBoss && (
-          <>
+          <label className='soutenance-filter-block'>
             <select
+              aria-label='Filtrer par expert'
               value={filters.experts}
               onChange={(e) => updateFilter("experts", e.target.value)}
             >
@@ -350,8 +748,13 @@ const SoutenanceDesktopHeader = ({
                 </option>
               ))}
             </select>
+          </label>
+        )}
 
+        {!expertOrBoss && (
+          <label className='soutenance-filter-block'>
             <select
+              aria-label='Filtrer par chef de projet'
               value={filters.projectManager}
               onChange={(e) => updateFilter("projectManager", e.target.value)}
             >
@@ -362,8 +765,13 @@ const SoutenanceDesktopHeader = ({
                 </option>
               ))}
             </select>
+          </label>
+        )}
 
+        {!expertOrBoss && (
+          <label className='soutenance-filter-block'>
             <select
+              aria-label='Filtrer par candidat'
               value={filters.candidate}
               onChange={(e) => updateFilter("candidate", e.target.value)}
             >
@@ -379,46 +787,11 @@ const SoutenanceDesktopHeader = ({
                 return null
               })}
             </select>
-          </>
+          </label>
         )}
-
-        <select
-          value={filters.date}
-          onChange={(e) => updateFilter("date", e.target.value)}
-        >
-          <option value=''>Toutes les dates</option>
-          {uniqueDates.map((date) => (
-            <option key={date} value={date}>
-              {date}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.site}
-          onChange={(e) => updateFilter("site", e.target.value)}
-        >
-          <option value=''>Tous les sites</option>
-          {uniqueSites.map((site) => (
-            <option key={site} value={site}>
-              {site}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.nameRoom}
-          onChange={(e) => updateFilter("nameRoom", e.target.value)}
-        >
-          <option value=''>Toutes les salles</option>
-          {uniqueSalles.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
       </div>
-    </div>
+
+    </header>
   )
 }
 
@@ -430,7 +803,11 @@ export {
   formatDate,
   formatTimeRange,
   getDisplayedSlot,
+  getLegacyScheduleIndex,
+  getRoomSlotCount,
+  getRoomSlots,
   getRoomClassLabel,
+  getRoomClassBadgeClass,
   getRoomSchedule,
   renderSchedule
 }

@@ -9,6 +9,7 @@ describe('tpiScheduleData', () => {
             siteCode: 'VENNES',
             label: 'Vennes',
             planningColor: '#14532d',
+            tpiColor: '#fee2e2',
             numSlots: 6
           }
         ]
@@ -28,6 +29,7 @@ describe('tpiScheduleData', () => {
     )
 
     expect(room.configSite.planningColor).toBe('#14532D')
+    expect(room.configSite.tpiColor).toBe('#FEE2E2')
     expect(room.configSite.numSlots).toBe(6)
   })
 })

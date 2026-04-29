@@ -111,7 +111,7 @@ describe('Home', () => {
     expect(window.localStorage.getItem(STORAGE_KEYS.PLANNING_SELECTED_YEAR)).toBe(targetYear)
   })
 
-  test('redirige le raccourci soutenances vers l année courante par défaut', async () => {
+  test('redirige le raccourci défenses vers l année courante par défaut', async () => {
     const targetYear = String(YEARS_CONFIG.getCurrentYear())
 
     render(
@@ -126,7 +126,7 @@ describe('Home', () => {
               </>
             }
           />
-          <Route path='/Soutenances/:year' element={<LocationDisplay />} />
+          <Route path='/defenses/:year' element={<LocationDisplay />} />
         </Routes>
       </MemoryRouter>
     )
@@ -134,11 +134,11 @@ describe('Home', () => {
     const yearSelect = screen.getByLabelText(/année active/i)
     expect(yearSelect).toHaveValue(targetYear)
 
-    fireEvent.click(screen.getByRole('button', { name: /^soutenances consulter/i }))
+    fireEvent.click(screen.getByRole('link', { name: /^Défenses\b/i }))
 
     await waitFor(() => {
       expect(screen.getByTestId('location-display')).toHaveTextContent(
-        `/Soutenances/${targetYear}`
+        `/defenses/${targetYear}`
       )
     })
   })

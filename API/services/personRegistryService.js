@@ -120,7 +120,6 @@ function normalizePreferredSoutenanceChoice(value) {
 
 function normalizePreferredSoutenanceChoices(choices = [], fallbackDates = []) {
   const normalizedChoices = []
-  const choiceIndexByDate = new Map()
 
   for (const value of [
     ...(Array.isArray(choices) ? choices : [choices]),
@@ -132,21 +131,35 @@ function normalizePreferredSoutenanceChoices(choices = [], fallbackDates = []) {
       continue
     }
 
-    const existingIndex = choiceIndexByDate.get(choice.date)
-    if (!Number.isInteger(existingIndex)) {
-      choiceIndexByDate.set(choice.date, normalizedChoices.length)
-      normalizedChoices.push(choice)
+    const choicePeriod = Number.isInteger(choice.period) ? choice.period : null
+    const exactIndex = normalizedChoices.findIndex((existingChoice) =>
+      existingChoice.date === choice.date &&
+      (existingChoice.period ?? null) === choicePeriod
+    )
 
-      if (normalizedChoices.length >= 3) {
-        break
-      }
-
+    if (exactIndex !== -1) {
       continue
     }
 
-    const existingChoice = normalizedChoices[existingIndex]
-    if ((existingChoice?.period ?? null) === null && Number.isInteger(choice.period)) {
-      normalizedChoices[existingIndex] = choice
+    if (Number.isInteger(choice.period)) {
+      const dateOnlyIndex = normalizedChoices.findIndex((existingChoice) =>
+        existingChoice.date === choice.date && (existingChoice.period ?? null) === null
+      )
+
+      if (dateOnlyIndex !== -1) {
+        normalizedChoices[dateOnlyIndex] = choice
+        continue
+      }
+
+      if (normalizedChoices.length < 3) {
+        normalizedChoices.push(choice)
+      }
+      continue
+    }
+
+    const hasChoiceForDate = normalizedChoices.some((existingChoice) => existingChoice.date === choice.date)
+    if (!hasChoiceForDate && normalizedChoices.length < 3) {
+      normalizedChoices.push(choice)
     }
   }
 
@@ -154,7 +167,7 @@ function normalizePreferredSoutenanceChoices(choices = [], fallbackDates = []) {
 }
 
 function normalizePreferredSoutenanceDates(dates = [], fallbackChoices = []) {
-  return normalizePreferredSoutenanceChoices(fallbackChoices, dates).map((choice) => choice.date)
+  return Array.from(new Set(normalizePreferredSoutenanceChoices(fallbackChoices, dates).map((choice) => choice.date)))
 }
 
 function normalizeRoleList(roles = []) {

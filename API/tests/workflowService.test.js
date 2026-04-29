@@ -26,6 +26,10 @@ test('transition matrix allows only forward workflow', () => {
   assert.equal(workflowService.isTransitionAllowed('voting_open', 'published'), true)
 
   assert.equal(workflowService.isTransitionAllowed('planning', 'published'), false)
+  assert.equal(
+    workflowService.isTransitionAllowed('planning', 'published', { allowDirectPublication: true }),
+    true
+  )
   assert.equal(workflowService.isTransitionAllowed('published', 'planning'), false)
   assert.equal(workflowService.isTransitionAllowed('published', 'voting_open'), false)
 })

@@ -45,7 +45,7 @@ test('enrichLegacyTpisWithDerivedDates falls back when optional context queries 
     assert.deepEqual(enrichedTpi.lieu, {})
     assert.equal(warnings.length, 2)
     assert.match(warnings[0], /configuration de planification/i)
-    assert.match(warnings[1], /publication active des soutenances/i)
+    assert.match(warnings[1], /publication active des défenses/i)
   } finally {
     PlanningConfig.findOne = originalPlanningFindOne
     PublicationVersion.findOne = originalPublicationFindOne

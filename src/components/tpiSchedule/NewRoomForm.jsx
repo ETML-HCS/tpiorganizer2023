@@ -163,7 +163,7 @@ const NewRoomForm = ({
 
   const submitDisabledReason =
     availableDates.length === 0
-      ? "Ajoute d'abord des dates de soutenance"
+      ? "Ajoute d'abord des dates de défense"
       : availableSites.length === 0
         ? "Ajoute d'abord des sites"
       : availableRooms.length === 0

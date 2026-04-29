@@ -6,6 +6,7 @@ const emailService = require('../services/emailService')
 const magicLinkV2Service = require('../services/magicLinkV2Service')
 const votingCampaignService = require('../services/votingCampaignService')
 const Vote = require('../models/voteModel')
+const schedulingService = require('../services/schedulingService')
 
 function patchMethod(target, key, implementation) {
   const original = target[key]
@@ -206,6 +207,244 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
     assert.equal(voteUpdates.length, 3)
     assert.equal(sentVoteRequests.length, 0)
     assert.equal(createdVoteLinks.length, 0)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('startVotesCampaign sends one vote link per stakeholder for all their TPI', async () => {
+  const createdVoteLinks = []
+  const sentDigestTargets = []
+  const sentVoteRequests = []
+  const voteUpdates = []
+  const savedTpis = []
+
+  const alice = {
+    _id: 'person-alice',
+    firstName: 'Alice',
+    lastName: 'Expert',
+    email: 'alice@example.com',
+    sendEmails: true
+  }
+  const bob = {
+    _id: 'person-bob',
+    firstName: 'Bob',
+    lastName: 'Expert',
+    email: 'bob@example.com',
+    sendEmails: true
+  }
+  const carla = {
+    _id: 'person-carla',
+    firstName: 'Carla',
+    lastName: 'Boss',
+    email: 'carla@example.com',
+    sendEmails: true
+  }
+  const david = {
+    _id: 'person-david',
+    firstName: 'David',
+    lastName: 'Expert',
+    email: 'david@example.com',
+    sendEmails: true
+  }
+
+  function makeTpi(id, reference, expert2) {
+    return {
+      _id: id,
+      status: 'pending_slots',
+      reference,
+      sujet: `Sujet ${reference}`,
+      candidat: {
+        _id: `candidate-${id}`,
+        firstName: `Candidat ${id}`,
+        lastName: 'Test'
+      },
+      proposedSlots: [
+        {
+          slot: {
+            _id: `slot-${id}`,
+            date: new Date('2026-06-10T08:00:00.000Z'),
+            period: 'AM',
+            startTime: '08:00',
+            endTime: '08:45',
+            room: { name: 'A101' }
+          }
+        }
+      ],
+      expert1: alice,
+      expert2,
+      chefProjet: carla,
+      save: async function save() {
+        savedTpis.push({
+          id: this._id,
+          status: this.status,
+          votingSession: this.votingSession
+        })
+      }
+    }
+  }
+
+  const tpis = [
+    makeTpi('planning-1', 'TPI-2026-001', bob),
+    makeTpi('planning-2', 'TPI-2026-002', david)
+  ]
+
+  const query = {
+    populate() {
+      return this
+    },
+    then(resolve, reject) {
+      return Promise.resolve(tpis).then(resolve, reject)
+    }
+  }
+
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches()
+  const restore = [
+    restoreService,
+    patchMethod(TpiPlanning, 'find', () => query),
+    patchMethod(Vote, 'findOneAndUpdate', async (filter) => {
+      voteUpdates.push(filter)
+      return {
+        _id: `vote-${voteUpdates.length}`
+      }
+    }),
+    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (params) => {
+      createdVoteLinks.push(params)
+      return {
+        url: `https://example.test/planning/${params.year}?ml=${params.person._id}`,
+        expiresAt: new Date('2026-05-01T12:00:00.000Z')
+      }
+    }),
+    patchMethod(emailService, 'sendVoteDigestRequests', async (targets) => {
+      sentDigestTargets.push(...targets)
+      return targets.map((target) => ({
+        email: target.email,
+        success: true
+      }))
+    }),
+    patchMethod(emailService, 'sendVoteRequests', async (...args) => {
+      sentVoteRequests.push(args)
+      return []
+    })
+  ]
+
+  try {
+    const result = await service.startVotesCampaign(2026, 'https://example.test')
+
+    assert.equal(result.tpiCount, 2)
+    assert.equal(result.totalEmails, 4)
+    assert.equal(result.successfulEmails, 4)
+    assert.equal(createdVoteLinks.length, 4)
+    assert.equal(sentDigestTargets.length, 4)
+    assert.equal(sentVoteRequests.length, 0)
+    assert.equal(voteUpdates.length, 6)
+    assert.equal(savedTpis.length, 2)
+
+    assert.equal(createdVoteLinks.every((link) => link.role === null), true)
+    assert.equal(
+      createdVoteLinks.every((link) => link.scope?.kind === 'stakeholder_votes'),
+      true
+    )
+    assert.equal(
+      createdVoteLinks.some((link) => Object.prototype.hasOwnProperty.call(link.scope || {}, 'tpiId')),
+      false
+    )
+
+    const aliceTarget = sentDigestTargets.find((target) => target.email === 'alice@example.com')
+    const carlaTarget = sentDigestTargets.find((target) => target.email === 'carla@example.com')
+    const bobTarget = sentDigestTargets.find((target) => target.email === 'bob@example.com')
+
+    assert.ok(aliceTarget)
+    assert.ok(carlaTarget)
+    assert.ok(bobTarget)
+    assert.deepEqual(
+      aliceTarget.tpis.map((tpi) => tpi.reference),
+      ['TPI-2026-001', 'TPI-2026-002']
+    )
+    assert.deepEqual(
+      carlaTarget.tpis.map((tpi) => tpi.reference),
+      ['TPI-2026-001', 'TPI-2026-002']
+    )
+    assert.deepEqual(
+      bobTarget.tpis.map((tpi) => tpi.reference),
+      ['TPI-2026-001']
+    )
+    assert.equal(result.details[0].emailsSent, 3)
+    assert.equal(result.details[1].emailsSent, 3)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('closeVotesCampaign confirme tous les TPI dont les trois rôles ont voté OK', async () => {
+  const confirmedSlots = new Map([
+    ['planning-1', 'slot-1'],
+    ['planning-2', 'slot-2']
+  ])
+  const tpis = [
+    {
+      _id: 'planning-1',
+      reference: 'TPI-2026-001',
+      conflicts: [],
+      save: async function save() { return this }
+    },
+    {
+      _id: 'planning-2',
+      reference: 'TPI-2026-002',
+      conflicts: [],
+      save: async function save() { return this }
+    }
+  ]
+  const votesByTpi = new Map(
+    tpis.map((tpi) => [
+      tpi._id,
+      [
+        { voterRole: 'expert1', decision: 'accepted' },
+        { voterRole: 'expert2', decision: 'accepted' },
+        { voterRole: 'chef_projet', decision: 'accepted' }
+      ]
+    ])
+  )
+  const confirmedTpiIds = []
+
+  const restore = [
+    patchMethod(TpiPlanning, 'find', async (query) => {
+      assert.equal(query.year, 2026)
+      assert.deepEqual(query.status.$in, ['voting', 'pending_validation'])
+      return tpis
+    }),
+    patchMethod(Vote, 'find', (query) => ({
+      select: async () => votesByTpi.get(String(query.tpiPlanning)) || []
+    })),
+    patchMethod(Vote, 'findUnanimousSlot', async (tpiId) => confirmedSlots.get(String(tpiId))),
+    patchMethod(schedulingService, 'confirmSlotForTpi', async (tpiId, slotId) => {
+      confirmedTpiIds.push(String(tpiId))
+      assert.equal(slotId, confirmedSlots.get(String(tpiId)))
+      return {
+        success: true
+      }
+    })
+  ]
+
+  try {
+    const result = await votingCampaignService.closeVotesCampaign(2026)
+
+    assert.equal(result.tpiProcessed, 2)
+    assert.equal(result.confirmedCount, 2)
+    assert.equal(result.manualRequiredCount, 0)
+    assert.deepEqual(confirmedTpiIds, ['planning-1', 'planning-2'])
+    assert.deepEqual(
+      result.details.map((detail) => detail.status),
+      ['confirmed', 'confirmed']
+    )
+    assert.deepEqual(
+      result.details.map((detail) => detail.allVotesIn),
+      [true, true]
+    )
   } finally {
     while (restore.length > 0) {
       restore.pop()()

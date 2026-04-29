@@ -3,13 +3,13 @@
  * Extrait les périodes d'enseignement pour déterminer la présence des enseignants
  * 
  * Logique : Si un enseignant a cours pendant une demi-journée, il est présent
- * et donc potentiellement disponible pour une soutenance TPI
+ * et donc potentiellement disponible pour une défense TPI
  */
 
 const fs = require('fs')
 const path = require('path')
 
-// Périodes de soutenance standard
+// Périodes de défense standard
 const PERIODS = {
   matin: {
     id: 'matin',
@@ -30,7 +30,7 @@ const PERIODS = {
 }
 
 // Offset pour la Suisse (UTC+1 en hiver, UTC+2 en été)
-// Pour simplifier, on utilise +2 pour les soutenances TPI (juin)
+// Pour simplifier, on utilise +2 pour les défenses TPI (juin)
 const SWISS_OFFSET_HOURS = 2
 
 /**
@@ -321,7 +321,7 @@ function processMultipleTeachers(teachers, startDate, endDate) {
  * 
  * @param {Array<string>} participantEmails - Emails des participants (expert1, expert2, chefProjet)
  * @param {Object} allPresences - Présences de tous les enseignants
- * @param {Array<string>} availableDates - Dates possibles pour les soutenances
+ * @param {Array<string>} availableDates - Dates possibles pour les défenses
  * @returns {Array} Liste des créneaux communs disponibles
  */
 function findCommonAvailableSlots(participantEmails, allPresences, availableDates) {

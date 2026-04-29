@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { authPlanningService, planningCatalogService, planningConfigService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
-import { IS_DEBUG } from '../../config/appConfig'
+import { IS_DEBUG, ROUTES } from '../../config/appConfig'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
 import PlanningCalendar from './PlanningCalendar'
 import TpiPlanningList from './TpiPlanningList'
@@ -13,7 +13,6 @@ import PageToolbar from '../shared/PageToolbar'
 import {
   AlertIcon,
   ArrowRightIcon,
-  BanIcon,
   CalendarIcon,
   CheckIcon,
   CloseIcon,
@@ -38,6 +37,7 @@ import {
 } from '../../constants/planningStatus'
 import { getActivePlanningSiteLabels, getPlanningPerimeterState } from '../../utils/planningScopeUtils'
 import { buildValidationToast, extractValidationResultFromError } from '../../utils/workflowFeedback'
+import { YEARS_CONFIG } from '../../config/appConfig'
 import './PlanningDashboard.css'
 
 const WORKFLOW_LABELS = {
@@ -55,7 +55,7 @@ const WORKFLOW_ACTION_LABELS = {
   remindVotes: 'Relancer votes',
   closeVotes: 'Clore votes',
   publish: 'Publier definitif',
-  sendLinks: 'Envoyer liens soutenance'
+  sendLinks: 'Envoyer liens défense'
 }
 
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== 'test'
@@ -514,7 +514,7 @@ function getMoveConflictLabel(conflict) {
   }
 
   if (type === 'consecutive_limit') {
-    return 'La règle du nombre de soutenances consécutives serait dépassée.'
+    return 'La règle du nombre de défenses consécutives serait dépassée.'
   }
 
   return conflict?.description || conflict?.message || 'Conflit détecté.'
@@ -621,7 +621,7 @@ function buildVoteWorkflowRow(tpi) {
 }
 
 /**
- * Dashboard principal pour la planification des soutenances TPI
+ * Dashboard principal pour la planification des défenses TPI
  * Offre une vue d'ensemble du processus de planification avec calendrier,
  * liste des TPI, panel de vote et gestion des conflits
  */
@@ -979,7 +979,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     {
       id: 'confirmed',
       title: 'Confirmes',
-      helper: 'Les soutenances ont un creneau confirme.',
+      helper: 'Les défenses ont un creneau confirme.',
       rows: voteWorkflowRows.filter((row) => row.bucket === 'confirmed')
     }
   ]), [voteWorkflowRows])
@@ -1020,39 +1020,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       .map(({ tpi }) => tpi)
   }, [legacyPlanningPerimeterEntries, tpis])
 
-  const outOfScopeLegacyTpis = useMemo(() => {
-    return legacyPlanningPerimeterEntries
-      .filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable)
-      .map(({ tpi }) => tpi)
-  }, [legacyPlanningPerimeterEntries])
-
-  const inScopeLegacyCount = useMemo(() => {
-    return legacyPlanningPerimeterEntries
-      .filter(({ planningPerimeter }) => planningPerimeter.isPlanifiable)
-      .length
-  }, [legacyPlanningPerimeterEntries])
-
-  const outOfScopeLegacySiteBreakdown = useMemo(() => {
-    const countsBySite = new Map()
-
-    legacyPlanningPerimeterEntries
-      .filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable)
-      .forEach(({ planningPerimeter }) => {
-        const label = compactText(planningPerimeter?.siteValue) || 'Site non renseigne'
-        countsBySite.set(label, (countsBySite.get(label) || 0) + 1)
-      })
-
-    return Array.from(countsBySite.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
-  }, [legacyPlanningPerimeterEntries])
-
   const activePlanningSiteLabels = useMemo(() => {
     return getActivePlanningSiteLabels(planningSiteConfigs)
   }, [planningSiteConfigs])
 
-  const legacyOutOfScopeCount = outOfScopeLegacyTpis.length
-  const hasLegacyOutOfScope = legacyOutOfScopeCount > 0
   const notImportedLegacyTpisByPlanningPerimeter = notImportedLegacyTpis
 
   const legacyTpiCount = legacyTpis.length
@@ -1170,7 +1141,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     Number(validationResult?.year) === Number(year) &&
     validationResult?.summary?.isValid === false
   const canStartVotes = isPlanningState && hasActiveSnapshot && hasSuccessfulValidation
-  const canPublish = isVotingState || isPublishedState
+  const canPublishDirect = isPlanningState && canStartVotes && !hasLegacyImportGap
+  const canPublish = canPublishDirect || isVotingState || isPublishedState
 
   const selectedTpiValidationMessages = useMemo(() => {
     if (!selectedTpi) {
@@ -1182,7 +1154,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
   const selectedTpiDetailLink = useMemo(() => {
     if (!selectedTpi) {
-      return '/gestionTPI'
+      return ROUTES.GESTION_TPI
     }
 
     return buildTpiDetailsLink(
@@ -1834,12 +1806,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handlePublishDefinitive = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'publish',
-      confirmMessage: 'Confirmer la publication definitive des soutenances ?',
+      confirmMessage: 'Confirmer la publication definitive des défenses ?',
       run: () => workflowPlanningService.publishDefinitive(year),
       successBuilder: (result) => {
         const sent = result?.sentLinks
         const sentLabel = sent
-          ? ` Liens soutenance: ${sent.emailsSucceeded || 0}/${sent.emailsSent || 0}.`
+          ? ` Liens défense: ${sent.emailsSucceeded || 0}/${sent.emailsSent || 0}.`
           : ''
         return (result?.message || 'Publication definitive terminee.') + sentLabel
       },
@@ -1854,15 +1826,20 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       run: () => workflowPlanningService.sendPublicationLinks(year),
       successBuilder: (result) => {
         const sent = result?.sentLinks
-        return `Liens soutenance envoyes: ${sent?.emailsSucceeded || 0}/${sent?.emailsSent || 0}.`
+        return `Liens défense envoyes: ${sent?.emailsSucceeded || 0}/${sent?.emailsSent || 0}.`
       },
-      errorFallback: 'Erreur lors de l envoi des liens soutenance.'
+      errorFallback: 'Erreur lors de l envoi des liens défense.'
     })
   }, [year, executeWorkflowAction])
 
   const handleOpenPublishedView = useCallback(() => {
-    window.location.href = `/Soutenances/${year}`
-  }, [year])
+    const normalizedYear = Number.parseInt(year, 10)
+    const targetYear = YEARS_CONFIG.isSupportedYear(normalizedYear)
+      ? normalizedYear
+      : YEARS_CONFIG.getCurrentYear()
+
+    navigate(`${ROUTES.SOUTENANCES}/${targetYear}`)
+  }, [year, navigate])
 
   const handleOpenVoteAccessPreview = useCallback(() => {
     const query = new URLSearchParams({
@@ -1871,13 +1848,18 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       auto: '1'
     })
 
-    navigate(`/genTokens?${query.toString()}`)
+    navigate(`${ROUTES.GEN_TOKENS}?${query.toString()}`)
   }, [navigate, year])
 
   const handleExitScopedVoteView = useCallback(() => {
+    const parsedYear = Number.parseInt(year, 10)
+    const targetYear = YEARS_CONFIG.isSupportedYear(parsedYear)
+      ? parsedYear
+      : YEARS_CONFIG.getCurrentYear()
+
     authPlanningService.clearSession()
-    window.location.href = `/planning/${year}`
-  }, [year])
+    navigate(`${ROUTES.PLANNING}/${targetYear}`)
+  }, [navigate, year])
 
   // Onglets de navigation
   const tabs = useMemo(() => {
@@ -1957,8 +1939,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const hasDashboardNotices = Boolean(
     error ||
     successMessage ||
-    hasLegacyPlanningData ||
-    (isAdmin && hasLegacyOutOfScope)
+    hasLegacyPlanningData
   )
   const proposalMoveSimulation = proposalMoveReview?.simulation || null
   const proposalMoveReference = compactText(proposalMoveReview?.tpi?.reference) ||
@@ -2076,7 +2057,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             </span>
             {isAdmin && isVotingState && (
               <Link
-                to={`/planning/${year}?tab=votes`}
+                to={`${ROUTES.PLANIFICATION_VOTES.replace(':year', String(year))}?tab=votes`}
                 className="page-tools-chip planning-dashboard-votes-link"
                 title="Ouvrir le suivi des votes de cette année."
               >
@@ -2143,7 +2124,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               <button
                 type="button"
                 className="legacy-planning-button"
-                onClick={() => navigate('/gestionTPI')}
+                onClick={() => navigate(ROUTES.GESTION_TPI)}
                 title="Ouvrir la gestion TPI."
                 aria-label="Ouvrir la gestion TPI."
               >
@@ -2152,54 +2133,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             </div>
           )}
 
-          {isAdmin && hasLegacyOutOfScope && (
-            <div className="legacy-planning-banner legacy-planning-banner-info legacy-perimeter-banner">
-              <div className="legacy-perimeter-copy">
-                <div className="legacy-perimeter-head">
-                  <span className="legacy-perimeter-eyebrow">Perimetre Planning {year}</span>
-                  <strong>Le workflow ne couvre que les sites actives pour cette annee.</strong>
-                </div>
-
-                <div className="legacy-perimeter-metrics" aria-label={`Résumé du périmètre Planning ${year}`}>
-                  <span className="legacy-perimeter-metric in-scope">
-                    <CheckIcon className="inline-icon" />
-                    {inScopeLegacyCount} dans le workflow
-                  </span>
-                  <span className="legacy-perimeter-metric out-of-scope">
-                    <BanIcon className="inline-icon" />
-                    {legacyOutOfScopeCount} TPI hors site
-                  </span>
-                </div>
-
-                <p>{legacyOutOfScopeCount} TPI hors site.</p>
-
-                <div className="legacy-perimeter-tags">
-                  <span className="legacy-perimeter-tag active-sites">
-                    {activePlanningSiteLabels.length > 0
-                      ? `Sites planifies: ${activePlanningSiteLabels.join(', ')}`
-                      : `Aucun site actif n'est configure pour ${year}.`}
-                  </span>
-                  {outOfScopeLegacySiteBreakdown.map(({ label, count }) => (
-                    <span
-                      key={`${label}-${count}`}
-                      className="legacy-perimeter-tag excluded-sites"
-                    >
-                      {label}: {count}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="legacy-planning-button legacy-planning-button-info"
-                onClick={() => navigate('/gestionTPI')}
-                title="Ouvrir Gestion TPI."
-                aria-label="Ouvrir Gestion TPI."
-              >
-                Ouvrir Gestion TPI
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -2438,7 +2371,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                     <button
                       type="button"
                       className="validation-feedback-link"
-                      onClick={() => navigate('/gestionTPI')}
+                      onClick={() => navigate(ROUTES.GESTION_TPI)}
                       title="Ouvrir la gestion TPI."
                       aria-label="Ouvrir la gestion TPI."
                     >
@@ -2642,16 +2575,43 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 </button>
               ) : null}
 
+              {isPlanningState || isVotingState ? (
+                <button
+                  type="button"
+                  className="workflow-btn success"
+                  onClick={handlePublishDefinitive}
+                  disabled={workflowActionLoading || (isPlanningState ? !canPublishDirect : !canPublish)}
+                  title={
+                    isPlanningState
+                      ? hasLegacyImportGap
+                        ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
+                        : hasBlockedValidation
+                          ? 'La vérification a détecté des anomalies. Corrigez-les avant de publier.'
+                          : canPublishDirect
+                            ? 'Confirmer les créneaux du snapshot et publier sans campagne de votes.'
+                            : 'Geler un snapshot avant publication directe.'
+                      : 'Publier les défenses confirmées.'
+                  }
+                >
+                  <CheckIcon className="button-icon" />
+                  {isActionRunning('publish')
+                    ? 'Publication...'
+                    : isPlanningState
+                      ? 'Publier sans votes'
+                      : 'Publier définitif'}
+                </button>
+              ) : null}
+
               {isPublishedState ? (
                 <button
                   type="button"
                   className="workflow-btn success"
                   onClick={handleOpenPublishedView}
-                  title="Afficher la vue de publication des soutenances."
-                  aria-label="Ouvrir soutenances."
+                  title="Afficher la vue de publication des défenses."
+                  aria-label="Ouvrir défenses."
                 >
                   <CheckIcon className="button-icon" />
-                  Ouvrir soutenances
+                  Ouvrir défenses
                 </button>
               ) : null}
             </div>
@@ -2788,10 +2748,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                                         <div className="vote-proposal-summary-chips">
                                           {summary.slots.length > 0 ? (
                                             <div className="vote-proposal-choice-list">
-                                              {summary.slots.map((slot, slotIndex) => {
-                                                const choiceLabel = slot.priority
-                                                  ? `Choix ${slot.priority}`
-                                                  : `Choix ${slotIndex + 1}`
+                                              {summary.slots.map((slot) => {
                                                 const moveKey = `${row.id}:${slot.slotId}:move`
                                                 const preferenceKey = `${slot.voteId || summary.role}:${slot.slotId}`
                                                 const isMoveLoading = proposalMoveLoadingKey === `${row.id}:${slot.slotId}` ||
@@ -2805,9 +2762,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                                                   >
                                                     <span
                                                       className="vote-proposal-chip is-normal"
-                                                      title={`${choiceLabel}: ${slot.label}`}
+                                                      title={slot.label}
                                                     >
-                                                      {choiceLabel}: {slot.label}
+                                                      {slot.label}
                                                     </span>
                                                     <button
                                                       type="button"

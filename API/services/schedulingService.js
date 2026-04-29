@@ -12,6 +12,7 @@ const { getRoomCompatibilityReport } = require('./roomClassCompatibilityService'
 const {
   buildOccupiedStepKeys,
   buildTimelineIndex,
+  getMaxConsecutiveTpiLimit,
   MAX_CONSECUTIVE_TPI,
   OCCUPIED_SLOT_STATUSES,
   slotContainsPerson,
@@ -51,8 +52,8 @@ function toIdString(value) {
 
 /**
  * Génère tous les créneaux pour une période donnée
- * @param {Number} year - Année de soutenance
- * @param {Array} dates - Liste des dates de soutenance
+ * @param {Number} year - Année de défense
+ * @param {Array} dates - Liste des dates de défense
  * @param {Object} siteConfig - Configuration du site (salles, périodes, etc.)
  */
 async function generateSlotsForPeriod(year, dates, siteConfig) {
@@ -183,13 +184,15 @@ async function calculateSlotScore(slot, tpi) {
     result.reasons.push(`Expert 2 à confirmer: ${expert2Available.reason}`)
   }
   
-  // 4. Vérifier la règle des 4 TPI consécutifs
+  // 4. Vérifier la règle des TPI consécutifs
   const consecutiveCheck = await checkConsecutiveRule([
     tpi.candidat?._id || tpi.candidat,
     tpi.expert1._id,
     tpi.expert2._id,
     tpi.chefProjet._id
-  ], date, period)
+  ], date, period, {
+    maxConsecutiveTpi: slot?.config?.maxConsecutiveTpi
+  })
   
   if (!consecutiveCheck.valid) {
     result.reasons.push(`Attention: ${consecutiveCheck.reason}`)
@@ -241,12 +244,13 @@ async function checkPersonAvailability(person, date, period, slotId) {
 }
 
 /**
- * Vérifie la règle des 4 TPI consécutifs max
+ * Vérifie la règle des TPI consécutifs max
  */
-async function checkConsecutiveRule(personIds, date, period) {
+async function checkConsecutiveRule(personIds, date, period, options = {}) {
   const candidateDate = new Date(date)
   const year = candidateDate.getFullYear()
   const candidateKey = toTimeStepKey(candidateDate, period)
+  const maxConsecutiveTpi = getMaxConsecutiveTpiLimit(options?.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
 
   if (!candidateKey) {
     return { valid: true, reason: '' }
@@ -284,7 +288,7 @@ async function checkConsecutiveRule(personIds, date, period) {
     }
 
     const consecutive = rightIndex - leftIndex + 1
-    if (consecutive > MAX_CONSECUTIVE_TPI) {
+    if (consecutive > maxConsecutiveTpi) {
       const person = await Person.findById(personId)
       const personName = getPersonDisplayName(person)
 

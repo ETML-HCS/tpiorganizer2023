@@ -10,6 +10,7 @@ const { filterPlanifiableTpis } = require('./tpiPlanningVisibility')
 const {
   buildOccupiedStepKeys,
   buildTimelineIndex,
+  getMaxConsecutiveTpiLimit,
   MAX_CONSECUTIVE_TPI,
   OCCUPIED_SLOT_STATUSES,
   toTimeStepKey
@@ -41,6 +42,14 @@ function toIsoDateKey(rawDate) {
 
 function normalizeText(value) {
   return String(value || '').trim()
+}
+
+function normalizeLookup(value) {
+  return normalizeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
 }
 
 function pickFirstNonEmpty(...values) {
@@ -352,9 +361,53 @@ function formatSlotLabel(slot) {
   return [dateLabel, periodLabel, roomLabel].filter(Boolean).join(' • ')
 }
 
-function detectSequenceViolations(slots) {
+function buildMaxConsecutiveTpiBySite(planningConfig = {}) {
+  const bySite = new Map()
+
+  for (const siteConfig of Array.isArray(planningConfig?.siteConfigs) ? planningConfig.siteConfigs : []) {
+    if (siteConfig?.active === false) {
+      continue
+    }
+
+    const limit = getMaxConsecutiveTpiLimit(siteConfig?.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
+    const keys = [
+      siteConfig?.siteId,
+      siteConfig?.siteCode,
+      siteConfig?.label
+    ]
+      .map((value) => normalizeLookup(value))
+      .filter(Boolean)
+
+    for (const key of keys) {
+      bySite.set(key, limit)
+    }
+  }
+
+  return bySite
+}
+
+function resolveSlotMaxConsecutiveTpi(slot, maxConsecutiveTpiBySite) {
+  const configuredLimit = maxConsecutiveTpiBySite?.get(normalizeLookup(slot?.room?.site))
+  return getMaxConsecutiveTpiLimit(
+    configuredLimit ?? slot?.config?.maxConsecutiveTpi,
+    MAX_CONSECUTIVE_TPI
+  )
+}
+
+function getRunMaxConsecutiveTpiLimit(runKeys, slotLimits) {
+  const limits = runKeys
+    .map((key) => getMaxConsecutiveTpiLimit(slotLimits.get(key), MAX_CONSECUTIVE_TPI))
+    .filter((value) => Number.isInteger(value) && value > 0)
+
+  return limits.length > 0
+    ? Math.min(...limits)
+    : MAX_CONSECUTIVE_TPI
+}
+
+function detectSequenceViolations(slots, options = {}) {
   const timeline = buildTimelineIndex(slots)
   const personMetadata = new Map()
+  const maxConsecutiveTpiBySite = buildMaxConsecutiveTpiBySite(options?.planningConfig)
 
   for (const slot of slots) {
     if (!OCCUPIED_SLOT_STATUSES.includes(slot.status)) {
@@ -386,7 +439,8 @@ function detectSequenceViolations(slots) {
           personName: getPersonDisplayName(participant),
           roles: new Set(),
           slotLabels: new Map(),
-          slotReferences: new Map()
+          slotReferences: new Map(),
+          slotLimits: new Map()
         })
       }
 
@@ -396,6 +450,7 @@ function detectSequenceViolations(slots) {
         current.personName = getPersonDisplayName(participant)
       }
       current.slotLabels.set(key, formatSlotLabel(slot))
+      current.slotLimits.set(key, resolveSlotMaxConsecutiveTpi(slot, maxConsecutiveTpiBySite))
 
       const slotReference = normalizeText(slot?.assignedTpi?.reference)
       if (slotReference) {
@@ -418,7 +473,7 @@ function detectSequenceViolations(slots) {
       .filter((value) => Number.isInteger(value))
       .sort((left, right) => left - right)
 
-    if (occupiedIndices.length <= MAX_CONSECUTIVE_TPI) {
+    if (occupiedIndices.length === 0) {
       continue
     }
 
@@ -433,8 +488,9 @@ function detectSequenceViolations(slots) {
       }
 
       const runLength = runEnd - runStart + 1
-      if (runLength > MAX_CONSECUTIVE_TPI) {
-        const runKeys = timeline.timeSteps.slice(runStart, runEnd + 1)
+      const runKeys = timeline.timeSteps.slice(runStart, runEnd + 1)
+      const maxConsecutiveTpi = getRunMaxConsecutiveTpiLimit(runKeys, participant.slotLimits)
+      if (runLength > maxConsecutiveTpi) {
         const slotLabels = runKeys
           .map((key) => participant.slotLabels.get(key))
           .filter(Boolean)
@@ -449,6 +505,7 @@ function detectSequenceViolations(slots) {
           personId: participant.personId,
           personName: participant.personName,
           consecutiveCount: runLength,
+          maxConsecutiveTpi,
           slotLabels,
           references,
           message: `${participant.personName} a ${runLength} TPI consécutifs. Une pause d'un créneau est obligatoire avant de reprendre.`
@@ -460,8 +517,9 @@ function detectSequenceViolations(slots) {
     }
 
     const finalRunLength = runEnd - runStart + 1
-    if (finalRunLength > MAX_CONSECUTIVE_TPI) {
-      const runKeys = timeline.timeSteps.slice(runStart, runEnd + 1)
+    const runKeys = timeline.timeSteps.slice(runStart, runEnd + 1)
+    const maxConsecutiveTpi = getRunMaxConsecutiveTpiLimit(runKeys, participant.slotLimits)
+    if (finalRunLength > maxConsecutiveTpi) {
       const slotLabels = runKeys
         .map((key) => participant.slotLabels.get(key))
         .filter(Boolean)
@@ -476,6 +534,7 @@ function detectSequenceViolations(slots) {
         personId: participant.personId,
         personName: participant.personName,
         consecutiveCount: finalRunLength,
+        maxConsecutiveTpi,
         slotLabels,
         references,
         message: `${participant.personName} a ${finalRunLength} TPI consécutifs. Une pause d'un créneau est obligatoire avant de reprendre.`
@@ -665,9 +724,9 @@ function buildLegacyConsistencyIssues({ year, legacyTpis, workflowTpis, people =
     })
 }
 
-function buildValidationIssues(entries, slots, extraIssues = []) {
+function buildValidationIssues(entries, slots, extraIssues = [], options = {}) {
   const hardConflictData = detectHardConflicts(entries)
-  const sequenceViolations = detectSequenceViolations(Array.isArray(slots) ? slots : [])
+  const sequenceViolations = detectSequenceViolations(Array.isArray(slots) ? slots : [], options)
   const roomClassMismatchIssues = buildRoomClassMismatchIssues(entries)
 
   const issues = [
@@ -770,7 +829,8 @@ async function validatePlanningForYear(year) {
   const validationIssues = buildValidationIssues(
     entries,
     slots,
-    [...workflowGapIssues, ...legacyConsistencyIssues]
+    [...workflowGapIssues, ...legacyConsistencyIssues],
+    { planningConfig }
   )
 
   const source = {

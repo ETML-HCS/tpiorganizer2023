@@ -108,13 +108,13 @@ const personSchema = new Schema({
   // Un candidat est lié à une année précise. En cas de redoublement, ajouter l'année manuellement.
   candidateYears: [{ type: Number }],
 
-  // Dates idéales de soutenance à considérer lors de la planification automatique
+  // Dates idéales de défense à considérer lors de la planification automatique
   preferredSoutenanceDates: {
     type: [{ type: Date }],
     default: [],
     validate: {
       validator: (value) => Array.isArray(value) && value.length <= 3,
-      message: 'Maximum 3 dates de preference de soutenance.'
+      message: 'Maximum 3 dates de preference de défense.'
     }
   },
   preferredSoutenanceChoices: {
@@ -122,7 +122,7 @@ const personSchema = new Schema({
     default: [],
     validate: {
       validator: (value) => Array.isArray(value) && value.length <= 3,
-      message: 'Maximum 3 preferences precises de soutenance.'
+      message: 'Maximum 3 preferences precises de défense.'
     }
   }
 })

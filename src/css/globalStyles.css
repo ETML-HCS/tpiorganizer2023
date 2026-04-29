@@ -1,6 +1,6 @@
 :root {
   --app-ui-font-family: "Trebuchet MS", "Segoe UI", "Aptos", sans-serif;
-  --app-page-width: min(98vw, 1800px);
+  --app-page-width: min(97vw, 1540px);
   --app-page-gutter: clamp(12px, 1vw, 20px);
   --app-header-height: 66px;
   --app-tools-height: 0px;
@@ -48,22 +48,7 @@
 }
 
 :is(.page-with-toolbar, .stakeholders-page)::before {
-  content: "";
-  position: fixed;
-  top: calc(var(--app-header-height) + 34px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(92vw, 1320px);
-  height: 280px;
-  border-radius: 36px;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(circle at 20% 18%, rgba(59, 130, 246, 0.12), transparent 32%),
-    radial-gradient(circle at 78% 12%, rgba(14, 165, 233, 0.12), transparent 28%),
-    radial-gradient(circle at 60% 82%, rgba(16, 185, 129, 0.1), transparent 28%);
-  filter: blur(16px);
-  opacity: 0.95;
+  display: none;
 }
 
 #header {
@@ -555,6 +540,7 @@ body.planning-focus-mode .app-header-tools-toggle {
 #tools.tpi-eval-tools,
 #tools.token-generator-tools,
 #tools.tpi-detail-tools,
+#tools.tpi-management-tools,
 #tools.planning-dashboard-tools,
 #tools.planning-tools {
   width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
@@ -776,9 +762,11 @@ body.planning-focus-mode .app-header-tools-toggle {
 
 #tools.planning-tools .planning-room-overview-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   align-items: start;
+  width: min(97%, 100%);
+  margin-inline: auto;
 }
 
 #tools.planning-tools .planning-room-overview-card {
@@ -1391,6 +1379,17 @@ body.planning-focus-mode .app-header-tools-toggle {
   border-color: #c084fc;
 }
 
+#tools.planning-tools .planning-data-btn.delete-all {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+#tools.planning-tools .planning-data-btn.delete-all:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
 #tools.planning-tools .planning-data-btn.edit {
   background: #f8fafc;
   color: #475569;
@@ -1832,6 +1831,7 @@ body.planning-focus-mode .app-header-tools-toggle {
   grid-column: 1;
   display: block;
   margin: 0;
+  max-width: 46ch;
   color: #64748b;
   font-size: 0.72rem;
   line-height: 1.3;
@@ -2839,4 +2839,85 @@ label.icon-button:not(.icon-button--with-badge) {
 
 .planning-schedule-page--focus .date-room {
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+/* Professional application harmonization */
+:root {
+  --app-content-width: var(--app-page-width);
+  --app-surface: #ffffff;
+  --app-surface-muted: #f8fafc;
+  --app-border: #d8e0ea;
+  --app-border-soft: #e7edf3;
+  --app-text: #0f172a;
+  --app-text-muted: #5b677a;
+  --app-radius-panel: 10px;
+  --app-radius-card: 8px;
+  --app-shadow-panel: 0 10px 26px rgba(15, 23, 42, 0.06);
+  --app-shadow-card: 0 6px 18px rgba(15, 23, 42, 0.045);
+}
+
+body {
+  background: #f4f7fa;
+}
+
+:is(
+  .page-with-toolbar,
+  .planning-schedule-page,
+  .planning-dashboard,
+  .stakeholders-page,
+  .configuration-page,
+  .tpi-management-page,
+  .tpi-soutenance-page,
+  .tpi-detail-page,
+  #tpiEval
+) {
+  color: var(--app-text);
+}
+
+#tools.page-tools {
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-panel);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--app-shadow-panel);
+}
+
+.page-tools .page-tools-shell {
+  gap: 8px;
+}
+
+.page-tools .page-tools-title {
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.page-tools .page-tools-description,
+.page-tools .page-tools-note {
+  color: var(--app-text-muted);
+}
+
+.page-tools .page-tools-tabs {
+  border-radius: var(--app-radius-panel);
+  background: #eef3f8;
+  box-shadow: none;
+}
+
+.page-tools .page-tools-tab {
+  border-radius: var(--app-radius-card);
+  box-shadow: none;
+}
+
+.page-tools .page-tools-tab.active {
+  transform: none;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.07);
+}
+
+.page-tools .page-tools-tab.active::before {
+  height: 2px;
+  background: #2563eb;
+}
+
+.page-tools .page-tools-field-control,
+.page-tools .page-tools-action-btn,
+.page-tools .page-tools-file-label {
+  border-radius: var(--app-radius-card);
 }

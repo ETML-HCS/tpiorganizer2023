@@ -13,6 +13,12 @@ const {
 const magicLinkV2Service = require('../services/magicLinkV2Service')
 
 const router = express.Router()
+const DEFENSE_API_PREFIXES = ['/defenses', '/soutenances']
+const DEFENSE_ACCESS_REQUIRED_ERROR = 'Code ou lien magique requis pour afficher les defenses.'
+
+function buildDefenseApiRoutes(suffix) {
+  return DEFENSE_API_PREFIXES.map(prefix => `${prefix}${suffix}`)
+}
 
 function isValidRole(role) {
   return ['expert1', 'expert2', 'boss'].includes(role)
@@ -26,6 +32,18 @@ function getBearerToken(req) {
   }
 
   return authHeader.substring(7)
+}
+
+function getQueryToken(req, keys) {
+  for (const key of keys) {
+    const value = req.query[key]
+
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return ''
 }
 
 function tryResolveAdminSession(req) {
@@ -63,7 +81,7 @@ async function resolveSoutenanceViewer(magicLinkToken, year) {
   const resolved = await magicLinkV2Service.resolveMagicLink(magicLinkToken)
 
   if (resolved?.link?.type !== 'soutenance') {
-    const error = new Error('Ce lien n est pas un lien de soutenance.')
+    const error = new Error('Ce lien n est pas un lien de défense.')
     error.statusCode = 403
     throw error
   }
@@ -81,11 +99,11 @@ async function resolveSoutenanceViewer(magicLinkToken, year) {
   }
 }
 
-router.get('/soutenances/:year', requireYearParam('year'), async (req, res) => {
+router.get(buildDefenseApiRoutes('/:year'), requireYearParam('year'), async (req, res) => {
   try {
     const adminSession = tryResolveAdminSession(req)
-    const magicLinkToken = typeof req.query.ml === 'string' ? req.query.ml.trim() : ''
-    const legacyToken = typeof req.query.token === 'string' ? req.query.token.trim() : ''
+    const magicLinkToken = getQueryToken(req, ['ml'])
+    const legacyToken = getQueryToken(req, ['token', 'code'])
 
     let accessOptions = {}
 
@@ -103,9 +121,7 @@ router.get('/soutenances/:year', requireYearParam('year'), async (req, res) => {
         viewerName: legacyViewer.name
       }
     } else {
-      return res.status(401).json({
-        error: 'Authentification ou lien de soutenance requis.'
-      })
+      return res.status(401).json({ error: DEFENSE_ACCESS_REQUIRED_ERROR })
     }
 
     const rooms = await listPublishedSoutenances(req.params.year, accessOptions)
@@ -116,7 +132,7 @@ router.get('/soutenances/:year', requireYearParam('year'), async (req, res) => {
       return res.status(error.statusCode).json({ error: error.message })
     }
 
-    console.error(`Error fetching soutenances for year ${req.params.year}:`, error)
+    console.error(`Error fetching défenses for year ${req.params.year}:`, error)
     return res.status(500).json({
       error: `Internal server error for the year ${req.params.year}`
     })
@@ -124,7 +140,7 @@ router.get('/soutenances/:year', requireYearParam('year'), async (req, res) => {
 })
 
 router.post(
-  '/soutenances/:year/publish-room',
+  buildDefenseApiRoutes('/:year/publish-room'),
   requireAppAuth,
   requireYearParam('year'),
   async (req, res) => {
@@ -139,15 +155,15 @@ router.post(
 
     return res.status(200).json(savedRoom)
   } catch (error) {
-    console.error(`Error publishing soutenance room for year ${req.params.year}:`, error)
+    console.error(`Error publishing défense room for year ${req.params.year}:`, error)
     return res.status(500).json({
-      error: `Erreur lors de la publication de la salle de soutenance pour l'année ${req.params.year}`
+      error: `Erreur lors de la publication de la salle de défense pour l'année ${req.params.year}`
     })
   }
 })
 
 router.post(
-  '/soutenances/:year/publish-from-planning',
+  buildDefenseApiRoutes('/:year/publish-from-planning'),
   requireAppAuth,
   requireYearParam('year'),
   async (req, res) => {
@@ -162,7 +178,7 @@ router.post(
       publicationVersion: publishedResult?.publicationVersion || null,
       message: publishedRooms.length > 0
         ? `${publishedRooms.length} salles publiées depuis le planning confirmé`
-        : 'Aucune soutenance confirmée à publier'
+        : 'Aucune défense confirmée à publier'
     })
   } catch (error) {
     console.error(`Error publishing confirmed planning for year ${req.params.year}:`, error)
@@ -173,14 +189,14 @@ router.post(
 })
 
 router.put(
-  '/soutenances/:year/rooms/:roomId/tpis/:tpiDataId/offres/:expertOrBoss',
+  buildDefenseApiRoutes('/:year/rooms/:roomId/tpis/:tpiDataId/offres/:expertOrBoss'),
   requireYearParam('year'),
   async (req, res) => {
   try {
     const { year, roomId, tpiDataId, expertOrBoss } = req.params
     const adminSession = tryResolveAdminSession(req)
-    const legacyToken = typeof req.query.token === 'string' ? req.query.token.trim() : ''
-    const magicLinkToken = typeof req.query.ml === 'string' ? req.query.ml.trim() : ''
+    const legacyToken = getQueryToken(req, ['token', 'code'])
+    const magicLinkToken = getQueryToken(req, ['ml'])
 
     if (!isValidRole(expertOrBoss)) {
       return res.status(400).json({ error: 'Rôle invalide.' })
@@ -188,7 +204,7 @@ router.put(
 
     if (magicLinkToken) {
       return res.status(403).json({
-        error: 'Lien soutenance en lecture seule.'
+        error: 'Lien défense en lecture seule.'
       })
     }
 
@@ -197,7 +213,7 @@ router.put(
       legacyViewer = await resolveLegacyViewer(legacyToken)
       if (!legacyViewer) {
         return res.status(401).json({
-          error: 'Authentification requise pour modifier une soutenance.'
+          error: 'Authentification requise pour modifier une défense.'
         })
       }
     }
@@ -207,18 +223,18 @@ router.put(
       const room = await DataRooms.findById(roomId)
 
       if (!room) {
-        return res.status(404).json({ error: 'Salle de soutenance introuvable.' })
+        return res.status(404).json({ error: 'Salle de défense introuvable.' })
       }
 
       const tpiData = room.tpiDatas.id(tpiDataId)
 
       if (!tpiData) {
-        return res.status(404).json({ error: 'Salle de soutenance introuvable.' })
+        return res.status(404).json({ error: 'Salle de défense introuvable.' })
       }
 
       if (tpiData[expertOrBoss]?.name !== legacyViewer.name) {
         return res.status(403).json({
-          error: 'Non autorisé à modifier cette soutenance.'
+          error: 'Non autorisé à modifier cette défense.'
         })
       }
     }
@@ -232,17 +248,17 @@ router.put(
     )
 
     if (!tpiData) {
-      return res.status(404).json({ error: 'Salle de soutenance introuvable.' })
+      return res.status(404).json({ error: 'Salle de défense introuvable.' })
     }
 
     return res.status(200).json({
-      message: 'Données de soutenance mises à jour avec succès',
+      message: 'Données de défense mises à jour avec succès',
       tpiData
     })
   } catch (error) {
-    console.error('Erreur lors de la mise à jour des offres de soutenance :', error)
+    console.error('Erreur lors de la mise à jour des offres de défense :', error)
     return res.status(500).json({
-      error: 'Erreur lors de la mise à jour des données de soutenance'
+      error: 'Erreur lors de la mise à jour des données de défense'
     })
   }
 })

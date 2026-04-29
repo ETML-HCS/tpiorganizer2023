@@ -66,8 +66,20 @@ const MobileRoomFilter = ({ rooms, schedule }) => {
             );
           })}
         </div>
-        <button onClick={handlePreviousRoom}>Gauche</button>
-        <button onClick={handleNextRoom}>Droite</button>
+        <button
+          onClick={handlePreviousRoom}
+          title="Voir la salle précédente"
+          aria-label="Salle précédente"
+        >
+          Gauche
+        </button>
+        <button
+          onClick={handleNextRoom}
+          title="Voir la salle suivante"
+          aria-label="Salle suivante"
+        >
+          Droite
+        </button>
       </div>
     );
   };

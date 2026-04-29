@@ -8,7 +8,7 @@ const Schema = mongoose.Schema
 const slotSchema = new Schema({
   _id: { type: Schema.Types.ObjectId, auto: true },
   
-  // Année de soutenance
+  // Année de défense
   year: { type: Number, required: true, index: true },
   
   // Date du créneau
@@ -68,7 +68,8 @@ const slotSchema = new Schema({
   // Métadonnées de configuration
   config: {
     duration: { type: Number, default: 60 }, // Durée en minutes
-    breakAfter: { type: Number, default: 10 } // Pause après en minutes
+    breakAfter: { type: Number, default: 10 }, // Pause après en minutes
+    maxConsecutiveTpi: { type: Number, default: 4 }
   },
   
   // Historique des modifications
@@ -142,7 +143,10 @@ slotSchema.statics.generateDaySlots = async function(year, date, site, config) {
         },
         config: {
           duration: tpiTime * 60,
-          breakAfter: breakline * 60
+          breakAfter: breakline * 60,
+          maxConsecutiveTpi: Number.isInteger(Number(config.maxConsecutiveTpi)) && Number(config.maxConsecutiveTpi) > 0
+            ? Number(config.maxConsecutiveTpi)
+            : 4
         },
         status: 'available'
       })

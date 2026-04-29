@@ -1,4 +1,4 @@
-# Roadmap Workflow Soutenances - Epics, User Stories, DoD
+# Roadmap Workflow Défenses - Epics, User Stories, DoD
 
 ## 1) Vision produit
 
@@ -160,7 +160,7 @@ Publier une version finale stable et consultable.
 
 - US-11: En tant qu'admin, je veux publier uniquement les TPI confirmes.
 - US-12: En tant qu'admin, je veux envoyer automatiquement les `soutenance_link` apres publication.
-- US-13: En tant qu'utilisateur, je veux voir une vue finale filtree a mes soutenances.
+- US-13: En tant qu'utilisateur, je veux voir une vue finale filtree a mes défenses.
 - US-14: En tant qu'admin, je veux rollback la publication precedente si besoin.
 
 ### Criteres d'acceptation
@@ -216,7 +216,7 @@ Garantir separation stricte des usages et robustesse securite.
 ### DoD Epic
 
 - Tests de securite passes (expiry, replay, scope mismatch, revocation).
-- Aucun endpoint ne melange les scopes vote/soutenance.
+- Aucun endpoint ne melange les scopes vote/défense.
 
 ---
 
@@ -240,7 +240,7 @@ Rendre le workflow operable sans manip technique.
 
 ### Livrables
 
-- Actions UI dans `planification`, `planification-votes/:year`, `Soutenances admin`.
+- Actions UI dans `planification`, `planification-votes/:year`, `Défenses admin`.
 
 ### DoD Epic
 
@@ -380,7 +380,7 @@ Une story est Done si:
 ## 9) KPIs de succes
 
 1. 100% des TPI publies proviennent d'un etat `confirmed`.
-2. 0 incident de token cross-scope (vote vers soutenance ou inverse).
+2. 0 incident de token cross-scope (vote vers défense ou inverse).
 3. >95% des votes collectes avant deadline.
 4. Publication + rollback executes en <5 minutes.
 5. 0 modification manuelle hors workflow officiel.
@@ -446,7 +446,7 @@ Une story est Done si:
 
 - [ ] Bouton `Valider et geler` en planification.
 - [ ] Boutons `Lancer/Relancer/Clore` en planification-votes.
-- [ ] Boutons `Publier/Envoyer liens/Rollback` en admin soutenances.
+- [ ] Boutons `Publier/Envoyer liens/Rollback` en admin défenses.
 - [ ] Etats disabled/loading + confirmations explicites.
 
 ### EPIC-07 - Migration legacy

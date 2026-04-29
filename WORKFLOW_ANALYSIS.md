@@ -326,7 +326,7 @@ POST /:year/publication/publish
                                  └─→ Admin assigne ──→ confirmed
 
    confirmed ──→ ┌──────────────┐
-                │ completed │ (après soutenance)
+                │ completed │ (après défense)
                 └──────────────┘
 ```
 

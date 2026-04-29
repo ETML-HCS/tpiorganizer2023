@@ -52,7 +52,7 @@ const tpiSchema = new mongoose.Schema(
     tags: [String], // Liste de tags associés au TPI
     dates: {
       // Regroupe les dates en un seul champ
-      soutenance: Date, // Date de soutenance du TPI
+      soutenance: Date, // Date de défense du TPI
       depart: { type: Date }, // Date de début du TPI (non obligatoire)
       fin: { type: Date }, // Date de fin du TPI (non obligatoire)
       premiereVisite: { type: Date }, // Date de la première visite (non obligatoire)
@@ -65,7 +65,7 @@ const tpiSchema = new mongoose.Schema(
       note: { type: Number }, // Note attribuée lors de l'évaluation (non obligatoire)
       lien: { type: String } // Lien vers l'évaluation (non obligatoire)
     },
-    salle: { type: String } // Salle de soutenance (non obligatoire)
+    salle: { type: String } // Salle de défense (non obligatoire)
   },
   {
     collection: 'tpiList'

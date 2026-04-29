@@ -54,7 +54,7 @@ export const buildImportedTpi = (entry) => {
     dates: {
       depart: parseLegacyDate(getFirstValue(entry, ['Départ', 'dateDepart'])),
       fin: parseLegacyDate(getFirstValue(entry, ['Fin', 'dateFin'])),
-      soutenance: parseLegacyDate(getFirstValue(entry, ['Date soutenance', 'dateSoutenance']))
+      soutenance: parseLegacyDate(getFirstValue(entry, ['Date défense', 'Date soutenance', 'dateSoutenance']))
     },
     salle: getFirstValue(entry, ['Salle', 'salle'])
   }

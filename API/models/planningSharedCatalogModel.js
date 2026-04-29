@@ -128,6 +128,28 @@ const siteClassGroupSchema = new mongoose.Schema(
   { _id: false }
 )
 
+const stakeholderIconSchema = new mongoose.Schema(
+  {
+    candidate: {
+      type: String,
+      default: 'candidate'
+    },
+    expert1: {
+      type: String,
+      default: 'participant'
+    },
+    expert2: {
+      type: String,
+      default: 'participant'
+    },
+    projectManager: {
+      type: String,
+      default: 'participant'
+    }
+  },
+  { _id: false }
+)
+
 const siteCatalogSchema = new mongoose.Schema(
   {
     id: {
@@ -143,6 +165,14 @@ const siteCatalogSchema = new mongoose.Schema(
       default: ''
     },
     planningColor: {
+      type: String,
+      default: ''
+    },
+    tpiColor: {
+      type: String,
+      default: ''
+    },
+    soutenanceColor: {
       type: String,
       default: ''
     },
@@ -180,6 +210,10 @@ const planningSharedCatalogSchema = new mongoose.Schema({
   schemaVersion: {
     type: Number,
     default: 2
+  },
+  stakeholderIcons: {
+    type: stakeholderIconSchema,
+    default: () => ({})
   },
   sites: {
     type: [siteCatalogSchema],

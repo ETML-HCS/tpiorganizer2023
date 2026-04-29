@@ -300,7 +300,8 @@ test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferr
     assert.deepEqual(body.preferredSoutenanceDates, ['2026-06-12', '2026-06-10'])
     assert.deepEqual(body.preferredSoutenanceChoices, [
       { date: '2026-06-12', period: 3 },
-      { date: '2026-06-10', period: 1 }
+      { date: '2026-06-10', period: 1 },
+      { date: '2026-06-10', period: 6 }
     ])
     assert.deepEqual(body.roles, ['candidat'])
   } finally {

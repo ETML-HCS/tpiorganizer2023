@@ -138,7 +138,7 @@
     align-items: center;
 }
 
-/* Styles pour la page de planification des soutenances */
+/* Styles pour la page de planification des défenses */
 .tpi-tracker-page .schedule {
     text-align: center;
     margin-top: 50px;
@@ -396,7 +396,7 @@
 
 .tpi-tracker-page .home h1 {
     max-width: 14ch;
-    font-size: clamp(2rem, 3vw, 2.9rem);
+    font-size: 2.2rem;
     line-height: 1.05;
     text-align: left;
 }
@@ -536,7 +536,7 @@
 
 .tpi-tracker-page .container h1 {
     margin: 0;
-    font-size: clamp(1.6rem, 2.4vw, 2.3rem);
+    font-size: 1.85rem;
     color: #0f172a;
 }
 
@@ -649,26 +649,7 @@
 
 .tpi-tracker-page::before,
 .tpi-tracker-page::after {
-    content: "";
-    position: absolute;
-    width: 320px;
-    height: 320px;
-    border-radius: 999px;
-    pointer-events: none;
-    z-index: -1;
-    filter: blur(16px);
-}
-
-.tpi-tracker-page::before {
-    top: 100px;
-    left: -70px;
-    background: radial-gradient(circle, rgba(37, 99, 235, 0.16) 0%, rgba(37, 99, 235, 0) 68%);
-}
-
-.tpi-tracker-page::after {
-    right: -80px;
-    bottom: 0;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0) 70%);
+    display: none;
 }
 
 .tpi-tracker-page.page-with-toolbar {
@@ -680,6 +661,8 @@
 .tracker-page-shell {
     display: grid;
     gap: 20px;
+    width: var(--app-content-width);
+    margin-inline: auto;
 }
 
 #tools.tpi-tracker-tools.page-tools .page-tools-shell {
@@ -878,7 +861,7 @@
 
 .tracker-panel h2 {
     margin: 0;
-    font-size: clamp(1.2rem, 1.8vw, 1.55rem);
+    font-size: 1.35rem;
     line-height: 1.1;
     color: var(--tracker-ink);
 }
@@ -926,9 +909,9 @@
 .tracker-hero-copy h1 {
     margin: 0;
     max-width: 13ch;
-    font-size: clamp(2rem, 4vw, 3.4rem);
+    font-size: 2.4rem;
     line-height: 1.02;
-    letter-spacing: -0.04em;
+    letter-spacing: 0;
     color: #ffffff;
 }
 
@@ -978,7 +961,7 @@
 
 .tracker-metric-value {
     color: #ffffff;
-    font-size: clamp(1.6rem, 3vw, 2.5rem);
+    font-size: 1.9rem;
     line-height: 1;
     font-weight: 800;
 }
@@ -1581,7 +1564,7 @@
 
     .tracker-hero-copy h1 {
         max-width: none;
-        font-size: clamp(1.9rem, 9vw, 2.6rem);
+        font-size: 2rem;
     }
 
     .tracker-hero-metrics {
@@ -1625,5 +1608,123 @@
 
     #tools.tpi-tracker-tools.page-tools .page-tools-inline-row {
         width: 100%;
+    }
+}
+
+/* Final module harmonization */
+.tpi-tracker-page {
+    --tracker-border: var(--app-border, #d8e0ea);
+    --tracker-muted: var(--app-text-muted, #5b677a);
+    --tracker-radius: var(--app-radius-card, 8px);
+    --tracker-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+    background: transparent;
+}
+
+.tracker-page-shell {
+    gap: 14px;
+    width: var(--app-content-width);
+}
+
+.tracker-auth-grid,
+.tracker-dashboard-grid {
+    gap: 14px;
+}
+
+.tracker-panel,
+.tracker-role-option,
+.tracker-registration-form,
+.tracker-registration-summary,
+.tracker-register-empty,
+.tracker-session-fact,
+.tracker-action-tile,
+.tracker-session-summary,
+.tracker-project-summary,
+.tracker-project-note,
+.tracker-step-item,
+.tracker-guide-note {
+    border-color: var(--tracker-border);
+    border-radius: var(--tracker-radius);
+    background: var(--app-surface, #ffffff);
+    box-shadow: var(--tracker-shadow);
+}
+
+.tracker-panel {
+    gap: 12px;
+    padding: 18px;
+}
+
+.tracker-panel::before {
+    height: 2px;
+}
+
+.tracker-panel h2,
+.tracker-session-copy h2,
+.tracker-project-card h2,
+.tracker-register-intro h2 {
+    font-size: 1.18rem;
+    line-height: 1.18;
+}
+
+.tracker-field input,
+.tracker-primary-button {
+    border-radius: var(--tracker-radius);
+}
+
+.tracker-primary-button {
+    box-shadow: none;
+}
+
+.tracker-role-option:hover {
+    box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.tracker-role-option.active {
+    background: var(--app-surface-muted, #f8fafc);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.09);
+}
+
+.tracker-avatar {
+    border-radius: var(--tracker-radius);
+    box-shadow: none;
+}
+
+.tracker-session-fact,
+.tracker-action-tile {
+    background: var(--app-surface-muted, #f8fafc);
+    box-shadow: none;
+}
+
+.tracker-project-note,
+.tracker-guide-note,
+.tracker-session-summary,
+.tracker-project-summary {
+    box-shadow: none;
+}
+
+.tracker-hero-card {
+    color: var(--tracker-ink);
+    background: var(--app-surface, #ffffff);
+    border-color: var(--tracker-border);
+}
+
+.tracker-hero-card .tracker-panel-eyebrow,
+.tracker-hero-copy h1,
+.tracker-hero-copy p,
+.tracker-metric-value,
+.tracker-metric-label,
+.tracker-metric-detail,
+.tracker-badge {
+    color: inherit;
+}
+
+.tracker-metric-card,
+.tracker-badge {
+    border-color: var(--tracker-border);
+    background: var(--app-surface-muted, #f8fafc);
+}
+
+@media (max-width: 860px) {
+    .tracker-panel {
+        border-radius: var(--tracker-radius);
     }
 }

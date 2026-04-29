@@ -17,7 +17,7 @@ const tpiPlanningSchema = new Schema({
     index: true
   },
   
-  // Année de soutenance
+  // Année de défense
   year: { type: Number, required: true, index: true },
   
   // === PERSONNES LIÉES (OBLIGATOIRES) ===
@@ -107,7 +107,7 @@ const tpiPlanningSchema = new Schema({
     default: null
   },
   
-  // Date/heure de soutenance confirmée
+  // Date/heure de défense confirmée
   soutenanceDateTime: { type: Date },
   
   // Salle confirmée
@@ -166,7 +166,7 @@ const tpiPlanningSchema = new Schema({
     status: { type: String, enum: ['sent', 'delivered', 'failed'] }
   }],
   
-  // === ÉVALUATION (après soutenance) ===
+  // === ÉVALUATION (après défense) ===
   
   evaluation: {
     note: { type: Number, min: 0, max: 6 },

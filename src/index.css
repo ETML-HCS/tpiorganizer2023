@@ -8,10 +8,7 @@ body {
   margin: 0;
   font-family: 'Trebuchet MS', 'Segoe UI', 'Aptos', sans-serif;
   -webkit-font-smoothing: antialiased;
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 26%),
-    radial-gradient(circle at 12% 24%, rgba(16, 185, 129, 0.12), transparent 24%),
-    linear-gradient(180deg, #f7fbfd 0%, #eef4f8 100%);
+  background: linear-gradient(180deg, #f7fbfd 0%, #eef4f8 100%);
   color: #0f172a;
 }
 

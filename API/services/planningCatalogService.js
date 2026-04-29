@@ -22,6 +22,13 @@ const DEFAULT_SITE_PLANNING_COLORS = [
   '#4F46E5',
   '#65A30D'
 ]
+const DEFAULT_STAKEHOLDER_ICONS = {
+  candidate: 'candidate',
+  expert1: 'participant',
+  expert2: 'participant',
+  projectManager: 'participant'
+}
+const STAKEHOLDER_ICON_VALUES = new Set(['candidate', 'participant'])
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -47,6 +54,51 @@ function normalizePlanningColor(value) {
   }
 
   return ''
+}
+
+function normalizeOptionalPlanningColor(source = {}, fallback = {}, keys = ['tpiColor', 'tpiCardColor']) {
+  const sourceObject = source && typeof source === 'object' ? source : {}
+  const fallbackObject = fallback && typeof fallback === 'object' ? fallback : {}
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(sourceObject, key)) {
+      return normalizePlanningColor(sourceObject[key])
+    }
+  }
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(fallbackObject, key)) {
+      return normalizePlanningColor(fallbackObject[key])
+    }
+  }
+
+  return ''
+}
+
+function normalizeOptionalSoutenanceColor(source = {}, fallback = {}) {
+  return normalizeOptionalPlanningColor(source, fallback, ['soutenanceColor', 'defenseColor', 'defenceColor'])
+}
+
+function normalizeStakeholderIconKey(value, fallback = 'participant') {
+  const normalizedValue = compactText(value)
+  return STAKEHOLDER_ICON_VALUES.has(normalizedValue)
+    ? normalizedValue
+    : fallback
+}
+
+function normalizeStakeholderIcons(value = {}, fallback = DEFAULT_STAKEHOLDER_ICONS) {
+  const source = value && typeof value === 'object' ? value : {}
+  const fallbackSource = fallback && typeof fallback === 'object' ? fallback : DEFAULT_STAKEHOLDER_ICONS
+
+  return {
+    candidate: normalizeStakeholderIconKey(source.candidate, fallbackSource.candidate || DEFAULT_STAKEHOLDER_ICONS.candidate),
+    expert1: normalizeStakeholderIconKey(source.expert1, fallbackSource.expert1 || DEFAULT_STAKEHOLDER_ICONS.expert1),
+    expert2: normalizeStakeholderIconKey(source.expert2, fallbackSource.expert2 || DEFAULT_STAKEHOLDER_ICONS.expert2),
+    projectManager: normalizeStakeholderIconKey(
+      source.projectManager || source.boss,
+      fallbackSource.projectManager || DEFAULT_STAKEHOLDER_ICONS.projectManager
+    )
+  }
 }
 
 function getDefaultPlanningColor(seed = '', fallbackIndex = 0) {
@@ -426,6 +478,8 @@ function normalizeSiteCatalog(value, fallback = {}) {
       fallbackSource.color ||
       getDefaultPlanningColor(code || label)
     ),
+    tpiColor: normalizeOptionalPlanningColor(source, fallbackSource),
+    soutenanceColor: normalizeOptionalSoutenanceColor(source, fallbackSource),
     address: normalizeAddress(source.address || fallbackSource.address),
     rooms: normalizeRoomNames(roomDetails),
     roomDetails,
@@ -442,6 +496,7 @@ function buildDefaultPlanningCatalog() {
   return {
     key: 'shared',
     schemaVersion: DEFAULT_SCHEMA_VERSION,
+    stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
     sites: []
   }
 }
@@ -493,6 +548,7 @@ function normalizeStoredCatalog(document, fallbackCatalog = buildDefaultPlanning
       : Number.isFinite(Number(fallback.schemaVersion))
         ? Number(fallback.schemaVersion)
         : DEFAULT_SCHEMA_VERSION,
+    stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons, fallback.stakeholderIcons),
     sites: sortSitesByInputOrder(normalizedInOrder)
   }
 }
@@ -515,6 +571,7 @@ async function getSharedPlanningCatalog() {
       $setOnInsert: {
         key: 'shared',
         schemaVersion: DEFAULT_SCHEMA_VERSION,
+        stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
         sites: []
       }
     },
@@ -541,6 +598,7 @@ async function saveSharedPlanningCatalog(payload = {}) {
     {
       key: 'shared',
       schemaVersion: normalizedCatalog.schemaVersion,
+      stakeholderIcons: normalizedCatalog.stakeholderIcons,
       sites: normalizedCatalog.sites
     },
     {
@@ -559,6 +617,7 @@ module.exports = {
   normalizeAddress,
   normalizeRoomDetails,
   normalizeSiteCatalog,
+  normalizeStakeholderIcons,
   normalizeStoredCatalog,
   saveSharedPlanningCatalog
 }

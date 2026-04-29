@@ -341,7 +341,7 @@ describe('TpiList', () => {
       />
     )
 
-    expect(screen.getByRole('link', { name: /ouvrir la fiche/i })).toHaveAttribute('href', '/tpi/2026/2163')
+    expect(screen.getByTitle('Ouvrir la fiche 2163')).toHaveAttribute('href', '/tpi/2026/2163')
   })
 
   it('passes return context to the stakeholder link toward Parties prenantes', () => {
@@ -361,7 +361,7 @@ describe('TpiList', () => {
       />
     )
 
-    expect(screen.getByRole('link', { name: 'Chasi Sanchez Dario Jhesuanj' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Ouvrir la fiche de Chasi Sanchez Dario Jhesuanj' })).toHaveAttribute(
       'href',
       '/partiesPrenantes?personId=2163-candidat&name=Chasi+Sanchez+Dario+Jhesuanj&role=candidat&tab=create&year=2026&returnTo=%2FgestionTPI%3Fyear%3D2026%26focus%3D2163%26edit%3D1'
     )
@@ -415,7 +415,7 @@ describe('TpiList', () => {
       />
     )
 
-    expect(screen.getByText(/elles restent éditables ici/i)).toBeInTheDocument()
+    expect(screen.queryByText(/fiches éditables, exclues des contrôles pp/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /incorrectes/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/liaison pp à compléter/i)).not.toBeInTheDocument()
   })
@@ -447,7 +447,7 @@ describe('TpiList', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /hors périmètre/i }))
+    fireEvent.click(screen.getByRole('button', { name: /hors pér/i }))
 
     expect(screen.getByText('Bruno CFPV')).toBeInTheDocument()
     expect(screen.queryByText('Alice ETML')).not.toBeInTheDocument()
@@ -484,7 +484,7 @@ describe('TpiList', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /édition multiple/i }))
+    fireEvent.click(screen.getByRole('button', { name: /lot/i }))
     fireEvent.click(screen.getByRole('button', { name: /prendre visibles/i }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Classe' }))
     fireEvent.change(screen.getByPlaceholderText('CID4A'), { target: { value: 'MID4B' } })

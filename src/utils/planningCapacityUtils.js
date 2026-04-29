@@ -392,7 +392,7 @@ const finalizeBucket = (bucket) => {
     })
   const constraintHints = [
     repeatedStakeholderCount > 0 ? "Conflits de parties prenantes à vérifier en planification." : null,
-    bucket.undatedTpiCount > 0 ? `${bucket.undatedTpiCount} TPI sans dates de soutenance configurées.` : null
+    bucket.undatedTpiCount > 0 ? `${bucket.undatedTpiCount} TPI sans dates de défense configurées.` : null
   ].filter(Boolean)
 
   return {

@@ -18,15 +18,15 @@ import "../../css/tpiTracker/tpiTrackerStyle.css"
 const TRACKER_ACTIONS = [
   {
     title: "Mes TPI",
-    text: "Retrouver les projets associés au profil connecté."
+    text: "Projets liés."
   },
   {
     title: "Planification",
-    text: "Accéder au calendrier et aux soutenances liées."
+    text: "Calendrier lié."
   },
   {
     title: "Compte",
-    text: "Vérifier l’identité et les informations principales."
+    text: "Identité et accès."
   }
 ]
 
@@ -70,8 +70,7 @@ const TrackerSessionCard = ({ user }) => {
         <div className='tracker-session-copy'>
           <h2>Bienvenue, {displayName}.</h2>
           <p>
-            Votre compte est reconnu comme <strong>{roleLabel}</strong>. Les
-            cartes ci-dessous résument les prochaines étapes du suivi.
+            Profil <strong>{roleLabel}</strong>.
           </p>
         </div>
       </div>
@@ -282,8 +281,7 @@ const TrackerEmptyState = () => {
       </div>
       <h2>Aucun écran d’affectation</h2>
       <p>
-        Ce compte est connecté, mais le rôle associé ne dispose pas encore
-        d’un écran dédié dans le module.
+        Aucun écran dédié pour ce rôle.
       </p>
     </section>
   )

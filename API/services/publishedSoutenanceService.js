@@ -2,8 +2,64 @@ const { createCustomTpiRoomModel } = require('../models/tpiRoomsModels')
 const PublicationVersion = require('../models/publicationVersionModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const TpiModelsYear = require('../models/tpiModels')
+const { getSharedPlanningCatalog } = require('./planningCatalogService')
+const { getPlanningConfig } = require('./planningConfigService')
 const { inferTpiClassMode } = require('./roomClassCompatibilityService')
 const { buildLegacyRefFilter } = require('./legacyTpiDateEnrichmentService')
+
+const DEFAULT_STAKEHOLDER_ICONS = {
+  candidate: 'candidate',
+  expert1: 'participant',
+  expert2: 'participant',
+  projectManager: 'participant'
+}
+
+function compactText(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim()
+}
+
+function normalizeSoutenanceColor(value) {
+  const hex = compactText(value).replace(/^#/, '')
+
+  if (/^[\da-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toUpperCase()}`
+  }
+
+  if (/^[\da-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`
+  }
+
+  return ''
+}
+
+function normalizeStakeholderIconKey(value, fallback = 'participant') {
+  const normalizedValue = compactText(value)
+  return normalizedValue === 'candidate' || normalizedValue === 'participant'
+    ? normalizedValue
+    : fallback
+}
+
+function normalizeStakeholderIcons(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+
+  return {
+    candidate: normalizeStakeholderIconKey(source.candidate, DEFAULT_STAKEHOLDER_ICONS.candidate),
+    expert1: normalizeStakeholderIconKey(source.expert1, DEFAULT_STAKEHOLDER_ICONS.expert1),
+    expert2: normalizeStakeholderIconKey(source.expert2, DEFAULT_STAKEHOLDER_ICONS.expert2),
+    projectManager: normalizeStakeholderIconKey(
+      source.projectManager || source.boss,
+      DEFAULT_STAKEHOLDER_ICONS.projectManager
+    )
+  }
+}
 
 function getSoutenanceModel(year) {
   return createCustomTpiRoomModel(`tpiSoutenance_${year}`)
@@ -25,8 +81,129 @@ function parseTimeToDecimal(time) {
     return 0
   }
 
-  const [hours, minutes] = time.split(':').map(Number)
-  return hours + ((minutes || 0) / 60)
+  if (typeof time === 'number' && Number.isFinite(time)) {
+    return time
+  }
+
+  const [hours, minutes] = String(time).split(':').map(Number)
+  if (!Number.isFinite(hours)) {
+    return 0
+  }
+
+  return hours + ((Number.isFinite(minutes) ? minutes : 0) / 60)
+}
+
+function parsePositiveInteger(value, fallback = 0) {
+  const parsedValue = Number.parseInt(String(value), 10)
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : fallback
+}
+
+function parseNonNegativeInteger(value, fallback = null) {
+  const parsedValue = Number.parseInt(String(value), 10)
+  return Number.isInteger(parsedValue) && parsedValue >= 0 ? parsedValue : fallback
+}
+
+function parsePositiveNumber(value, fallback = 0) {
+  const parsedValue = Number(value)
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : fallback
+}
+
+function normalizeSiteCode(value) {
+  return compactText(value).toUpperCase()
+}
+
+function getPlanningSiteConfig(planningConfig, siteCode) {
+  const normalizedSiteCode = normalizeSiteCode(siteCode)
+  if (!normalizedSiteCode) {
+    return null
+  }
+
+  return (Array.isArray(planningConfig?.siteConfigs) ? planningConfig.siteConfigs : [])
+    .find((siteConfig) =>
+      siteConfig?.active !== false &&
+      normalizeSiteCode(siteConfig?.siteCode || siteConfig?.code || siteConfig?.label) === normalizedSiteCode
+    ) || null
+}
+
+function getPublishedTpiSlotIndex(tpiData, fallbackIndex = 0) {
+  const period = parsePositiveInteger(tpiData?.period, 0)
+  if (period > 0) {
+    return period - 1
+  }
+
+  const idIndex = parseNonNegativeInteger(String(tpiData?.id || '').split('_').pop(), null)
+  return idIndex === null ? fallbackIndex : idIndex
+}
+
+function buildRoomKey(room) {
+  const date = room?.date ? new Date(room.date) : null
+  const dateKey = Number.isFinite(date?.getTime?.())
+    ? date.toISOString().split('T')[0]
+    : compactText(room?.date || 'date')
+
+  return compactText(room?.key) || `${compactText(room?.site)}_${compactText(room?.name)}_${dateKey}`
+}
+
+function buildConfigSiteFromPlanning(roomConfig = {}, siteConfig = null, totalSlots = 0) {
+  const nextConfig = roomConfig && typeof roomConfig === 'object' ? { ...roomConfig } : {}
+
+  if (siteConfig) {
+    nextConfig.breakline = parsePositiveNumber(siteConfig.breaklineMinutes, parsePositiveNumber(nextConfig.breakline, 0) * 60) / 60
+    nextConfig.tpiTime = parsePositiveNumber(siteConfig.tpiTimeMinutes, parsePositiveNumber(nextConfig.tpiTime, 1) * 60) / 60
+    nextConfig.firstTpiStart = parseTimeToDecimal(siteConfig.firstTpiStartTime || nextConfig.firstTpiStart)
+  }
+
+  nextConfig.numSlots = totalSlots
+  return nextConfig
+}
+
+function enrichPublishedRoomsScheduleConfig(rooms = [], planningConfig = null) {
+  return cloneRooms(rooms).map((room) => {
+    const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+    const siteConfig = getPlanningSiteConfig(planningConfig, room?.site)
+    const configuredSlotCount = parsePositiveInteger(siteConfig?.numSlots, 0)
+    const existingConfiguredSlotCount = parsePositiveInteger(room?.configSite?.numSlots, 0)
+    const maxTpiIndex = tpiDatas.reduce(
+      (maxIndex, tpiData, index) => Math.max(maxIndex, getPublishedTpiSlotIndex(tpiData, index)),
+      -1
+    )
+    const totalSlots = Math.max(
+      configuredSlotCount,
+      existingConfiguredSlotCount,
+      tpiDatas.length,
+      maxTpiIndex + 1,
+      0
+    )
+    const roomKey = buildRoomKey(room)
+    const expandedTpiDatas = Array.from(
+      { length: totalSlots },
+      (_, index) => createEmptyTpiData(roomKey, index)
+    )
+
+    tpiDatas.forEach((tpiData, fallbackIndex) => {
+      const slotIndex = getPublishedTpiSlotIndex(tpiData, fallbackIndex)
+      if (slotIndex < 0 || slotIndex >= expandedTpiDatas.length) {
+        return
+      }
+
+      expandedTpiDatas[slotIndex] = tpiData
+    })
+
+    return {
+      ...room,
+      configSite: buildConfigSiteFromPlanning(room?.configSite, siteConfig, totalSlots),
+      tpiDatas: expandedTpiDatas
+    }
+  })
+}
+
+async function loadPlanningConfigSafe(year) {
+  try {
+    return await getPlanningConfig(year)
+  } catch (error) {
+    console.error('Erreur chargement configuration planning pour publication défenses:', error)
+    return null
+  }
 }
 
 function getPersonDisplayName(person) {
@@ -62,12 +239,35 @@ function createEmptyTpiData(roomKey, periodIndex) {
   }
 }
 
-function buildRoomConfig(slot, maxPeriod) {
+function inferFirstTpiStart(slot, tpiTime, breakline) {
+  const slotStart = parseTimeToDecimal(slot?.startTime)
+  const period = parsePositiveInteger(slot?.period, 1)
+
+  return slotStart - ((period - 1) * (tpiTime + breakline))
+}
+
+function buildRoomConfig(slot, totalSlots, appearance = {}, siteConfig = null) {
+  const breaklineMinutes = parsePositiveNumber(
+    siteConfig?.breaklineMinutes,
+    parsePositiveNumber(slot?.config?.breakAfter, 0)
+  )
+  const tpiTimeMinutes = parsePositiveNumber(
+    siteConfig?.tpiTimeMinutes,
+    parsePositiveNumber(slot?.config?.duration, 60)
+  )
+  const breakline = breaklineMinutes / 60
+  const tpiTime = tpiTimeMinutes / 60
+  const configuredFirstStart = compactText(siteConfig?.firstTpiStartTime)
+
   return {
-    breakline: (slot.config?.breakAfter || 0) / 60,
-    tpiTime: (slot.config?.duration || 60) / 60,
-    firstTpiStart: parseTimeToDecimal(slot.startTime),
-    numSlots: maxPeriod
+    breakline,
+    tpiTime,
+    firstTpiStart: configuredFirstStart
+      ? parseTimeToDecimal(configuredFirstStart)
+      : inferFirstTpiStart(slot, tpiTime, breakline),
+    numSlots: totalSlots,
+    ...(appearance.soutenanceColor !== undefined ? { soutenanceColor: appearance.soutenanceColor } : {}),
+    ...(appearance.stakeholderIcons ? { stakeholderIcons: appearance.stakeholderIcons } : {})
   }
 }
 
@@ -149,6 +349,64 @@ function filterPublishedRooms(rooms, viewer = {}) {
   })
 }
 
+async function loadSoutenanceAppearance() {
+  try {
+    const catalog = await getSharedPlanningCatalog()
+    const sites = Array.isArray(catalog?.sites) ? catalog.sites : []
+    const siteAppearanceByCode = new Map()
+
+    sites.forEach((site) => {
+      const siteCode = compactText(site?.code || site?.siteCode || site?.label).toUpperCase()
+      if (!siteCode) {
+        return
+      }
+
+      siteAppearanceByCode.set(siteCode, {
+        soutenanceColor: normalizeSoutenanceColor(
+          site?.soutenanceColor || site?.defenseColor || site?.defenceColor || ''
+        )
+      })
+    })
+
+    return {
+      stakeholderIcons: normalizeStakeholderIcons(catalog?.stakeholderIcons),
+      siteAppearanceByCode
+    }
+  } catch (error) {
+    console.error('Erreur chargement apparence défenses:', error)
+    return {
+      stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
+      siteAppearanceByCode: new Map()
+    }
+  }
+}
+
+function getRoomAppearance(room, appearance = {}) {
+  const siteCode = compactText(room?.site || room?.configSite?.siteCode || '').toUpperCase()
+  const siteAppearance = appearance.siteAppearanceByCode instanceof Map
+    ? appearance.siteAppearanceByCode.get(siteCode)
+    : null
+
+  return {
+    ...(siteAppearance ? { soutenanceColor: normalizeSoutenanceColor(siteAppearance.soutenanceColor) } : {}),
+    stakeholderIcons: normalizeStakeholderIcons(appearance.stakeholderIcons)
+  }
+}
+
+function enrichPublishedRoomsAppearance(rooms = [], appearance = {}) {
+  return cloneRooms(rooms).map((room) => {
+    const roomAppearance = getRoomAppearance(room, appearance)
+
+    return {
+      ...room,
+      configSite: {
+        ...(room.configSite && typeof room.configSite === 'object' ? room.configSite : {}),
+        ...roomAppearance
+      }
+    }
+  })
+}
+
 async function getNextPublicationVersion(year) {
   const latest = await PublicationVersion.findOne({ year })
     .sort({ version: -1 })
@@ -184,6 +442,8 @@ async function loadConfirmedPlanningTpis(year) {
 
 async function buildPublishedRoomsFromConfirmedTpis(year) {
   const confirmedTpis = await loadConfirmedPlanningTpis(year)
+  const appearance = await loadSoutenanceAppearance()
+  const planningConfig = await loadPlanningConfigSafe(year)
 
   if (confirmedTpis.length === 0) {
     return {
@@ -224,9 +484,12 @@ async function buildPublishedRoomsFromConfirmedTpis(year) {
         (maxValue, entry) => Math.max(maxValue, entry.slot.period),
         0
       )
+      const siteConfig = getPlanningSiteConfig(planningConfig, room.site)
+      const configuredSlotCount = parsePositiveInteger(siteConfig?.numSlots, 0)
+      const totalSlots = Math.max(maxPeriod, configuredSlotCount)
       const roomIdentifier = buildStableNumericId(`${year}_${room.key}`)
       const tpiDatas = Array.from(
-        { length: maxPeriod },
+        { length: totalSlots },
         (_, index) => createEmptyTpiData(room.key, index)
       )
 
@@ -266,7 +529,12 @@ async function buildPublishedRoomsFromConfirmedTpis(year) {
         date: room.date,
         name: room.name,
         roomClassMode: inferPublishedRoomClassModeFromEntries(sortedSlots),
-        configSite: buildRoomConfig(sortedSlots[0].slot, maxPeriod),
+        configSite: buildRoomConfig(
+          sortedSlots[0].slot,
+          totalSlots,
+          getRoomAppearance(room, appearance),
+          siteConfig
+        ),
         tpiDatas
       }
     })
@@ -367,13 +635,13 @@ async function publishConfirmedPlanningSoutenancesVersioned(year, user = null) {
   try {
     await syncLegacyPublishedRooms(normalizedYear, rooms)
   } catch (error) {
-    console.error('Erreur synchro collection legacy soutenances:', error)
+    console.error('Erreur synchro collection legacy défenses:', error)
   }
 
   try {
     await syncPublishedSoutenancesToTpiCatalog(normalizedYear, rooms)
   } catch (error) {
-    console.error('Erreur synchro collection tpiList soutenances:', error)
+    console.error('Erreur synchro collection tpiList défenses:', error)
   }
 
   return {
@@ -407,13 +675,13 @@ async function rollbackPublicationVersion(year, version) {
   try {
     await syncLegacyPublishedRooms(normalizedYear, targetVersion.rooms || [])
   } catch (error) {
-    console.error('Erreur synchro rollback collection legacy soutenances:', error)
+    console.error('Erreur synchro rollback collection legacy défenses:', error)
   }
 
   try {
     await syncPublishedSoutenancesToTpiCatalog(normalizedYear, targetVersion.rooms || [])
   } catch (error) {
-    console.error('Erreur synchro rollback collection tpiList soutenances:', error)
+    console.error('Erreur synchro rollback collection tpiList défenses:', error)
   }
 
   return {
@@ -432,9 +700,12 @@ async function listPublishedSoutenances(year, options = {}) {
     : null
 
   const activeVersion = explicitVersion || await getActivePublicationVersion(normalizedYear)
+  const appearance = await loadSoutenanceAppearance()
+  const planningConfig = await loadPlanningConfigSafe(normalizedYear)
 
   if (activeVersion?.rooms) {
-    return filterPublishedRooms(activeVersion.rooms, {
+    const scheduledRooms = enrichPublishedRoomsScheduleConfig(activeVersion.rooms, planningConfig)
+    return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledRooms, appearance), {
       personId: options.viewerPersonId || null,
       name: options.viewerName || null
     })
@@ -443,7 +714,8 @@ async function listPublishedSoutenances(year, options = {}) {
   const DataRooms = getSoutenanceModel(normalizedYear)
   const legacyRooms = await DataRooms.find().lean()
 
-  return filterPublishedRooms(legacyRooms, {
+  const scheduledLegacyRooms = enrichPublishedRoomsScheduleConfig(legacyRooms, planningConfig)
+  return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledLegacyRooms, appearance), {
     personId: options.viewerPersonId || null,
     name: options.viewerName || null
   })
@@ -549,6 +821,8 @@ async function updateActivePublicationOffersByLegacyId(year, tpiLegacyId, expert
 
 module.exports = {
   getSoutenanceModel,
+  enrichPublishedRoomsAppearance,
+  enrichPublishedRoomsScheduleConfig,
   filterPublishedRooms,
   inferPublishedRoomClassModeFromEntries,
   listPublishedSoutenances,

@@ -153,7 +153,7 @@
   box-sizing: border-box;
   text-align: center;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
     var(--dateRoom-bgColor);
@@ -379,7 +379,7 @@
 
 .date-room-action.secondary {
   background: rgba(15, 23, 42, 0.15);
-  color: #ffffff;
+  color: var(--dateRoom-textColor);
 }
 
 .date-room-menu-wrap {
@@ -392,7 +392,7 @@
   font-size: 0.98rem;
   font-weight: 900;
   background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  color: var(--dateRoom-textColor);
 }
 
 .date-room-menu-trigger:hover {
@@ -1887,13 +1887,104 @@
   border-color: #ea580c;
 }
 
+.planning-delete-rooms-dialog {
+  width: min(94vw, 640px);
+}
+
+.planning-delete-rooms-icon {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.planning-delete-rooms-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.planning-delete-rooms-choices {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.planning-delete-rooms-choice {
+  display: grid;
+  grid-template-columns: minmax(160px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 54px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #dbe4ec;
+  background: #ffffff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.planning-delete-rooms-choice:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.planning-delete-rooms-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.planning-delete-rooms-choice .ui-button-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: 0 0 auto;
+  stroke-width: var(--app-button-icon-stroke-width);
+}
+
+.planning-delete-rooms-choice-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.planning-delete-rooms-choice-detail {
+  color: #475569;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.planning-delete-rooms-choice.secondary {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.planning-delete-rooms-choice.warning {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.planning-delete-rooms-choice.danger {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.planning-delete-rooms-choice.danger .planning-delete-rooms-choice-main,
+.planning-delete-rooms-choice.danger .ui-button-icon {
+  color: #b91c1c;
+}
+
 @media (max-width: 640px) {
   .planning-year-change-dialog {
     width: min(96vw, 560px);
     padding: 18px 16px 16px;
   }
 
-  .planning-year-change-summary {
+  .planning-year-change-summary,
+  .planning-delete-rooms-summary {
     grid-template-columns: 1fr;
   }
 
@@ -1903,6 +1994,11 @@
 
   .planning-year-change-btn {
     width: 100%;
+  }
+
+  .planning-delete-rooms-choice {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
 
@@ -1935,4 +2031,35 @@
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
+
+/* Final module harmonization */
+.planning-schedule-page #tools.planning-tools,
+.planning-schedule-page .planning-empty-state,
+.planning-schedule-page .planning-status-panel,
+.planning-schedule-page .planning-year-change-dialog,
+.planning-schedule-page .room,
+.planning-schedule-page .planning-room-dates-panel,
+.planning-schedule-page .planning-room-overview-card {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.planning-schedule-page #tools.planning-tools {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.planning-schedule-page .planning-year-change-btn,
+.planning-schedule-page .planning-room-create-btn,
+.planning-schedule-page .planning-room-filter-reset,
+.planning-schedule-page .planning-room-wrap-toggle,
+.planning-schedule-page .planning-room-focus-toggle {
+  border-radius: var(--app-radius-card, 8px);
+}
+
+.planning-schedule-page .date-room:hover {
+  transform: none;
+  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+}
 

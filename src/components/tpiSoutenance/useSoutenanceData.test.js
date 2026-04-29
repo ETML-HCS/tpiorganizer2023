@@ -1,4 +1,11 @@
-import { createSchedule, isFilterApplied, matchesReferenceFilter } from './useSoutenanceData'
+import {
+  buildDateFilterOptions,
+  createSchedule,
+  isFilterApplied,
+  matchesReferenceFilter,
+  sortFilterTextValues
+} from './useSoutenanceData'
+import { formatDate } from './TpiSoutenanceParts'
 
 jest.mock('../../services/apiService', () => ({
   soutenancesService: {
@@ -19,11 +26,24 @@ jest.mock('../Tools', () => ({
 }))
 
 jest.mock('./TpiSoutenanceParts', () => ({
-  formatDate: jest.fn(() => '10 juin 2026'),
+  formatDate: jest.fn(),
+  getLegacyScheduleIndex: jest.fn((tpi, index) => index),
   getRoomSchedule: jest.fn(() => [])
 }))
 
 describe('useSoutenanceData helpers', () => {
+  beforeEach(() => {
+    formatDate.mockImplementation((date) => {
+    const labels = {
+      '2026-04-30': '30 avril 2026',
+      '2026-05-01': '1 mai 2026',
+      '2026-06-10': '10 juin 2026'
+    }
+
+    return labels[date] || String(date || '')
+    })
+  })
+
   test('createSchedule applique la pause uniquement entre les créneaux', () => {
     const schedule = createSchedule({
       configSite: {
@@ -74,5 +94,23 @@ describe('useSoutenanceData helpers', () => {
     expect(matchesReferenceFilter('TPI-2026-2163', '2163')).toBe(true)
     expect(matchesReferenceFilter('TPI-2026-2163', 'TPI-2026-2163')).toBe(true)
     expect(matchesReferenceFilter('9999', 'TPI-2026-2163')).toBe(false)
+  })
+
+  test('sortFilterTextValues trie les options alphabétiquement en évitant les doublons et les valeurs vides', () => {
+    expect(
+      sortFilterTextValues(['Salle 10', 'Salle 2', '', 'Salle 1', 'Salle 2', null])
+    ).toEqual(['Salle 1', 'Salle 2', 'Salle 10'])
+  })
+
+  test('buildDateFilterOptions trie les dates chronologiquement avant de les afficher', () => {
+    expect(formatDate('2026-04-30')).toBe('30 avril 2026')
+    expect(
+      buildDateFilterOptions([
+        { date: '2026-06-10' },
+        { date: '2026-05-01' },
+        { date: '2026-06-10' },
+        { date: '2026-04-30' }
+      ])
+    ).toEqual(['30 avril 2026', '1 mai 2026', '10 juin 2026'])
   })
 })

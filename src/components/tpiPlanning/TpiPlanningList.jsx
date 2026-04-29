@@ -72,6 +72,27 @@ function formatPersonName(person) {
   return compactText(person)
 }
 
+function getClassDisplayContext(tpi, classTypes, planningCatalogSites) {
+  const tpiSite = tpi?.site || tpi?.lieu?.site
+  const classInfo = getPlanningClassDisplayInfo(tpi?.classe, classTypes, planningCatalogSites, tpiSite)
+  const classDisplayLabel = classInfo.displayClassLabel || compactText(tpi?.classe)
+  const classTypeLabel = classInfo.displayTypeLabel
+  const classModePeriod = getPlanningClassPeriod(tpi?.classe, classTypes, planningCatalogSites, tpiSite)
+  const classModeTitle = [
+    classDisplayLabel ? `Classe ${classDisplayLabel}` : '',
+    classInfo.hasSpecificClass && classTypeLabel ? `Type ${classTypeLabel}` : '',
+    classInfo.siteLabel || tpiSite ? `Site ${classInfo.siteLabel || tpiSite}` : '',
+    [classModePeriod.startDate, classModePeriod.endDate].filter(Boolean).join(' → ')
+  ].filter(Boolean).join(' · ')
+
+  return {
+    classInfo,
+    classDisplayLabel,
+    classTypeLabel,
+    classModeTitle
+  }
+}
+
 const STATUS_META = {
   [PLANNING_STATUS.DRAFT]: { label: 'Brouillon', Icon: DocumentIcon },
   [PLANNING_STATUS.VOTING]: { label: 'En vote', Icon: CalendarIcon },
@@ -231,6 +252,14 @@ const TpiPlanningList = ({
     setExpandedTpi(prev => prev === tpiId ? null : tpiId)
   }, [])
 
+  const isTpiActionable = useCallback((tpi) => {
+    const normalizedStatus = normalizePlanningStatus(tpi?.status)
+    return normalizedStatus === PLANNING_STATUS.DRAFT ||
+      MANUAL_REQUIRED_STATUSES.includes(normalizedStatus)
+  }, [])
+
+  const showActionsColumn = isAdmin && sortedTpis.some(isTpiActionable)
+
   /**
    * Obtient le libellé du statut
    */
@@ -244,14 +273,18 @@ const TpiPlanningList = ({
   const renderSortHeader = (field, label) => {
     const isActive = sortField === field
     return (
-      <th 
-        className={`sortable ${isActive ? 'active' : ''}`}
-        onClick={() => handleSort(field)}
-      >
-        {label}
-        <span className="sort-indicator">
-          {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : '○'}
-        </span>
+      <th className={`sortable ${isActive ? 'active' : ''}`}>
+        <button
+          type="button"
+          className="sort-header-button"
+          onClick={() => handleSort(field)}
+          aria-label={`Trier par ${label}`}
+        >
+          <span>{label}</span>
+          <span className="sort-indicator">
+            {isActive ? (sortDirection === 'asc' ? 'A-Z' : 'Z-A') : 'Trier'}
+          </span>
+        </button>
       </th>
     )
   }
@@ -353,12 +386,20 @@ const TpiPlanningList = ({
               <th>Expert 2</th>
               <th>Chef de projet</th>
               {renderSortHeader('status', 'Statut')}
-              {renderSortHeader('date', 'Date soutenance')}
-              {isAdmin && <th>Actions</th>}
+              {renderSortHeader('date', 'Date défense')}
+              {showActionsColumn && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {sortedTpis.map(tpi => (
+            {sortedTpis.map(tpi => {
+              const {
+                classInfo,
+                classDisplayLabel,
+                classTypeLabel,
+                classModeTitle
+              } = getClassDisplayContext(tpi, classTypes, planningCatalogSites)
+
+              return (
               <React.Fragment key={tpi._id}>
                 {(() => {
                   const normalizedStatus = normalizePlanningStatus(tpi.status)
@@ -374,19 +415,6 @@ const TpiPlanningList = ({
                     ? plannedSlotDate.toLocaleDateString('fr-CH')
                     : ""
                   const plannedRoom = compactText(plannedSlot?.room?.name)
-                  const tpiSite = tpi.site || tpi.lieu?.site
-                  const classInfo = getPlanningClassDisplayInfo(tpi.classe, classTypes, planningCatalogSites, tpiSite)
-                  const classDisplayLabel = classInfo.displayClassLabel || compactText(tpi.classe)
-                  const classTypeLabel = classInfo.displayTypeLabel
-                  const classModePeriod = getPlanningClassPeriod(tpi.classe, classTypes, planningCatalogSites, tpiSite)
-                  const classModeTitle = classInfo
-                    ? [
-                        classDisplayLabel ? `Classe ${classDisplayLabel}` : '',
-                        classInfo.hasSpecificClass && classTypeLabel ? `Type ${classTypeLabel}` : '',
-                        classInfo.siteLabel || tpiSite ? `Site ${classInfo.siteLabel || tpiSite}` : '',
-                        [classModePeriod.startDate, classModePeriod.endDate].filter(Boolean).join(' → ')
-                      ].filter(Boolean).join(' · ')
-                    : ''
                   const proposedSlots = Array.isArray(tpi.proposedSlots)
                     ? tpi.proposedSlots.filter((ps) => Boolean(ps?.slot))
                     : []
@@ -418,8 +446,11 @@ const TpiPlanningList = ({
                         e.stopPropagation()
                         toggleExpand(tpi._id)
                       }}
+                      title={`${expandedTpi === tpi._id ? 'Masquer' : 'Afficher'} l'aperçu ${compactText(tpi.reference) || ''}`}
+                      aria-label={`${expandedTpi === tpi._id ? 'Masquer' : 'Afficher'} l'aperçu ${compactText(tpi.reference) || 'du TPI'}`}
                     >
                       {expandedTpi === tpi._id ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                      <span>Aperçu</span>
                     </button>
                     <div className="reference-content">
                       <div className="reference-main">
@@ -536,11 +567,11 @@ const TpiPlanningList = ({
                       </div>
                     ) : null}
                   </td>
-                  {isAdmin && (
+                  {showActionsColumn && (
                     <td className="cell-actions">
                       {normalizedStatus === PLANNING_STATUS.DRAFT && (
                         <button
-                          className="btn-action btn-vote btn-icon-only"
+                          className="btn-action btn-vote"
                           onClick={(e) => {
                             e.stopPropagation()
                             onProposeSlots(tpi._id)
@@ -549,12 +580,12 @@ const TpiPlanningList = ({
                           aria-label="Lancer le processus de vote"
                         >
                           <VoteIcon />
-                          <span className="sr-only">Voter</span>
+                          <span>Lancer vote</span>
                         </button>
                       )}
                       {MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(tpi.status)) && (
                         <button
-                          className="btn-action btn-resolve btn-icon-only"
+                          className="btn-action btn-resolve"
                           onClick={(e) => {
                             e.stopPropagation()
                             onSelectTpi(tpi)
@@ -563,9 +594,12 @@ const TpiPlanningList = ({
                           aria-label="Résoudre le conflit"
                         >
                           <WrenchIcon />
-                          <span className="sr-only">Résoudre</span>
+                          <span>Forcer</span>
                         </button>
                       )}
+                      {!isTpiActionable(tpi) ? (
+                        <span className="cell-actions-empty">—</span>
+                      ) : null}
                     </td>
                   )}
                 </tr>
@@ -575,7 +609,7 @@ const TpiPlanningList = ({
                 {/* Détails étendus */}
                 {expandedTpi === tpi._id && (
                   <tr className="tpi-details-row">
-                    <td colSpan={isAdmin ? 8 : 7}>
+                    <td colSpan={showActionsColumn ? 8 : 7}>
                       <div className="tpi-details">
                         {compactText(tpi.sujet) ? (
                           <div className="detail-section">
@@ -685,7 +719,8 @@ const TpiPlanningList = ({
                   </tr>
                 )}
               </React.Fragment>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

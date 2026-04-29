@@ -16,7 +16,7 @@ describe('TpiForm', () => {
     personService.getAll.mockResolvedValue([])
   })
 
-  it('propose les salles et dates de soutenance via les listes de configuration, y compris SPECIAL', () => {
+  it('propose les salles et dates de défense via les listes de configuration, y compris SPECIAL', () => {
     render(
       <TpiForm
         onSave={jest.fn()}
@@ -58,7 +58,7 @@ describe('TpiForm', () => {
     )
 
     const roomSelect = screen.getByRole('combobox', { name: /salle/i })
-    const soutenanceSelect = screen.getByRole('combobox', { name: /soutenance/i })
+    const soutenanceSelect = screen.getByRole('combobox', { name: /défense/i })
 
     expect(within(roomSelect).getByRole('option', { name: 'A101' })).toBeInTheDocument()
     expect(within(roomSelect).getByRole('option', { name: 'A102' })).toBeInTheDocument()
@@ -107,7 +107,7 @@ describe('TpiForm', () => {
     )
 
     const roomSelect = screen.getByRole('combobox', { name: /salle/i })
-    const soutenanceSelect = screen.getByRole('combobox', { name: /soutenance/i })
+    const soutenanceSelect = screen.getByRole('combobox', { name: /défense/i })
 
     expect(roomSelect).toHaveValue('Z999')
     expect(soutenanceSelect).toHaveValue('2026-07-02')

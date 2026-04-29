@@ -43,7 +43,7 @@ const CreneauPropositionPopup = ({
         }
       } catch (error) {
         if (!isCancelled) {
-          console.error("Erreur lors du chargement des dates de soutenance :", error)
+          console.error("Erreur lors du chargement des dates de défense :", error)
           setSoutenanceDateOptions(
             normalizeSoutenanceDateEntries(fallbackConfig?.soutenanceDates || [])
           )

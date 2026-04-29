@@ -32,6 +32,7 @@ const mockCatalog = {
       code: 'ETML',
       label: 'ETML',
       planningColor: '#1D4ED8',
+      tpiColor: '',
       address: {
         line1: '',
         line2: '',
@@ -397,6 +398,34 @@ describe('PlanningConfiguration', () => {
     )
   })
 
+  test("enregistre la limite de TPI à la suite du site", async () => {
+    render(<PlanningConfiguration />)
+
+    const removeSiteButton = await screen.findByRole('button', { name: 'Supprimer le site' })
+    const siteCard = removeSiteButton.closest('article')
+    const maxConsecutiveInput = within(siteCard).getByLabelText('TPI à la suite max')
+
+    expect(maxConsecutiveInput).toHaveValue(4)
+
+    fireEvent.change(maxConsecutiveInput, { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+    })
+    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+      2026,
+      expect.objectContaining({
+        siteConfigs: expect.arrayContaining([
+          expect.objectContaining({
+            siteId: 'site-etml',
+            maxConsecutiveTpi: 3
+          })
+        ])
+      })
+    )
+  })
+
   test("enregistre ensemble le catalogue et l'année depuis le bouton principal", async () => {
     render(<PlanningConfiguration />)
 
@@ -455,6 +484,80 @@ describe('PlanningConfiguration', () => {
             planningColor: '#14532D'
           })
         ])
+      })
+    )
+  })
+
+  test('enregistre la couleur TPI du site dans le catalogue', async () => {
+    render(<PlanningConfiguration />)
+
+    const colorInput = await screen.findByLabelText('Couleur TPI')
+    fireEvent.change(colorInput, { target: { value: '#fee2e2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+    })
+
+    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sites: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'site-etml',
+            tpiColor: '#FEE2E2'
+          })
+        ])
+      })
+    )
+  })
+
+  test('enregistre la couleur défenses du site dans le catalogue', async () => {
+    render(<PlanningConfiguration />)
+
+    const colorInput = await screen.findByLabelText('Couleur défenses')
+    fireEvent.change(colorInput, { target: { value: '#0f766e' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+    })
+
+    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sites: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'site-etml',
+            soutenanceColor: '#0F766E'
+          })
+        ])
+      })
+    )
+  })
+
+  test('enregistre les SVG de parties prenantes dans le catalogue', async () => {
+    render(<PlanningConfiguration />)
+
+    const iconCard = (await screen.findByRole('heading', { name: 'SVG parties prenantes' })).closest('article')
+    const candidateIconSelect = within(iconCard).getByLabelText('Candidat')
+    await waitFor(() => {
+      expect(candidateIconSelect).toBeEnabled()
+    })
+
+    fireEvent.change(candidateIconSelect, { target: { value: 'participant' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+    })
+
+    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        stakeholderIcons: expect.objectContaining({
+          candidate: 'participant',
+          expert1: 'participant',
+          expert2: 'participant',
+          projectManager: 'participant'
+        })
       })
     )
   })

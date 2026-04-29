@@ -3,6 +3,12 @@ import { createPortal } from "react-dom"
 import { toast } from "react-toastify"
 
 import { YEARS_CONFIG, STORAGE_KEYS } from "../../config/appConfig"
+import {
+  STAKEHOLDER_ICON_OPTIONS,
+  normalizeOptionalSoutenanceColor,
+  normalizeStakeholderIcons,
+  resolveSoutenanceColor
+} from "../../config/soutenanceAppearance"
 import { readStorageValue, writeStorageValue } from "../../utils/storage"
 import {
   planningCatalogService,
@@ -35,6 +41,7 @@ const DEFAULT_SITE_SCHEDULE = {
   tpiTimeMinutes: 60,
   firstTpiStartTime: "08:00",
   numSlots: 8,
+  maxConsecutiveTpi: 4,
   manualRoomTarget: ""
 }
 
@@ -92,6 +99,25 @@ const normalizePlanningColor = (value) => {
   return ""
 }
 
+const normalizeOptionalPlanningColor = (source = {}, fallback = {}, keys = ["tpiColor", "tpiCardColor"]) => {
+  const sourceObject = source && typeof source === "object" ? source : {}
+  const fallbackObject = fallback && typeof fallback === "object" ? fallback : {}
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(sourceObject, key)) {
+      return normalizePlanningColor(sourceObject[key])
+    }
+  }
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(fallbackObject, key)) {
+      return normalizePlanningColor(fallbackObject[key])
+    }
+  }
+
+  return ""
+}
+
 const getDefaultPlanningColor = (seed = "", fallbackIndex = 0) => {
   const normalizedSeed = compactText(seed).toUpperCase()
 
@@ -105,6 +131,66 @@ const getDefaultPlanningColor = (seed = "", fallbackIndex = 0) => {
   }
 
   return DEFAULT_SITE_PLANNING_COLORS[hash % DEFAULT_SITE_PLANNING_COLORS.length]
+}
+
+const parseHexColor = (value) => {
+  const normalized = normalizePlanningColor(value)
+
+  if (!normalized) {
+    return null
+  }
+
+  return {
+    red: Number.parseInt(normalized.slice(1, 3), 16),
+    green: Number.parseInt(normalized.slice(3, 5), 16),
+    blue: Number.parseInt(normalized.slice(5, 7), 16)
+  }
+}
+
+const toHexChannel = (value) =>
+  Math.max(0, Math.min(255, Math.round(value)))
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase()
+
+const rgbToHex = ({ red, green, blue }) =>
+  `#${toHexChannel(red)}${toHexChannel(green)}${toHexChannel(blue)}`
+
+const mixPlanningColors = (baseColor, targetColor, targetWeight = 0.5) => {
+  const base = parseHexColor(baseColor)
+  const target = parseHexColor(targetColor)
+
+  if (!base || !target) {
+    return normalizePlanningColor(baseColor) || normalizePlanningColor(targetColor) || ""
+  }
+
+  const safeTargetWeight = Math.max(0, Math.min(1, Number(targetWeight) || 0))
+  const baseWeight = 1 - safeTargetWeight
+
+  return rgbToHex({
+    red: base.red * baseWeight + target.red * safeTargetWeight,
+    green: base.green * baseWeight + target.green * safeTargetWeight,
+    blue: base.blue * baseWeight + target.blue * safeTargetWeight
+  })
+}
+
+const getPlanningColorBrightness = (value) => {
+  const color = parseHexColor(value)
+
+  if (!color) {
+    return 0
+  }
+
+  return color.red * 0.299 + color.green * 0.587 + color.blue * 0.114
+}
+
+const getAutoTpiColor = (planningColor) => {
+  const accent = normalizePlanningColor(planningColor) || DEFAULT_SITE_PLANNING_COLORS[0]
+  const brightness = getPlanningColorBrightness(accent)
+
+  return brightness >= 170
+    ? mixPlanningColors(accent, "#0F172A", 0.68)
+    : mixPlanningColors(accent, "#FFFFFF", 0.82)
 }
 
 const generateLocalId = (prefix) => {
@@ -531,6 +617,8 @@ const normalizeCatalogSites = (values) => {
       const planningColor = normalizePlanningColor(
         site?.planningColor || site?.color || getDefaultPlanningColor(code || label, index)
       )
+      const tpiColor = normalizeOptionalPlanningColor(site)
+      const soutenanceColor = normalizeOptionalSoutenanceColor(site)
       const roomSource = Array.isArray(site?.roomDetails)
         ? site.roomDetails
         : Array.isArray(site?.rooms)
@@ -553,6 +641,8 @@ const normalizeCatalogSites = (values) => {
         code,
         label,
         planningColor,
+        tpiColor,
+        soutenanceColor,
         address: {
           line1: compactText(site?.address?.line1 || site?.address?.street || ""),
           line2: compactText(site?.address?.line2 || site?.address?.street2 || ""),
@@ -588,6 +678,14 @@ const syncSiteConfigsToCatalog = (siteConfigs, sites) => {
       id: compactText(existing?.id) || generateLocalId("site-config"),
       siteId,
       siteCode: compactText(site?.code || existing?.siteCode || ""),
+      label: compactText(site?.label || existing?.label || site?.code || ""),
+      planningColor: normalizePlanningColor(
+        site?.planningColor ||
+        existing?.planningColor ||
+        getDefaultPlanningColor(site?.code || site?.label || existing?.siteCode, index)
+      ),
+      tpiColor: normalizeOptionalPlanningColor(site, existing),
+      soutenanceColor: normalizeOptionalSoutenanceColor(site, existing),
       breaklineMinutes: Number.isFinite(Number(existing?.breaklineMinutes))
         ? Number(existing.breaklineMinutes)
         : DEFAULT_SITE_SCHEDULE.breaklineMinutes,
@@ -598,6 +696,9 @@ const syncSiteConfigsToCatalog = (siteConfigs, sites) => {
       numSlots: Number.isFinite(Number(existing?.numSlots)) && Number(existing.numSlots) > 0
         ? Number(existing.numSlots)
         : DEFAULT_SITE_SCHEDULE.numSlots,
+      maxConsecutiveTpi: Number.isInteger(Number(existing?.maxConsecutiveTpi)) && Number(existing.maxConsecutiveTpi) > 0
+        ? Number(existing.maxConsecutiveTpi)
+        : DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
       manualRoomTarget: Number.isFinite(Number(existing?.manualRoomTarget)) && Number(existing.manualRoomTarget) >= 0
         ? Number(existing.manualRoomTarget)
         : "",
@@ -629,6 +730,7 @@ const normalizeCatalogDraft = (payload) => {
   return {
     key: compactText(source.key || "shared") || "shared",
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
+    stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons),
     sites: normalizeCatalogSites(source.sites || [])
   }
 }
@@ -660,6 +762,12 @@ const buildYearPayload = (draft, year, catalogSites = []) => {
     id: compactText(siteConfig.id) || generateLocalId("site-config"),
     siteId: compactText(siteConfig.siteId),
     siteCode: compactText(siteConfig.siteCode).toUpperCase(),
+    label: compactText(siteConfig.label || siteConfig.siteCode),
+    planningColor: normalizePlanningColor(
+      siteConfig.planningColor || getDefaultPlanningColor(siteConfig.siteCode || siteConfig.label)
+    ),
+    tpiColor: normalizeOptionalPlanningColor(siteConfig),
+    soutenanceColor: normalizeOptionalSoutenanceColor(siteConfig),
     breaklineMinutes: Number.isFinite(Number(siteConfig.breaklineMinutes))
       ? Number(siteConfig.breaklineMinutes)
       : DEFAULT_SITE_SCHEDULE.breaklineMinutes,
@@ -670,6 +778,9 @@ const buildYearPayload = (draft, year, catalogSites = []) => {
     numSlots: Number.isFinite(Number(siteConfig.numSlots)) && Number(siteConfig.numSlots) > 0
       ? Number(siteConfig.numSlots)
       : DEFAULT_SITE_SCHEDULE.numSlots,
+    maxConsecutiveTpi: Number.isInteger(Number(siteConfig.maxConsecutiveTpi)) && Number(siteConfig.maxConsecutiveTpi) > 0
+      ? Number(siteConfig.maxConsecutiveTpi)
+      : DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
     manualRoomTarget: Number.isFinite(Number(siteConfig.manualRoomTarget)) && Number(siteConfig.manualRoomTarget) >= 0
       ? Number(siteConfig.manualRoomTarget)
       : null,
@@ -694,6 +805,7 @@ const buildCatalogPayload = (draft) => {
   return {
     key: compactText(source.key || "shared") || "shared",
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
+    stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons),
     sites: normalizeCatalogSites(source.sites || []).map((site) => {
       const roomDetails = normalizeRoomDetails(site.roomDetails, compactText(site.id))
       const classGroups = Array.isArray(site.classGroups)
@@ -707,6 +819,8 @@ const buildCatalogPayload = (draft) => {
         planningColor: normalizePlanningColor(
           site.planningColor || getDefaultPlanningColor(site.code || site.label)
         ),
+        tpiColor: normalizeOptionalPlanningColor(site),
+        soutenanceColor: normalizeOptionalSoutenanceColor(site),
         address: {
           line1: compactText(site.address?.line1),
           line2: compactText(site.address?.line2),
@@ -802,6 +916,8 @@ const createBlankSite = (index = 1) => {
     code,
     label: `Site ${index}`,
     planningColor: getDefaultPlanningColor(code, index - 1),
+    tpiColor: "",
+    soutenanceColor: "",
     address: { ...DEFAULT_ADDRESS, country: "Suisse" },
     roomDetails: [],
     rooms: [],
@@ -815,10 +931,17 @@ const createBlankSiteConfig = (site) => ({
   id: generateLocalId("site-config"),
   siteId: compactText(site?.id) || generateLocalId("site"),
   siteCode: compactText(site?.code || "").toUpperCase(),
+  label: compactText(site?.label || site?.code || ""),
+  planningColor: normalizePlanningColor(
+    site?.planningColor || getDefaultPlanningColor(site?.code || site?.label)
+  ),
+  tpiColor: normalizeOptionalPlanningColor(site),
+  soutenanceColor: normalizeOptionalSoutenanceColor(site),
   breaklineMinutes: DEFAULT_SITE_SCHEDULE.breaklineMinutes,
   tpiTimeMinutes: DEFAULT_SITE_SCHEDULE.tpiTimeMinutes,
   firstTpiStartTime: DEFAULT_SITE_SCHEDULE.firstTpiStartTime,
   numSlots: DEFAULT_SITE_SCHEDULE.numSlots,
+  maxConsecutiveTpi: DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
   manualRoomTarget: "",
   notes: "",
   active: true
@@ -1246,7 +1369,7 @@ const ClassTypeCard = ({
         </div>
 
         <label className='page-tools-field configuration-class-type-soutenance'>
-          <span className='page-tools-field-label'>Soutenance</span>
+          <span className='page-tools-field-label'>Défense</span>
           <textarea
             className='page-tools-field-control configuration-textarea'
             rows='3'
@@ -1320,6 +1443,24 @@ const SiteScheduleCard = ({ site, schedule, onChange, disabled = false }) => (
           step='1'
           value={schedule?.numSlots ?? DEFAULT_SITE_SCHEDULE.numSlots}
           onChange={(event) => onChange("numSlots", Number.parseInt(event.target.value, 10))}
+          disabled={disabled}
+        />
+      </label>
+
+      <label className='page-tools-field'>
+        <span
+          className='page-tools-field-label configuration-help-label'
+          title='Nombre maximal de TPI consécutifs autorisés pour une même personne sur ce site.'
+        >
+          TPI à la suite max
+        </span>
+        <input
+          className='page-tools-field-control'
+          type='number'
+          min='1'
+          step='1'
+          value={schedule?.maxConsecutiveTpi ?? DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi}
+          onChange={(event) => onChange("maxConsecutiveTpi", Number.parseInt(event.target.value, 10))}
           disabled={disabled}
         />
       </label>
@@ -1800,6 +1941,53 @@ const SiteClassCatalogCard = ({
   )
 }
 
+const STAKEHOLDER_ICON_FIELDS = [
+  { key: "candidate", label: "Candidat" },
+  { key: "expert1", label: "Expert 1" },
+  { key: "expert2", label: "Expert 2" },
+  { key: "projectManager", label: "Chef de projet" }
+]
+
+const StakeholderIconsCard = ({ icons, onChange, disabled = false }) => {
+  const normalizedIcons = normalizeStakeholderIcons(icons)
+
+  return (
+    <article className='configuration-card configuration-appearance-card'>
+      <div className='configuration-card-head'>
+        <div className='configuration-card-head-copy'>
+          <span className='configuration-card-kicker'>
+            <ConfigurationIcon className='configuration-card-icon' />
+          </span>
+          <h4>SVG parties prenantes</h4>
+          <p className='configuration-section-note'>
+            Icônes utilisées dans les cartes de défense.
+          </p>
+        </div>
+      </div>
+
+      <div className='configuration-card-grid configuration-card-grid--stakeholder-icons'>
+        {STAKEHOLDER_ICON_FIELDS.map((field) => (
+          <label key={field.key} className='page-tools-field'>
+            <span className='page-tools-field-label'>{field.label}</span>
+            <select
+              className='page-tools-field-control'
+              value={normalizedIcons[field.key]}
+              onChange={(event) => onChange(field.key, event.target.value)}
+              disabled={disabled}
+            >
+              {STAKEHOLDER_ICON_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+    </article>
+  )
+}
+
 const CatalogSiteCard = ({
   site,
   schedule,
@@ -1829,6 +2017,8 @@ const CatalogSiteCard = ({
     : DEFAULT_SITE_SCHEDULE.numSlots
   const missingRoomCount = manualRoomTarget === null ? 0 : Math.max(manualRoomTarget - roomCount, 0)
   const summaryLine = `${compactText(site?.label || site?.code || "Site")} · ${formatRoomNamesSummary(site?.roomDetails)}`
+  const tpiColorLabelId = `${bodyId}-tpi-color-label`
+  const soutenanceColorLabelId = `${bodyId}-soutenance-color-label`
 
   return (
     <article className={`configuration-card configuration-catalog-card configuration-site-stack${isExpanded ? "" : " is-collapsed"}`}>
@@ -1926,6 +2116,55 @@ const CatalogSiteCard = ({
               disabled={disabled}
             />
           </label>
+
+          <div className='page-tools-field configuration-color-field'>
+            <span id={tpiColorLabelId} className='page-tools-field-label'>Couleur TPI</span>
+            <span className='configuration-color-control-row'>
+              <input
+                className='page-tools-field-control configuration-color-input'
+                type='color'
+                value={normalizePlanningColor(
+                  site?.tpiColor ||
+                  getAutoTpiColor(site?.planningColor || getDefaultPlanningColor(site?.code || site?.label))
+                )}
+                onChange={(event) => onSiteChange("tpiColor", event.target.value)}
+                aria-labelledby={tpiColorLabelId}
+                disabled={disabled}
+              />
+              <button
+                type='button'
+                className='page-tools-action-btn ghost configuration-color-auto-button'
+                onClick={() => onSiteChange("tpiColor", "")}
+                disabled={disabled || !site?.tpiColor}
+                title='Couleur TPI automatique'
+              >
+                Auto
+              </button>
+            </span>
+          </div>
+
+          <div className='page-tools-field configuration-color-field'>
+            <span id={soutenanceColorLabelId} className='page-tools-field-label'>Couleur défenses</span>
+            <span className='configuration-color-control-row'>
+              <input
+                className='page-tools-field-control configuration-color-input'
+                type='color'
+                value={resolveSoutenanceColor(site, site?.code || site?.label)}
+                onChange={(event) => onSiteChange("soutenanceColor", event.target.value)}
+                aria-labelledby={soutenanceColorLabelId}
+                disabled={disabled}
+              />
+              <button
+                type='button'
+                className='page-tools-action-btn ghost configuration-color-auto-button'
+                onClick={() => onSiteChange("soutenanceColor", "")}
+                disabled={disabled || !site?.soutenanceColor}
+                title='Couleur défenses par défaut'
+              >
+                Auto
+              </button>
+            </span>
+          </div>
 
           <label className='page-tools-field'>
             <span className='page-tools-field-label'>Adresse 1</span>
@@ -2099,7 +2338,7 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
   const notes = Array.isArray(overview?.notes) ? overview.notes.filter(Boolean) : []
   const globalOptimalRooms = Number(totals.recommendedRooms || 0)
   const globalIntro = totals.tpiCount > 0
-    ? `${formatCountLabel(totals.tpiCount, "TPI")} pris en compte. Optimum théorique global: ${formatCountLabel(globalOptimalRooms, "salle")} par jour de soutenance.`
+    ? `${formatCountLabel(totals.tpiCount, "TPI")} pris en compte. Optimum théorique global: ${formatCountLabel(globalOptimalRooms, "salle")} par jour de défense.`
     : "Aucun TPI pris en compte pour le calcul théorique."
   const panelNotes = notes.map((note) => ({ label: note, tone: "muted" }))
 
@@ -2109,7 +2348,7 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
         <div className='configuration-panel-head-copy'>
           <h3>Salles à prévoir</h3>
           <p className='configuration-section-note'>
-            Calcul théorique basé sur les types de classe, leurs dates de soutenance et les créneaux par salle.
+            Calcul théorique basé sur les types de classe, leurs dates de défense et les créneaux par salle.
           </p>
         </div>
         <span className='page-tools-chip configuration-panel-head-chip'>
@@ -2131,10 +2370,10 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
               {globalIntro}
             </p>
             <p className='configuration-card-note'>
-              Formule utilisée: TPI d&apos;un type ÷ dates de soutenance disponibles ÷ créneaux par salle = nombre de salles optimales.
+              Formule utilisée: TPI d&apos;un type ÷ dates de défense disponibles ÷ créneaux par salle = nombre de salles optimales.
             </p>
             <p className='configuration-card-note'>
-              Cet optimum ne tient pas encore compte des arbitrages de planification: parties prenantes sur 2 salles au même moment, règle des 4 TPI consécutifs, préférences individuelles.
+              Cet optimum ne tient pas encore compte des arbitrages de planification: parties prenantes sur 2 salles au même moment, règle des TPI consécutifs configurée par site, préférences individuelles.
             </p>
           </div>
 
@@ -2681,6 +2920,16 @@ const PlanningConfiguration = () => {
     }))
   }, [])
 
+  const updateStakeholderIcon = useCallback((field, value) => {
+    setCatalogDraft((current) => ({
+      ...current,
+      stakeholderIcons: normalizeStakeholderIcons({
+        ...(current.stakeholderIcons || {}),
+        [field]: value
+      })
+    }))
+  }, [])
+
   const updateSiteAddressField = useCallback((siteId, field, value) => {
     setCatalogDraft((current) => ({
       ...current,
@@ -2969,10 +3218,10 @@ const PlanningConfiguration = () => {
           className='configuration-hero'
           eyebrow='Paramètres partagés'
           title='Configuration'
-          description='Réglez l année, le catalogue des sites, les salles et les familles de classes depuis une barre commune.'
+          description='Année, sites, salles, classes.'
           actions={actions}
           navigationLinks={toolbarNavigationLinks}
-          navigationMode='floating'
+          navigationMode='body'
           ariaLabel='Outils de configuration'
         />
 
@@ -2989,7 +3238,7 @@ const PlanningConfiguration = () => {
             <div className='configuration-panel-head-copy'>
               <h3>Année</h3>
               <p className='configuration-section-note'>
-                Types de classe, dates de soutenance et configuration annuelle.
+                Types, dates et rythme.
               </p>
             </div>
             <div className='configuration-card-head-actions'>
@@ -3058,7 +3307,7 @@ const PlanningConfiguration = () => {
               </span>
               <h3>Sites</h3>
               <p className='configuration-section-note'>
-                Chaque site regroupe ses salles, son horaire et ses familles de classes.
+                Salles, horaires et classes par site.
               </p>
             </div>
             <div className='configuration-card-head-actions'>
@@ -3077,6 +3326,12 @@ const PlanningConfiguration = () => {
 
           <div className='configuration-panel-body'>
             <div className='configuration-site-groups'>
+              <StakeholderIconsCard
+                icons={catalogDraft?.stakeholderIcons}
+                onChange={updateStakeholderIcon}
+                disabled={!isCatalogReady}
+              />
+
               {siteCards.length > 0 ? (
                 siteCards.map((site) => (
                   <CatalogSiteCard

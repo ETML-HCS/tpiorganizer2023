@@ -38,32 +38,11 @@
 
 .token-generator-page::before,
 .token-generator-page::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: 999px;
-  filter: blur(16px);
-}
-
-.token-generator-page::before {
-  top: 92px;
-  right: 3%;
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(14, 116, 144, 0.14) 0%, rgba(14, 116, 144, 0) 72%);
-}
-
-.token-generator-page::after {
-  bottom: 24px;
-  left: 1%;
-  width: 260px;
-  height: 260px;
-  background: radial-gradient(circle, rgba(217, 119, 6, 0.12) 0%, rgba(217, 119, 6, 0) 72%);
+  display: none;
 }
 
 .token-generator-page .token-generator-results {
-  width: 100%;
+  width: var(--app-content-width);
   margin: 18px auto 0;
   padding: 0 var(--app-page-gutter);
 }
@@ -307,6 +286,32 @@
   color: #475569;
 }
 
+.token-access-link-details {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.token-access-link-detail {
+  display: grid;
+  gap: 2px;
+  color: #334155;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.token-access-link-detail strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.token-access-link-detail span {
+  color: #475569;
+}
+
 .token-access-link-url {
   color: #0f62fe;
   text-decoration: none;
@@ -417,4 +422,67 @@
   .token-access-link-actions {
     flex-wrap: wrap;
   }
+}
+
+/* Final module harmonization */
+#tools.token-generator-tools {
+  border: 1px solid var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-panel, 10px);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+}
+
+.token-generator-page .token-generator-results {
+  width: var(--app-content-width);
+  padding: 0;
+}
+
+.token-generator-page .token-generator-results-shell,
+.token-access-summary-card,
+.token-access-person-card,
+.token-access-link-row,
+.token-access-link-details,
+.token-generator-page .token-generator-empty-state,
+.token-access-empty-inline,
+.token-generator-page .token-generator-alert,
+.token-generator-page .token-generator-success {
+  border-color: var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.token-generator-page .token-generator-results-shell {
+  padding: 18px;
+}
+
+.token-access-summary-grid,
+.token-access-person-list,
+.token-access-link-list {
+  gap: 10px;
+}
+
+.token-access-summary-card {
+  min-height: 92px;
+  padding: 14px;
+}
+
+.token-access-person-card {
+  gap: 14px;
+  padding: 18px;
+}
+
+.token-access-link-row {
+  gap: 12px;
+  padding: 14px;
+}
+
+.token-access-btn {
+  min-height: 38px;
+  border-radius: var(--app-radius-card, 8px);
+  box-shadow: none;
+}
+
+.token-access-btn.primary {
+  background: #1756d6;
 }

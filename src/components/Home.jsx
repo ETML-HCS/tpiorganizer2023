@@ -7,7 +7,7 @@ import React, {
 } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
-import { IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../config/appConfig"
+import { IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG, ROUTES } from "../config/appConfig"
 import { authPlanningService, workflowPlanningService } from "../services/planningService"
 import { readStorageValue, writeStorageValue } from "../utils/storage"
 import IconButtonContent from "./shared/IconButtonContent"
@@ -62,7 +62,7 @@ const PRIMARY_ITEMS = [
     special: "planningWorkflow",
     icon: "workflow",
     tone: "primary",
-    description: "Construire la planification annuelle avant l'ouverture des votes.",
+    description: "Préparer les créneaux.",
     actionLabel: "Ouvrir"
   },
   {
@@ -70,15 +70,15 @@ const PRIMARY_ITEMS = [
     special: "planningVotes",
     icon: "clipboard",
     tone: "accent",
-    description: "Suivre les votes et l'état annuel du planning.",
+    description: "Suivre votes et publication.",
     actionLabel: "Ouvrir"
   },
   {
-    name: "Soutenances",
+    name: "Défenses",
     special: "soutenance",
     icon: "calendar",
     tone: "warm",
-    description: "Consulter le calendrier des soutenances par année.",
+    description: "Voir l'agenda publié.",
     actionLabel: "Ouvrir"
   }
 ]
@@ -86,34 +86,34 @@ const PRIMARY_ITEMS = [
 const ADMIN_ITEMS = [
   {
     name: "Gestion TPI",
-    link: "/gestionTPI",
+    link: ROUTES.GESTION_TPI,
     icon: "gestionTpi",
     tone: "neutral",
-    description: "Mettre à jour les fiches, imports et référentiels.",
+    description: "Fiches et imports.",
     actionLabel: "Ouvrir"
   },
   {
     name: "Parties prenantes",
-    link: "/partiesPrenantes",
+    link: ROUTES.PARTIES_PRENANTES,
     icon: "users",
     tone: "neutral",
-    description: "Gérer experts, candidats et responsables.",
+    description: "Contacts et rôles.",
     actionLabel: "Ouvrir"
   },
   {
     name: "Suivi des profils",
-    link: "/suiviEtudiants",
+    link: ROUTES.SUIVI_ETUDIANTS,
     icon: "users",
     tone: "neutral",
-    description: "Contrôler les comptes et les accès utilisateurs.",
+    description: "Comptes utilisateurs.",
     actionLabel: "Ouvrir"
   },
   {
     name: "Évaluation",
-    link: "/TpiEval",
+    link: ROUTES.TPI_EVAL,
     icon: "stars",
     tone: "neutral",
-    description: "Accéder aux formulaires et au suivi des notes.",
+    description: "Formulaires et notes.",
     actionLabel: "Ouvrir"
   },
   {
@@ -121,15 +121,15 @@ const ADMIN_ITEMS = [
     link: "/configuration",
     icon: "configuration",
     tone: "primary",
-    description: "Régler l'année active, les salles et les paramètres.",
+    description: "Sites, salles, dates.",
     actionLabel: "Ouvrir"
   },
   {
     name: "Liens d'accès",
-    link: "/genTokens",
+    link: ROUTES.GEN_TOKENS,
     icon: "key",
     tone: "neutral",
-    description: "Préparer les magic links vote et soutenance par personne.",
+    description: "Liens vote et défense.",
     actionLabel: "Ouvrir"
   }
 ]
@@ -138,7 +138,7 @@ const DEV_ACCESS_ITEMS = [
   {
     dialog: "voteLinks",
     title: "Liens de vote",
-    description: "Générer les magic links vote d'un TPI sans envoyer d'email.",
+    description: "Générer les liens vote sans email.",
     meta: "Année + référence",
     icon: "vote",
     requiresEmail: false,
@@ -147,7 +147,7 @@ const DEV_ACCESS_ITEMS = [
   {
     dialog: "voteTest",
     title: "Emails vote",
-    description: "Envoyer les emails de test vote vers une adresse choisie.",
+    description: "Envoyer un test vote.",
     meta: "Année + email",
     icon: "mail",
     requiresEmail: true,
@@ -155,8 +155,8 @@ const DEV_ACCESS_ITEMS = [
   },
   {
     dialog: "soutenanceTest",
-    title: "Emails soutenance",
-    description: "Envoyer les emails de test soutenance vers une adresse choisie.",
+    title: "Emails défense",
+    description: "Envoyer un test défense.",
     meta: "Année + email",
     icon: "mailOff",
     requiresEmail: true,
@@ -164,11 +164,22 @@ const DEV_ACCESS_ITEMS = [
   }
 ]
 
+const getModuleActionHint = (item, activeYear) => {
+  const yearHint = item.special && activeYear ? ` (${activeYear})` : ""
+  const actionText = item.actionLabel || "Ouvrir"
+
+  return item.description
+    ? `${item.name} - ${item.description}${yearHint}`
+    : `${item.name} - ${actionText}${yearHint}`
+}
+
 const ActionCard = ({ item, onOpenDialog, activeYear, delayMs = 0 }) => {
   const cardStyle = { "--home-card-delay": `${delayMs}ms` }
   const actionLabel = item.special && activeYear
     ? `${item.actionLabel} ${activeYear}`
     : item.actionLabel
+  const actionHint = getModuleActionHint(item, activeYear)
+  const targetYear = activeYear || String(YEARS_CONFIG.getCurrentYear())
 
   const content = (
     <>
@@ -186,11 +197,27 @@ const ActionCard = ({ item, onOpenDialog, activeYear, delayMs = 0 }) => {
   )
 
   if (item.special) {
+    if (item.special === "soutenance") {
+      return (
+        <Link
+          to={`${ROUTES.SOUTENANCES}/${targetYear}`}
+          className={`home-card home-card-${item.tone}`}
+          style={cardStyle}
+          aria-label={actionHint}
+          title={actionHint}
+        >
+          {content}
+        </Link>
+      )
+    }
+
     return (
       <button
         type='button'
         className={`home-card home-card-${item.tone}`}
         style={cardStyle}
+        aria-label={actionHint}
+        title={actionHint}
         onClick={() => onOpenDialog(item.special)}
       >
         {content}
@@ -199,7 +226,13 @@ const ActionCard = ({ item, onOpenDialog, activeYear, delayMs = 0 }) => {
   }
 
   return (
-    <Link to={item.link} className={`home-card home-card-${item.tone}`} style={cardStyle}>
+    <Link
+      to={item.link}
+      className={`home-card home-card-${item.tone}`}
+      style={cardStyle}
+      aria-label={actionHint}
+      title={actionHint}
+    >
       {content}
     </Link>
   )
@@ -213,7 +246,7 @@ const HomeSection = ({ title, description, items, onOpenDialog, activeYear, dela
   >
     <div className='home-section-head'>
       <h2>{title}</h2>
-      <p>{description}</p>
+      {description ? <p>{description}</p> : null}
     </div>
 
     <div className='home-grid'>
@@ -482,7 +515,7 @@ const DevAccessResultMenu = ({ payload, onClose }) => {
   const title = payload?.kind === "vote-links"
     ? "Liens de vote"
     : payload?.kind === "soutenance"
-    ? "Emails de test soutenance"
+    ? "Emails de test défense"
     : "Emails de test vote"
   const resultSummary = hasEmailSummary
     ? `${payload?.summary?.emailsSucceeded || 0}/${payload?.summary?.emailsSent || 0} email(s) envoyé(s)`
@@ -694,7 +727,7 @@ const Home = () => {
       if (accessType === "planningWorkflow") {
         authPlanningService.clearSession()
         writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
-        navigate('/planification')
+        navigate(ROUTES.PLANIFICATION)
         return
       }
 
@@ -706,7 +739,7 @@ const Home = () => {
       }
 
       if (accessType === "soutenance") {
-        navigate(`/Soutenances/${year}`)
+        navigate(`${ROUTES.SOUTENANCES}/${year}`)
       }
     },
     [activeYear, navigate]
@@ -732,7 +765,7 @@ const Home = () => {
           ? `Génération des liens de vote ${year}...`
           : isVoteTest
           ? `Envoi des emails de test vote ${year}...`
-          : `Envoi des emails de test soutenance ${year}...`,
+          : `Envoi des emails de test défense ${year}...`,
         {
           position: "top-center"
         }
@@ -803,8 +836,7 @@ const Home = () => {
           <h1>Accès rapide aux modules</h1>
 
           <p>
-            Les accès essentiels sont affichés en premier. Les outils d'administration restent en
-            dessous.
+            Choisissez l'année, puis ouvrez le module utile.
           </p>
         </div>
 
@@ -830,7 +862,7 @@ const Home = () => {
 
       <HomeSection
         title='Accès principaux'
-        description='Les accès les plus utilisés.'
+        description=''
         items={PRIMARY_ITEMS}
         onOpenDialog={handlePrimaryAccess}
         activeYear={activeYear}
@@ -839,7 +871,7 @@ const Home = () => {
 
       <HomeSection
         title='Administration'
-        description='Réglages et gestion des données.'
+        description=''
         items={ADMIN_ITEMS}
         onOpenDialog={handleOpenDialog}
         delayBase={190}
@@ -894,7 +926,7 @@ const Home = () => {
       {activeDialog === "voteLinks" && (
         <DevAccessMenu
           title='Liens de vote'
-          description="Le système génère les magic links vote pour le premier dossier disponible, ou pour la référence indiquée."
+          description="Génère les liens pour la référence indiquée, ou le premier dossier disponible."
           submitLabel='Générer les liens'
           onClose={handleCloseDialog}
           onSubmit={handleSubmitDevAccess}
@@ -907,7 +939,7 @@ const Home = () => {
       {activeDialog === "voteTest" && (
         <DevAccessMenu
           title='Test des votes'
-          description="Le système envoie les emails de test vote vers l'adresse choisie et conserve des liens ouvrables/copiables."
+          description="Envoie les emails de test et garde les liens copiables."
           submitLabel='Envoyer les emails'
           onClose={handleCloseDialog}
           onSubmit={handleSubmitDevAccess}
@@ -918,8 +950,8 @@ const Home = () => {
 
       {activeDialog === "soutenanceTest" && (
         <DevAccessMenu
-          title='Test des soutenances'
-          description="Le système envoie les emails de test soutenance vers l'adresse choisie et cible une soutenance publiée."
+          title='Test des défenses'
+          description="Envoie un test pour une défense publiée."
           submitLabel='Envoyer les emails'
           onClose={handleCloseDialog}
           onSubmit={handleSubmitDevAccess}

@@ -162,7 +162,7 @@ const Register = ({ secret }) => {
       <div className='tracker-register-intro'>
         <h2>Créer un compte</h2>
         <p className='tracker-card-copy'>
-          Choisissez un profil puis complétez les champs obligatoires.
+          Choisissez un profil, puis complétez les champs.
         </p>
       </div>
 
@@ -249,7 +249,7 @@ const Register = ({ secret }) => {
 
           <div className='tracker-form-footer'>
             <p className='tracker-form-note'>
-              Le mot de passe est chiffré avant l&apos;enregistrement.
+              Mot de passe chiffré.
             </p>
             <button type='submit' className='tracker-primary-button' disabled={isSubmitting}>
               {isSubmitting

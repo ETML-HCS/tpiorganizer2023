@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { tpiPlanningService } from '../../services/planningService'
 import {
   AlertIcon,
@@ -23,15 +23,32 @@ import './ConflictResolver.css'
  * Composant pour résoudre les conflits de planification
  * Permet l'intervention manuelle quand le vote automatique échoue
  */
-const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) => {
+const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focusTpiId = '' }) => {
   const [selectedConflict, setSelectedConflict] = useState(null)
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [reason, setReason] = useState('')
   const [isResolving, setIsResolving] = useState(false)
   const [resolveError, setResolveError] = useState(null)
-  const [showAvailableSlots, setShowAvailableSlots] = useState(false)
   const [isResendingVotes, setIsResendingVotes] = useState(false)
   const [resendVotesError, setResendVotesError] = useState(null)
+
+  useEffect(() => {
+    if (!focusTpiId) {
+      return
+    }
+
+    const focusedConflict = conflicts.find((tpi) =>
+      String(tpi?._id || '') === String(focusTpiId) ||
+      String(tpi?.reference || '') === String(focusTpiId)
+    )
+
+    if (focusedConflict) {
+      setSelectedConflict(focusedConflict)
+      setSelectedSlot(null)
+      setReason('')
+      setResolveError(null)
+    }
+  }, [focusTpiId, conflicts])
 
   /**
    * Analyse les votes d'un TPI pour identifier le type de conflit
@@ -179,8 +196,8 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
           <span className="empty-icon" aria-hidden="true">
             <CheckIcon />
           </span>
-          <h3>Aucun conflit à résoudre</h3>
-          <p>Tous les TPI ont été planifiés avec succès ou sont en cours de vote.</p>
+          <h3>Aucun créneau à forcer</h3>
+          <p>Les TPI sont encore en vote, déjà confirmés, ou ne nécessitent pas d'intervention.</p>
         </div>
       </div>
     )
@@ -193,11 +210,10 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
           <span className="resolver-title-icon" aria-hidden="true">
             <AlertIcon />
           </span>
-          Conflits à résoudre ({conflicts.length})
+          Créneaux à forcer ({conflicts.length})
         </h2>
         <p className="resolver-description">
-          Ces TPI nécessitent une intervention manuelle car le processus de vote 
-          automatique n'a pas pu aboutir à un consensus.
+          Ouvre un TPI, sélectionne le créneau retenu, puis indique pourquoi l'administration force ce choix.
         </p>
       </div>
 
@@ -365,7 +381,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
 
                   {/* Section de résolution */}
                   <div className="resolution-section">
-                    <h4>Résolution manuelle</h4>
+                    <h4>Forçage du créneau</h4>
                     
                     {selectedSlot ? (
                       <div className="resolution-form">
@@ -374,7 +390,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                         </div>
                         
                         <div className="form-group">
-                          <label>Raison de l'intervention manuelle *</label>
+                          <label>Raison du forçage *</label>
                           <textarea
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
@@ -406,7 +422,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
                             ) : (
                               <>
                                 <WrenchIcon className="button-icon" />
-                                Forcer l'attribution
+                                Forcer ce créneau
                               </>
                             )}
                           </button>
@@ -421,13 +437,6 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload }) =>
 
                   {/* Actions alternatives */}
                   <div className="alternative-actions">
-                    <button
-                      className="btn-secondary"
-                      onClick={() => setShowAvailableSlots(!showAvailableSlots)}
-                    >
-                      <CalendarIcon className="button-icon" />
-                      {showAvailableSlots ? 'Masquer' : 'Voir'} autres créneaux disponibles
-                    </button>
                     <button
                       className="btn-secondary"
                       onClick={handleResendVotes}

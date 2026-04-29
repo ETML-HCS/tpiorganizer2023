@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from "react";
 
 import { ArrowRightIcon } from "../../shared/InlineIcons";
+import { API_URL } from "../../../config/appConfig";
 
-// Pour accéder à la variable d'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === "true";
-
-// Pour accéder à la variable d'environnement REACT_APP_API_URL
-const apiUrl = debugMode
-  ? process.env.REACT_APP_API_URL_TRUE
-  : process.env.REACT_APP_API_URL_FALSE;
+const apiUrl = API_URL;
 
 async function getExpertByName(name) {
   try {

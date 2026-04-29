@@ -1400,7 +1400,7 @@ export const getTpiTimelineLabel = (tpi) => {
   const endDate = tpi?.dates?.fin
 
   if (soutenanceDate) {
-    return `Soutenance ${formatDisplayDate(soutenanceDate)}`
+    return `Défense ${formatDisplayDate(soutenanceDate)}`
   }
 
   if (startDate && endDate) {

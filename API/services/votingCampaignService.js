@@ -80,6 +80,128 @@ function buildSlotsPayloadFromVotes(votes) {
   return entries
 }
 
+function getTpiCandidateName(tpi) {
+  return getDisplayName(tpi?.candidat)
+}
+
+function normalizeTargetPersonId(person) {
+  return person?._id ? String(person._id) : ''
+}
+
+function ensureVoteEmailTarget(targetsByPersonId, year, person) {
+  const personId = normalizeTargetPersonId(person)
+
+  if (!personId || !person?.email) {
+    return null
+  }
+
+  if (!targetsByPersonId.has(personId)) {
+    targetsByPersonId.set(personId, {
+      person,
+      personId,
+      email: person.email,
+      personName: getDisplayName(person),
+      year,
+      deadlines: [],
+      tpisById: new Map()
+    })
+  }
+
+  return targetsByPersonId.get(personId)
+}
+
+function addTpiToVoteEmailTarget(targetsByPersonId, {
+  year,
+  tpi,
+  person,
+  role,
+  slots = []
+}) {
+  const target = ensureVoteEmailTarget(targetsByPersonId, year, person)
+  const tpiId = tpi?._id ? String(tpi._id) : ''
+
+  if (!target || !tpiId) {
+    return
+  }
+
+  if (tpi?.votingSession?.deadline) {
+    target.deadlines.push(tpi.votingSession.deadline)
+  }
+
+  if (!target.tpisById.has(tpiId)) {
+    target.tpisById.set(tpiId, {
+      id: tpiId,
+      reference: tpi.reference || '',
+      subject: tpi.sujet || '',
+      candidateName: getTpiCandidateName(tpi),
+      roleLabels: new Set(),
+      slots
+    })
+  }
+
+  const entry = target.tpisById.get(tpiId)
+  const seenSlots = new Set(
+    (Array.isArray(entry.slots) ? entry.slots : [])
+      .map((slot) => [
+        slot?.date,
+        slot?.period,
+        slot?.startTime,
+        slot?.endTime,
+        slot?.room
+      ].join('|'))
+  )
+
+  for (const slot of Array.isArray(slots) ? slots : []) {
+    const slotKey = [
+      slot?.date,
+      slot?.period,
+      slot?.startTime,
+      slot?.endTime,
+      slot?.room
+    ].join('|')
+
+    if (seenSlots.has(slotKey)) {
+      continue
+    }
+
+    seenSlots.add(slotKey)
+    entry.slots.push(slot)
+  }
+
+  if (role) {
+    entry.roleLabels.add(toRoleLabel(role))
+  }
+}
+
+function formatEarliestDeadline(deadlines = [], fallbackDate = null) {
+  const validDates = (Array.isArray(deadlines) ? deadlines : [])
+    .map((value) => new Date(value))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((left, right) => left.getTime() - right.getTime())
+
+  const deadline = validDates[0] || fallbackDate
+  return deadline ? new Date(deadline).toLocaleDateString('fr-CH') : ''
+}
+
+function finalizeVoteEmailTarget(target, link) {
+  const tpis = Array.from(target.tpisById.values())
+    .map((entry) => ({
+      ...entry,
+      roleLabel: Array.from(entry.roleLabels).filter(Boolean).join(', '),
+      roleLabels: undefined
+    }))
+    .sort((left, right) => String(left.reference).localeCompare(String(right.reference)))
+
+  return {
+    email: target.email,
+    personName: target.personName,
+    year: target.year,
+    url: link.url,
+    deadline: formatEarliestDeadline(target.deadlines, link.expiresAt),
+    tpis
+  }
+}
+
 function buildTpiVoters(tpi) {
   const rawVoters = [
     { person: tpi.expert1, role: 'expert1' },
@@ -158,6 +280,7 @@ async function ensureVotesForTpi(tpi) {
 async function startVotesCampaign(year, baseUrl, options = {}) {
   const skipEmails = options?.skipEmails === true
   const tpis = await loadVotingTpisForYear(year)
+  const emailTargetsByPersonId = new Map()
 
   let totalEmails = 0
   let successfulEmails = 0
@@ -203,47 +326,60 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
     await ensureVotesForTpi(tpi)
 
-    let emailsSent = 0
-    let emailsSucceeded = 0
-
-    if (!skipEmails) {
-      const slots = buildSlotsPayloadFromProposedSlots(tpi.proposedSlots)
-      const magicLinks = []
-
-      for (const voter of voters) {
-        const link = await magicLinkV2Service.createVoteMagicLink({
-          year,
-          person: voter.person,
-          role: voter.role,
-          scope: {
-            tpiId: String(tpi._id),
-            reference: tpi.reference
-          },
-          baseUrl
-        })
-        magicLinks.push({
-          ...link,
-          email: voter.person.email,
-          personName: getDisplayName(voter.person),
-          role: voter.role,
-          slots
-        })
-      }
-
-      const mailResults = await emailService.sendVoteRequests(tpi, magicLinks)
-      emailsSent = mailResults.length
-      emailsSucceeded = mailResults.filter(result => result.success).length
-      totalEmails += emailsSent
-      successfulEmails += emailsSucceeded
-    }
-
-    details.push({
+    const detail = {
       tpiId: String(tpi._id),
       reference: tpi.reference,
       voters: voters.length,
-      emailsSent,
-      emailsSucceeded
-    })
+      emailsSent: 0,
+      emailsSucceeded: 0
+    }
+    details.push(detail)
+
+    if (!skipEmails) {
+      const slots = buildSlotsPayloadFromProposedSlots(tpi.proposedSlots)
+      for (const voter of voters) {
+        addTpiToVoteEmailTarget(emailTargetsByPersonId, {
+          year,
+          person: voter.person,
+          role: voter.role,
+          tpi,
+          slots
+        })
+      }
+    }
+  }
+
+  if (!skipEmails && emailTargetsByPersonId.size > 0) {
+    const digestTargets = []
+
+    for (const target of emailTargetsByPersonId.values()) {
+      const link = await magicLinkV2Service.createVoteMagicLink({
+        year,
+        person: target.person,
+        role: null,
+        scope: {
+          year,
+          kind: 'stakeholder_votes'
+        },
+        baseUrl
+      })
+
+      digestTargets.push({
+        ...finalizeVoteEmailTarget(target, link),
+        tpiIds: Array.from(target.tpisById.keys())
+      })
+    }
+
+    const mailResults = await emailService.sendVoteDigestRequests(digestTargets)
+    const resultByEmail = new Map(mailResults.map((result) => [result.email, result]))
+    totalEmails = mailResults.length
+    successfulEmails = mailResults.filter(result => result.success).length
+
+    for (const detail of details) {
+      const detailTargets = digestTargets.filter((target) => target.tpiIds.includes(detail.tpiId))
+      detail.emailsSent = detailTargets.length
+      detail.emailsSucceeded = detailTargets.filter((target) => resultByEmail.get(target.email)?.success).length
+    }
   }
 
   return {
@@ -285,7 +421,7 @@ async function remindPendingVotes(year, baseUrl) {
     .populate('voter', 'firstName lastName email sendEmails')
     .select('tpiPlanning voter voterRole slot')
 
-  const groupedByTpiAndVoter = new Map()
+  const targetsByPersonId = new Map()
   for (const vote of pendingVotes) {
     const tpiId = String(vote.tpiPlanning)
     const voterId = vote.voter?._id ? String(vote.voter._id) : null
@@ -294,62 +430,53 @@ async function remindPendingVotes(year, baseUrl) {
       continue
     }
 
-    const key = `${tpiId}|${voterId}`
-    if (!groupedByTpiAndVoter.has(key)) {
-      groupedByTpiAndVoter.set(key, {
-        tpiId,
-        voter: vote.voter,
-        voterRole: vote.voterRole,
-        votes: []
-      })
-    }
-
-    groupedByTpiAndVoter.get(key).votes.push(vote)
-  }
-
-  let emailsSent = 0
-  let emailsSucceeded = 0
-  const touchedTpiIds = new Set()
-
-  for (const target of groupedByTpiAndVoter.values()) {
-    // Ne pas relancer les personnes qui ne veulent pas d'emails
-    if (target.voter.sendEmails === false) {
+    if (vote.voter.sendEmails === false) {
       continue
     }
 
-    const tpi = tpiById.get(target.tpiId)
+    const tpi = tpiById.get(tpiId)
     if (!tpi) {
       continue
     }
 
-    const slots = buildSlotsPayloadFromVotes(target.votes)
+    addTpiToVoteEmailTarget(targetsByPersonId, {
+      year,
+      person: vote.voter,
+      role: vote.voterRole,
+      tpi,
+      slots: buildSlotsPayloadFromVotes([vote])
+    })
+  }
+
+  const digestTargets = []
+  for (const target of targetsByPersonId.values()) {
     const link = await magicLinkV2Service.createVoteMagicLink({
       year,
-      person: target.voter,
-      role: target.voterRole,
+      person: target.person,
+      role: null,
       scope: {
-        tpiId: target.tpiId
+        year,
+        kind: 'stakeholder_votes',
+        source: 'vote_reminder'
       },
       baseUrl
     })
 
-    const result = await emailService.sendEmail(target.voter.email, 'voteReminder', {
-      recipientName: getDisplayName(target.voter),
-      candidateName: getDisplayName(tpi.candidat),
-      tpiReference: tpi.reference,
-      role: toRoleLabel(target.voterRole),
-      slots,
-      deadline: tpi.votingSession?.deadline
-        ? new Date(tpi.votingSession.deadline).toLocaleDateString('fr-CH')
-        : '',
-      magicLinkUrl: link.url
+    digestTargets.push({
+      ...finalizeVoteEmailTarget(target, link),
+      tpiIds: Array.from(target.tpisById.keys())
     })
+  }
 
-    emailsSent += 1
-    if (result.success) {
-      emailsSucceeded += 1
+  const mailResults = await emailService.sendVoteDigestRequests(digestTargets, { reminder: true })
+  const emailsSent = mailResults.length
+  const emailsSucceeded = mailResults.filter(result => result.success).length
+  const touchedTpiIds = new Set()
+
+  for (const target of digestTargets) {
+    if (mailResults.find((result) => result.email === target.email)?.success) {
+      target.tpiIds.forEach((tpiId) => touchedTpiIds.add(tpiId))
     }
-    touchedTpiIds.add(target.tpiId)
   }
 
   if (touchedTpiIds.size > 0) {
@@ -361,7 +488,7 @@ async function remindPendingVotes(year, baseUrl) {
 
   return {
     tpiCount: tpis.length,
-    reminderTargets: groupedByTpiAndVoter.size,
+    reminderTargets: digestTargets.length,
     emailsSent,
     emailsSucceeded,
     emailsFailed: Math.max(emailsSent - emailsSucceeded, 0)

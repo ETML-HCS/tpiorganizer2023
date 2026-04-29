@@ -54,6 +54,68 @@ function formatSlotDate(slot) {
   })
 }
 
+function parseTimeToMinutes(value) {
+  const match = compactText(value).match(/^(\d{1,2})(?::(\d{2}))?$/)
+
+  if (!match) {
+    return null
+  }
+
+  const hours = Number.parseInt(match[1], 10)
+  const minutes = Number.parseInt(match[2] || '0', 10)
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || minutes < 0 || minutes >= 60) {
+    return null
+  }
+
+  return (hours * 60) + minutes
+}
+
+function formatTime(value) {
+  const minutes = parseTimeToMinutes(value)
+  if (minutes === null) {
+    return compactText(value)
+  }
+
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+}
+
+function buildSlotTimeDisplay(slot, option = null) {
+  const display = option?.display || slot?.display || {}
+  const periodLabel = compactText(display.periodLabel)
+  const timeRangeLabel = compactText(display.timeRangeLabel)
+  const exactTimeLabel = compactText(display.exactTimeLabel)
+  const shouldShowExactTime = option
+    ? display.showExactTime === true
+    : display.showExactTime !== false
+
+  if (periodLabel && timeRangeLabel) {
+    const tooltip = [
+      `${periodLabel}: ${timeRangeLabel}`,
+      exactTimeLabel ? `Créneau représentatif: ${exactTimeLabel}` : ''
+    ].filter(Boolean).join('\n')
+
+    return {
+      primary: option?.display?.isGroupedWindow ? periodLabel : `${periodLabel} (${timeRangeLabel})`,
+      secondary: shouldShowExactTime && exactTimeLabel ? `Créneau indicatif ${exactTimeLabel}` : '',
+      tooltip
+    }
+  }
+
+  const startTime = formatTime(slot?.startTime)
+  const endTime = formatTime(slot?.endTime)
+  const startMinutes = parseTimeToMinutes(slot?.startTime)
+  const isMorning = startMinutes === null || startMinutes < (12 * 60)
+
+  return {
+    primary: isMorning ? 'Matin (08:00 - 12:00)' : 'Après-midi (13:00 - fin de journée)',
+    secondary: !option && startTime && endTime ? `Créneau indicatif ${startTime} - ${endTime}` : '',
+    tooltip: startTime && endTime ? `${startTime} - ${endTime}` : ''
+  }
+}
+
 function createDefaultResponseState() {
   return {
     mode: '',
@@ -94,13 +156,72 @@ function getModeSummary(state) {
     }
 
     if (state.specialEnabled) {
-      return 'Demande spéciale'
+    return 'Demande spéciale'
     }
 
-    return 'Proposition en cours'
+    return 'Proposition'
   }
 
   return 'Réponse à saisir'
+}
+
+function getQueueBadgeLabel(option, isSelected) {
+  const queueCount = Number(option?.queue?.count)
+  if (!Number.isFinite(queueCount) || queueCount < 0) {
+    return ''
+  }
+
+  const normalizedCount = Math.floor(queueCount)
+  const capacity = Number(option?.queue?.capacity)
+  const capacitySuffix = Number.isFinite(capacity) && capacity > 0
+    ? `/${Math.floor(capacity)}`
+    : ''
+
+  if (isSelected) {
+    return `n°${normalizedCount + 1}${capacitySuffix}`
+  }
+
+  return `${normalizedCount}${capacitySuffix}`
+}
+
+function getQueueBadgeTitle(option, isSelected) {
+  const queueCount = Number(option?.queue?.count)
+  if (!Number.isFinite(queueCount) || queueCount < 0) {
+    return ''
+  }
+
+  const normalizedCount = Math.floor(queueCount)
+  const capacity = Number(option?.queue?.capacity)
+  const capacityLabel = Number.isFinite(capacity) && capacity > 0
+    ? ` sur ${Math.floor(capacity)} places indicatives`
+    : ''
+
+  if (isSelected) {
+    return `Avec votre proposition, vous seriez le vote favorable n°${normalizedCount + 1}${capacityLabel} sur cette demi-journée.`
+  }
+
+  return `${normalizedCount} vote${normalizedCount > 1 ? 's' : ''} favorable${normalizedCount > 1 ? 's' : ''}${capacityLabel} sur cette demi-journée.`
+}
+
+function getProposalCardLabel(option) {
+  if (option?.display?.isGroupedWindow) {
+    return '½ journée'
+  }
+
+  return option?.source === 'existing_vote' ? 'Déjà proposé' : 'Planning'
+}
+
+function getProposalCardTitle(option, isSelected) {
+  const timeDisplay = buildSlotTimeDisplay(option?.slot, option)
+  const parts = [
+    formatSlotDate(option?.slot),
+    timeDisplay.tooltip || timeDisplay.primary,
+    option?.slot?.room?.name && !option?.display?.isGroupedWindow ? `Salle ${option.slot.room.name}` : '',
+    getQueueBadgeTitle(option, isSelected),
+    isSelected ? 'Cliquez pour retirer cette proposition.' : 'Cliquez pour proposer cette demi-journée.'
+  ]
+
+  return parts.filter(Boolean).join('\n')
 }
 
 function buildProposalContextSummary(group) {
@@ -112,11 +233,11 @@ function buildProposalContextSummary(group) {
   }
 
   if (source === 'planning_config' && candidateClass) {
-    return `Créneaux filtrés selon la configuration ${candidateClass}.`
+    return `Filtre ${candidateClass}`
   }
 
   if (source === 'planning_config') {
-    return 'Créneaux filtrés selon la configuration annuelle.'
+    return 'Filtre annuel'
   }
 
   if (candidateClass) {
@@ -124,6 +245,40 @@ function buildProposalContextSummary(group) {
   }
 
   return ''
+}
+
+function buildProposalContextTitle(group) {
+  const candidateClass = compactText(group?.proposalContext?.candidateClassLabel || group?.tpi?.classe)
+  const source = group?.proposalContext?.source
+
+  if (source === 'planning_config' && candidateClass) {
+    return `Créneaux filtrés selon la configuration ${candidateClass}.`
+  }
+
+  if (source === 'planning_config') {
+    return 'Créneaux filtrés selon la configuration annuelle.'
+  }
+
+  return candidateClass ? `Classe ${candidateClass}.` : ''
+}
+
+const SlotTimeDisplay = ({ slot, option = null }) => {
+  const timeDisplay = buildSlotTimeDisplay(slot, option)
+
+  return (
+    <span
+      className={timeDisplay.tooltip ? 'hover-detail' : undefined}
+      data-tooltip={timeDisplay.tooltip || undefined}
+      title={timeDisplay.tooltip || undefined}
+    >
+      {timeDisplay.primary}
+      {timeDisplay.secondary ? (
+        <small className="slot-time-detail">
+          {timeDisplay.secondary}
+        </small>
+      ) : null}
+    </span>
+  )
 }
 
 const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
@@ -297,12 +452,14 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
           <span className="panel-title-icon" aria-hidden="true">
             <CalendarIcon />
           </span>
-          Votes en attente ({pendingVotes.length} TPI)
+          Votes ({pendingVotes.length})
         </h2>
-        <p className="panel-description">
-          Pour chaque TPI, choisissez simplement <strong>OK</strong> si la date fixée convient,
-          ou <strong>Proposition</strong> pour suggérer jusqu&apos;à 3 créneaux du planning,
-          avec au besoin une demande spéciale libre.
+        <p
+          className="panel-description hover-detail"
+          data-tooltip={`Pour chaque TPI, choisissez OK si la date fixée convient, ou Proposition pour suggérer jusqu'à ${MAX_PROPOSALS_PER_TPI} demi-journées avec une demande spéciale si nécessaire.`}
+          title={`Pour chaque TPI, choisissez OK si la date fixée convient, ou Proposition pour suggérer jusqu'à ${MAX_PROPOSALS_PER_TPI} demi-journées avec une demande spéciale si nécessaire.`}
+        >
+          <strong>OK</strong> ou <strong>Proposition</strong>.
         </p>
       </div>
 
@@ -332,6 +489,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
           const fixedSlot = group.fixedSlot || group.slots?.[0] || null
           const proposalOptions = normalizeProposalOptions(group)
           const proposalContextSummary = buildProposalContextSummary(group)
+          const proposalContextTitle = buildProposalContextTitle(group)
           const state = responses[tpiId] || {
             mode: '',
             selectedSlotIds: [],
@@ -341,6 +499,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
           }
           const isExpanded = String(selectedTpi) === tpiId
           const summaryEntry = votingSummary.find((entry) => entry.tpiId === tpiId)
+          const proposalCountLabel = `${proposalOptions.length} option${proposalOptions.length > 1 ? 's' : ''}`
 
           return (
             <div
@@ -360,8 +519,12 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                 </div>
 
                 <div className="voting-meta">
-                  <span className="slots-count">
-                    {proposalOptions.length} option{proposalOptions.length > 1 ? 's' : ''} de proposition
+                  <span
+                    className="slots-count hover-detail"
+                    data-tooltip={`${proposalCountLabel} de proposition disponible${proposalOptions.length > 1 ? 's' : ''} pour ce TPI.`}
+                    title={`${proposalCountLabel} de proposition disponible${proposalOptions.length > 1 ? 's' : ''} pour ce TPI.`}
+                  >
+                    {proposalCountLabel}
                   </span>
                   <span className={`preferred-count ${state.mode ? 'full' : ''}`}>
                     {summaryEntry?.summary || 'Réponse à saisir'}
@@ -377,9 +540,15 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                   <div className="slot-group-header">
                     <div>
                       <h3>Date fixée</h3>
-                      <p>Si elle convient, validez directement en OK.</p>
+                      <p title="Si cette date convient, validez directement avec OK.">Validez si OK.</p>
                     </div>
-                    <span className="slot-group-badge pending">Réponse simple</span>
+                    <span
+                      className="slot-group-badge pending hover-detail"
+                      data-tooltip="Réponse simple: la date fixée est acceptée telle quelle."
+                      title="Réponse simple: la date fixée est acceptée telle quelle."
+                    >
+                      OK
+                    </span>
                   </div>
 
                   {fixedSlot ? (
@@ -391,7 +560,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                         </div>
                         <div className="slot-line slot-time">
                           <TimeIcon className="slot-icon" />
-                          <span>{fixedSlot.slot?.startTime} - {fixedSlot.slot?.endTime}</span>
+                          <SlotTimeDisplay slot={fixedSlot.slot} />
                         </div>
                         {fixedSlot.slot?.room?.name ? (
                           <div className="slot-line slot-room">
@@ -414,15 +583,15 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                       onClick={() => setMode(tpiId, 'ok')}
                     >
                       <strong>OK</strong>
-                      <span>La date fixée me convient.</span>
+                      <span title="La date fixée me convient.">Me convient.</span>
                     </button>
                     <button
                       type="button"
                       className={`vote-mode-card ${state.mode === 'proposal' ? 'active proposal' : ''}`}
                       onClick={() => setMode(tpiId, 'proposal')}
                     >
-                      <strong>Proposition</strong>
-                      <span>Je propose d&apos;autres créneaux ou une demande spéciale.</span>
+                      <strong>Proposer</strong>
+                      <span title="Je propose d'autres demi-journées ou une demande spéciale.">Autre choix.</span>
                     </button>
                   </div>
 
@@ -430,19 +599,26 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                     <>
                       <div className="slot-group-header alternative-group">
                         <div>
-                          <h3>Créneaux à proposer</h3>
-                          <p>
-                            Choisissez jusqu&apos;à {MAX_PROPOSALS_PER_TPI} créneaux du planning.
-                            Les propositions sélectionnées seront transmises à l&apos;administration.
+                          <h3>Propositions</h3>
+                          <p title={`Choisissez jusqu'à ${MAX_PROPOSALS_PER_TPI} demi-journées. Les propositions sélectionnées seront transmises à l'administration.`}>
+                            Max {MAX_PROPOSALS_PER_TPI} demi-journées.
                           </p>
                           {proposalContextSummary ? (
-                            <p className="proposal-context-note">
+                            <p
+                              className="proposal-context-note hover-detail"
+                              data-tooltip={proposalContextTitle || undefined}
+                              title={proposalContextTitle || undefined}
+                            >
                               {proposalContextSummary}
                             </p>
                           ) : null}
                         </div>
-                        <span className="slot-group-badge alternatives">
-                          {state.selectedSlotIds.length}/{MAX_PROPOSALS_PER_TPI} sélectionnés
+                        <span
+                          className="slot-group-badge alternatives hover-detail"
+                          data-tooltip={`${state.selectedSlotIds.length} proposition${state.selectedSlotIds.length > 1 ? 's' : ''} sélectionnée${state.selectedSlotIds.length > 1 ? 's' : ''} sur ${MAX_PROPOSALS_PER_TPI} possibles.`}
+                          title={`${state.selectedSlotIds.length} proposition${state.selectedSlotIds.length > 1 ? 's' : ''} sélectionnée${state.selectedSlotIds.length > 1 ? 's' : ''} sur ${MAX_PROPOSALS_PER_TPI} possibles.`}
+                        >
+                          {state.selectedSlotIds.length}/{MAX_PROPOSALS_PER_TPI}
                         </span>
                       </div>
 
@@ -457,13 +633,31 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                               key={slotId || `${tpiId}-${index}`}
                               className={`slot-vote-card alternative proposal-select-card ${isSelected ? 'preferred' : ''}`}
                               onClick={() => toggleProposalSlot(tpiId, slotId)}
+                              title={getProposalCardTitle(option, isSelected)}
                             >
                               <div className="slot-card-head">
-                                <span className="slot-card-label">
-                                  {option.source === 'existing_vote' ? 'Déjà proposé' : 'Planning'}
+                                <span
+                                  className="slot-card-label hover-detail"
+                                  data-tooltip={getProposalCardTitle(option, isSelected)}
+                                  title={getProposalCardTitle(option, isSelected)}
+                                >
+                                  {getProposalCardLabel(option)}
                                 </span>
-                                <span className={`slot-state-chip ${isSelected ? 'preferred' : 'default'}`}>
-                                  {isSelected ? 'Sélectionné' : 'Ajouter'}
+                                {getQueueBadgeLabel(option, isSelected) ? (
+                                  <span
+                                    className="slot-queue-chip hover-detail"
+                                    data-tooltip={getQueueBadgeTitle(option, isSelected)}
+                                    title={getQueueBadgeTitle(option, isSelected)}
+                                  >
+                                    {getQueueBadgeLabel(option, isSelected)}
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={`slot-state-chip ${isSelected ? 'preferred' : 'default'} hover-detail`}
+                                  data-tooltip={isSelected ? 'Cliquez pour retirer cette proposition.' : 'Cliquez pour ajouter cette demi-journée.'}
+                                  title={isSelected ? 'Cliquez pour retirer cette proposition.' : 'Cliquez pour ajouter cette demi-journée.'}
+                                >
+                                  {isSelected ? 'Pris' : '+'}
                                 </span>
                               </div>
 
@@ -474,9 +668,9 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                                 </div>
                                 <div className="slot-line slot-time">
                                   <TimeIcon className="slot-icon" />
-                                  <span>{option.slot?.startTime} - {option.slot?.endTime}</span>
+                                  <SlotTimeDisplay slot={option.slot} option={option} />
                                 </div>
-                                {option.slot?.room?.name ? (
+                                {option.slot?.room?.name && !option.display?.isGroupedWindow ? (
                                   <div className="slot-line slot-room">
                                     <RoomIcon className="slot-icon" />
                                     <span>{option.slot.room.name}</span>
@@ -494,7 +688,13 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
 
                       <div className="special-request-box">
                         <div className="special-request-toggle-row">
-                          <span className="special-request-toggle-label">Ajouter une demande spéciale</span>
+                          <span
+                            className="special-request-toggle-label hover-detail"
+                            data-tooltip="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
+                            title="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
+                          >
+                            Demande spéciale
+                          </span>
                           <BinaryToggle
                             value={Boolean(state.specialEnabled)}
                             onChange={(nextValue) => toggleSpecialRequest(tpiId, nextValue)}
@@ -508,9 +708,12 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                             falseIcon={CloseIcon}
                           />
                         </div>
-                        <p className="special-request-help">
-                          Utilisez cette option si vous devez sortir des créneaux disponibles
-                          et transmettre une contrainte précise à l&apos;administration.
+                        <p
+                          className="special-request-help hover-detail"
+                          data-tooltip="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
+                          title="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
+                        >
+                          Hors planning ou contrainte.
                         </p>
 
                         {state.specialEnabled && (
@@ -541,10 +744,10 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                   <div className="card-footer">
                     <div className="card-footer-note">
                       {state.mode === 'ok'
-                        ? 'La date fixée sera validée telle quelle.'
+                        ? 'Date validée.'
                         : state.mode === 'proposal'
-                          ? 'La date fixée sera refusée et vos propositions seront enregistrées.'
-                          : 'Choisissez une réponse avant de soumettre.'}
+                          ? 'Propositions envoyées.'
+                          : 'Choisissez OK ou Proposition.'}
                     </div>
                     <button
                       className="btn-submit-votes"

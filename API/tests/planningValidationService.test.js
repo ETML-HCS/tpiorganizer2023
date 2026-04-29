@@ -80,6 +80,38 @@ test('buildValidationIssues reports a sequence overflow after 4 consecutive TPI'
   ])
 })
 
+test('buildValidationIssues utilise la limite consecutive configuree par site', () => {
+  const person = buildPerson('person-2b', 'Grace', 'Hopper')
+  const slots = Array.from({ length: 4 }, (_, index) => ({
+    date: '2026-06-11',
+    period: index + 1,
+    status: 'confirmed',
+    room: { site: 'ETML', name: `A10${index + 1}` },
+    assignedTpi: {
+      reference: `TPI-20${index + 1}`
+    },
+    assignments: {
+      expert1: person
+    }
+  }))
+
+  const result = buildValidationIssues([], slots, [], {
+    planningConfig: {
+      siteConfigs: [
+        {
+          siteCode: 'ETML',
+          maxConsecutiveTpi: 3
+        }
+      ]
+    }
+  })
+
+  assert.equal(result.issueCount, 1)
+  assert.equal(result.issues[0].type, 'consecutive_limit')
+  assert.equal(result.issues[0].consecutiveCount, 4)
+  assert.equal(result.issues[0].maxConsecutiveTpi, 3)
+})
+
 test('buildValidationIssues returns no issue when planning is valid', () => {
   const person = buildPerson('person-3', 'Linus', 'Torvalds')
 
@@ -171,7 +203,7 @@ test('buildUnplannedTpiIssues exposes the stored manual reason when a TPI is man
       conflicts: [
         {
           type: 'no_common_slot',
-          description: 'Aucune date de soutenance configuree pour cette classe.'
+          description: 'Aucune date de défense configuree pour cette classe.'
         }
       ]
     }
@@ -179,8 +211,8 @@ test('buildUnplannedTpiIssues exposes the stored manual reason when a TPI is man
 
   assert.equal(result.length, 1)
   assert.equal(result[0].type, 'unplanned_tpi')
-  assert.equal(result[0].reason, 'Aucune date de soutenance configuree pour cette classe.')
-  assert.match(result[0].message, /Raison: Aucune date de soutenance configuree pour cette classe\./)
+  assert.equal(result[0].reason, 'Aucune date de défense configuree pour cette classe.')
+  assert.match(result[0].message, /Raison: Aucune date de défense configuree pour cette classe\./)
 })
 
 test('buildLegacyConsistencyIssues reports missing stakeholders from legacy catalog', () => {

@@ -89,12 +89,25 @@ export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
   PLANIFICATION: '/planification',
-  GESTION_TPI: '/gestionTPI',
-  PARTIES_PRENANTES: '/partiesPrenantes',
-  SUIVI_ETUDIANTS: '/suiviEtudiants',
-  SOUTENANCES: '/Soutenances',
-  TPI_EVAL: '/TpiEval',
-  GEN_TOKENS: '/genTokens'
+  PLANNING: '/planning',
+  PLANIFICATION_VOTES: '/planning/:year/votes',
+  PLANNING_VOTES_LEGACY: '/planification-votes/:year',
+  GESTION_TPI: '/gestion-tpi',
+  GESTION_TPI_LEGACY: '/gestionTPI',
+  PARTIES_PRENANTES: '/parties-prenantes',
+  PARTIES_PRENANTES_LEGACY: '/partiesPrenantes',
+  SUIVI_ETUDIANTS: '/suivi-etudiants',
+  SUIVI_ETUDIANTS_LEGACY: '/suiviEtudiants',
+  SOUTENANCES: '/defenses',
+  SOUTENANCES_LEGACY: '/Soutenances',
+  SOUTENANCES_LEGACY_LOWER: '/soutenances',
+  SOUTENANCE_LEGACY: '/Soutenance',
+  SOUTENANCE_LEGACY_LOWER: '/soutenance',
+  DEFENSE_LEGACY: '/defense',
+  TPI_EVAL: '/evaluation',
+  TPI_EVAL_LEGACY: '/TpiEval',
+  GEN_TOKENS: '/acces-liens',
+  GEN_TOKENS_LEGACY: '/genTokens'
 }
 
 // Durées (en millisecondes)

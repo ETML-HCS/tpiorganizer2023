@@ -1,9 +1,9 @@
 const PREFERRED_SOUTENANCE_LIMIT = 3
 
 export const PREFERRED_SOUTENANCE_CHOICE_FIELDS = [
-  { dateField: 'preferredSoutenanceDate1', slotField: 'preferredSoutenanceSlot1', label: 'Choix 1' },
-  { dateField: 'preferredSoutenanceDate2', slotField: 'preferredSoutenanceSlot2', label: 'Choix 2' },
-  { dateField: 'preferredSoutenanceDate3', slotField: 'preferredSoutenanceSlot3', label: 'Choix 3' }
+  { dateField: 'preferredSoutenanceDate1', slotField: 'preferredSoutenanceSlot1', label: 'Préférence 1' },
+  { dateField: 'preferredSoutenanceDate2', slotField: 'preferredSoutenanceSlot2', label: 'Préférence 2' },
+  { dateField: 'preferredSoutenanceDate3', slotField: 'preferredSoutenanceSlot3', label: 'Préférence 3' }
 ]
 
 function normalizeWhitespace(value = '') {
@@ -59,7 +59,6 @@ function normalizePreferredSoutenanceChoice(value) {
 
 function dedupePreferredSoutenanceChoices(values = []) {
   const normalizedChoices = []
-  const choiceIndexByDate = new Map()
 
   for (const value of (Array.isArray(values) ? values : [values])) {
     const choice = normalizePreferredSoutenanceChoice(value)
@@ -68,19 +67,35 @@ function dedupePreferredSoutenanceChoices(values = []) {
       continue
     }
 
-    const existingIndex = choiceIndexByDate.get(choice.date)
-    if (!Number.isInteger(existingIndex)) {
-      choiceIndexByDate.set(choice.date, normalizedChoices.length)
-      normalizedChoices.push(choice)
-      if (normalizedChoices.length >= PREFERRED_SOUTENANCE_LIMIT) {
-        break
+    const choicePeriod = Number.isInteger(choice.period) ? choice.period : null
+    const exactIndex = normalizedChoices.findIndex((existingChoice) =>
+      existingChoice.date === choice.date &&
+      (existingChoice.period ?? null) === choicePeriod
+    )
+
+    if (exactIndex !== -1) {
+      continue
+    }
+
+    if (Number.isInteger(choice.period)) {
+      const dateOnlyIndex = normalizedChoices.findIndex((existingChoice) =>
+        existingChoice.date === choice.date && (existingChoice.period ?? null) === null
+      )
+
+      if (dateOnlyIndex !== -1) {
+        normalizedChoices[dateOnlyIndex] = choice
+        continue
+      }
+
+      if (normalizedChoices.length < PREFERRED_SOUTENANCE_LIMIT) {
+        normalizedChoices.push(choice)
       }
       continue
     }
 
-    const existingChoice = normalizedChoices[existingIndex]
-    if ((existingChoice?.period ?? null) === null && Number.isInteger(choice.period)) {
-      normalizedChoices[existingIndex] = choice
+    const hasChoiceForDate = normalizedChoices.some((existingChoice) => existingChoice.date === choice.date)
+    if (!hasChoiceForDate && normalizedChoices.length < PREFERRED_SOUTENANCE_LIMIT) {
+      normalizedChoices.push(choice)
     }
   }
 
@@ -102,7 +117,7 @@ export function getPreferredSoutenanceChoicesForPerson(person = {}) {
 }
 
 export function buildPreferredSoutenanceDates(choices = [], fallbackDates = []) {
-  return buildPreferredSoutenanceChoices(choices, fallbackDates).map((choice) => choice.date)
+  return Array.from(new Set(buildPreferredSoutenanceChoices(choices, fallbackDates).map((choice) => choice.date)))
 }
 
 export function getPreferredSoutenanceChoiceInputValues(choices = [], fallbackDates = []) {

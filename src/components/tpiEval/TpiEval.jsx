@@ -11,7 +11,7 @@ import IconButtonContent from "../shared/IconButtonContent"
 import PageToolbar from "../shared/PageToolbar"
 import { CloseIcon, PlusIcon, UploadIcon } from "../shared/InlineIcons"
 import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
-import { STORAGE_KEYS } from "../../config/appConfig"
+import { API_URL, ROUTES, STORAGE_KEYS } from "../../config/appConfig"
 import {
   readJSONListValue,
   upsertJSONListValue,
@@ -19,13 +19,7 @@ import {
 
 import "../../css/tpiEval/tpiEval.css"
 
-// Pour accéder à la variable 'environnement REACT_APP_DEBUG
-const debugMode = process.env.REACT_APP_DEBUG === "true"
-
-// Pour accéder à la variable 'environnement REACT_APP_API_URL
-const apiUrl = debugMode
-  ? process.env.REACT_APP_API_URL_TRUE
-  : process.env.REACT_APP_API_URL_FALSE
+const apiUrl = API_URL
 
 //#region:fonctions
 
@@ -90,7 +84,7 @@ function EvaluationList({ evaluations, setLoadTpiEval }) {
             <span className='evaluation-list-kicker'>Bibliothèque locale</span>
             <h2>Liste des évaluations</h2>
             <p>
-              Rouvrez une évaluation existante ou filtrez rapidement par entreprise.
+              Filtrez ou rouvrez une fiche.
             </p>
           </div>
 
@@ -174,7 +168,7 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
   const fileInputRef = useRef(null)
   const hasOpenEvaluation = isNewEval || loadTpiEval !== null
   const navigationLinks = MAIN_NAVIGATION_LINKS.filter(
-    (link) => link?.to !== "/TpiEval"
+    (link) => link?.to !== ROUTES.TPI_EVAL
   )
 
   const loadDataLocally = () => {
@@ -306,7 +300,7 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
         className='tpi-eval-tools'
         eyebrow='Évaluation'
         title='Bibliothèque des évaluations'
-        description='Créer une évaluation locale, rouvrir une fiche existante et importer un export JSON.'
+        description='Créer, rouvrir, importer.'
         meta={
           <div className='tpi-eval-toolbar-meta'>
             <span className='page-tools-chip'>
@@ -364,8 +358,7 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
               <span className='evaluation-form-kicker'>Saisie</span>
               <h2>{loadTpiEval ? 'Modifier une évaluation' : 'Nouvelle évaluation'}</h2>
               <p>
-                La fiche reste éditable localement et la bibliothèque ci-dessous se
-                met à jour dès l&apos;enregistrement.
+                Enregistrement local, liste mise à jour.
               </p>
             </div>
           </div>

@@ -22,6 +22,7 @@ import {
   SearchIcon,
   SendIcon,
   SnowflakeIcon,
+  TrashIcon,
   UploadIcon,
   VoteIcon,
   WrapIcon,
@@ -35,6 +36,7 @@ import {
 
 const TpiScheduleButtons = ({
   onToggleEditing,
+  onDeleteAllRooms = null,
   onSave,
   onSendBD,
   onExport,
@@ -61,6 +63,7 @@ const TpiScheduleButtons = ({
   onOpenVotesTracking,
   onOpenSoutenances,
   roomsCount = 0,
+  totalRoomsCount = roomsCount,
   usedTpiCount = null,
   totalTpiCount = null,
   localConflictCount = 0,
@@ -118,7 +121,6 @@ const TpiScheduleButtons = ({
   const isVotingState = workflowState === "voting_open"
   const isPublishedState = workflowState === "published"
   const canOpenVoteTracking = isVotingState || isPublishedState
-  const canPublishDefinitive = isVotingState || isPublishedState
   const isActionRunning = (actionKey) =>
     workflowActionLoading && pendingWorkflowAction === actionKey
   const planningHeaderSlot =
@@ -139,6 +141,8 @@ const TpiScheduleButtons = ({
     Number(validationResult?.year) === Number(effectiveYear) &&
     validationResult?.summary?.isValid === false
   const canStartVotes = isPlanningState && hasSnapshot && !hasStaleSnapshot && hasSuccessfulValidation
+  const canPublishDirect = isPlanningState && canStartVotes
+  const canPublishDefinitive = canPublishDirect || isVotingState || isPublishedState
 
   const validationYear = Number.parseInt(validationResult?.year, 10)
   const validationSummary = validationResult?.summary || {}
@@ -162,6 +166,9 @@ const TpiScheduleButtons = ({
   const hasTpiUsageCount =
     Number.isInteger(usedTpiCount) && Number.isInteger(totalTpiCount)
   const hasLocalConflictCount = Number.isInteger(localConflictCount) && localConflictCount > 0
+  const deleteAllRoomsCount = Number.isFinite(Number(totalRoomsCount))
+    ? Number(totalRoomsCount)
+    : Number(roomsCount) || 0
 
   const validationLabel = isActionRunning("validate")
     ? "Vérification..."
@@ -186,9 +193,11 @@ const TpiScheduleButtons = ({
   const closeVotesLabel = isActionRunning("closeVotes") ? "Clôture..." : "Clore votes"
   const publishDefinitiveLabel = isActionRunning("publish")
     ? "Publication..."
-    : "Publier définitif"
+    : isPlanningState
+      ? "Publier sans votes"
+      : "Publier définitif"
   const sendLinksLabel = isActionRunning("sendLinks") ? "Envoi..." : "Envoyer liens"
-  const openSoutenancesLabel = "Ouvrir Soutenances"
+  const openSoutenancesLabel = "Ouvrir Défenses"
   const workflowActionLabels = {
     autoPlan: "Automatisation",
     validate: "Vérification",
@@ -483,6 +492,17 @@ const TpiScheduleButtons = ({
     }
   }
 
+  const handleDeleteAllRooms = () => {
+    if (typeof onDeleteAllRooms !== "function") {
+      return
+    }
+
+    const didDelete = onDeleteAllRooms()
+    if (didDelete !== false) {
+      setIsEditing(false)
+    }
+  }
+
   const handleFileLoad = (event) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -512,7 +532,7 @@ const TpiScheduleButtons = ({
           className="planning-tools"
           flatHeader
           title={`Planification ${effectiveYear}`}
-          description="Données, salles et workflow dans une barre compacte."
+          description="Données, salles, workflow."
           tabs={toolbarTabs}
           activeTab={activeToolTab}
           onTabChange={setActiveToolTab}
@@ -548,6 +568,27 @@ const TpiScheduleButtons = ({
                 badgeClassName="ui-button-badge planning-edit-toggle-count"
               />
             </button>
+
+            {isEditing ? (
+              <button
+                type="button"
+                className="planning-data-btn delete-all icon-button"
+                onClick={handleDeleteAllRooms}
+                aria-label="Supprimer tout"
+                title={
+                  deleteAllRoomsCount > 0
+                    ? `Supprimer toutes les salles du planning (${deleteAllRoomsCount}).`
+                    : "Aucune salle à supprimer."
+                }
+                disabled={!onDeleteAllRooms || deleteAllRoomsCount <= 0}
+              >
+                <IconButtonContent
+                  label="Supprimer tout"
+                  icon={TrashIcon}
+                  iconClassName="planning-button-icon"
+                />
+              </button>
+            ) : null}
 
             <input
               ref={fileInputRef}
@@ -634,7 +675,7 @@ const TpiScheduleButtons = ({
           <div className="planning-tools-panel-head">
             <div className="planning-tools-panel-copy">
               <h4>Configuration</h4>
-              <p>Les noms de rooms viennent de Configuration. Ce bouton crée les rooms du planning pour chaque date avec les créneaux définis par site.</p>
+              <p>Crée les salles du planning depuis Configuration.</p>
             </div>
             <div className="planning-room-form-head-actions">
               {typeof onGenerateRoomsFromCatalog === "function" ? (
@@ -1102,7 +1143,17 @@ const TpiScheduleButtons = ({
                       className="planning-workflow-btn success"
                       onClick={onPublishDefinitive}
                       disabled={workflowActionLoading || !canPublishDefinitive}
-                      title="Publier la version définitive dans Soutenances."
+                      title={
+                        isPlanningState
+                          ? hasStaleSnapshot
+                            ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant de publier."
+                            : hasBlockedValidation
+                              ? "La vérification a détecté des anomalies. Corrigez-les avant de publier."
+                              : canPublishDirect
+                                ? "Confirmer les créneaux du snapshot et publier sans campagne de votes."
+                                : "Snapshot validé requis avant publication directe."
+                          : "Publier la version définitive dans Défenses."
+                      }
                       aria-label={publishDefinitiveLabel}
                     >
                       <IconButtonContent
@@ -1118,7 +1169,7 @@ const TpiScheduleButtons = ({
                       className="planning-workflow-btn success"
                       onClick={onSendSoutenanceLinks}
                       disabled={workflowActionLoading || !isPublishedState}
-                      title="Renvoyer les magic links de soutenance."
+                      title="Renvoyer les magic links de défense."
                       aria-label={sendLinksLabel}
                     >
                       <IconButtonContent
@@ -1135,7 +1186,7 @@ const TpiScheduleButtons = ({
                       onClick={onOpenSoutenances}
                       disabled={workflowActionLoading}
                       aria-label={openSoutenancesLabel}
-                      title="Ouvrir le module Soutenances."
+                      title="Ouvrir le module Défenses."
                     >
                       <IconButtonContent
                         label={openSoutenancesLabel}

@@ -611,7 +611,7 @@ const TpiForm = ({
               </div>
 
               <div className='form-row stacked'>
-                <label htmlFor='dateSoutenance'>Soutenance</label>
+                <label htmlFor='dateSoutenance'>Défense</label>
                 <select
                   id='dateSoutenance'
                   name='dateSoutenance'

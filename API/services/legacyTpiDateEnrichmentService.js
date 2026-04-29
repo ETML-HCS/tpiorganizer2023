@@ -298,7 +298,7 @@ async function loadLegacyTpiDateEnrichmentContext(year, options = {}) {
           ? PublicationVersion.findOne({ year: normalizedYear, isActive: true })
           : null,
       null,
-      'la publication active des soutenances',
+      'la publication active des défenses',
       normalizedYear
     )
   ])

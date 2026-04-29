@@ -14,7 +14,7 @@ import {
 } from '../shared/InlineIcons'
 import { MAIN_NAVIGATION_LINKS } from '../shared/mainNavigation'
 import { showNotification } from '../Tools.jsx'
-import { STORAGE_KEYS } from '../../config/appConfig'
+import { ROUTES, STORAGE_KEYS } from '../../config/appConfig'
 import { readJSONListValue, writeJSONValue } from '../../utils/storage'
 import {
   IMPORT_FIELD_DEFS,
@@ -319,7 +319,7 @@ const TpiManagementButtons = ({
   const canSubmitImport =
     importRows.length > 0 && missingMappingKeys.length === 0 && !isImporting && !isParsingFile
   const toolbarNavigationLinks = useMemo(
-    () => MAIN_NAVIGATION_LINKS.filter((link) => link?.to !== '/gestionTPI'),
+    () => MAIN_NAVIGATION_LINKS.filter((link) => link?.to !== ROUTES.GESTION_TPI),
     []
   )
   const toolbarMeta = useMemo(
@@ -541,7 +541,7 @@ const TpiManagementButtons = ({
       className='tpi-management-tools'
       eyebrow='Gestion TPI'
       title={`Catalogue ${year}`}
-      description='Créer, importer et nettoyer les fiches TPI d une année depuis un seul point d entrée.'
+      description={`${tpiCount} fiche${tpiCount > 1 ? 's' : ''} chargée${tpiCount > 1 ? 's' : ''}`}
       meta={toolbarMeta}
       navigationLinks={toolbarNavigationLinks}
       navigationMode='floating'
@@ -635,12 +635,14 @@ const TpiManagementButtons = ({
 
           {importFeedback.stats?.stakeholdersPending > 0 ? (
             <div className='tpi-import-feedback-actions'>
-              <Link
-                to='/partiesPrenantes?tab=draft&draftStatus=actionable'
-                className='tpi-import-feedback-link'
-              >
-                Ouvrir la complétion des parties prenantes
-              </Link>
+            <Link
+              to={`${ROUTES.PARTIES_PRENANTES}?tab=draft&draftStatus=actionable`}
+              className='tpi-import-feedback-link'
+              aria-label='Ouvrir la complétion des parties prenantes'
+              title='Ouvrir la complétion des parties prenantes'
+            >
+              Ouvrir la complétion des parties prenantes
+            </Link>
             </div>
           ) : null}
 
@@ -664,8 +666,7 @@ const TpiManagementButtons = ({
               <span className='tpi-management-tools-label'>Import CSV</span>
               <h3>Préparer l&apos;import</h3>
               <p>
-                Charge un CSV, vérifie l&apos;année, puis relie les colonnes avant de lancer
-                l&apos;import.
+                Charge le CSV, vérifie l&apos;année, puis importe.
               </p>
             </div>
             <div className='tpi-import-panel-meta'>
