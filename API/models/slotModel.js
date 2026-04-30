@@ -69,7 +69,8 @@ const slotSchema = new Schema({
   config: {
     duration: { type: Number, default: 60 }, // Durée en minutes
     breakAfter: { type: Number, default: 10 }, // Pause après en minutes
-    maxConsecutiveTpi: { type: Number, default: 4 }
+    maxConsecutiveTpi: { type: Number, default: 4 },
+    minTpiPerRoom: { type: Number, default: 3 }
   },
   
   // Historique des modifications
@@ -146,7 +147,10 @@ slotSchema.statics.generateDaySlots = async function(year, date, site, config) {
           breakAfter: breakline * 60,
           maxConsecutiveTpi: Number.isInteger(Number(config.maxConsecutiveTpi)) && Number(config.maxConsecutiveTpi) > 0
             ? Number(config.maxConsecutiveTpi)
-            : 4
+            : 4,
+          minTpiPerRoom: Number.isInteger(Number(config.minTpiPerRoom)) && Number(config.minTpiPerRoom) > 0
+            ? Number(config.minTpiPerRoom)
+            : 3
         },
         status: 'available'
       })

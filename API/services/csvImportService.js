@@ -138,6 +138,10 @@ const COLUMN_MAPPINGS = {
   'datedebut': 'dateDepart',
   'debuttpi': 'dateDepart',
   'datefin': 'dateFin',
+  'datedefense': 'dateSoutenance',
+  'datedefence': 'dateSoutenance',
+  'datesoutenance': 'dateSoutenance',
+  'soutenance': 'dateSoutenance',
   'remarques': 'remarques',
   'remarque': 'remarques',
   'remarquesdomaine': 'remarques',
@@ -397,8 +401,9 @@ async function importTpisFromCSV(parsedData, year, site = 'Vennes', createdBy = 
         if (row.remarques) existingTpi.description = `${existingTpi.description || ''}\n${row.remarques}`.trim()
         if (row.entreprise) existingTpi.entreprise = { nom: row.entreprise }
         if (row.classe) existingTpi.classe = row.classe
-        if (row.dateDepart || row.dateFin) {
+        if (row.dateSoutenance || row.dateDepart || row.dateFin) {
           existingTpi.dates = existingTpi.dates || {}
+          if (row.dateSoutenance) existingTpi.dates.soutenance = parseDate(row.dateSoutenance)
           if (row.dateDepart) existingTpi.dates.debut = parseDate(row.dateDepart)
           if (row.dateFin) existingTpi.dates.fin = parseDate(row.dateFin)
         }
@@ -432,6 +437,7 @@ async function importTpisFromCSV(parsedData, year, site = 'Vennes', createdBy = 
           classe: row.classe || '',
           site,
           dates: {
+            soutenance: parseDate(row.dateSoutenance),
             debut: parseDate(row.dateDepart),
             fin: parseDate(row.dateFin)
           },

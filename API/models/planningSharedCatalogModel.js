@@ -48,6 +48,10 @@ const roomCatalogSchema = new mongoose.Schema(
       type: Number,
       default: null
     },
+    soutenanceColor: {
+      type: String,
+      default: ''
+    },
     notes: {
       type: String,
       default: ''

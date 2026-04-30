@@ -3,14 +3,19 @@ const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
 const { createTpiRoomModel } = require('../models/tpiRoomsModels')
 const {
+  MIN_TPI_PER_OPEN_ROOM,
   MAX_CONSECUTIVE_TPI,
   buildTimelineIndex,
   getMaxConsecutiveTpiLimit,
+  getMinTpiPerOpenRoomTarget,
   toTimeStepKey
 } = require('./planningRuleUtils')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
 const { getPlanningConfig } = require('./planningConfigService')
-const { inferTpiClassMode } = require('./roomClassCompatibilityService')
+const {
+  getRoomCompatibilityReport,
+  inferTpiClassMode
+} = require('./roomClassCompatibilityService')
 const { buildVoteProposalContext } = require('./voteProposalOptionsService')
 const {
   buildPlanifiableTpiQuery,
@@ -231,7 +236,8 @@ function buildLegacyRoomConfig(slot, maxPeriod) {
     tpiTime: Number(slot?.config?.duration || 60) / 60,
     firstTpiStart: parseTimeToDecimal(slot?.startTime),
     numSlots: maxPeriod,
-    maxConsecutiveTpi: getMaxConsecutiveTpiLimit(slot?.config?.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
+    maxConsecutiveTpi: getMaxConsecutiveTpiLimit(slot?.config?.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI),
+    minTpiPerRoom: getMinTpiPerOpenRoomTarget(slot?.config?.minTpiPerRoom, MIN_TPI_PER_OPEN_ROOM)
   }
 }
 
@@ -335,6 +341,34 @@ function getTaskPreferredDateWeight(task) {
   }, 0)
 }
 
+function getTpiFixedDateKeys(tpi) {
+  return normalizeDateKeyList([
+    tpi?.dates?.soutenance,
+    tpi?.dateSoutenance,
+    tpi?.soutenanceDateTime
+  ])
+}
+
+function resolveTaskAllowedDateKeys(tpi, proposalAllowedDateKeys = []) {
+  const classAllowedDateKeys = normalizeDateKeyList(proposalAllowedDateKeys)
+  const fixedDateKeys = getTpiFixedDateKeys(tpi)
+
+  if (fixedDateKeys.length === 0) {
+    return classAllowedDateKeys
+  }
+
+  if (classAllowedDateKeys.length === 0) {
+    return fixedDateKeys
+  }
+
+  const fixedDateSet = new Set(fixedDateKeys)
+  const compatibleFixedDates = classAllowedDateKeys.filter((dateKey) => fixedDateSet.has(dateKey))
+
+  return compatibleFixedDates.length > 0
+    ? compatibleFixedDates
+    : classAllowedDateKeys
+}
+
 function buildSiteContextIndex(catalogSites = [], planningConfig = {}) {
   const siteConfigs = Array.isArray(planningConfig?.siteConfigs) ? planningConfig.siteConfigs : []
   const siteConfigById = new Map()
@@ -409,7 +443,11 @@ function buildSiteContextIndex(catalogSites = [], planningConfig = {}) {
       firstTpiStartTime: compactText(configMatch?.firstTpiStartTime) || '08:00',
       manualRoomTarget: Number.isFinite(Number(configMatch?.manualRoomTarget)) && Number(configMatch.manualRoomTarget) >= 0
         ? Number(configMatch.manualRoomTarget)
-        : null
+        : null,
+      minTpiPerRoom: getMinTpiPerOpenRoomTarget(
+        configMatch?.minTpiPerRoom ?? configMatch?.minTpiPerOpenRoom ?? configMatch?.minRoomLoad,
+        MIN_TPI_PER_OPEN_ROOM
+      )
     }
 
     siteContexts.push(context)
@@ -438,9 +476,7 @@ function buildSchedulingTask(tpi, planningConfig, resolveSiteContext) {
   const siteValue = compactText(tpi?.site)
   const siteContext = resolveSiteContext(siteValue)
   const proposalContext = buildVoteProposalContext(tpi, planningConfig)
-  const allowedDateKeys = Array.isArray(proposalContext?.allowedDateKeys)
-    ? proposalContext.allowedDateKeys.filter(Boolean)
-    : []
+  const allowedDateKeys = resolveTaskAllowedDateKeys(tpi, proposalContext?.allowedDateKeys)
   const participants = getParticipantRecords(tpi)
 
   return {
@@ -453,7 +489,8 @@ function buildSchedulingTask(tpi, planningConfig, resolveSiteContext) {
     participants,
     preferredDateWeight: getTaskPreferredDateWeight({
       allowedDateKeys,
-      participants
+      participants,
+      siteContext
     }),
     repeatedParticipantWeight: 0,
     issues: []
@@ -559,6 +596,58 @@ function getRoomIndexForName(siteContext, roomName) {
   return roomNames.length + 100
 }
 
+function isRoomCompatibleWithTask(siteContext, roomName, task) {
+  const compatibility = getRoomCompatibilityReport(
+    {
+      name: roomName,
+      roomName,
+      site: siteContext?.siteCode || siteContext?.siteLabel || siteContext?.siteKey || ''
+    },
+    task?.tpi
+  )
+
+  return compatibility.compatible
+}
+
+function getNextCandidateRoomName(siteContext, generatedRooms = [], task = null) {
+  const generatedRoomNames = new Set(
+    (Array.isArray(generatedRooms) ? generatedRooms : [])
+      .map((roomName) => compactText(roomName))
+      .filter(Boolean)
+  )
+  const configuredRoomNames = Array.isArray(siteContext?.roomNames)
+    ? siteContext.roomNames
+      .map((roomName) => compactText(roomName))
+      .filter(Boolean)
+    : []
+
+  for (const roomName of configuredRoomNames) {
+    if (generatedRoomNames.has(roomName)) {
+      continue
+    }
+
+    if (!task || isRoomCompatibleWithTask(siteContext, roomName, task)) {
+      return roomName
+    }
+  }
+
+  let syntheticIndex = configuredRoomNames.length
+  for (let guard = 0; guard < 1000; guard += 1) {
+    const roomName = buildSyntheticRoomName(siteContext, syntheticIndex)
+    syntheticIndex += 1
+
+    if (generatedRoomNames.has(roomName)) {
+      continue
+    }
+
+    if (!task || isRoomCompatibleWithTask(siteContext, roomName, task)) {
+      return roomName
+    }
+  }
+
+  return ''
+}
+
 function buildState() {
   return {
     generatedRoomsBySiteDate: new Map(),
@@ -567,6 +656,49 @@ function buildState() {
     personOccupiedKeysById: new Map(),
     personDailyRoomByDate: new Map(),
     personDailyPeriodsByDate: new Map()
+  }
+}
+
+function cloneSetMap(source) {
+  const clone = new Map()
+
+  for (const [key, value] of source.entries()) {
+    clone.set(key, value instanceof Set ? new Set(value) : value)
+  }
+
+  return clone
+}
+
+function cloneNestedSetMap(source) {
+  const clone = new Map()
+
+  for (const [key, nestedMap] of source.entries()) {
+    const nestedClone = new Map()
+
+    for (const [nestedKey, value] of nestedMap.entries()) {
+      nestedClone.set(nestedKey, value instanceof Set ? new Set(value) : value)
+    }
+
+    clone.set(key, nestedClone)
+  }
+
+  return clone
+}
+
+function cloneState(state) {
+  const generatedRoomsBySiteDate = new Map()
+
+  for (const [key, roomNames] of state.generatedRoomsBySiteDate.entries()) {
+    generatedRoomsBySiteDate.set(key, Array.isArray(roomNames) ? [...roomNames] : roomNames)
+  }
+
+  return {
+    generatedRoomsBySiteDate,
+    roomAssignments: new Map(state.roomAssignments),
+    personOccupancyByTimeKey: cloneSetMap(state.personOccupancyByTimeKey),
+    personOccupiedKeysById: cloneSetMap(state.personOccupiedKeysById),
+    personDailyRoomByDate: cloneNestedSetMap(state.personDailyRoomByDate),
+    personDailyPeriodsByDate: cloneNestedSetMap(state.personDailyPeriodsByDate)
   }
 }
 
@@ -686,7 +818,7 @@ function isParticipantAvailable(participant, dateKey, period) {
   return true
 }
 
-function buildCandidateRooms(state, siteContext, dateKey, preferredRooms = []) {
+function buildCandidateRooms(state, siteContext, dateKey, preferredRooms = [], task = null) {
   const generatedRooms = getGeneratedRoomsForDate(state, siteContext, dateKey)
   const candidateRooms = new Map()
 
@@ -696,11 +828,15 @@ function buildCandidateRooms(state, siteContext, dateKey, preferredRooms = []) {
       return
     }
 
+    if (task && !isRoomCompatibleWithTask(siteContext, normalizedRoomName, task)) {
+      return
+    }
+
     const existing = candidateRooms.get(normalizedRoomName)
     const nextValue = {
-      roomName,
+      roomName: normalizedRoomName,
       isNew: options.isNew === true,
-      roomIndex: getRoomIndexForName(siteContext, roomName),
+      roomIndex: getRoomIndexForName(siteContext, normalizedRoomName),
       preferredRoomWeight: Number.isFinite(Number(options.preferredRoomWeight))
         ? Number(options.preferredRoomWeight)
         : 0
@@ -732,7 +868,7 @@ function buildCandidateRooms(state, siteContext, dateKey, preferredRooms = []) {
     })
   }
 
-  const nextRoomName = getRoomNameAt(siteContext, generatedRooms.length)
+  const nextRoomName = getNextCandidateRoomName(siteContext, generatedRooms, task)
   if (!generatedRooms.includes(nextRoomName)) {
     addCandidateRoom(nextRoomName, {
       isNew: true,
@@ -741,7 +877,7 @@ function buildCandidateRooms(state, siteContext, dateKey, preferredRooms = []) {
   }
 
   if (candidateRooms.size === 0) {
-    addCandidateRoom(getRoomNameAt(siteContext, 0), {
+    addCandidateRoom(getNextCandidateRoomName(siteContext, [], task) || getRoomNameAt(siteContext, 0), {
       isNew: true,
       preferredRoomWeight: 0
     })
@@ -798,7 +934,7 @@ function enumerateCandidatePlacements(task, state, timeline) {
 
   task.allowedDateKeys.forEach((dateKey, dateIndex) => {
     const preferredRooms = getPreferredRoomsForTask(state, task, dateKey)
-    const candidateRooms = buildCandidateRooms(state, siteContext, dateKey, preferredRooms)
+    const candidateRooms = buildCandidateRooms(state, siteContext, dateKey, preferredRooms, task)
 
     for (let period = 1; period <= siteContext.numSlots; period += 1) {
       const timeKey = toTimeStepKey(dateKey, period)
@@ -850,20 +986,20 @@ function enumerateCandidatePlacements(task, state, timeline) {
   })
 
   placements.sort((left, right) => {
-    if (left.preferredPreferenceScore !== right.preferredPreferenceScore) {
-      return right.preferredPreferenceScore - left.preferredPreferenceScore
-    }
-
-    if (left.preferredParticipantCount !== right.preferredParticipantCount) {
-      return right.preferredParticipantCount - left.preferredParticipantCount
+    if (left.isNewRoom !== right.isNewRoom) {
+      return left.isNewRoom ? 1 : -1
     }
 
     if (left.preferredRoomWeight !== right.preferredRoomWeight) {
       return right.preferredRoomWeight - left.preferredRoomWeight
     }
 
-    if (left.isNewRoom !== right.isNewRoom) {
-      return left.isNewRoom ? 1 : -1
+    if (left.preferredPreferenceScore !== right.preferredPreferenceScore) {
+      return right.preferredPreferenceScore - left.preferredPreferenceScore
+    }
+
+    if (left.preferredParticipantCount !== right.preferredParticipantCount) {
+      return right.preferredParticipantCount - left.preferredParticipantCount
     }
 
     if (left.dateIndex !== right.dateIndex) {
@@ -920,6 +1056,334 @@ function createManualIssue(task, reason) {
   }
 }
 
+function compareTaskSearchEntries(left, right) {
+  if (left.candidates.length !== right.candidates.length) {
+    return left.candidates.length - right.candidates.length
+  }
+
+  const leftDateCount = Array.isArray(left.task?.allowedDateKeys) ? left.task.allowedDateKeys.length : 0
+  const rightDateCount = Array.isArray(right.task?.allowedDateKeys) ? right.task.allowedDateKeys.length : 0
+
+  if (leftDateCount !== rightDateCount) {
+    return leftDateCount - rightDateCount
+  }
+
+  if (right.task.repeatedParticipantWeight !== left.task.repeatedParticipantWeight) {
+    return right.task.repeatedParticipantWeight - left.task.repeatedParticipantWeight
+  }
+
+  if (right.task.preferredDateWeight !== left.task.preferredDateWeight) {
+    return right.task.preferredDateWeight - left.task.preferredDateWeight
+  }
+
+  return compactText(left.task.reference).localeCompare(compactText(right.task.reference))
+}
+
+function buildSearchEntries(tasks, state, timeline) {
+  return tasks.map((task, index) => ({
+    index,
+    task,
+    candidates: enumerateCandidatePlacements(task, state, timeline)
+  }))
+}
+
+function searchCompleteAssignments(tasks, timeline, options = {}) {
+  const nodeLimit = Number.isInteger(Number(options.nodeLimit)) && Number(options.nodeLimit) > 0
+    ? Number(options.nodeLimit)
+    : 50000
+  let visitedNodes = 0
+
+  const visit = (remainingTasks, state, assignments) => {
+    visitedNodes += 1
+
+    if (visitedNodes > nodeLimit) {
+      return null
+    }
+
+    if (remainingTasks.length === 0) {
+      return {
+        assignments,
+        state
+      }
+    }
+
+    const entries = buildSearchEntries(remainingTasks, state, timeline)
+    if (entries.some((entry) => entry.candidates.length === 0)) {
+      return null
+    }
+
+    entries.sort(compareTaskSearchEntries)
+    const selectedEntry = entries[0]
+    const nextRemainingTasks = remainingTasks.filter((_, index) => index !== selectedEntry.index)
+
+    for (const placement of selectedEntry.candidates) {
+      const nextState = cloneState(state)
+      applyPlacement(nextState, selectedEntry.task, placement)
+
+      const result = visit(
+        nextRemainingTasks,
+        nextState,
+        [
+          ...assignments,
+          {
+            task: selectedEntry.task,
+            placement
+          }
+        ]
+      )
+
+      if (result) {
+        return result
+      }
+    }
+
+    return null
+  }
+
+  const result = visit(tasks, buildState(), [])
+
+  return result
+    ? {
+        ...result,
+        visitedNodes,
+        exhausted: false
+      }
+    : {
+        assignments: null,
+        state: null,
+        visitedNodes,
+        exhausted: visitedNodes > nodeLimit
+      }
+}
+
+function computeGreedyAssignments(tasks, timeline) {
+  const assignments = []
+  const manualRequired = []
+  const state = buildState()
+
+  while (tasks.length > 0) {
+    let bestIndex = -1
+    let bestCandidates = []
+
+    for (let index = 0; index < tasks.length; index += 1) {
+      const task = tasks[index]
+      const candidates = enumerateCandidatePlacements(task, state, timeline)
+
+      if (bestIndex === -1 || candidates.length < bestCandidates.length) {
+        bestIndex = index
+        bestCandidates = candidates
+      }
+
+      if (candidates.length === 0) {
+        break
+      }
+    }
+
+    const [task] = tasks.splice(bestIndex, 1)
+
+    if (!bestCandidates || bestCandidates.length === 0) {
+      manualRequired.push(createManualIssue(task, 'Aucun créneau valide sans conflit n a pu etre trouve.'))
+      continue
+    }
+
+    const placement = bestCandidates[0]
+    applyPlacement(state, task, placement)
+    assignments.push({
+      task,
+      placement
+    })
+  }
+
+  return {
+    assignments,
+    manualRequired,
+    generatedRoomsBySiteDate: state.generatedRoomsBySiteDate
+  }
+}
+
+function cloneGeneratedRoomsBySiteDate(generatedRoomsBySiteDate = new Map()) {
+  const clone = new Map()
+
+  for (const [key, roomNames] of generatedRoomsBySiteDate.entries()) {
+    clone.set(key, Array.isArray(roomNames) ? [...roomNames] : [])
+  }
+
+  return clone
+}
+
+function buildRoomLoadIndex(groupAssignments = []) {
+  const roomLoadIndex = new Map()
+
+  for (const assignment of groupAssignments) {
+    const roomName = compactText(assignment?.placement?.roomName)
+    if (!roomName) {
+      continue
+    }
+
+    if (!roomLoadIndex.has(roomName)) {
+      roomLoadIndex.set(roomName, {
+        roomName,
+        roomIndex: getRoomIndexForName(assignment?.task?.siteContext, roomName),
+        assignments: [],
+        occupiedPeriods: new Set()
+      })
+    }
+
+    const roomLoad = roomLoadIndex.get(roomName)
+    roomLoad.assignments.push(assignment)
+    roomLoad.occupiedPeriods.add(Number(assignment?.placement?.period))
+  }
+
+  return roomLoadIndex
+}
+
+function sortRoomLoadsByPressure(left, right) {
+  if (right.assignments.length !== left.assignments.length) {
+    return right.assignments.length - left.assignments.length
+  }
+
+  if (left.roomIndex !== right.roomIndex) {
+    return left.roomIndex - right.roomIndex
+  }
+
+  return left.roomName.localeCompare(right.roomName)
+}
+
+function findMovableAssignment(donorRoom, targetRoom) {
+  const donorAssignments = [...donorRoom.assignments]
+    .sort((left, right) => {
+      const periodCompare = Number(right?.placement?.period || 0) - Number(left?.placement?.period || 0)
+      if (periodCompare !== 0) {
+        return periodCompare
+      }
+
+      return compactText(left?.task?.reference).localeCompare(compactText(right?.task?.reference))
+    })
+
+  return donorAssignments.find((assignment) => {
+    const period = Number(assignment?.placement?.period)
+    if (!Number.isFinite(period) || targetRoom.occupiedPeriods.has(period)) {
+      return false
+    }
+
+    return isRoomCompatibleWithTask(
+      assignment?.task?.siteContext,
+      targetRoom.roomName,
+      assignment?.task
+    )
+  }) || null
+}
+
+function moveAssignmentToRoom(assignment, donorRoom, targetRoom) {
+  const period = Number(assignment?.placement?.period)
+  const siteContext = assignment?.task?.siteContext
+
+  donorRoom.assignments = donorRoom.assignments.filter((candidate) => candidate !== assignment)
+  donorRoom.occupiedPeriods.delete(period)
+  targetRoom.assignments.push(assignment)
+  targetRoom.occupiedPeriods.add(period)
+
+  assignment.placement = {
+    ...assignment.placement,
+    roomName: targetRoom.roomName,
+    roomKey: getRoomKey(siteContext, targetRoom.roomName),
+    roomIndex: getRoomIndexForName(siteContext, targetRoom.roomName),
+    isNewRoom: false
+  }
+}
+
+function rebalanceOpenRooms(assignments = [], generatedRoomsBySiteDate = new Map(), fallbackMinRoomLoad = MIN_TPI_PER_OPEN_ROOM) {
+  const defaultMinRoomLoad = getMinTpiPerOpenRoomTarget(fallbackMinRoomLoad, MIN_TPI_PER_OPEN_ROOM)
+  const nextAssignments = (Array.isArray(assignments) ? assignments : []).map((assignment) => ({
+    ...assignment,
+    placement: assignment?.placement && typeof assignment.placement === 'object'
+      ? { ...assignment.placement }
+      : assignment?.placement
+  }))
+  const groupedAssignments = new Map()
+
+  for (const assignment of nextAssignments) {
+    const siteContext = assignment?.task?.siteContext
+    const dateKey = compactText(assignment?.placement?.dateKey)
+    if (!siteContext || !dateKey) {
+      continue
+    }
+
+    const groupKey = getSiteDateKey(siteContext, dateKey)
+    if (!groupedAssignments.has(groupKey)) {
+      groupedAssignments.set(groupKey, [])
+    }
+
+    groupedAssignments.get(groupKey).push(assignment)
+  }
+
+  for (const groupAssignments of groupedAssignments.values()) {
+    const roomLoadIndex = buildRoomLoadIndex(groupAssignments)
+    const groupMinRoomLoad = getMinTpiPerOpenRoomTarget(
+      groupAssignments[0]?.task?.siteContext?.minTpiPerRoom,
+      defaultMinRoomLoad
+    )
+
+    for (let guard = 0; guard < 1000; guard += 1) {
+      const targetRooms = Array.from(roomLoadIndex.values())
+        .filter((roomLoad) =>
+          roomLoad.assignments.length > 0 &&
+          roomLoad.assignments.length < groupMinRoomLoad
+        )
+        .sort((left, right) => {
+          if (left.assignments.length !== right.assignments.length) {
+            return left.assignments.length - right.assignments.length
+          }
+
+          if (left.roomIndex !== right.roomIndex) {
+            return left.roomIndex - right.roomIndex
+          }
+
+          return left.roomName.localeCompare(right.roomName)
+        })
+
+      if (targetRooms.length === 0) {
+        break
+      }
+
+      let moved = false
+
+      for (const targetRoom of targetRooms) {
+        const donorRooms = Array.from(roomLoadIndex.values())
+          .filter((roomLoad) =>
+            roomLoad.roomName !== targetRoom.roomName &&
+            roomLoad.assignments.length > groupMinRoomLoad
+          )
+          .sort(sortRoomLoadsByPressure)
+
+        for (const donorRoom of donorRooms) {
+          const movableAssignment = findMovableAssignment(donorRoom, targetRoom)
+          if (!movableAssignment) {
+            continue
+          }
+
+          moveAssignmentToRoom(movableAssignment, donorRoom, targetRoom)
+          moved = true
+          break
+        }
+
+        if (moved) {
+          break
+        }
+      }
+
+      if (!moved) {
+        break
+      }
+    }
+  }
+
+  return {
+    assignments: nextAssignments,
+    generatedRoomsBySiteDate: cloneGeneratedRoomsBySiteDate(generatedRoomsBySiteDate)
+  }
+}
+
 function computeAutomaticAssignments(tasks = []) {
   const timeline = buildTimeline(tasks)
   const frequencyIndex = buildFrequencyIndex(tasks)
@@ -950,30 +1414,10 @@ function computeAutomaticAssignments(tasks = []) {
       return left.reference.localeCompare(right.reference)
     })
 
-  const assignments = []
   const manualRequired = []
-  const state = buildState()
+  const schedulableTasks = []
 
-  while (pendingTasks.length > 0) {
-    let bestIndex = -1
-    let bestCandidates = []
-
-    for (let index = 0; index < pendingTasks.length; index += 1) {
-      const task = pendingTasks[index]
-      const candidates = enumerateCandidatePlacements(task, state, timeline)
-
-      if (bestIndex === -1 || candidates.length < bestCandidates.length) {
-        bestIndex = index
-        bestCandidates = candidates
-      }
-
-      if (candidates.length === 0) {
-        break
-      }
-    }
-
-    const [task] = pendingTasks.splice(bestIndex, 1)
-
+  for (const task of pendingTasks) {
     if (!task.siteContext) {
       manualRequired.push(createManualIssue(task, 'Aucun site de planification reconnu pour ce TPI.'))
       continue
@@ -984,23 +1428,37 @@ function computeAutomaticAssignments(tasks = []) {
       continue
     }
 
-    if (!bestCandidates || bestCandidates.length === 0) {
-      manualRequired.push(createManualIssue(task, 'Aucun créneau valide sans conflit n a pu etre trouve.'))
-      continue
-    }
-
-    const placement = bestCandidates[0]
-    applyPlacement(state, task, placement)
-    assignments.push({
-      task,
-      placement
-    })
+    schedulableTasks.push(task)
   }
 
+  const searchResult = searchCompleteAssignments(schedulableTasks, timeline)
+
+  if (Array.isArray(searchResult.assignments)) {
+    const balancedResult = rebalanceOpenRooms(
+      searchResult.assignments,
+      searchResult.state.generatedRoomsBySiteDate
+    )
+
+    return {
+      assignments: balancedResult.assignments,
+      manualRequired,
+      generatedRoomsBySiteDate: balancedResult.generatedRoomsBySiteDate
+    }
+  }
+
+  const greedyResult = computeGreedyAssignments([...schedulableTasks], timeline)
+  const balancedGreedyResult = rebalanceOpenRooms(
+    greedyResult.assignments,
+    greedyResult.generatedRoomsBySiteDate
+  )
+
   return {
-    assignments,
-    manualRequired,
-    generatedRoomsBySiteDate: state.generatedRoomsBySiteDate
+    assignments: balancedGreedyResult.assignments,
+    manualRequired: [
+      ...manualRequired,
+      ...greedyResult.manualRequired
+    ],
+    generatedRoomsBySiteDate: balancedGreedyResult.generatedRoomsBySiteDate
   }
 }
 
@@ -1088,7 +1546,8 @@ function buildAutomaticSlotDocuments(assignments = [], generatedRoomsBySiteDate 
           config: {
             duration: Number(siteContext.tpiTimeMinutes || 60),
             breakAfter: Number(siteContext.breaklineMinutes || 10),
-            maxConsecutiveTpi: getMaxConsecutiveTpiLimit(siteContext.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI)
+            maxConsecutiveTpi: getMaxConsecutiveTpiLimit(siteContext.maxConsecutiveTpi, MAX_CONSECUTIVE_TPI),
+            minTpiPerRoom: getMinTpiPerOpenRoomTarget(siteContext.minTpiPerRoom, MIN_TPI_PER_OPEN_ROOM)
           }
         })
       }
@@ -1415,5 +1874,6 @@ module.exports = {
   autoPlanYear,
   buildAutomaticSlotDocuments,
   buildLegacyRoomsFromAutomaticSlots,
-  computeAutomaticAssignments
+  computeAutomaticAssignments,
+  resolveTaskAllowedDateKeys
 }

@@ -1,11 +1,12 @@
 import {
   buildDateFilterOptions,
   createSchedule,
+  filterRooms,
   isFilterApplied,
   matchesReferenceFilter,
   sortFilterTextValues
 } from './useSoutenanceData'
-import { formatDate } from './TpiSoutenanceParts'
+import { formatDate, getRoomClassFilterValue } from './TpiSoutenanceParts'
 
 jest.mock('../../services/apiService', () => ({
   soutenancesService: {
@@ -28,6 +29,7 @@ jest.mock('../Tools', () => ({
 jest.mock('./TpiSoutenanceParts', () => ({
   formatDate: jest.fn(),
   getLegacyScheduleIndex: jest.fn((tpi, index) => index),
+  getRoomClassFilterValue: jest.fn(),
   getRoomSchedule: jest.fn(() => [])
 }))
 
@@ -42,6 +44,13 @@ describe('useSoutenanceData helpers', () => {
 
     return labels[date] || String(date || '')
     })
+    getRoomClassFilterValue.mockImplementation((room) => (
+      room?.roomClassMode === 'matu'
+        ? 'matu'
+        : room?.roomClassMode === 'special'
+          ? 'special'
+          : 'noBadge'
+    ))
   })
 
   test('createSchedule applique la pause uniquement entre les créneaux', () => {
@@ -78,6 +87,7 @@ describe('useSoutenanceData helpers', () => {
       experts: '',
       projectManagerButton: '',
       projectManager: '',
+      classType: '',
       nameRoom: ''
     }
 
@@ -85,7 +95,70 @@ describe('useSoutenanceData helpers', () => {
     expect(isFilterApplied({ ...baseFilters, site: 'ETML' })).toBe(true)
     expect(isFilterApplied({ ...baseFilters, date: '10 juin 2026' })).toBe(true)
     expect(isFilterApplied({ ...baseFilters, nameRoom: 'A101' })).toBe(true)
+    expect(isFilterApplied({ ...baseFilters, classType: 'matu' })).toBe(true)
     expect(isFilterApplied({ ...baseFilters, reference: 'TPI-2026-2163' })).toBe(true)
+  })
+
+  test('filterRooms filtre les salles par type de classe affiché', () => {
+    const baseFilters = {
+      site: '',
+      date: '',
+      reference: '',
+      candidate: '',
+      experts: '',
+      projectManagerButton: '',
+      projectManager: '',
+      classType: '',
+      nameRoom: ''
+    }
+    const rooms = [
+      {
+        name: 'M101',
+        site: 'ETML',
+        date: '2026-06-10',
+        roomClassMode: 'matu',
+        tpiDatas: [{
+          refTpi: '2101',
+          candidat: 'Alice',
+          expert1: { name: 'Expert 1' },
+          expert2: { name: 'Expert 2' },
+          boss: { name: 'Chef 1' }
+        }]
+      },
+      {
+        name: 'S101',
+        site: 'ETML',
+        date: '2026-06-10',
+        roomClassMode: 'special',
+        tpiDatas: [{
+          refTpi: '2102',
+          candidat: 'Bob',
+          expert1: { name: 'Expert 3' },
+          expert2: { name: 'Expert 4' },
+          boss: { name: 'Chef 2' }
+        }]
+      },
+      {
+        name: 'A101',
+        site: 'ETML',
+        date: '2026-06-10',
+        roomClassMode: null,
+        tpiDatas: [{
+          refTpi: '2103',
+          candidat: 'Chloé',
+          expert1: { name: 'Expert 5' },
+          expert2: { name: 'Expert 6' },
+          boss: { name: 'Chef 3' }
+        }]
+      }
+    ]
+
+    expect(getRoomClassFilterValue(rooms[0])).toBe('matu')
+    expect(getRoomClassFilterValue(rooms[1])).toBe('special')
+    expect(getRoomClassFilterValue(rooms[2])).toBe('noBadge')
+    expect(filterRooms(rooms, { ...baseFilters, classType: 'matu' })).toEqual([rooms[0]])
+    expect(filterRooms(rooms, { ...baseFilters, classType: 'special' })).toEqual([rooms[1]])
+    expect(filterRooms(rooms, { ...baseFilters, classType: 'noBadge' })).toEqual([rooms[2]])
   })
 
   test('matchesReferenceFilter accepte les références workflow et legacy', () => {

@@ -102,26 +102,96 @@ export const UsersIcon = (props) => (
 
 export const CandidateIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
-    <path d='M4 9l8-4 8 4-8 4-8-4Z' />
-    <path d='M8.5 10.8V14c0 1.7 1.9 3 3.5 3s3.5-1.3 3.5-3v-3.2' />
-    <path d='M6 11.5v3.8c0 .8.5 1.4 1.2 1.7L12 19l4.8-2c.7-.3 1.2-.9 1.2-1.7v-3.8' />
+    <path
+      d='M7 10.6v4.15c1.2 1.3 2.88 1.95 5 1.95s3.8-.65 5-1.95V10.6l-5 2.7-5-2.7Z'
+      fill='var(--role-icon-soft, #bfdbfe)'
+      stroke='none'
+    />
+    <path
+      d='M12 3.5 2.8 8.2 12 13l9.2-4.8L12 3.5Z'
+      fill='var(--role-icon-primary, #60a5fa)'
+      stroke='var(--role-icon-stroke, #1d4ed8)'
+      strokeWidth='1.35'
+      strokeLinejoin='round'
+    />
+    <path
+      d='M5.2 9.45v4.75m13.6-5.95v5.95M7 10.6l5 2.7 5-2.7'
+      fill='none'
+      stroke='var(--role-icon-stroke, #1d4ed8)'
+      strokeWidth='1.45'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+    <circle cx='18.8' cy='14.2' r='1.15' fill='var(--role-icon-stroke, #1d4ed8)' stroke='none' />
   </svg>
 )
 
-export const ExpertIcon = (props) => (
-  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
-    <circle cx='12' cy='8' r='3' />
-    <path d='M5.5 19a6.5 6.5 0 0 1 13 0' />
-    <path d='M18.5 10.5l1 .7 1-.7-.3 1.2.9.8-1.2.1-.4 1.1-.4-1.1-1.2-.1.9-.8z' />
-  </svg>
-)
+export const ExpertIcon = ({ badge, number, ...props }) => {
+  const badgeText = badge ?? number
+
+  return (
+    <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+      <path
+        d='M5.1 13.55C5.38 9.75 7.75 6.7 10.95 6v4.45h2.1V6c3.2.7 5.57 3.75 5.85 7.55H5.1Z'
+        fill='var(--role-icon-soft, #fef08a)'
+        stroke='none'
+      />
+      <path
+        d='M4.2 13.3h15.6c.75 0 1.35.6 1.35 1.35S20.55 16 19.8 16H4.2c-.75 0-1.35-.6-1.35-1.35s.6-1.35 1.35-1.35Z'
+        fill='var(--role-icon-primary, #facc15)'
+        stroke='var(--role-icon-stroke, #854d0e)'
+        strokeWidth='1.25'
+        strokeLinejoin='round'
+      />
+      <path
+        d='M5.15 13.35C5.5 9.2 8.35 6 12 6s6.5 3.2 6.85 7.35M10.95 6v4.45m2.1-4.45v4.45M4.2 16h15.6'
+        fill='none'
+        stroke='var(--role-icon-stroke, #854d0e)'
+        strokeWidth='1.45'
+        strokeLinecap='round'
+        strokeLinejoin='round'
+      />
+      {badgeText ? (
+        <text
+          x='12'
+          y='11.25'
+          textAnchor='middle'
+          dominantBaseline='middle'
+          fill='var(--role-icon-stroke, #854d0e)'
+          stroke='none'
+          fontSize='7.2'
+          fontWeight='800'
+          fontFamily='Arial, Helvetica, sans-serif'
+        >
+          {badgeText}
+        </text>
+      ) : null}
+    </svg>
+  )
+}
 
 export const ProjectLeadIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
-    <path d='M7 7.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.5' />
-    <path d='M4 9.5h16v8.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9.5Z' />
-    <path d='M9 9.5V8h6v1.5' />
-    <path d='M9 13h6' />
+    <path
+      d='M5.1 13.55C5.38 9.75 7.75 6.7 10.95 6v4.45h2.1V6c3.2.7 5.57 3.75 5.85 7.55H5.1Z'
+      fill='var(--role-icon-soft, #fecaca)'
+      stroke='none'
+    />
+    <path
+      d='M4.2 13.3h15.6c.75 0 1.35.6 1.35 1.35S20.55 16 19.8 16H4.2c-.75 0-1.35-.6-1.35-1.35s.6-1.35 1.35-1.35Z'
+      fill='var(--role-icon-primary, #ef4444)'
+      stroke='var(--role-icon-stroke, #7f1d1d)'
+      strokeWidth='1.25'
+      strokeLinejoin='round'
+    />
+    <path
+      d='M5.15 13.35C5.5 9.2 8.35 6 12 6s6.5 3.2 6.85 7.35M10.95 6v4.45m2.1-4.45v4.45M4.2 16h15.6'
+      fill='none'
+      stroke='var(--role-icon-stroke, #7f1d1d)'
+      strokeWidth='1.45'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
   </svg>
 )
 

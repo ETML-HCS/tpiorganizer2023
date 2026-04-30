@@ -28,7 +28,25 @@ const DEFAULT_STAKEHOLDER_ICONS = {
   expert2: 'participant',
   projectManager: 'participant'
 }
-const STAKEHOLDER_ICON_VALUES = new Set(['candidate', 'participant'])
+const CANDIDATE_STAKEHOLDER_ICON_VALUES = new Set([
+  'candidate',
+  'candidate-green',
+  'candidate-violet',
+  'candidate-rose',
+  'candidate-gold'
+])
+const HELMET_STAKEHOLDER_ICON_VALUES = new Set([
+  'participant',
+  'helmet-orange',
+  'helmet-green',
+  'helmet-blue',
+  'helmet-black',
+  'helmet-gray'
+])
+const STAKEHOLDER_ICON_VALUES = new Set([
+  ...CANDIDATE_STAKEHOLDER_ICON_VALUES,
+  ...HELMET_STAKEHOLDER_ICON_VALUES
+])
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -79,11 +97,20 @@ function normalizeOptionalSoutenanceColor(source = {}, fallback = {}) {
   return normalizeOptionalPlanningColor(source, fallback, ['soutenanceColor', 'defenseColor', 'defenceColor'])
 }
 
-function normalizeStakeholderIconKey(value, fallback = 'participant') {
+function normalizeStakeholderIconKey(value, fallback = 'participant', role = '') {
   const normalizedValue = compactText(value)
-  return STAKEHOLDER_ICON_VALUES.has(normalizedValue)
+  const allowedValues = role === 'candidate'
+    ? CANDIDATE_STAKEHOLDER_ICON_VALUES
+    : role
+      ? HELMET_STAKEHOLDER_ICON_VALUES
+      : STAKEHOLDER_ICON_VALUES
+  const defaultFallback = role === 'candidate' ? DEFAULT_STAKEHOLDER_ICONS.candidate : 'participant'
+  const normalizedFallback = compactText(fallback)
+  const safeFallback = allowedValues.has(normalizedFallback) ? normalizedFallback : defaultFallback
+
+  return allowedValues.has(normalizedValue)
     ? normalizedValue
-    : fallback
+    : safeFallback
 }
 
 function normalizeStakeholderIcons(value = {}, fallback = DEFAULT_STAKEHOLDER_ICONS) {
@@ -91,12 +118,25 @@ function normalizeStakeholderIcons(value = {}, fallback = DEFAULT_STAKEHOLDER_IC
   const fallbackSource = fallback && typeof fallback === 'object' ? fallback : DEFAULT_STAKEHOLDER_ICONS
 
   return {
-    candidate: normalizeStakeholderIconKey(source.candidate, fallbackSource.candidate || DEFAULT_STAKEHOLDER_ICONS.candidate),
-    expert1: normalizeStakeholderIconKey(source.expert1, fallbackSource.expert1 || DEFAULT_STAKEHOLDER_ICONS.expert1),
-    expert2: normalizeStakeholderIconKey(source.expert2, fallbackSource.expert2 || DEFAULT_STAKEHOLDER_ICONS.expert2),
+    candidate: normalizeStakeholderIconKey(
+      source.candidate,
+      fallbackSource.candidate || DEFAULT_STAKEHOLDER_ICONS.candidate,
+      'candidate'
+    ),
+    expert1: normalizeStakeholderIconKey(
+      source.expert1,
+      fallbackSource.expert1 || DEFAULT_STAKEHOLDER_ICONS.expert1,
+      'expert1'
+    ),
+    expert2: normalizeStakeholderIconKey(
+      source.expert2,
+      fallbackSource.expert2 || DEFAULT_STAKEHOLDER_ICONS.expert2,
+      'expert2'
+    ),
     projectManager: normalizeStakeholderIconKey(
       source.projectManager || source.boss,
-      fallbackSource.projectManager || DEFAULT_STAKEHOLDER_ICONS.projectManager
+      fallbackSource.projectManager || DEFAULT_STAKEHOLDER_ICONS.projectManager,
+      'projectManager'
     )
   }
 }
@@ -156,6 +196,31 @@ function normalizeRoomDetails(values, fallback = [], siteCode = '') {
     : Array.isArray(fallback)
       ? fallback
       : []
+  const fallbackEntries = Array.isArray(fallback) ? fallback : []
+  const fallbackById = new Map()
+  const fallbackByKey = new Map()
+
+  fallbackEntries.forEach((entry) => {
+    const fallbackSource = entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? entry
+      : { code: entry, label: entry }
+    const fallbackId = compactText(fallbackSource.id).toLowerCase()
+    const fallbackKeys = [
+      fallbackSource.code,
+      fallbackSource.label,
+      fallbackSource.name
+    ].map((value) => compactText(value).toLowerCase()).filter(Boolean)
+
+    if (fallbackId) {
+      fallbackById.set(fallbackId, fallbackSource)
+    }
+
+    fallbackKeys.forEach((key) => {
+      if (!fallbackByKey.has(key)) {
+        fallbackByKey.set(key, fallbackSource)
+      }
+    })
+  })
   const normalized = []
   const seen = new Set()
 
@@ -165,12 +230,18 @@ function normalizeRoomDetails(values, fallback = [], siteCode = '') {
       : { code: entry, label: entry }
     const code = compactText(source.code || source.label || source.name || '').toUpperCase()
     const label = compactText(source.label || source.name || source.code || code)
+    const sourceId = compactText(source.id)
+    const fallbackSource =
+      fallbackById.get(sourceId.toLowerCase()) ||
+      fallbackByKey.get(compactText(code || label).toLowerCase()) ||
+      fallbackEntries[index] ||
+      {}
 
     if (!code && !label) {
       return
     }
 
-    const id = compactText(source.id || makeStableId('room', siteCode, code || label))
+    const id = sourceId || compactText(fallbackSource.id) || makeStableId('room', siteCode, code || label)
     const dedupeKey = compactText(source.id || '').toLowerCase() || compactText(code || label).toLowerCase()
 
     if (seen.has(dedupeKey)) {
@@ -185,6 +256,7 @@ function normalizeRoomDetails(values, fallback = [], siteCode = '') {
       code: code || label,
       label: label || code,
       capacity: Number.isFinite(capacity) ? capacity : null,
+      soutenanceColor: normalizeOptionalSoutenanceColor(source, fallbackSource),
       notes: compactText(source.notes || ''),
       active: source.active !== false,
       order: Number.isFinite(Number(source.order)) ? Number(source.order) : index

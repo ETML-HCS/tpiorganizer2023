@@ -144,6 +144,35 @@ describe('VotingPanel', () => {
     })
   })
 
+  test('réinitialise propositions et demande spéciale quand on repasse sur OK', async () => {
+    render(<VotingPanel pendingVotes={buildPendingVotes()} onVoteSubmitted={jest.fn()} />)
+
+    fireEvent.click(screen.getByText('TPI-2026-001'))
+    fireEvent.click(screen.getByRole('button', { name: /^Proposer/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /½ journée/i })[0])
+    fireEvent.click(screen.getByLabelText(/Ajouter une demande spéciale/i))
+    fireEvent.change(screen.getByLabelText(/Date demandée/i), {
+      target: { value: '2026-06-20' }
+    })
+    fireEvent.change(screen.getByLabelText(/Raison \/ contexte/i), {
+      target: { value: 'Déplacement impossible' }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^OK/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Envoyer ma réponse/i }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(voteService.respondToVote).toHaveBeenCalledWith('tpi-1', {
+      fixedVoteId: 'vote-fixed',
+      mode: 'ok',
+      proposedSlotIds: [],
+      specialRequest: null
+    })
+  })
+
   test('permet de proposer jusqu à 3 créneaux', async () => {
     render(<VotingPanel pendingVotes={buildPendingVotes()} onVoteSubmitted={jest.fn()} />)
 

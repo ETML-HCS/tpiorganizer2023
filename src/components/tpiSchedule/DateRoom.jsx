@@ -725,6 +725,7 @@ const DateRoom = ({
                   roomSite={safeRoomData.site}
                   roomName={safeRoomData.name}
                   roomDate={safeRoomData.date}
+                  roomPeriod={iSlot + 1}
                   roomScheduleContext={{
                     firstTpiStartMinutes,
                     tpiDurationMinutes,

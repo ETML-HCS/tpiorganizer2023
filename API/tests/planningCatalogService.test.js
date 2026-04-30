@@ -18,10 +18,10 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
   const catalog = normalizeStoredCatalog({
     key: 'shared',
     stakeholderIcons: {
-      candidate: 'candidate',
-      expert1: 'candidate',
-      expert2: 'participant',
-      projectManager: 'participant'
+      candidate: 'candidate-violet',
+      expert1: 'helmet-orange',
+      expert2: 'helmet-blue',
+      projectManager: 'helmet-gray'
     },
     sites: [
       {
@@ -38,7 +38,7 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
           country: 'Suisse'
         },
         roomDetails: [
-          { code: 'N101', label: 'N101', capacity: 20 },
+          { code: 'N101', label: 'N101', capacity: 20, soutenanceColor: '#be185d' },
           { code: 'N101', label: 'N101', capacity: 20 },
           { code: 'N102', label: 'N102', capacity: 24, active: false }
         ],
@@ -76,15 +76,16 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
   assert.equal(etml.tpiColor, '#FEE2E2')
   assert.equal(etml.soutenanceColor, '#0F766E')
   assert.deepEqual(catalog.stakeholderIcons, {
-    candidate: 'candidate',
-    expert1: 'candidate',
-    expert2: 'participant',
-    projectManager: 'participant'
+    candidate: 'candidate-violet',
+    expert1: 'helmet-orange',
+    expert2: 'helmet-blue',
+    projectManager: 'helmet-gray'
   })
   assert.deepEqual(etml.rooms, ['N101', 'N102'])
   assert.equal(etml.roomDetails.length, 2)
   assert.equal(etml.roomDetails[0].code, 'N101')
   assert.equal(etml.roomDetails[0].capacity, 20)
+  assert.equal(etml.roomDetails[0].soutenanceColor, '#BE185D')
   assert.equal(etml.roomDetails[1].code, 'N102')
   assert.equal(etml.roomDetails[1].active, false)
   assert.deepEqual(
@@ -146,6 +147,40 @@ test('normalizeStoredCatalog retire les sites absents du payload explicite', () 
     catalog.sites.map((site) => site.code),
     ['ETML']
   )
+})
+
+test('normalizeStoredCatalog conserve les couleurs de salle du fallback avec une liste rooms simple', () => {
+  const catalog = normalizeStoredCatalog(
+    {
+      key: 'shared',
+      sites: [
+        {
+          code: 'ETML',
+          rooms: ['N101']
+        }
+      ]
+    },
+    {
+      key: 'shared',
+      schemaVersion: 2,
+      sites: [
+        {
+          code: 'ETML',
+          roomDetails: [
+            {
+              id: 'room-n101',
+              code: 'N101',
+              label: 'N101',
+              soutenanceColor: '#be185d'
+            }
+          ]
+        }
+      ]
+    }
+  )
+
+  assert.equal(catalog.sites[0].roomDetails[0].id, 'room-n101')
+  assert.equal(catalog.sites[0].roomDetails[0].soutenanceColor, '#BE185D')
 })
 
 test('normalizeStoredCatalog conserve la suppression explicite de toutes les salles d un site', () => {

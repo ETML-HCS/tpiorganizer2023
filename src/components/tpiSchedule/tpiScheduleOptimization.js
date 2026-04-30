@@ -5,6 +5,7 @@ import {
 import { inferRoomClassMode } from "./tpiScheduleFilters"
 
 const PLACEHOLDER_NAMES = new Set(["null", "n/a", "na", "none", "-"])
+const DEFAULT_MAX_CONSECUTIVE_TPI = 4
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -31,6 +32,17 @@ const getRoomName = (room) => compactText(room?.name || room?.nameRoom)
 const getRoomSite = (room) => compactText(room?.site).toUpperCase()
 
 const getRoomDateKey = (room) => normalizeSoutenanceDateValue(room?.date)
+
+const getMaxConsecutiveTpiLimit = (value, fallback = DEFAULT_MAX_CONSECUTIVE_TPI) => {
+  const fallbackLimit = Number.isInteger(Number(fallback)) && Number(fallback) > 0
+    ? Number(fallback)
+    : DEFAULT_MAX_CONSECUTIVE_TPI
+  const limit = Number(value)
+
+  return Number.isInteger(limit) && limit > 0
+    ? limit
+    : fallbackLimit
+}
 
 const inferTpiClassMode = (tpi) => {
   const classe = compactText(tpi?.classe).toUpperCase()
@@ -182,6 +194,7 @@ const buildSlotContexts = (roomEntries, roomContexts, timeline) => {
         roomDateKey: roomContext.roomDateKey,
         roomDateEntry: roomContext.roomDateEntry,
         roomClassMode: roomContext.roomClassMode,
+        maxConsecutiveTpi: getMaxConsecutiveTpiLimit(room?.configSite?.maxConsecutiveTpi),
         tpi,
         reference: getTpiReference(tpi),
         tpiClassMode: inferTpiClassMode(tpi),
@@ -289,12 +302,17 @@ const buildPersonAnalytics = (slotContexts) => {
           refs: new Set(),
           roles: new Set(),
           roomNames: new Set(),
-          roomSites: new Set()
+          roomSites: new Set(),
+          maxConsecutiveTpi: getMaxConsecutiveTpiLimit(context.maxConsecutiveTpi)
         })
       }
 
       const group = slotGroups.get(context.slotKey)
       group.refs.add(context.reference || `${context.roomKey}#${context.slotKey}`)
+      group.maxConsecutiveTpi = Math.min(
+        getMaxConsecutiveTpiLimit(group.maxConsecutiveTpi),
+        getMaxConsecutiveTpiLimit(context.maxConsecutiveTpi)
+      )
       for (const role of participant.roles) {
         group.roles.add(role)
       }
@@ -352,15 +370,22 @@ const buildPersonAnalytics = (slotContexts) => {
         return
       }
 
-      if (runLength > 3) {
-        sequenceExcessCount += runLength - 3
+      const runGroups = slotGroups.slice(startIndex, endIndex + 1)
+      const maxConsecutiveTpi = Math.min(
+        ...runGroups.map((slotGroup) => getMaxConsecutiveTpiLimit(slotGroup.maxConsecutiveTpi))
+      )
+      const softLimit = Math.max(maxConsecutiveTpi - 1, 0)
+
+      if (runLength > softLimit) {
+        sequenceExcessCount += runLength - softLimit
       }
 
-      if (runLength > 4) {
+      if (runLength > maxConsecutiveTpi) {
         sequenceViolationCount += 1
         sequenceViolations.push({
           personName: slotGroups[startIndex].personName,
           consecutiveCount: runLength,
+          maxConsecutiveTpi,
           slotKeys: slotGroups
             .slice(startIndex, endIndex + 1)
             .map((slotGroup) => slotGroup.slotKey)

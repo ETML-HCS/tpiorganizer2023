@@ -112,6 +112,42 @@ test('buildValidationIssues utilise la limite consecutive configuree par site', 
   assert.equal(result.issues[0].maxConsecutiveTpi, 3)
 })
 
+test('buildValidationIssues respecte les pauses meme si les slots arrivent desordonnes', () => {
+  const person = buildPerson('person-2c', 'Grace', 'Hopper')
+  const makeSlot = (period, status = 'confirmed') => ({
+    date: '2026-06-11',
+    period,
+    status,
+    room: { site: 'ETML', name: `A10${period}` },
+    assignedTpi: status === 'confirmed'
+      ? { reference: `TPI-30${period}` }
+      : null,
+    assignments: status === 'confirmed'
+      ? { expert1: person }
+      : {}
+  })
+  const slots = [
+    makeSlot(1),
+    makeSlot(2),
+    makeSlot(4),
+    makeSlot(5),
+    makeSlot(3, 'available')
+  ]
+
+  const result = buildValidationIssues([], slots, [], {
+    planningConfig: {
+      siteConfigs: [
+        {
+          siteCode: 'ETML',
+          maxConsecutiveTpi: 3
+        }
+      ]
+    }
+  })
+
+  assert.equal(result.issueCount, 0)
+})
+
 test('buildValidationIssues returns no issue when planning is valid', () => {
   const person = buildPerson('person-3', 'Linus', 'Torvalds')
 

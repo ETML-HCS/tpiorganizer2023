@@ -21,6 +21,7 @@ const DEFAULT_SITE_SCHEDULE = {
   tpiTimeMinutes: 60,
   firstTpiStartTime: "08:00",
   numSlots: 8,
+  minTpiPerRoom: 3,
   active: true
 }
 
@@ -263,6 +264,11 @@ function normalizeSiteConfig(siteConfig = {}, fallbackSiteConfig = DEFAULT_SITE_
     : Number.isInteger(Number(fallback.numSlots)) && Number(fallback.numSlots) > 0
       ? Number(fallback.numSlots)
       : DEFAULT_SITE_SCHEDULE.numSlots
+  const minTpiPerRoom = Number.isInteger(Number(source.minTpiPerRoom)) && Number(source.minTpiPerRoom) > 0
+    ? Number(source.minTpiPerRoom)
+    : Number.isInteger(Number(fallback.minTpiPerRoom)) && Number(fallback.minTpiPerRoom) > 0
+      ? Number(fallback.minTpiPerRoom)
+      : DEFAULT_SITE_SCHEDULE.minTpiPerRoom
   const active = source.active !== false && fallback.active !== false
 
   return {
@@ -283,6 +289,7 @@ function normalizeSiteConfig(siteConfig = {}, fallbackSiteConfig = DEFAULT_SITE_
     tpiTimeMinutes,
     firstTpiStartTime,
     numSlots,
+    minTpiPerRoom,
     notes: compactText(source.notes || fallback.notes || ""),
     active,
     breakline: breaklineMinutes / 60,

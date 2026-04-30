@@ -1,7 +1,12 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { MobileRoomFilter, SoutenanceDesktopHeader, getRoomSlots } from './TpiSoutenanceParts'
+import {
+  MobileRoomFilter,
+  SoutenanceDesktopHeader,
+  getRoomClassFilterValue,
+  getRoomSlots
+} from './TpiSoutenanceParts'
 
 const buildRoom = (name, date, candidat, refTpi = '2163') => ({
   site: 'ETML',
@@ -20,6 +25,13 @@ const buildRoom = (name, date, candidat, refTpi = '2163') => ({
 })
 
 describe('MobileRoomFilter', () => {
+  test('normalise les badges de salle pour le filtre type de classe', () => {
+    expect(getRoomClassFilterValue({ roomClassMode: 'matu' })).toBe('matu')
+    expect(getRoomClassFilterValue({ roomClassMode: 'special' })).toBe('special')
+    expect(getRoomClassFilterValue({ roomClassMode: null })).toBe('noBadge')
+    expect(getRoomClassFilterValue({ roomClassMode: 'nonM' })).toBe('noBadge')
+  })
+
   test('getRoomSlots complète les trous jusqu au nombre total de créneaux', () => {
     const slots = getRoomSlots(
       {
@@ -188,6 +200,7 @@ describe('SoutenanceDesktopHeader', () => {
         nameRoom: '',
         experts: '',
         projectManager: '',
+        classType: '',
         candidate: ''
       }}
       onGeneratePdf={jest.fn()}
@@ -235,6 +248,45 @@ describe('SoutenanceDesktopHeader', () => {
     expect(button.querySelector('svg')).not.toBeNull()
   })
 
+  test('affiche un titre court sans salutation visiteur', () => {
+    renderHeader()
+
+    expect(screen.getByText('Défenses 2026')).toBeInTheDocument()
+    expect(screen.queryByText(/bonjour visiteur/i)).not.toBeInTheDocument()
+  })
+
+  test('place le badge démo sous le titre', () => {
+    renderHeader()
+
+    const title = screen.getByText('Défenses 2026')
+    const demoBadge = screen.getByText('Version démo active')
+    const heroContent = title.closest('.soutenance-toolbar-hero-content')
+
+    expect(heroContent).not.toBeNull()
+    expect(demoBadge.parentElement).toBe(heroContent)
+  })
+
+  test('conserve la salutation pour une personne identifiée', () => {
+    renderHeader({
+      hasToken: true,
+      expertOrBoss: { name: 'Alice Martin', role: 'expert' }
+    })
+
+    expect(screen.getByText('Bonjour Alice Martin')).toBeInTheDocument()
+  })
+
+  test('utilise des libellés courts pour les options par défaut des filtres', () => {
+    renderHeader()
+
+    expect(screen.getByRole('option', { name: 'Date' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Site' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Salle' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Type' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Expert' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'CDP' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Candidat' })).toBeInTheDocument()
+  })
+
   test('le bouton plein écran demande le plein écran', () => {
     renderHeader()
 
@@ -269,5 +321,20 @@ describe('SoutenanceDesktopHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: /quitter le plein écran/i }))
 
     expect(document.exitFullscreen).toHaveBeenCalledTimes(1)
+  })
+
+  test('permet de filtrer par type de classe', () => {
+    const updateFilter = jest.fn()
+
+    renderHeader({ updateFilter })
+
+    const select = screen.getByLabelText(/filtrer par type de classe/i)
+    expect(select).toHaveTextContent('MATU')
+    expect(select).toHaveTextContent('SPECIAL')
+    expect(select).toHaveTextContent('Sans badge')
+
+    fireEvent.change(select, { target: { value: 'special' } })
+
+    expect(updateFilter).toHaveBeenCalledWith('classType', 'special')
   })
 })

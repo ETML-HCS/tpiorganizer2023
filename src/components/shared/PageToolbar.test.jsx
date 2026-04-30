@@ -1,15 +1,11 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { screen } from '@testing-library/react'
 
 import PageToolbar from './PageToolbar'
+import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
 function renderToolbar(props = {}) {
-  return render(
-    <MemoryRouter>
-      <PageToolbar {...props} />
-    </MemoryRouter>
-  )
+  return renderWithRouter(<PageToolbar {...props} />)
 }
 
 describe('PageToolbar', () => {
@@ -30,5 +26,16 @@ describe('PageToolbar', () => {
     expect(screen.getByRole('toolbar')).toBeInTheDocument()
     expect(screen.getByText('Bibliothèque des évaluations')).toBeInTheDocument()
     expect(container.querySelector('.page-tools-body')).toBeNull()
+  })
+
+  test('masque la toolbar quand elle est repliée', () => {
+    const { container } = renderToolbar({
+      title: 'Planification',
+      isArrowUp: false
+    })
+
+    expect(container.querySelector('[data-page-toolbar="true"]')).toHaveStyle({
+      display: 'none'
+    })
   })
 })

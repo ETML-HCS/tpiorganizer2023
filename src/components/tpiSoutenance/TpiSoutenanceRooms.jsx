@@ -14,6 +14,11 @@ import {
   buildSoutenanceRoomAppearance,
   resolveStakeholderIconKey
 } from "../../config/soutenanceAppearance"
+import {
+  CandidateIcon,
+  ExpertIcon,
+  ProjectLeadIcon
+} from "../shared/InlineIcons"
 
 import { showNotification } from "../Tools"
 
@@ -151,58 +156,49 @@ const STAKEHOLDER_ICON_LABELS = {
   projectManager: "Chef de projet"
 }
 
-const StakeholderIcon = ({ type, label, iconKey }) => {
+const STAKEHOLDER_ICON_BADGES = {
+  expert1: "1",
+  expert2: "2"
+}
+
+const STAKEHOLDER_ICON_COMPONENTS = {
+  candidate: CandidateIcon,
+  expert1: ExpertIcon,
+  expert2: ExpertIcon,
+  projectManager: ProjectLeadIcon
+}
+
+const isCandidateAcademicIconKey = (iconKey) =>
+  iconKey === "candidate" || String(iconKey || "").startsWith("candidate-")
+
+const getStakeholderIconComponent = (type, iconKey) => {
+  if (type === "candidate" || isCandidateAcademicIconKey(iconKey)) {
+    return CandidateIcon
+  }
+
+  return type === "projectManager" ? ProjectLeadIcon : ExpertIcon
+}
+
+const isHelmetIconKey = (iconKey) =>
+  iconKey === "participant" || String(iconKey || "").startsWith("helmet-")
+
+const StakeholderIcon = ({ type, iconKey, label }) => {
   const accessibleLabel = label || STAKEHOLDER_ICON_LABELS[type] || "Participant"
-  const isCandidate = iconKey === "candidate"
+  const resolvedIconKey = iconKey || type
+  const Icon = getStakeholderIconComponent(type, resolvedIconKey) || STAKEHOLDER_ICON_COMPONENTS[type] || ExpertIcon
+  const badge = isHelmetIconKey(resolvedIconKey) ? STAKEHOLDER_ICON_BADGES[type] : undefined
 
   return (
     <span
-      className={`stakeholder-icon stakeholder-icon--${type}`}
+      className={`stakeholder-icon stakeholder-icon--${type} stakeholder-icon--visual-${resolvedIconKey}`}
       role='img'
       aria-label={accessibleLabel}
       title={accessibleLabel}
     >
-      <svg
+      <Icon
         className='stakeholder-icon-svg'
-        viewBox='0 0 24 24'
-        focusable='false'
-        aria-hidden='true'
-      >
-        {isCandidate ? (
-          <>
-            <path
-              className='stakeholder-icon-soft'
-              d='M7 10.6v4.15c1.2 1.3 2.88 1.95 5 1.95s3.8-.65 5-1.95V10.6l-5 2.7-5-2.7Z'
-            />
-            <path
-              className='stakeholder-icon-fill'
-              d='M12 3.5 2.8 8.2 12 13l9.2-4.8L12 3.5Z'
-            />
-            <path
-              className='stakeholder-icon-stroke'
-              d='M5.2 9.45v4.75m13.6-5.95v5.95M7 10.6l5 2.7 5-2.7'
-              fill='none'
-            />
-            <circle className='stakeholder-icon-dot' cx='18.8' cy='14.2' r='1.15' />
-          </>
-        ) : (
-          <>
-            <path
-              className='stakeholder-icon-soft'
-              d='M5.1 13.55C5.38 9.75 7.75 6.7 10.95 6v4.45h2.1V6c3.2.7 5.57 3.75 5.85 7.55H5.1Z'
-            />
-            <path
-              className='stakeholder-icon-fill'
-              d='M4.2 13.3h15.6c.75 0 1.35.6 1.35 1.35S20.55 16 19.8 16H4.2c-.75 0-1.35-.6-1.35-1.35s.6-1.35 1.35-1.35Z'
-            />
-            <path
-              className='stakeholder-icon-stroke'
-              d='M5.15 13.35C5.5 9.2 8.35 6 12 6s6.5 3.2 6.85 7.35M10.95 6v4.45m2.1-4.45v4.45M4.2 16h15.6'
-              fill='none'
-            />
-          </>
-        )}
-      </svg>
+        badge={badge}
+      />
     </span>
   )
 }
@@ -509,7 +505,6 @@ const RenderRooms = ({
           const roomClassLabel = getRoomClassLabel(salle)
           const roomClassBadgeClass = getRoomClassBadgeClass(roomClassLabel)
           const roomAppearance = buildSoutenanceRoomAppearance(salle)
-          const stakeholderIcons = salle?.configSite?.stakeholderIcons || {}
           const roomSlots = getRoomSlots(salle, schedule)
           const visibleRoomSlots = showEmptySlots
             ? roomSlots
@@ -559,6 +554,7 @@ const RenderRooms = ({
 
               {visibleRoomSlots.map(({ tpiData, index, displayedSlot }, visibleIndex) => {
                 const { expert1, expert2, boss } = tpiData || {}
+                const stakeholderIcons = salle?.configSite?.stakeholderIcons || {}
                 const hasPublishedTpi = Boolean(tpiData?.refTpi)
                 const expert1Token = hasPublishedTpi ? findPersonTokenByName(expert1?.name) : undefined
                 const expert2Token = hasPublishedTpi ? findPersonTokenByName(expert2?.name) : undefined
@@ -652,8 +648,8 @@ const RenderRooms = ({
                         <div className='tpi-row-block tpi-row-block--candidate' style={{ gridTemplateColumns: "auto minmax(0, 1fr) auto" }}>
                           <StakeholderIcon
                             type='candidate'
-                            label='Candidat'
                             iconKey={resolveStakeholderIconKey(stakeholderIcons, "candidate")}
+                            label='Candidat'
                           />
                           <span className='slot-value'>
                             <TruncatedText text={tpiData?.candidat} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
@@ -667,8 +663,8 @@ const RenderRooms = ({
                         >
                           <StakeholderIcon
                             type='expert1'
-                            label='Expert 1'
                             iconKey={resolveStakeholderIconKey(stakeholderIcons, "expert1")}
+                            label='Expert 1'
                           />
                           <span className='slot-value'>
                             <TruncatedText text={tpiData?.expert1?.name} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
@@ -694,8 +690,8 @@ const RenderRooms = ({
                         >
                           <StakeholderIcon
                             type='expert2'
-                            label='Expert 2'
                             iconKey={resolveStakeholderIconKey(stakeholderIcons, "expert2")}
+                            label='Expert 2'
                           />
                           <span className='slot-value'>
                             <TruncatedText text={tpiData?.expert2?.name} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
@@ -721,8 +717,8 @@ const RenderRooms = ({
                         >
                           <StakeholderIcon
                             type='projectManager'
-                            label='Chef de projet'
                             iconKey={resolveStakeholderIconKey(stakeholderIcons, "projectManager")}
+                            label='Chef de projet'
                           />
                           <span className='slot-value'>
                             <TruncatedText text={tpiData?.boss?.name} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />

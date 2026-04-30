@@ -110,6 +110,15 @@ jest.mock('./TpiSoutenanceParts', () => ({
         ? 'SPECIAL'
         : ''
   ),
+  getRoomClassFilterLabel: (value) => (
+    value === 'matu'
+      ? 'MATU'
+      : value === 'special'
+        ? 'SPECIAL'
+        : value === 'noBadge'
+          ? 'Sans badge'
+          : ''
+  ),
   getRoomSchedule: () => [],
   getRoomSlotCount: (room) => room?.tpiDatas?.length || 0,
   getRoomSlots: (room) => (
@@ -130,6 +139,7 @@ describe('TpiSoutenance focus UX', () => {
     experts: '',
     projectManagerButton: '',
     projectManager: '',
+    classType: '',
     nameRoom: ''
   }
 
@@ -488,6 +498,22 @@ describe('TpiSoutenance focus UX', () => {
         filters: {
           ...defaultFilters,
           date: '10 juin 2026'
+        },
+        isFilterApplied: true
+      })
+    )
+
+    const props = getLastRenderRoomsProps()
+    expect(props.showEmptySlots).toBe(true)
+    expect(props.personIcalFilter).toBeNull()
+  })
+
+  test('garde les créneaux vides avec un filtre type de classe seul', () => {
+    renderSoutenance(
+      buildHookData({
+        filters: {
+          ...defaultFilters,
+          classType: 'matu'
         },
         isFilterApplied: true
       })

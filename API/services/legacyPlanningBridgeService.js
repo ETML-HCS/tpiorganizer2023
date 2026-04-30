@@ -290,6 +290,7 @@ function buildPlanningDraftFromLegacyTpi({ year, legacyTpi, linkedPersonIds = {}
     classe: pickFirstNonEmpty(legacyTpi?.classe),
     site: pickFirstNonEmpty(legacyTpi?.lieu?.site, legacyTpi?.site),
     dates: {
+      soutenance: normalizeDateOnly(legacyTpi?.dates?.soutenance || legacyTpi?.dateSoutenance),
       debut: normalizeDateOnly(legacyTpi?.dates?.depart || legacyTpi?.dates?.debut),
       fin: normalizeDateOnly(legacyTpi?.dates?.fin),
       premiereVisite: normalizeDateOnly(legacyTpi?.dates?.premiereVisite),
@@ -340,17 +341,24 @@ async function syncLegacyCatalogToPlanning({ year, createdBy = null }) {
       .map((tpi) => normalizeString(tpi?.reference))
       .filter(Boolean)
   )
+  const existingPlanningByReference = new Map(
+    existingPlanningTpis
+      .map((tpi) => [normalizeString(tpi?.reference), tpi])
+      .filter(([reference]) => Boolean(reference))
+  )
   const summary = {
     year: normalizedYear,
     totalLegacyTpis: Array.isArray(legacyTpis) ? legacyTpis.length : 0,
     planifiableLegacyTpis: 0,
     createdCount: 0,
+    updatedExistingCount: 0,
     skippedExistingCount: 0,
     skippedMissingReferenceCount: 0,
     skippedInvalidStakeholdersCount: 0,
     outOfScopeCount: 0
   }
   const legacyBulkOperations = []
+  const planningBulkOperations = []
   const planningCreates = []
 
   for (const rawLegacyTpi of Array.isArray(legacyTpis) ? legacyTpis : []) {
@@ -385,6 +393,24 @@ async function syncLegacyCatalogToPlanning({ year, createdBy = null }) {
 
     const reference = buildReference(normalizedYear, legacyRef, 0)
     if (existingReferences.has(reference)) {
+      const existingPlanningTpi = existingPlanningByReference.get(reference)
+      const legacySoutenanceDate = normalizeDateOnly(
+        linkedLegacyTpi?.dates?.soutenance || linkedLegacyTpi?.dateSoutenance
+      )
+
+      if (existingPlanningTpi?._id && legacySoutenanceDate) {
+        planningBulkOperations.push({
+          updateOne: {
+            filter: { _id: existingPlanningTpi._id },
+            update: {
+              $set: {
+                'dates.soutenance': legacySoutenanceDate
+              }
+            }
+          }
+        })
+      }
+
       summary.skippedExistingCount += 1
       continue
     }
@@ -418,6 +444,11 @@ async function syncLegacyCatalogToPlanning({ year, createdBy = null }) {
 
   if (legacyBulkOperations.length > 0) {
     await LegacyTpiModel.bulkWrite(legacyBulkOperations)
+  }
+
+  if (planningBulkOperations.length > 0) {
+    await TpiPlanning.bulkWrite(planningBulkOperations, { ordered: false })
+    summary.updatedExistingCount = planningBulkOperations.length
   }
 
   if (planningCreates.length > 0) {
@@ -652,6 +683,7 @@ async function rebuildWorkflowFromLegacyPlanning({
         classe: pickFirstNonEmpty(legacyTpi?.classe, tpiData?.classe),
         site: participantSite,
         dates: {
+          soutenance: roomDate,
           debut: normalizeDateOnly(legacyTpi?.dates?.depart || legacyTpi?.dates?.debut),
           fin: normalizeDateOnly(legacyTpi?.dates?.fin),
           premiereVisite: normalizeDateOnly(legacyTpi?.dates?.premiereVisite),
@@ -708,7 +740,10 @@ async function rebuildWorkflowFromLegacyPlanning({
         },
         config: {
           duration: (Number(roomConfig.tpiTime) || 1) * 60,
-          breakAfter: (Number(roomConfig.breakline) || 0.1667) * 60
+          breakAfter: (Number(roomConfig.breakline) || 0.1667) * 60,
+          minTpiPerRoom: Number.isInteger(Number(roomConfig.minTpiPerRoom)) && Number(roomConfig.minTpiPerRoom) > 0
+            ? Number(roomConfig.minTpiPerRoom)
+            : 3
         },
         history: []
       })

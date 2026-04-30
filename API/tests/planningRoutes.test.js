@@ -6,57 +6,21 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
 const mongoose = require('mongoose')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
+const {
+  buildSessionToken,
+  closeServer,
+  DEFAULT_USER_ID,
+  startServer
+} = require('./helpers/httpTest')
+const {
+  makeQueryResult,
+  replaceProperty: patchMethod
+} = require('./helpers/stubSandbox')
 const Vote = require('../models/voteModel')
 const schedulingService = require('../services/schedulingService')
-
-const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
-
-function patchMethod(target, key, implementation) {
-  const original = target[key]
-  target[key] = implementation
-  return () => {
-    target[key] = original
-  }
-}
-
-function makeQueryResult(value) {
-  return {
-    populate() {
-      return this
-    },
-    then(resolve, reject) {
-      return Promise.resolve(value).then(resolve, reject)
-    }
-  }
-}
-
-function buildSessionToken(secret, roles = ['admin']) {
-  return jwt.sign(
-    {
-      id: VALID_OBJECT_ID,
-      email: 'planner@example.com',
-      roles
-    },
-    secret,
-    { expiresIn: '1h' }
-  )
-}
-
-async function startServer(app) {
-  return await new Promise(resolve => {
-    const server = app.listen(0, () => {
-      const address = server.address()
-      resolve({
-        server,
-        baseUrl: `http://127.0.0.1:${address.port}`
-      })
-    })
-  })
-}
 
 // ============================================
 // Tests: Resend Vote Requests (TODO#1)
@@ -95,7 +59,7 @@ test('POST /api/planning/tpi/:id/resend-votes successfully resends voting reques
       'resend-votes endpoint should exist and be callable')
 
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -120,7 +84,7 @@ test('POST /api/planning/tpi/:id/resend-votes requires authentication', async ()
       'resend-votes should return 401 without auth token')
 
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -149,7 +113,7 @@ test('GET /api/planning/availability/:year/:tpiId returns available slots', asyn
       'availability endpoint should exist')
 
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -193,7 +157,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId/simulate retourne la simul
     assert.equal(body.message, 'Déplacement possible sans conflit détecté.')
   } finally {
     restore()
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -239,7 +203,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId retourne 409 quand le dép
     assert.deepEqual(calls, [{
       tpiId,
       slotId,
-      userId: VALID_OBJECT_ID,
+      userId: DEFAULT_USER_ID,
       reason: 'Depuis proposition de vote'
     }])
     const body = await response.json()
@@ -247,7 +211,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId retourne 409 quand le dép
     assert.equal(body.message, 'Le déplacement est bloqué par un conflit.')
   } finally {
     restore()
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -316,7 +280,7 @@ test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates exis
     assert.equal(voter.preferredSoutenanceChoices.length, 3)
   } finally {
     restore()
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -382,7 +346,7 @@ test('POST /api/planning/votes/:id/preferred-soutenance-choice précise une date
     assert.equal(voter.preferredSoutenanceChoices[0].period, 2)
   } finally {
     restore()
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -440,7 +404,7 @@ test('Invalid TPI ID should return proper error', async () => {
     assert.ok(error.error || error.message, 'Error should have message')
 
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -504,7 +468,7 @@ test('GET /api/planning/catalog returns 503 when database config is unavailable'
     const error = await response.json()
     assert.equal(error.error, 'Catalogue partagé indisponible: connexion MongoDB impossible.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -529,7 +493,7 @@ test('GET /api/planning/config/:year returns 503 when database config is unavail
     const error = await response.json()
     assert.equal(error.error, 'Configuration de planification indisponible: connexion MongoDB impossible.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })

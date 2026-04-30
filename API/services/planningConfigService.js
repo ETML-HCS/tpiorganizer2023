@@ -5,6 +5,8 @@ const PlanningConfig = require('../models/planningConfigModel')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
 const {
   getMaxConsecutiveTpiLimit,
+  getMinTpiPerOpenRoomTarget,
+  MIN_TPI_PER_OPEN_ROOM,
   MAX_CONSECUTIVE_TPI
 } = require('./planningRuleUtils')
 
@@ -15,6 +17,7 @@ const DEFAULT_SITE_SCHEDULE = {
   firstTpiStartTime: '08:00',
   numSlots: 8,
   maxConsecutiveTpi: MAX_CONSECUTIVE_TPI,
+  minTpiPerRoom: MIN_TPI_PER_OPEN_ROOM,
   manualRoomTarget: null,
   active: true
 }
@@ -481,6 +484,13 @@ function normalizeSiteScheduleDefinition(value, fallback = {}) {
       source.maxConsecutiveTpi,
       getMaxConsecutiveTpiLimit(fallbackSource.maxConsecutiveTpi, DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi)
     ),
+    minTpiPerRoom: getMinTpiPerOpenRoomTarget(
+      source.minTpiPerRoom ?? source.minTpiPerOpenRoom ?? source.minRoomLoad,
+      getMinTpiPerOpenRoomTarget(
+        fallbackSource.minTpiPerRoom ?? fallbackSource.minTpiPerOpenRoom ?? fallbackSource.minRoomLoad,
+        DEFAULT_SITE_SCHEDULE.minTpiPerRoom
+      )
+    ),
     manualRoomTarget: Number.isFinite(Number(source.manualRoomTarget)) && Number(source.manualRoomTarget) >= 0
       ? Number(source.manualRoomTarget)
       : Number.isFinite(Number(fallbackSource.manualRoomTarget)) && Number(fallbackSource.manualRoomTarget) >= 0
@@ -536,6 +546,7 @@ function buildLegacySiteAlias(siteConfigs, siteCode) {
     firstTpiStart: firstStart,
     numSlots: siteConfig ? siteConfig.numSlots : DEFAULT_SITE_SCHEDULE.numSlots,
     maxConsecutiveTpi: siteConfig ? siteConfig.maxConsecutiveTpi : DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
+    minTpiPerRoom: siteConfig ? siteConfig.minTpiPerRoom : DEFAULT_SITE_SCHEDULE.minTpiPerRoom,
     label: siteConfig ? siteConfig.label : code
   }
 }
@@ -720,6 +731,7 @@ function buildDefaultPlanningConfig(year, catalogSites = []) {
     firstTpiStartTime: DEFAULT_SITE_SCHEDULE.firstTpiStartTime,
     numSlots: DEFAULT_SITE_SCHEDULE.numSlots,
     maxConsecutiveTpi: DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
+    minTpiPerRoom: DEFAULT_SITE_SCHEDULE.minTpiPerRoom,
     manualRoomTarget: DEFAULT_SITE_SCHEDULE.manualRoomTarget,
     active: entry.active !== false
   }))

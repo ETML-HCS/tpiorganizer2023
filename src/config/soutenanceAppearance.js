@@ -10,12 +10,37 @@ export const DEFAULT_STAKEHOLDER_ICON_KEYS = Object.freeze({
   projectManager: "participant"
 })
 
-export const STAKEHOLDER_ICON_OPTIONS = Object.freeze([
-  { value: "candidate", label: "Candidat" },
-  { value: "participant", label: "Participant" }
+export const CANDIDATE_STAKEHOLDER_ICON_OPTIONS = Object.freeze([
+  { value: "candidate", label: "Académique bleu", emoji: "🔵" },
+  { value: "candidate-green", label: "Académique vert", emoji: "🟢" },
+  { value: "candidate-violet", label: "Académique violet", emoji: "🟣" },
+  { value: "candidate-rose", label: "Académique rose", emoji: "🔴" },
+  { value: "candidate-gold", label: "Académique or", emoji: "🟡" }
 ])
 
+export const HELMET_STAKEHOLDER_ICON_OPTIONS = Object.freeze([
+  { value: "participant", label: "Casque jaune", emoji: "🟡" },
+  { value: "helmet-orange", label: "Casque orange", emoji: "🟠" },
+  { value: "helmet-green", label: "Casque vert", emoji: "🟢" },
+  { value: "helmet-blue", label: "Casque bleu", emoji: "🔵" },
+  { value: "helmet-black", label: "Casque noir", emoji: "⚫" },
+  { value: "helmet-gray", label: "Casque gris", emoji: "⚪" }
+])
+
+export const STAKEHOLDER_ICON_OPTIONS = Object.freeze([
+  ...CANDIDATE_STAKEHOLDER_ICON_OPTIONS,
+  ...HELMET_STAKEHOLDER_ICON_OPTIONS
+])
+
+const CANDIDATE_STAKEHOLDER_ICON_VALUES = new Set(CANDIDATE_STAKEHOLDER_ICON_OPTIONS.map((option) => option.value))
+const HELMET_STAKEHOLDER_ICON_VALUES = new Set(HELMET_STAKEHOLDER_ICON_OPTIONS.map((option) => option.value))
 const STAKEHOLDER_ICON_VALUES = new Set(STAKEHOLDER_ICON_OPTIONS.map((option) => option.value))
+
+export function getStakeholderIconOptionsForRole(role = "") {
+  return role === "candidate"
+    ? CANDIDATE_STAKEHOLDER_ICON_OPTIONS
+    : HELMET_STAKEHOLDER_ICON_OPTIONS
+}
 
 export function normalizeSoutenanceColor(value) {
   const hex = String(value || "").trim().replace(/^#/, "")
@@ -102,11 +127,20 @@ export function buildSoutenanceRoomAppearance(room = {}) {
   }
 }
 
-export function normalizeStakeholderIconKey(value, fallback = "participant") {
+export function normalizeStakeholderIconKey(value, fallback = "participant", role = "") {
   const normalizedValue = String(value || "").trim()
-  return STAKEHOLDER_ICON_VALUES.has(normalizedValue)
+  const allowedValues = role === "candidate"
+    ? CANDIDATE_STAKEHOLDER_ICON_VALUES
+    : role
+      ? HELMET_STAKEHOLDER_ICON_VALUES
+      : STAKEHOLDER_ICON_VALUES
+  const defaultFallback = role === "candidate" ? DEFAULT_STAKEHOLDER_ICON_KEYS.candidate : "participant"
+  const normalizedFallback = String(fallback || "").trim()
+  const safeFallback = allowedValues.has(normalizedFallback) ? normalizedFallback : defaultFallback
+
+  return allowedValues.has(normalizedValue)
     ? normalizedValue
-    : fallback
+    : safeFallback
 }
 
 export function normalizeStakeholderIcons(source = {}, fallback = DEFAULT_STAKEHOLDER_ICON_KEYS) {
@@ -117,12 +151,25 @@ export function normalizeStakeholderIcons(source = {}, fallback = DEFAULT_STAKEH
   const fallbackIcons = fallback && typeof fallback === "object" ? fallback : DEFAULT_STAKEHOLDER_ICON_KEYS
 
   return {
-    candidate: normalizeStakeholderIconKey(rawIcons.candidate, fallbackIcons.candidate || DEFAULT_STAKEHOLDER_ICON_KEYS.candidate),
-    expert1: normalizeStakeholderIconKey(rawIcons.expert1, fallbackIcons.expert1 || DEFAULT_STAKEHOLDER_ICON_KEYS.expert1),
-    expert2: normalizeStakeholderIconKey(rawIcons.expert2, fallbackIcons.expert2 || DEFAULT_STAKEHOLDER_ICON_KEYS.expert2),
+    candidate: normalizeStakeholderIconKey(
+      rawIcons.candidate,
+      fallbackIcons.candidate || DEFAULT_STAKEHOLDER_ICON_KEYS.candidate,
+      "candidate"
+    ),
+    expert1: normalizeStakeholderIconKey(
+      rawIcons.expert1,
+      fallbackIcons.expert1 || DEFAULT_STAKEHOLDER_ICON_KEYS.expert1,
+      "expert1"
+    ),
+    expert2: normalizeStakeholderIconKey(
+      rawIcons.expert2,
+      fallbackIcons.expert2 || DEFAULT_STAKEHOLDER_ICON_KEYS.expert2,
+      "expert2"
+    ),
     projectManager: normalizeStakeholderIconKey(
       rawIcons.projectManager || rawIcons.boss,
-      fallbackIcons.projectManager || DEFAULT_STAKEHOLDER_ICON_KEYS.projectManager
+      fallbackIcons.projectManager || DEFAULT_STAKEHOLDER_ICON_KEYS.projectManager,
+      "projectManager"
     )
   }
 }

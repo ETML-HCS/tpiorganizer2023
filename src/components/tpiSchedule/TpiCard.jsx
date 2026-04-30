@@ -896,6 +896,7 @@ const TpiCard = ({
   const renderRoleRow = ({
     className,
     Icon,
+    iconProps: roleIconProps = {},
     label,
     name,
     proposalTitle,
@@ -914,7 +915,7 @@ const TpiCard = ({
       <div className={`${className} tpi-card-row`} title={shouldShowProposal ? proposalTitle : undefined}>
         {shouldShowIcon ? (
           <span className="tpi-card-icon" aria-hidden="true">
-            <Icon />
+            <Icon {...roleIconProps} />
           </span>
         ) : (
           <span className="tpi-card-icon tpi-card-cell-placeholder" aria-hidden="true" />
@@ -1310,6 +1311,7 @@ const TpiCard = ({
               {renderRoleRow({
                 className: "expert",
                 Icon: ExpertIcon,
+                iconProps: { badge: "1" },
                 label: "Exp. 1",
                 name: expert1Name,
                 proposalTitle: expert1Title,
@@ -1319,6 +1321,7 @@ const TpiCard = ({
               {renderRoleRow({
                 className: "expert",
                 Icon: ExpertIcon,
+                iconProps: { badge: "2" },
                 label: "Exp. 2",
                 name: expert2Name,
                 proposalTitle: expert2Title,

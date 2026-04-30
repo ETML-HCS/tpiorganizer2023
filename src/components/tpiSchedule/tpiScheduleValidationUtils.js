@@ -98,9 +98,10 @@ export const buildLocalValidationIssues = (analysis = {}) => {
     .map((issue) => {
       const personName = compactText(issue?.personName) || "Personne inconnue"
       const consecutiveCount = toIntegerOrNull(issue?.consecutiveCount) || 0
+      const maxConsecutiveTpi = toIntegerOrNull(issue?.maxConsecutiveTpi) || 4
       const slotKeys = toUniqueSortedValues(issue?.slotKeys)
 
-      if (consecutiveCount <= 4 || slotKeys.length === 0) {
+      if (consecutiveCount <= maxConsecutiveTpi || slotKeys.length === 0) {
         return null
       }
 
@@ -110,6 +111,7 @@ export const buildLocalValidationIssues = (analysis = {}) => {
         personId: "",
         personName,
         consecutiveCount,
+        maxConsecutiveTpi,
         slotKeys,
         message: `${personName} a ${consecutiveCount} TPI consécutifs. Une pause d'un créneau est obligatoire avant de reprendre.`
       }

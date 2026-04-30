@@ -54,6 +54,30 @@ function getRoomClassLabel(room) {
   return ""
 }
 
+const ROOM_CLASS_TYPE_FILTER_OPTIONS = [
+  { value: "matu", label: "MATU" },
+  { value: "special", label: "SPECIAL" },
+  { value: "noBadge", label: "Sans badge" }
+]
+
+function getRoomClassFilterValue(room) {
+  const normalizedLabel = String(getRoomClassLabel(room) || "").toLowerCase()
+
+  if (normalizedLabel === "matu") {
+    return "matu"
+  }
+
+  if (normalizedLabel === "special") {
+    return "special"
+  }
+
+  return "noBadge"
+}
+
+function getRoomClassFilterLabel(value) {
+  return ROOM_CLASS_TYPE_FILTER_OPTIONS.find((option) => option.value === value)?.label || ""
+}
+
 function getRoomClassBadgeClass(label) {
   const normalizedLabel = String(label || "").toLowerCase()
 
@@ -564,7 +588,7 @@ const SoutenanceDesktopHeader = ({
 }) => {
   const userGreeting = hasToken
     ? `Bonjour ${expertOrBoss?.name || "Collaborateur"}`
-    : "Bonjour Visiteur"
+    : ""
   const [isFullscreen, setIsFullscreen] = useState(Boolean(getFullscreenElement()))
 
   useEffect(() => {
@@ -611,9 +635,12 @@ const SoutenanceDesktopHeader = ({
       <div className={`soutenance-toolbar-head soutenance-toolbar-hero has-fullscreen-action ${isFullscreen ? "is-fullscreen-active" : ""}`.trim()}>
         <div className='soutenance-toolbar-hero-content'>
           <div className={isDemo ? "demo" : "title"}>
-            Défenses de {year}
+            Défenses {year}
           </div>
-          <p className='soutenance-toolbar-greeting'>{userGreeting}</p>
+          {isDemo ? <span className='soutenance-hero-status'>Version démo active</span> : null}
+          {userGreeting ? (
+            <p className='soutenance-toolbar-greeting'>{userGreeting}</p>
+          ) : null}
         </div>
 
         <button
@@ -625,8 +652,6 @@ const SoutenanceDesktopHeader = ({
         >
           <FullscreenIcon />
         </button>
-
-        {isDemo ? <span className='soutenance-hero-status'>Version démo active</span> : null}
       </div>
 
       <div className='soutenance-toolbar-filters'>
@@ -695,7 +720,7 @@ const SoutenanceDesktopHeader = ({
             value={filters.date}
             onChange={(e) => updateFilter("date", e.target.value)}
           >
-            <option value=''>Toutes les dates</option>
+            <option value=''>Date</option>
             {uniqueDates.map((date) => (
               <option key={date} value={date}>
                 {date}
@@ -710,7 +735,7 @@ const SoutenanceDesktopHeader = ({
             value={filters.site}
             onChange={(e) => updateFilter("site", e.target.value)}
           >
-            <option value=''>Tous les sites</option>
+            <option value=''>Site</option>
             {uniqueSites.map((site) => (
               <option key={site} value={site}>
                 {site}
@@ -725,10 +750,25 @@ const SoutenanceDesktopHeader = ({
             value={filters.nameRoom}
             onChange={(e) => updateFilter("nameRoom", e.target.value)}
           >
-            <option value=''>Toutes les salles</option>
+            <option value=''>Salle</option>
             {uniqueSalles.map((name) => (
               <option key={name} value={name}>
                 {name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className='soutenance-filter-block'>
+          <select
+            aria-label='Filtrer par type de classe'
+            value={filters.classType || ""}
+            onChange={(e) => updateFilter("classType", e.target.value)}
+          >
+            <option value=''>Type</option>
+            {ROOM_CLASS_TYPE_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -741,7 +781,7 @@ const SoutenanceDesktopHeader = ({
               value={filters.experts}
               onChange={(e) => updateFilter("experts", e.target.value)}
             >
-              <option value=''>Tous les experts</option>
+              <option value=''>Expert</option>
               {uniqueExperts.map((expert) => (
                 <option key={expert} value={expert}>
                   {expert}
@@ -758,7 +798,7 @@ const SoutenanceDesktopHeader = ({
               value={filters.projectManager}
               onChange={(e) => updateFilter("projectManager", e.target.value)}
             >
-              <option value=''>Tous les chefs de projet</option>
+              <option value=''>CDP</option>
               {uniqueProjectManagers.map((manager) => (
                 <option key={manager} value={manager}>
                   {manager}
@@ -775,7 +815,7 @@ const SoutenanceDesktopHeader = ({
               value={filters.candidate}
               onChange={(e) => updateFilter("candidate", e.target.value)}
             >
-              <option value=''>Tous les candidats</option>
+              <option value=''>Candidat</option>
               {uniqueCandidates.map((candidate) => {
                 if (candidate.trim() !== "") {
                   return (
@@ -804,10 +844,13 @@ export {
   formatTimeRange,
   getDisplayedSlot,
   getLegacyScheduleIndex,
+  getRoomClassFilterLabel,
+  getRoomClassFilterValue,
   getRoomSlotCount,
   getRoomSlots,
   getRoomClassLabel,
   getRoomClassBadgeClass,
   getRoomSchedule,
+  ROOM_CLASS_TYPE_FILTER_OPTIONS,
   renderSchedule
 }

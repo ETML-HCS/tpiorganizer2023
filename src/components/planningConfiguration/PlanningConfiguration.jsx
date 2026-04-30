@@ -4,7 +4,7 @@ import { toast } from "react-toastify"
 
 import { YEARS_CONFIG, STORAGE_KEYS } from "../../config/appConfig"
 import {
-  STAKEHOLDER_ICON_OPTIONS,
+  getStakeholderIconOptionsForRole,
   normalizeOptionalSoutenanceColor,
   normalizeStakeholderIcons,
   resolveSoutenanceColor
@@ -23,17 +23,18 @@ import IconButtonContent from "../shared/IconButtonContent"
 import PageToolbar from "../shared/PageToolbar"
 import {
   CalendarIcon,
+  CandidateIcon,
   ChevronDownIcon,
   ClipboardIcon,
   ConfigurationIcon,
+  ExpertIcon,
   PlusIcon,
+  RefreshIcon,
   RoomIcon,
   SaveIcon,
   TimeIcon,
   TrashIcon
 } from "../shared/InlineIcons"
-import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
-
 import "../../css/planningConfiguration.css"
 
 const DEFAULT_SITE_SCHEDULE = {
@@ -42,6 +43,7 @@ const DEFAULT_SITE_SCHEDULE = {
   firstTpiStartTime: "08:00",
   numSlots: 8,
   maxConsecutiveTpi: 4,
+  minTpiPerRoom: 3,
   manualRoomTarget: ""
 }
 
@@ -79,6 +81,17 @@ const compactText = (value) => {
   }
 
   return String(value).trim()
+}
+
+const normalizePositiveInteger = (value, fallback) => {
+  const numeric = Number(value)
+  const fallbackValue = Number.isInteger(Number(fallback)) && Number(fallback) > 0
+    ? Number(fallback)
+    : 1
+
+  return Number.isInteger(numeric) && numeric > 0
+    ? numeric
+    : fallbackValue
 }
 
 const normalizePlanningColor = (value) => {
@@ -570,6 +583,31 @@ const normalizeRoomDetails = (values, siteId = "", fallback = []) => {
           .map((line) => compactText(line))
           .filter(Boolean)
       : fallback
+  const fallbackValues = Array.isArray(fallback) ? fallback : []
+  const fallbackById = new Map()
+  const fallbackByKey = new Map()
+
+  fallbackValues.forEach((entry) => {
+    const fallbackSource = entry && typeof entry === "object" && !Array.isArray(entry)
+      ? entry
+      : { code: entry, label: entry }
+    const fallbackId = compactText(fallbackSource.id).toLowerCase()
+    const fallbackKeys = [
+      fallbackSource.code,
+      fallbackSource.label,
+      fallbackSource.name
+    ].map((value) => compactText(value).toLowerCase()).filter(Boolean)
+
+    if (fallbackId) {
+      fallbackById.set(fallbackId, fallbackSource)
+    }
+
+    fallbackKeys.forEach((key) => {
+      if (!fallbackByKey.has(key)) {
+        fallbackByKey.set(key, fallbackSource)
+      }
+    })
+  })
   const normalized = []
   const seen = new Set()
 
@@ -579,7 +617,13 @@ const normalizeRoomDetails = (values, siteId = "", fallback = []) => {
       : { code: entry, label: entry }
     const code = compactText(source.code || source.label || source.name || `ROOM${index + 1}`).toUpperCase()
     const label = compactText(source.label || source.name || source.code || code)
-    const id = compactText(source.id) || makeStableId("room", siteId, code || label || index + 1)
+    const sourceId = compactText(source.id)
+    const fallbackSource =
+      fallbackById.get(sourceId.toLowerCase()) ||
+      fallbackByKey.get(compactText(code || label).toLowerCase()) ||
+      fallbackValues[index] ||
+      {}
+    const id = sourceId || compactText(fallbackSource.id) || makeStableId("room", siteId, code || label || index + 1)
     const dedupeKey = compactText(id).toLowerCase() || code || label.toUpperCase()
 
     if (!code && !label) {
@@ -596,6 +640,7 @@ const normalizeRoomDetails = (values, siteId = "", fallback = []) => {
       code,
       label,
       capacity: Number.isFinite(Number(source.capacity)) ? Number(source.capacity) : "",
+      soutenanceColor: normalizeOptionalSoutenanceColor(source, fallbackSource),
       notes: compactText(source.notes || ""),
       active: source.active !== false,
       order: Number.isFinite(Number(source.order)) ? Number(source.order) : index,
@@ -699,6 +744,10 @@ const syncSiteConfigsToCatalog = (siteConfigs, sites) => {
       maxConsecutiveTpi: Number.isInteger(Number(existing?.maxConsecutiveTpi)) && Number(existing.maxConsecutiveTpi) > 0
         ? Number(existing.maxConsecutiveTpi)
         : DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
+      minTpiPerRoom: normalizePositiveInteger(
+        existing?.minTpiPerRoom ?? existing?.minTpiPerOpenRoom ?? existing?.minRoomLoad,
+        DEFAULT_SITE_SCHEDULE.minTpiPerRoom
+      ),
       manualRoomTarget: Number.isFinite(Number(existing?.manualRoomTarget)) && Number(existing.manualRoomTarget) >= 0
         ? Number(existing.manualRoomTarget)
         : "",
@@ -781,6 +830,10 @@ const buildYearPayload = (draft, year, catalogSites = []) => {
     maxConsecutiveTpi: Number.isInteger(Number(siteConfig.maxConsecutiveTpi)) && Number(siteConfig.maxConsecutiveTpi) > 0
       ? Number(siteConfig.maxConsecutiveTpi)
       : DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
+    minTpiPerRoom: normalizePositiveInteger(
+      siteConfig.minTpiPerRoom ?? siteConfig.minTpiPerOpenRoom ?? siteConfig.minRoomLoad,
+      DEFAULT_SITE_SCHEDULE.minTpiPerRoom
+    ),
     manualRoomTarget: Number.isFinite(Number(siteConfig.manualRoomTarget)) && Number(siteConfig.manualRoomTarget) >= 0
       ? Number(siteConfig.manualRoomTarget)
       : null,
@@ -856,6 +909,7 @@ const createBlankRoom = (index = 1, siteId = "") => ({
   code: `ROOM${index}`,
   label: `Salle ${index}`,
   capacity: "",
+  soutenanceColor: "",
   notes: "",
   active: true,
   order: index,
@@ -942,6 +996,7 @@ const createBlankSiteConfig = (site) => ({
   firstTpiStartTime: DEFAULT_SITE_SCHEDULE.firstTpiStartTime,
   numSlots: DEFAULT_SITE_SCHEDULE.numSlots,
   maxConsecutiveTpi: DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi,
+  minTpiPerRoom: DEFAULT_SITE_SCHEDULE.minTpiPerRoom,
   manualRoomTarget: "",
   notes: "",
   active: true
@@ -1190,8 +1245,27 @@ const formatRoomNamesSummary = (roomDetails = []) => {
   return roomNames.length > 0 ? roomNames.join(" · ") : "Aucune salle"
 }
 
+const countDefenseDates = (classType = {}) => {
+  if (Array.isArray(classType?.soutenanceDates)) {
+    return classType.soutenanceDates.filter((entry) => compactText(entry?.date || entry)).length
+  }
+
+  return classTypeTextToDates(classType?.soutenanceDatesText).length
+}
+
+const getSiteCollapseId = (site = {}, index = 0) =>
+  compactText(site?.id || site?.code || site?.label || `site-${index + 1}`)
+
+const getSiteCollapseIds = (sites = []) =>
+  (Array.isArray(sites) ? sites : [])
+    .map((site, index) => getSiteCollapseId(site, index))
+    .filter(Boolean)
+
 const getSiteStatistics = (site = {}) => {
   const roomCount = Array.isArray(site?.roomDetails) ? site.roomDetails.length : 0
+  const activeRoomCount = Array.isArray(site?.roomDetails)
+    ? site.roomDetails.filter((room) => room?.active !== false).length
+    : 0
   const groupCount = Array.isArray(site?.classGroups) ? site.classGroups.length : 0
   const classCount = Array.isArray(site?.classGroups)
     ? site.classGroups.reduce(
@@ -1199,10 +1273,22 @@ const getSiteStatistics = (site = {}) => {
         0
       )
     : 0
+  const activeClassCount = Array.isArray(site?.classGroups)
+    ? site.classGroups.reduce(
+        (count, group) =>
+          count + (Array.isArray(group?.classes)
+            ? group.classes.filter((entry) => entry?.active !== false).length
+            : 0),
+        0
+      )
+    : 0
+
   return {
     roomCount,
+    activeRoomCount,
     groupCount,
-    classCount
+    classCount,
+    activeClassCount
   }
 }
 
@@ -1384,124 +1470,187 @@ const ClassTypeCard = ({
   )
 }
 
-const SiteScheduleCard = ({ site, schedule, onChange, disabled = false }) => (
-  <article className='configuration-card configuration-schedule-card'>
-    <div className='configuration-card-head'>
-      <div className='configuration-card-head-copy'>
-        <span className='configuration-card-kicker'>
-          <TimeIcon className='configuration-card-icon' />
-        </span>
-        <h4>{site?.label || site?.code || "Site"}</h4>
+const SiteScheduleCard = ({ site, schedule, onChange, disabled = false, defaultExpanded = false }) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const bodyId = `configuration-schedule-body-${site?.id || site?.code || "site"}`
+  const siteLabel = site?.label || site?.code || "Site"
+  const summaryLine = [
+    schedule?.firstTpiStartTime || DEFAULT_SITE_SCHEDULE.firstTpiStartTime,
+    `${schedule?.numSlots ?? DEFAULT_SITE_SCHEDULE.numSlots} créneaux`,
+    `${schedule?.tpiTimeMinutes ?? DEFAULT_SITE_SCHEDULE.tpiTimeMinutes} min`,
+    `${normalizePositiveInteger(schedule?.minTpiPerRoom, DEFAULT_SITE_SCHEDULE.minTpiPerRoom)} TPI min / salle`
+  ].join(" · ")
+
+  return (
+    <article className={`configuration-card configuration-schedule-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <TimeIcon className='configuration-card-icon' />
+            </span>
+            <h4>{siteLabel}</h4>
+          </div>
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject={`le rythme ${siteLabel}`}
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>{siteLabel} · {summaryLine}</p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject={`le rythme ${siteLabel}`}
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-grid configuration-card-grid--schedule' hidden={!isExpanded}>
+        <label className='page-tools-field'>
+          <span className='page-tools-field-label'>Pause entre TPI (min)</span>
+          <input
+            className='page-tools-field-control'
+            type='number'
+            min='0'
+            step='1'
+            value={schedule?.breaklineMinutes ?? DEFAULT_SITE_SCHEDULE.breaklineMinutes}
+            onChange={(event) => onChange("breaklineMinutes", Number.parseInt(event.target.value, 10))}
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field'>
+          <span className='page-tools-field-label'>Durée TPI (min)</span>
+          <input
+            className='page-tools-field-control'
+            type='number'
+            min='1'
+            step='1'
+            value={schedule?.tpiTimeMinutes ?? DEFAULT_SITE_SCHEDULE.tpiTimeMinutes}
+            onChange={(event) => onChange("tpiTimeMinutes", Number.parseInt(event.target.value, 10))}
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field'>
+          <span className='page-tools-field-label'>Premier TPI</span>
+          <input
+            className='page-tools-field-control'
+            type='time'
+            step='900'
+            value={schedule?.firstTpiStartTime || DEFAULT_SITE_SCHEDULE.firstTpiStartTime}
+            onChange={(event) => onChange("firstTpiStartTime", event.target.value)}
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field'>
+          <span className='page-tools-field-label'>Créneaux / salle</span>
+          <input
+            className='page-tools-field-control'
+            type='number'
+            min='1'
+            step='1'
+            value={schedule?.numSlots ?? DEFAULT_SITE_SCHEDULE.numSlots}
+            onChange={(event) => onChange("numSlots", Number.parseInt(event.target.value, 10))}
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field'>
+          <span
+            className='page-tools-field-label configuration-help-label'
+            title='Nombre maximal de TPI consécutifs autorisés pour une même personne sur ce site.'
+          >
+            TPI à la suite max
+          </span>
+          <input
+            className='page-tools-field-control'
+            type='number'
+            min='1'
+            step='1'
+            value={schedule?.maxConsecutiveTpi ?? DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi}
+            onChange={(event) => onChange("maxConsecutiveTpi", Number.parseInt(event.target.value, 10))}
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field'>
+          <span
+            className='page-tools-field-label configuration-help-label'
+            title="Objectif souple utilisé quand la planification ouvre une salle pour respecter une contrainte. Les conflits et contraintes bloquantes restent prioritaires."
+          >
+            TPI min / salle
+          </span>
+          <input
+            className='page-tools-field-control'
+            type='number'
+            min='1'
+            step='1'
+            value={
+              schedule?.minTpiPerRoom === ""
+                ? ""
+                : normalizePositiveInteger(schedule?.minTpiPerRoom, DEFAULT_SITE_SCHEDULE.minTpiPerRoom)
+            }
+            onChange={(event) =>
+              onChange(
+                "minTpiPerRoom",
+                event.target.value === "" ? "" : Number.parseInt(event.target.value, 10)
+              )
+            }
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field'>
+          <span
+            className='page-tools-field-label configuration-help-label'
+            title='Nombre de salles à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
+          >
+            Salles / date
+          </span>
+          <input
+            className='page-tools-field-control'
+            type='number'
+            min='0'
+            step='1'
+            value={schedule?.manualRoomTarget ?? ""}
+            onChange={(event) =>
+              onChange(
+                "manualRoomTarget",
+                event.target.value === "" ? "" : Number.parseInt(event.target.value, 10)
+              )
+            }
+            placeholder='Auto'
+            disabled={disabled}
+          />
+        </label>
+
+        <label className='page-tools-field configuration-schedule-field configuration-schedule-field--notes'>
+          <span className='page-tools-field-label'>Notes</span>
+          <input
+            className='page-tools-field-control'
+            type='text'
+            value={schedule?.notes || ""}
+            onChange={(event) => onChange("notes", event.target.value)}
+            disabled={disabled}
+          />
+        </label>
       </div>
-    </div>
-
-    <div className='configuration-card-grid configuration-card-grid--schedule'>
-      <label className='page-tools-field'>
-        <span className='page-tools-field-label'>Pause entre TPI (min)</span>
-        <input
-          className='page-tools-field-control'
-          type='number'
-          min='0'
-          step='1'
-          value={schedule?.breaklineMinutes ?? DEFAULT_SITE_SCHEDULE.breaklineMinutes}
-          onChange={(event) => onChange("breaklineMinutes", Number.parseInt(event.target.value, 10))}
-          disabled={disabled}
-        />
-      </label>
-
-      <label className='page-tools-field'>
-        <span className='page-tools-field-label'>Durée TPI (min)</span>
-        <input
-          className='page-tools-field-control'
-          type='number'
-          min='1'
-          step='1'
-          value={schedule?.tpiTimeMinutes ?? DEFAULT_SITE_SCHEDULE.tpiTimeMinutes}
-          onChange={(event) => onChange("tpiTimeMinutes", Number.parseInt(event.target.value, 10))}
-          disabled={disabled}
-        />
-      </label>
-
-      <label className='page-tools-field'>
-        <span className='page-tools-field-label'>Premier TPI</span>
-        <input
-          className='page-tools-field-control'
-          type='time'
-          step='900'
-          value={schedule?.firstTpiStartTime || DEFAULT_SITE_SCHEDULE.firstTpiStartTime}
-          onChange={(event) => onChange("firstTpiStartTime", event.target.value)}
-          disabled={disabled}
-        />
-      </label>
-
-      <label className='page-tools-field'>
-        <span className='page-tools-field-label'>Créneaux / salle</span>
-        <input
-          className='page-tools-field-control'
-          type='number'
-          min='1'
-          step='1'
-          value={schedule?.numSlots ?? DEFAULT_SITE_SCHEDULE.numSlots}
-          onChange={(event) => onChange("numSlots", Number.parseInt(event.target.value, 10))}
-          disabled={disabled}
-        />
-      </label>
-
-      <label className='page-tools-field'>
-        <span
-          className='page-tools-field-label configuration-help-label'
-          title='Nombre maximal de TPI consécutifs autorisés pour une même personne sur ce site.'
-        >
-          TPI à la suite max
-        </span>
-        <input
-          className='page-tools-field-control'
-          type='number'
-          min='1'
-          step='1'
-          value={schedule?.maxConsecutiveTpi ?? DEFAULT_SITE_SCHEDULE.maxConsecutiveTpi}
-          onChange={(event) => onChange("maxConsecutiveTpi", Number.parseInt(event.target.value, 10))}
-          disabled={disabled}
-        />
-      </label>
-
-      <label className='page-tools-field'>
-        <span
-          className='page-tools-field-label configuration-help-label'
-          title='Nombre de salles à prévoir pour chaque date sur ce site. Laisser vide pour utiliser le calcul automatique.'
-        >
-          Salles / date
-        </span>
-        <input
-          className='page-tools-field-control'
-          type='number'
-          min='0'
-          step='1'
-          value={schedule?.manualRoomTarget ?? ""}
-          onChange={(event) =>
-            onChange(
-              "manualRoomTarget",
-              event.target.value === "" ? "" : Number.parseInt(event.target.value, 10)
-            )
-          }
-          placeholder='Auto'
-          disabled={disabled}
-        />
-      </label>
-
-      <label className='page-tools-field configuration-schedule-field configuration-schedule-field--notes'>
-        <span className='page-tools-field-label'>Notes</span>
-        <input
-          className='page-tools-field-control'
-          type='text'
-          value={schedule?.notes || ""}
-          onChange={(event) => onChange("notes", event.target.value)}
-          disabled={disabled}
-        />
-      </label>
-    </div>
-  </article>
-)
+    </article>
+  )
+}
 
 const RoomRow = ({ room, siteId = "", onChange, onRemove, disabled = false }) => (
   <article className='configuration-room-row'>
@@ -1653,7 +1802,7 @@ const SiteClassEntryRow = ({ entry, siteId = "", onChange, onRemove, disabled = 
 )
 
 const SiteClassGroupCard = ({ siteId = "", group, onAddClass, onClassChange, onClassRemove, disabled = false }) => {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(false)
   const classCount = Array.isArray(group?.classes) ? group.classes.length : 0
   const activeClassCount = Array.isArray(group?.classes)
     ? group.classes.filter((entry) => entry?.active !== false).length
@@ -1741,8 +1890,10 @@ const SiteClassCatalogCard = ({
   onAddClass,
   onRemoveClass,
   onCopyClassesFromSite,
-  disabled = false
+  disabled = false,
+  defaultExpanded = false
 }) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [copySourceSiteId, setCopySourceSiteId] = useState("")
   const [activeGroupId, setActiveGroupId] = useState("")
   const allSiteOptions = Array.isArray(sites)
@@ -1772,6 +1923,12 @@ const SiteClassCatalogCard = ({
   }, [activeGroupId, groupTabs])
   const activeTabButtonId = activeGroup ? `configuration-site-class-tabs-${site?.id || site?.code || "site"}-${activeGroup.key}` : ""
   const panelId = `configuration-site-class-panel-${site?.id || site?.code || "site"}`
+  const bodyId = `configuration-site-class-card-body-${site?.id || site?.code || "site"}`
+  const classCount = groupList.reduce(
+    (count, group) => count + (Array.isArray(group?.classes) ? group.classes.length : 0),
+    0
+  )
+  const summaryLine = `${groupList.length} groupe${groupList.length > 1 ? "s" : ""} · ${classCount} classe${classCount > 1 ? "s" : ""}`
 
   useEffect(() => {
     if (groupTabs.length === 0) {
@@ -1830,112 +1987,138 @@ const SiteClassCatalogCard = ({
   )
 
   return (
-    <article className='configuration-card configuration-class-site-card'>
-      <div className='configuration-card-head'>
-        <div className='configuration-card-head-copy'>
-          <span className='configuration-card-kicker'>
-            <CalendarIcon className='configuration-card-icon' />
-          </span>
-          <h4>Classes</h4>
-        </div>
-      </div>
-
-      <div className='configuration-site-class-toolbar'>
-        <p className='configuration-section-note'>
-          Les familles sont organisées en onglets. Chaque groupe peut ensuite être replié individuellement.
-        </p>
-
-        <div className='configuration-site-copybar'>
-          <label className='configuration-site-copybar-field'>
-            <span className='configuration-site-copybar-label'>Copier depuis</span>
-          <select
-            className='page-tools-field-control'
-            value={copySourceSiteId}
-            onChange={(event) => setCopySourceSiteId(event.target.value)}
-            disabled={disabled || allSiteOptions.length === 0}
-            aria-label='Copier depuis un site'
-          >
-            <option value=''>Choisir un site</option>
-            {allSiteOptions.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.label || entry.code || entry.id}
-              </option>
-            ))}
-          </select>
-          </label>
-
-          <button
-            type='button'
-            className='page-tools-action-btn ghost icon-button'
-            onClick={() => {
-              if (!copySourceSiteId) {
-                return
-              }
-
-              onCopyClassesFromSite(copySourceSiteId)
-              setCopySourceSiteId("")
-            }}
-            disabled={disabled || !copySourceSiteId || allSiteOptions.length === 0}
-            aria-label='Copier'
-            title='Copier'
-          >
-            <IconButtonContent label='Copier' icon={ClipboardIcon} />
-          </button>
-        </div>
-      </div>
-
-      {groupTabs.length > 1 ? (
-        <div className='page-tools-tabs configuration-site-class-tabs' role='tablist' aria-label={`Groupes de classes de ${site?.label || site?.code || "site"}`}>
-          {groupTabs.map((tab, tabIndex) => {
-            const isActive = tab.key === activeGroup?.key
-            const tabId = `configuration-site-class-tabs-${site?.id || site?.code || "site"}-${tab.key}`
-
-            return (
-              <button
-                key={tab.key}
-                id={tabId}
-                type='button'
-                role='tab'
-                className={`page-tools-tab configuration-site-class-tab${isActive ? " active" : ""}`.trim()}
-                aria-selected={isActive}
-                aria-controls={panelId}
-                tabIndex={isActive ? 0 : -1}
-                title={tab.group?.label || tab.group?.baseType || "Famille"}
-                onClick={() => setActiveGroupId(tab.key)}
-                onKeyDown={(event) => handleGroupTabKeyDown(event, tabIndex)}
-              >
-                <span className='page-tools-tab-label'>{tab.group?.label || tab.group?.baseType || "Famille"}</span>
-                <span className='page-tools-tab-badge'>
-                  {tab.classCount}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
-
-      <div
-        id={panelId}
-        className='configuration-site-class-panel'
-        role='tabpanel'
-        aria-labelledby={activeTabButtonId || undefined}
-      >
-        {activeGroup ? (
-          <SiteClassGroupCard
-            siteId={site?.id || site?.code || "site"}
-            group={activeGroup.group}
-            onAddClass={() => onAddClass(site.id, activeGroup.key)}
-            onClassChange={(classId, field, value) =>
-              onClassChange(site.id, activeGroup.key, classId, field, value)
-            }
-            onClassRemove={(classId) => onRemoveClass(site.id, activeGroup.key, classId)}
-            disabled={disabled}
-          />
-        ) : (
-          <div className='configuration-empty-state'>
-            <p>Aucune classe.</p>
+    <article className={`configuration-card configuration-class-site-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <CalendarIcon className='configuration-card-icon' />
+            </span>
+            <h4>Classes</h4>
           </div>
-        )}
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject={`les classes de ${site?.label || site?.code || "site"}`}
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>Classes · {summaryLine}</p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject={`les classes de ${site?.label || site?.code || "site"}`}
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-body configuration-class-site-card-body' hidden={!isExpanded}>
+        <div className='configuration-site-class-toolbar'>
+          <p className='configuration-section-note'>
+            Les familles sont organisées en onglets. Chaque groupe peut ensuite être replié individuellement.
+          </p>
+
+          <div className='configuration-site-copybar'>
+            <label className='configuration-site-copybar-field'>
+              <span className='configuration-site-copybar-label'>Copier depuis</span>
+            <select
+              className='page-tools-field-control'
+              value={copySourceSiteId}
+              onChange={(event) => setCopySourceSiteId(event.target.value)}
+              disabled={disabled || allSiteOptions.length === 0}
+              aria-label='Copier depuis un site'
+            >
+              <option value=''>Choisir un site</option>
+              {allSiteOptions.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label || entry.code || entry.id}
+                </option>
+              ))}
+            </select>
+            </label>
+
+            <button
+              type='button'
+              className='page-tools-action-btn ghost icon-button'
+              onClick={() => {
+                if (!copySourceSiteId) {
+                  return
+                }
+
+                onCopyClassesFromSite(copySourceSiteId)
+                setCopySourceSiteId("")
+              }}
+              disabled={disabled || !copySourceSiteId || allSiteOptions.length === 0}
+              aria-label='Copier'
+              title='Copier'
+            >
+              <IconButtonContent label='Copier' icon={ClipboardIcon} />
+            </button>
+          </div>
+        </div>
+
+        {groupTabs.length > 1 ? (
+          <div className='page-tools-tabs configuration-site-class-tabs' role='tablist' aria-label={`Groupes de classes de ${site?.label || site?.code || "site"}`}>
+            {groupTabs.map((tab, tabIndex) => {
+              const isActive = tab.key === activeGroup?.key
+              const tabId = `configuration-site-class-tabs-${site?.id || site?.code || "site"}-${tab.key}`
+
+              return (
+                <button
+                  key={tab.key}
+                  id={tabId}
+                  type='button'
+                  role='tab'
+                  className={`page-tools-tab configuration-site-class-tab${isActive ? " active" : ""}`.trim()}
+                  aria-selected={isActive}
+                  aria-controls={panelId}
+                  tabIndex={isActive ? 0 : -1}
+                  title={tab.group?.label || tab.group?.baseType || "Famille"}
+                  onClick={() => setActiveGroupId(tab.key)}
+                  onKeyDown={(event) => handleGroupTabKeyDown(event, tabIndex)}
+                >
+                  <span className='page-tools-tab-label'>{tab.group?.label || tab.group?.baseType || "Famille"}</span>
+                  <span className='page-tools-tab-badge'>
+                    {tab.classCount}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+
+        <div
+          id={panelId}
+          className='configuration-site-class-panel'
+          role='tabpanel'
+          aria-labelledby={activeTabButtonId || undefined}
+        >
+          {activeGroup ? (
+            <SiteClassGroupCard
+              siteId={site?.id || site?.code || "site"}
+              group={activeGroup.group}
+              onAddClass={() => onAddClass(site.id, activeGroup.key)}
+              onClassChange={(classId, field, value) =>
+                onClassChange(site.id, activeGroup.key, classId, field, value)
+              }
+              onClassRemove={(classId) => onRemoveClass(site.id, activeGroup.key, classId)}
+              disabled={disabled}
+            />
+          ) : (
+            <div className='configuration-empty-state'>
+              <p>Aucune classe.</p>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   )
@@ -1948,41 +2131,290 @@ const STAKEHOLDER_ICON_FIELDS = [
   { key: "projectManager", label: "Chef de projet" }
 ]
 
-const StakeholderIconsCard = ({ icons, onChange, disabled = false }) => {
-  const normalizedIcons = normalizeStakeholderIcons(icons)
+const getDefenseRoomColor = (site = {}, room = {}) =>
+  normalizeOptionalSoutenanceColor(room) ||
+  normalizeOptionalSoutenanceColor(site) ||
+  resolveSoutenanceColor({}, site?.code || site?.label)
+
+const getFrenchPlural = (count, singular, plural = `${singular}s`) =>
+  count === 1 ? singular : plural
+
+const STAKEHOLDER_ICON_PREVIEW_COMPONENTS = {
+  candidate: CandidateIcon,
+  "candidate-green": CandidateIcon,
+  "candidate-violet": CandidateIcon,
+  "candidate-rose": CandidateIcon,
+  "candidate-gold": CandidateIcon,
+  participant: ExpertIcon,
+  "helmet-orange": ExpertIcon,
+  "helmet-green": ExpertIcon,
+  "helmet-blue": ExpertIcon,
+  "helmet-black": ExpertIcon,
+  "helmet-gray": ExpertIcon
+}
+
+const StakeholderIconPreview = ({ iconKey, className = "" }) => {
+  const Icon = STAKEHOLDER_ICON_PREVIEW_COMPONENTS[iconKey] || ExpertIcon
 
   return (
-    <article className='configuration-card configuration-appearance-card'>
-      <div className='configuration-card-head'>
-        <div className='configuration-card-head-copy'>
-          <span className='configuration-card-kicker'>
-            <ConfigurationIcon className='configuration-card-icon' />
-          </span>
-          <h4>SVG parties prenantes</h4>
-          <p className='configuration-section-note'>
-            Icônes utilisées dans les cartes de défense.
-          </p>
-        </div>
-      </div>
+    <span className={`configuration-defense-role-icon configuration-defense-role-icon--${iconKey} ${className}`.trim()} aria-hidden='true'>
+      <Icon className='configuration-defense-role-icon-svg' />
+    </span>
+  )
+}
 
-      <div className='configuration-card-grid configuration-card-grid--stakeholder-icons'>
-        {STAKEHOLDER_ICON_FIELDS.map((field) => (
-          <label key={field.key} className='page-tools-field'>
-            <span className='page-tools-field-label'>{field.label}</span>
-            <select
-              className='page-tools-field-control'
-              value={normalizedIcons[field.key]}
-              onChange={(event) => onChange(field.key, event.target.value)}
-              disabled={disabled}
-            >
-              {STAKEHOLDER_ICON_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+const DefenseRoomsAppearanceCard = ({
+  sites = [],
+  stakeholderIcons,
+  onSiteColorChange,
+  onRoomColorChange,
+  onIconChange,
+  disabled = false
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const normalizedIcons = normalizeStakeholderIcons(stakeholderIcons)
+  const normalizedSites = Array.isArray(sites) ? sites : []
+  const bodyId = "configuration-defense-appearance-body"
+  const roomCount = normalizedSites.reduce(
+    (total, site) => total + (Array.isArray(site?.roomDetails) ? site.roomDetails.length : 0),
+    0
+  )
+  const customizedSiteCount = normalizedSites.filter((site) =>
+    Boolean(normalizeOptionalSoutenanceColor(site))
+  ).length
+  const customizedRoomCount = normalizedSites.reduce(
+    (total, site) =>
+      total + (Array.isArray(site?.roomDetails)
+        ? site.roomDetails.filter((room) => Boolean(normalizeOptionalSoutenanceColor(room))).length
+        : 0),
+    0
+  )
+  const customColorCount = customizedSiteCount + customizedRoomCount
+  const summaryLine = [
+    `${normalizedSites.length} ${getFrenchPlural(normalizedSites.length, "site")}`,
+    `${roomCount} ${getFrenchPlural(roomCount, "salle")}`,
+    `${customColorCount} ${getFrenchPlural(customColorCount, "couleur perso", "couleurs perso")}`
+  ].join(" · ")
+
+  return (
+    <article className={`configuration-card configuration-appearance-card configuration-defense-rooms-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <ConfigurationIcon className='configuration-card-icon' />
+            </span>
+            <h4>Personnalisation des soutenances</h4>
+            <p className='configuration-section-note'>
+              Couleurs publiées par site ou par salle et icônes des rôles.
+            </p>
+          </div>
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject='la personnalisation des soutenances'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>Personnalisation des soutenances · {summaryLine}</p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject='la personnalisation des soutenances'
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-body configuration-defense-card-body' hidden={!isExpanded}>
+        <div className='configuration-defense-appearance-body'>
+          <section className='configuration-defense-roles' aria-label='Icônes des rôles de défense'>
+          <div className='configuration-defense-subhead'>
+            <strong>Icônes des rôles</strong>
+          </div>
+          <ul className='configuration-defense-role-list'>
+            {STAKEHOLDER_ICON_FIELDS.map((field) => {
+              const selectedIcon = normalizedIcons[field.key]
+              const iconOptions = getStakeholderIconOptionsForRole(field.key)
+              const selectId = `configuration-defense-role-icon-${field.key}`
+
+              return (
+                <li key={field.key} className='configuration-defense-role-row'>
+                  <div className='configuration-defense-role-summary'>
+                    <StakeholderIconPreview iconKey={selectedIcon} />
+                    <span className='configuration-defense-role-text'>
+                      <span className='configuration-defense-role-name'>{field.label}</span>
+                    </span>
+                  </div>
+
+                  <label className='configuration-defense-role-select-field' htmlFor={selectId}>
+                    <span className='sr-only'>Icône pour {field.label}</span>
+                    <select
+                      id={selectId}
+                      className='page-tools-field-control configuration-defense-role-select'
+                      value={selectedIcon}
+                      onChange={(event) => onIconChange(field.key, event.target.value)}
+                      disabled={disabled}
+                      aria-label={`Icône pour ${field.label}`}
+                    >
+                      {iconOptions.map((option) => {
+                        return (
+                          <option key={option.value} value={option.value} title={option.label}>
+                            {option.emoji || option.label}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+          </section>
+
+          <section className='configuration-defense-sites' aria-label='Couleurs des salles de défense'>
+          <div className='configuration-defense-subhead'>
+            <strong>Couleurs de soutenance</strong>
+          </div>
+
+          <div className='configuration-defense-site-list'>
+            {normalizedSites.length > 0 ? (
+              normalizedSites.map((site, siteIndex) => {
+                const siteKey = site?.id || site?.code || `site-${siteIndex}`
+                const siteLabel = site?.label || site?.code || "Site"
+                const rooms = Array.isArray(site?.roomDetails) ? site.roomDetails : []
+                const siteColor = resolveSoutenanceColor(site, site?.code || site?.label)
+                const hasSiteColor = Boolean(normalizeOptionalSoutenanceColor(site))
+                const customizedRooms = rooms.filter((room) => Boolean(normalizeOptionalSoutenanceColor(room))).length
+                const siteColorLabel = hasSiteColor ? "site personnalisé" : "site auto"
+                const roomsColorLabel = customizedRooms > 0
+                  ? ` · ${customizedRooms} ${getFrenchPlural(customizedRooms, "salle personnalisée", "salles personnalisées")}`
+                  : ""
+
+                return (
+                  <div key={siteKey} className='configuration-defense-site'>
+                    <div className='configuration-defense-site-head'>
+                      <div className='configuration-defense-site-copy'>
+                        <strong>{siteLabel}</strong>
+                        <span>
+                          {rooms.length} {getFrenchPlural(rooms.length, "salle")} · {siteColorLabel}{roomsColorLabel}
+                        </span>
+                      </div>
+
+                      <div className='configuration-defense-color-cell configuration-defense-site-color'>
+                        <span
+                          className='configuration-defense-color-swatch'
+                          style={{ "--configuration-defense-preview-color": siteColor }}
+                          aria-hidden='true'
+                        />
+                        <div className='page-tools-field configuration-color-field'>
+                          <span className='page-tools-field-label'>Couleur site</span>
+                          <span className='configuration-color-control-row'>
+                            <input
+                              className='page-tools-field-control configuration-color-input'
+                              type='color'
+                              value={siteColor}
+                              onChange={(event) => onSiteColorChange(site.id, event.target.value)}
+                              aria-label={`Couleur défenses ${siteLabel}`}
+                              disabled={disabled}
+                            />
+                            <button
+                              type='button'
+                              className='page-tools-action-btn ghost icon-button configuration-color-auto-button configuration-color-auto-icon'
+                              onClick={() => onSiteColorChange(site.id, "")}
+                              disabled={disabled || !site?.soutenanceColor}
+                              aria-label={`Réinitialiser la couleur défenses ${siteLabel}`}
+                              title={`Couleur défenses automatique ${siteLabel}`}
+                            >
+                              <IconButtonContent label='Auto' icon={RefreshIcon} />
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className='configuration-defense-room-list'>
+                      {rooms.length > 0 ? (
+                        rooms.map((room, roomIndex) => {
+                          const roomKey = room?.id || `${siteKey}-room-${roomIndex}`
+                          const roomLabel = room?.label || room?.code || `Room ${roomIndex + 1}`
+                          const roomColor = getDefenseRoomColor(site, room)
+                          const isRoomColorCustom = Boolean(normalizeOptionalSoutenanceColor(room))
+                          const sourceLabel = isRoomColorCustom ? "Salle" : "Site"
+                          const sourceTitle = isRoomColorCustom
+                            ? "Couleur personnalisée pour cette salle"
+                            : "Couleur héritée du site"
+
+                          return (
+                            <div key={roomKey} className='configuration-defense-room-row'>
+                              <span className='configuration-defense-room-copy'>
+                                <span className='configuration-defense-room-name'>{roomLabel}</span>
+                                <span
+                                  className={`configuration-defense-source ${isRoomColorCustom ? "is-custom" : "is-inherited"}`}
+                                  title={sourceTitle}
+                                >
+                                  {sourceLabel}
+                                </span>
+                              </span>
+                              <span className='configuration-defense-color-cell'>
+                                <span
+                                  className='configuration-defense-color-swatch'
+                                  style={{ "--configuration-defense-preview-color": roomColor }}
+                                  aria-hidden='true'
+                                />
+                                <span className='configuration-color-control-row'>
+                                  <input
+                                    className='page-tools-field-control configuration-color-input'
+                                    type='color'
+                                    value={roomColor}
+                                    onChange={(event) => onRoomColorChange(site.id, room.id, event.target.value)}
+                                    aria-label={`Couleur salle de défense ${roomLabel}`}
+                                    disabled={disabled}
+                                  />
+                                  <button
+                                    type='button'
+                                    className='page-tools-action-btn ghost icon-button configuration-color-auto-button configuration-color-auto-icon'
+                                    onClick={() => onRoomColorChange(site.id, room.id, "")}
+                                    disabled={disabled || !room?.soutenanceColor}
+                                    aria-label={`Réinitialiser la couleur salle de défense ${roomLabel}`}
+                                    title={`Couleur automatique ${roomLabel}`}
+                                  >
+                                    <IconButtonContent label='Auto' icon={RefreshIcon} />
+                                  </button>
+                                </span>
+                              </span>
+                              <span
+                                className='configuration-defense-room-preview'
+                                style={{ "--configuration-defense-preview-color": roomColor }}
+                                aria-hidden='true'
+                              >
+                                <span className='configuration-defense-room-preview-site'>{site?.code || siteLabel}</span>
+                                <span>{roomLabel}</span>
+                              </span>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <p className='configuration-empty-hint'>Aucune salle à colorer.</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <p className='configuration-empty-hint'>Aucun site disponible.</p>
+            )}
+          </div>
+          </section>
+        </div>
       </div>
     </article>
   )
@@ -2004,11 +2436,14 @@ const CatalogSiteCard = ({
   onRemoveClass,
   onCopyClassesFromSite,
   sites = [],
-  disabled = false
+  disabled = false,
+  isExpanded = false,
+  onToggle
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [activeSitePanel, setActiveSitePanel] = useState("rooms")
   const bodyId = `configuration-site-body-${site?.id || site?.code || "site"}`
-  const { roomCount } = getSiteStatistics(site)
+  const handleToggle = typeof onToggle === "function" ? onToggle : () => {}
+  const { roomCount, activeRoomCount, groupCount, activeClassCount } = getSiteStatistics(site)
   const manualRoomTarget = Number.isFinite(Number(schedule?.manualRoomTarget)) && Number(schedule.manualRoomTarget) >= 0
     ? Number(schedule.manualRoomTarget)
     : null
@@ -2016,9 +2451,46 @@ const CatalogSiteCard = ({
     ? Number(schedule.numSlots)
     : DEFAULT_SITE_SCHEDULE.numSlots
   const missingRoomCount = manualRoomTarget === null ? 0 : Math.max(manualRoomTarget - roomCount, 0)
-  const summaryLine = `${compactText(site?.label || site?.code || "Site")} · ${formatRoomNamesSummary(site?.roomDetails)}`
+  const summaryLine = [
+    compactText(site?.label || site?.code || "Site"),
+    formatRoomNamesSummary(site?.roomDetails),
+    `${activeRoomCount}/${roomCount} salle${roomCount > 1 ? "s" : ""} active${activeRoomCount > 1 ? "s" : ""}`,
+    `${slotCount} créneau${slotCount > 1 ? "x" : ""}`,
+    `${groupCount} groupe${groupCount > 1 ? "s" : ""}`,
+    `${activeClassCount} classe${activeClassCount > 1 ? "s" : ""} active${activeClassCount > 1 ? "s" : ""}`
+  ].filter(Boolean).join(" · ")
   const tpiColorLabelId = `${bodyId}-tpi-color-label`
-  const soutenanceColorLabelId = `${bodyId}-soutenance-color-label`
+  const sitePanelTabs = [
+    { id: "rooms", label: "Salles", badge: roomCount },
+    { id: "schedule", label: "Rythme", badge: slotCount },
+    { id: "classes", label: "Classes", badge: activeClassCount },
+    { id: "general", label: "Site", badge: site?.code || "" }
+  ]
+  const handleSitePanelKeyDown = (event, tabIndex) => {
+    let nextIndex = null
+
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        nextIndex = (tabIndex + 1) % sitePanelTabs.length
+        break
+      case "ArrowLeft":
+      case "ArrowUp":
+        nextIndex = (tabIndex - 1 + sitePanelTabs.length) % sitePanelTabs.length
+        break
+      case "Home":
+        nextIndex = 0
+        break
+      case "End":
+        nextIndex = sitePanelTabs.length - 1
+        break
+      default:
+        return
+    }
+
+    event.preventDefault()
+    setActiveSitePanel(sitePanelTabs[nextIndex].id)
+  }
 
   return (
     <article className={`configuration-card configuration-catalog-card configuration-site-stack${isExpanded ? "" : " is-collapsed"}`}>
@@ -2038,7 +2510,10 @@ const CatalogSiteCard = ({
             <button
               type='button'
               className='page-tools-action-btn ghost icon-button'
-              onClick={onAddRoom}
+              onClick={() => {
+                setActiveSitePanel("rooms")
+                onAddRoom()
+              }}
               disabled={disabled}
               aria-label='Ajouter'
               title='Ajouter'
@@ -2057,7 +2532,7 @@ const CatalogSiteCard = ({
             </button>
             <SectionToggleButton
               isOpen={isExpanded}
-              onClick={() => setIsExpanded((current) => !current)}
+              onClick={handleToggle}
               controlsId={bodyId}
               subject={`le site ${site?.label || site?.code || ""}`.trim()}
               iconOnly={true}
@@ -2070,7 +2545,7 @@ const CatalogSiteCard = ({
           <p className='configuration-collapsed-line'>{summaryLine}</p>
           <SectionToggleButton
             isOpen={isExpanded}
-            onClick={() => setIsExpanded((current) => !current)}
+            onClick={handleToggle}
             controlsId={bodyId}
             subject={`le site ${site?.label || site?.code || ""}`.trim()}
             iconOnly={true}
@@ -2080,219 +2555,259 @@ const CatalogSiteCard = ({
       )}
 
       <div id={bodyId} className='configuration-site-stack-body' hidden={!isExpanded}>
-        <div className='configuration-card-grid configuration-card-grid--site'>
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Code</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.code || ""}
-              onChange={(event) => onSiteChange("code", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
+        <div className='page-tools-tabs configuration-site-tabs' role='tablist' aria-label={`Sections du site ${site?.label || site?.code || "site"}`}>
+          {sitePanelTabs.map((tab, tabIndex) => {
+            const isActive = activeSitePanel === tab.id
+            const tabId = `${bodyId}-tab-${tab.id}`
+            const panelId = `${bodyId}-panel-${tab.id}`
 
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Nom</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.label || ""}
-              onChange={(event) => onSiteChange("label", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
+            return (
+              <button
+                key={tab.id}
+                id={tabId}
+                type='button'
+                role='tab'
+                className={`page-tools-tab configuration-site-tab${isActive ? " active" : ""}`.trim()}
+                aria-selected={isActive}
+                aria-controls={panelId}
+                tabIndex={isActive ? 0 : -1}
+                title={tab.label}
+                onClick={() => setActiveSitePanel(tab.id)}
+                onKeyDown={(event) => handleSitePanelKeyDown(event, tabIndex)}
+              >
+                <span className='page-tools-tab-label'>{tab.label}</span>
+                {tab.badge !== "" && tab.badge !== null && tab.badge !== undefined ? (
+                  <span className='page-tools-tab-badge'>{tab.badge}</span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
 
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Couleur planning</span>
-            <input
-              className='page-tools-field-control configuration-color-input'
-              type='color'
-              value={normalizePlanningColor(
-                site?.planningColor || getDefaultPlanningColor(site?.code || site?.label)
-              )}
-              onChange={(event) => onSiteChange("planningColor", event.target.value)}
-              aria-label={`Couleur planning du site ${site?.label || site?.code || "site"}`}
-              disabled={disabled}
-            />
-          </label>
+        <div
+          id={`${bodyId}-panel-general`}
+          className='configuration-site-tab-panel configuration-site-tab-panel--general'
+          role='tabpanel'
+          aria-labelledby={`${bodyId}-tab-general`}
+          hidden={activeSitePanel !== "general"}
+        >
+          <div className='configuration-card-grid configuration-card-grid--site'>
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Code</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={site?.code || ""}
+                onChange={(event) => onSiteChange("code", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
 
-          <div className='page-tools-field configuration-color-field'>
-            <span id={tpiColorLabelId} className='page-tools-field-label'>Couleur TPI</span>
-            <span className='configuration-color-control-row'>
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Nom</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={site?.label || ""}
+                onChange={(event) => onSiteChange("label", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Couleur planning</span>
               <input
                 className='page-tools-field-control configuration-color-input'
                 type='color'
                 value={normalizePlanningColor(
-                  site?.tpiColor ||
-                  getAutoTpiColor(site?.planningColor || getDefaultPlanningColor(site?.code || site?.label))
+                  site?.planningColor || getDefaultPlanningColor(site?.code || site?.label)
                 )}
-                onChange={(event) => onSiteChange("tpiColor", event.target.value)}
-                aria-labelledby={tpiColorLabelId}
+                onChange={(event) => onSiteChange("planningColor", event.target.value)}
+                aria-label={`Couleur planning du site ${site?.label || site?.code || "site"}`}
                 disabled={disabled}
               />
-              <button
-                type='button'
-                className='page-tools-action-btn ghost configuration-color-auto-button'
-                onClick={() => onSiteChange("tpiColor", "")}
-                disabled={disabled || !site?.tpiColor}
-                title='Couleur TPI automatique'
-              >
-                Auto
-              </button>
-            </span>
-          </div>
+            </label>
 
-          <div className='page-tools-field configuration-color-field'>
-            <span id={soutenanceColorLabelId} className='page-tools-field-label'>Couleur défenses</span>
-            <span className='configuration-color-control-row'>
+            <div className='page-tools-field configuration-color-field'>
+              <span id={tpiColorLabelId} className='page-tools-field-label'>Couleur TPI</span>
+              <span className='configuration-color-control-row'>
+                <input
+                  className='page-tools-field-control configuration-color-input'
+                  type='color'
+                  value={normalizePlanningColor(
+                    site?.tpiColor ||
+                    getAutoTpiColor(site?.planningColor || getDefaultPlanningColor(site?.code || site?.label))
+                  )}
+                  onChange={(event) => onSiteChange("tpiColor", event.target.value)}
+                  aria-labelledby={tpiColorLabelId}
+                  disabled={disabled}
+                />
+                <button
+                  type='button'
+                  className='page-tools-action-btn ghost configuration-color-auto-button'
+                  onClick={() => onSiteChange("tpiColor", "")}
+                  disabled={disabled || !site?.tpiColor}
+                  title='Couleur TPI automatique'
+                >
+                  Auto
+                </button>
+              </span>
+            </div>
+
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Adresse 1</span>
               <input
-                className='page-tools-field-control configuration-color-input'
-                type='color'
-                value={resolveSoutenanceColor(site, site?.code || site?.label)}
-                onChange={(event) => onSiteChange("soutenanceColor", event.target.value)}
-                aria-labelledby={soutenanceColorLabelId}
+                className='page-tools-field-control'
+                type='text'
+                value={site?.address?.line1 || ""}
+                onChange={(event) => onAddressChange("line1", event.target.value)}
                 disabled={disabled}
               />
+            </label>
+
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>NPA</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={site?.address?.postalCode || ""}
+                onChange={(event) => onAddressChange("postalCode", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Ville</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={site?.address?.city || ""}
+                onChange={(event) => onAddressChange("city", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Canton</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={site?.address?.canton || ""}
+                onChange={(event) => onAddressChange("canton", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span className='page-tools-field-label'>Pays</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={site?.address?.country || ""}
+                onChange={(event) => onAddressChange("country", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
+          </div>
+
+          <label className='page-tools-field'>
+            <span className='page-tools-field-label'>Notes</span>
+            <input
+              className='page-tools-field-control'
+              type='text'
+              value={site?.notes || ""}
+              onChange={(event) => onSiteChange("notes", event.target.value)}
+              disabled={disabled}
+            />
+          </label>
+        </div>
+
+        <div
+          id={`${bodyId}-panel-rooms`}
+          className='configuration-site-tab-panel configuration-site-tab-panel--rooms'
+          role='tabpanel'
+          aria-labelledby={`${bodyId}-tab-rooms`}
+          hidden={activeSitePanel !== "rooms"}
+        >
+          <div className='configuration-room-list-head'>
+            <div className='configuration-room-list-copy'>
+              <strong>Salles du site</strong>
+              <p className='configuration-empty-hint'>
+                {manualRoomTarget === null
+                  ? `${slotCount} créneau${slotCount > 1 ? "x" : ""} par salle.`
+                  : `${roomCount}/${manualRoomTarget} salle${manualRoomTarget > 1 ? "s" : ""} · ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`}
+              </p>
+            </div>
+            {missingRoomCount > 0 ? (
               <button
                 type='button'
-                className='page-tools-action-btn ghost configuration-color-auto-button'
-                onClick={() => onSiteChange("soutenanceColor", "")}
-                disabled={disabled || !site?.soutenanceColor}
-                title='Couleur défenses par défaut'
-              >
-                Auto
-              </button>
-            </span>
-          </div>
-
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Adresse 1</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.address?.line1 || ""}
-              onChange={(event) => onAddressChange("line1", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>NPA</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.address?.postalCode || ""}
-              onChange={(event) => onAddressChange("postalCode", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Ville</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.address?.city || ""}
-              onChange={(event) => onAddressChange("city", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Canton</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.address?.canton || ""}
-              onChange={(event) => onAddressChange("canton", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-
-          <label className='page-tools-field'>
-            <span className='page-tools-field-label'>Pays</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={site?.address?.country || ""}
-              onChange={(event) => onAddressChange("country", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-        </div>
-
-        <label className='page-tools-field'>
-          <span className='page-tools-field-label'>Notes</span>
-          <input
-            className='page-tools-field-control'
-            type='text'
-            value={site?.notes || ""}
-            onChange={(event) => onSiteChange("notes", event.target.value)}
-            disabled={disabled}
-          />
-        </label>
-
-        <div className='configuration-room-list-head'>
-          <div className='configuration-room-list-copy'>
-            <strong>Salles du site</strong>
-            <p className='configuration-empty-hint'>
-              {manualRoomTarget === null
-                ? `Définis ici les noms. Planification créera ensuite 1 salle par date avec ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`
-                : `${roomCount}/${manualRoomTarget} salle${manualRoomTarget > 1 ? "s" : ""} définie${manualRoomTarget > 1 ? "s" : ""}. Planification créera ensuite 1 salle par date avec ${slotCount} créneau${slotCount > 1 ? "x" : ""}.`}
-            </p>
-          </div>
-          {missingRoomCount > 0 ? (
-            <button
-              type='button'
-              className='page-tools-action-btn secondary icon-button icon-button--with-badge'
-              onClick={() => onGenerateRooms(missingRoomCount)}
-              disabled={disabled}
-              aria-label={`Créer ${missingRoomCount}`}
-              title={`Créer ${missingRoomCount}`}
-            >
-              <IconButtonContent
-                label={`Créer ${missingRoomCount}`}
-                icon={RoomIcon}
-                badge={missingRoomCount}
-              />
-            </button>
-          ) : null}
-        </div>
-
-        <div className='configuration-room-list'>
-          {Array.isArray(site?.roomDetails) && site.roomDetails.length > 0 ? (
-            site.roomDetails.map((room, roomIndex) => (
-              <RoomRow
-                key={room.id || roomIndex}
-                room={room}
-                siteId={site?.id || site?.code || "site"}
-                onChange={(field, value) => onRoomChange(room.id || roomIndex, field, value)}
-                onRemove={() => onRemoveRoom(room.id || roomIndex)}
+                className='page-tools-action-btn secondary icon-button icon-button--with-badge'
+                onClick={() => onGenerateRooms(missingRoomCount)}
                 disabled={disabled}
-              />
-            ))
-          ) : (
-            <p className='configuration-empty-hint'>Aucune salle.</p>
-          )}
+                aria-label={`Créer ${missingRoomCount}`}
+                title={`Créer ${missingRoomCount}`}
+              >
+                <IconButtonContent
+                  label={`Créer ${missingRoomCount}`}
+                  icon={RoomIcon}
+                  badge={missingRoomCount}
+                />
+              </button>
+            ) : null}
+          </div>
+
+          <div className='configuration-room-list'>
+            {Array.isArray(site?.roomDetails) && site.roomDetails.length > 0 ? (
+              site.roomDetails.map((room, roomIndex) => (
+                <RoomRow
+                  key={room.id || roomIndex}
+                  room={room}
+                  siteId={site?.id || site?.code || "site"}
+                  onChange={(field, value) => onRoomChange(room.id || roomIndex, field, value)}
+                  onRemove={() => onRemoveRoom(room.id || roomIndex)}
+                  disabled={disabled}
+                />
+              ))
+            ) : (
+              <p className='configuration-empty-hint'>Aucune salle.</p>
+            )}
+          </div>
         </div>
 
-        <SiteScheduleCard
-          site={site}
-          schedule={schedule}
-          onChange={onScheduleChange}
-          disabled={disabled}
-        />
+        <div
+          id={`${bodyId}-panel-schedule`}
+          className='configuration-site-tab-panel configuration-site-tab-panel--schedule'
+          role='tabpanel'
+          aria-labelledby={`${bodyId}-tab-schedule`}
+          hidden={activeSitePanel !== "schedule"}
+        >
+          <SiteScheduleCard
+            site={site}
+            schedule={schedule}
+            onChange={onScheduleChange}
+            disabled={disabled}
+            defaultExpanded={true}
+          />
+        </div>
 
-        <SiteClassCatalogCard
-          site={site}
-          sites={sites}
-          onClassChange={onClassChange}
-          onAddClass={onAddClass}
-          onRemoveClass={onRemoveClass}
-          onCopyClassesFromSite={onCopyClassesFromSite}
-          disabled={disabled}
-        />
+        <div
+          id={`${bodyId}-panel-classes`}
+          className='configuration-site-tab-panel configuration-site-tab-panel--classes'
+          role='tabpanel'
+          aria-labelledby={`${bodyId}-tab-classes`}
+          hidden={activeSitePanel !== "classes"}
+        >
+          <SiteClassCatalogCard
+            site={site}
+            sites={sites}
+            onClassChange={onClassChange}
+            onAddClass={onAddClass}
+            onRemoveClass={onRemoveClass}
+            onCopyClassesFromSite={onCopyClassesFromSite}
+            disabled={disabled}
+            defaultExpanded={true}
+          />
+        </div>
       </div>
     </article>
   )
@@ -2333,64 +2848,60 @@ const formatTypeBreakdownDates = (typeBreakdown) => {
 }
 
 const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
-  const totals = overview?.totals || {}
+  const [isExpanded, setIsExpanded] = useState(false)
   const sites = Array.isArray(overview?.sites) ? overview.sites : []
   const notes = Array.isArray(overview?.notes) ? overview.notes.filter(Boolean) : []
-  const globalOptimalRooms = Number(totals.recommendedRooms || 0)
-  const globalIntro = totals.tpiCount > 0
-    ? `${formatCountLabel(totals.tpiCount, "TPI")} pris en compte. Optimum théorique global: ${formatCountLabel(globalOptimalRooms, "salle")} par jour de défense.`
-    : "Aucun TPI pris en compte pour le calcul théorique."
   const panelNotes = notes.map((note) => ({ label: note, tone: "muted" }))
+  const bodyId = "configuration-capacity-panel-body"
 
   return (
-    <section className='configuration-panel configuration-panel--capacity'>
+    <section className={`configuration-panel configuration-panel--capacity${isExpanded ? "" : " is-collapsed"}`}>
       <div className='configuration-panel-head'>
         <div className='configuration-panel-head-copy'>
-          <h3>Salles à prévoir</h3>
-          <p className='configuration-section-note'>
-            Calcul théorique basé sur les types de classe, leurs dates de défense et les créneaux par salle.
-          </p>
+          <div className='configuration-panel-title-row'>
+            <span className='configuration-card-kicker'>
+              <ConfigurationIcon className='configuration-panel-icon' />
+            </span>
+            <h3>Salles à prévoir</h3>
+          </div>
+          {error ? <p className='configuration-section-note'>{error}</p> : null}
         </div>
-        <span className='page-tools-chip configuration-panel-head-chip'>
-          <ConfigurationIcon className='configuration-panel-icon' />
-          Dimensionnement
-        </span>
+        <div className='configuration-card-head-actions'>
+          <span className='page-tools-chip configuration-panel-head-chip'>Dimensionnement</span>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject='le dimensionnement des salles'
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
       </div>
 
-      {error ? <p className='configuration-field-hint'>{error}</p> : null}
+      <div id={bodyId} className='configuration-panel-body' hidden={!isExpanded}>
+        {error ? <p className='configuration-field-hint'>{error}</p> : null}
 
-      {isLoading ? (
-        <div className='configuration-empty-state'>
-          <p>Chargement des TPI...</p>
-        </div>
-      ) : (
-        <>
-          <div className='configuration-capacity-explainer'>
-            <p className='configuration-card-note'>
-              {globalIntro}
-            </p>
-            <p className='configuration-card-note'>
-              Formule utilisée: TPI d&apos;un type ÷ dates de défense disponibles ÷ créneaux par salle = nombre de salles optimales.
-            </p>
-            <p className='configuration-card-note'>
-              Cet optimum ne tient pas encore compte des arbitrages de planification: parties prenantes sur 2 salles au même moment, règle des TPI consécutifs configurée par site, préférences individuelles.
-            </p>
+        {isLoading ? (
+          <div className='configuration-empty-state'>
+            <p>Chargement des TPI...</p>
           </div>
+        ) : (
+          <>
+            {panelNotes.length > 0 ? (
+              <div className='configuration-capacity-note-list'>
+                {panelNotes.map((note) => (
+                  <span
+                    key={note.label}
+                    className={`configuration-capacity-note configuration-capacity-note--${note.tone}`.trim()}
+                  >
+                    {note.label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
-          {panelNotes.length > 0 ? (
-            <div className='configuration-capacity-note-list'>
-              {panelNotes.map((note) => (
-                <span
-                  key={note.label}
-                  className={`configuration-capacity-note configuration-capacity-note--${note.tone}`.trim()}
-                >
-                  {note.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className='configuration-capacity-list'>
+            <div className='configuration-capacity-list'>
             {sites.length > 0 ? (
               sites.map((site) => {
                 const progress = site.targetRooms > 0
@@ -2538,19 +3049,23 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
                 <p>Aucun site à dimensionner.</p>
               </div>
             )}
-          </div>
-        </>
-      )}
+            </div>
+          </>
+        )}
+      </div>
     </section>
   )
 }
 
-const PlanningConfiguration = () => {
+const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   const initialYear = useMemo(getInitialSelectedYear, [])
   const [selectedYear, setSelectedYear] = useState(initialYear)
   const [yearDraft, setYearDraft] = useState(() => normalizeYearDraft({}, initialYear, []))
   const [catalogDraft, setCatalogDraft] = useState(() => normalizeCatalogDraft({}))
   const [collapsedClassTypeIds, setCollapsedClassTypeIds] = useState([])
+  const [collapsedSiteIds, setCollapsedSiteIds] = useState([])
+  const [isYearPanelExpanded, setIsYearPanelExpanded] = useState(false)
+  const [isCatalogPanelExpanded, setIsCatalogPanelExpanded] = useState(false)
   const [isYearReady, setIsYearReady] = useState(false)
   const [isCatalogReady, setIsCatalogReady] = useState(false)
   const [isPlanningReady, setIsPlanningReady] = useState(false)
@@ -2650,6 +3165,7 @@ const PlanningConfiguration = () => {
       }
 
       setCatalogDraft(loadedCatalog)
+      setCollapsedSiteIds(getSiteCollapseIds(loadedCatalog.sites))
       catalogBaselineRef.current = JSON.stringify(buildCatalogPayload(loadedCatalog))
 
       try {
@@ -2667,6 +3183,11 @@ const PlanningConfiguration = () => {
 
         const normalized = normalizeYearDraft(config, selectedYear, loadedCatalog.sites)
         setYearDraft(normalized)
+        setCollapsedClassTypeIds(
+          (Array.isArray(normalized?.classTypes) ? normalized.classTypes : [])
+            .map((classType) => classType?.id)
+            .filter(Boolean)
+        )
         yearBaselineRef.current = JSON.stringify(
           buildYearPayload(normalized, selectedYear, loadedCatalog.sites)
         )
@@ -2676,6 +3197,11 @@ const PlanningConfiguration = () => {
         console.error(`Erreur lors du chargement de la configuration ${selectedYear} :`, error)
         const fallback = normalizeYearDraft({}, selectedYear, loadedCatalog.sites)
         setYearDraft(fallback)
+        setCollapsedClassTypeIds(
+          (Array.isArray(fallback?.classTypes) ? fallback.classTypes : [])
+            .map((classType) => classType?.id)
+            .filter(Boolean)
+        )
         yearBaselineRef.current = JSON.stringify(
           buildYearPayload(fallback, selectedYear, loadedCatalog.sites)
         )
@@ -2827,6 +3353,7 @@ const PlanningConfiguration = () => {
   )
 
   const addClassType = useCallback(() => {
+    setIsYearPanelExpanded(true)
     setYearDraft((current) => ({
       ...current,
       classTypes: [
@@ -2837,6 +3364,7 @@ const PlanningConfiguration = () => {
   }, [])
 
   const removeClassType = useCallback((classTypeId) => {
+    setCollapsedClassTypeIds((current) => current.filter((id) => id !== classTypeId))
     setYearDraft((current) => ({
       ...current,
       classTypes: (current.classTypes || []).filter(
@@ -2881,13 +3409,35 @@ const PlanningConfiguration = () => {
   }, [])
 
   const toggleAllYearClassTypes = useCallback(() => {
-    setCollapsedClassTypeIds((current) => (
-      current.length === yearClassTypeIds.length ? [] : [...yearClassTypeIds]
-    ))
-  }, [yearClassTypeIds])
+    if (yearClassTypeIds.length === 0) {
+      return
+    }
+
+    if (areAllYearClassTypesCollapsed) {
+      setIsYearPanelExpanded(true)
+    }
+
+    setCollapsedClassTypeIds((current) => {
+      const classTypeIdSet = new Set(yearClassTypeIds)
+      const currentSet = new Set(current)
+      const allCurrentClassTypesCollapsed = yearClassTypeIds.every((classTypeId) =>
+        currentSet.has(classTypeId)
+      )
+
+      if (allCurrentClassTypesCollapsed) {
+        return current.filter((classTypeId) => !classTypeIdSet.has(classTypeId))
+      }
+
+      return Array.from(new Set([...current, ...yearClassTypeIds]))
+    })
+  }, [areAllYearClassTypesCollapsed, yearClassTypeIds])
 
   const addSite = useCallback(() => {
+    setIsCatalogPanelExpanded(true)
     const nextSite = createBlankSite((catalogDraft.sites || []).length + 1)
+    setCollapsedSiteIds((current) =>
+      current.filter((siteId) => siteId !== getSiteCollapseId(nextSite))
+    )
     setCatalogDraft((current) => ({
       ...current,
       sites: [...(current.sites || []), nextSite]
@@ -2899,6 +3449,7 @@ const PlanningConfiguration = () => {
   }, [catalogDraft.sites])
 
   const removeSite = useCallback((siteId) => {
+    setCollapsedSiteIds((current) => current.filter((id) => id !== siteId))
     setCatalogDraft((current) => ({
       ...current,
       sites: (current.sites || []).filter((site) => site.id !== siteId)
@@ -3145,7 +3696,109 @@ const PlanningConfiguration = () => {
     toast.success(`Classes copiées de ${sourceSite.label || sourceSite.code || sourceSiteId} vers ${targetSite.label || targetSite.code || targetSiteId}.`)
   }, [catalogDraft.sites])
 
-  const siteCards = Array.isArray(catalogDraft?.sites) ? catalogDraft.sites : []
+  const siteCards = useMemo(
+    () => (Array.isArray(catalogDraft?.sites) ? catalogDraft.sites : []),
+    [catalogDraft?.sites]
+  )
+  const catalogSiteIds = useMemo(
+    () => getSiteCollapseIds(siteCards),
+    [siteCards]
+  )
+  const areAllCatalogSitesCollapsed = useMemo(
+    () =>
+      catalogSiteIds.length > 0 &&
+      catalogSiteIds.every((siteId) => collapsedSiteIds.includes(siteId)),
+    [catalogSiteIds, collapsedSiteIds]
+  )
+
+  useEffect(() => {
+    const availableIds = new Set(catalogSiteIds)
+    setCollapsedSiteIds((current) => {
+      const next = current.filter((siteId) => availableIds.has(siteId))
+      return next.length === current.length ? current : next
+    })
+  }, [catalogSiteIds])
+
+  const toggleCatalogSiteExpanded = useCallback((siteId) => {
+    if (!siteId) {
+      return
+    }
+
+    setCollapsedSiteIds((current) =>
+      current.includes(siteId)
+        ? current.filter((id) => id !== siteId)
+        : [...current, siteId]
+    )
+  }, [])
+
+  const toggleAllCatalogSites = useCallback(() => {
+    if (catalogSiteIds.length === 0) {
+      return
+    }
+
+    if (areAllCatalogSitesCollapsed) {
+      setIsCatalogPanelExpanded(true)
+    }
+
+    setCollapsedSiteIds((current) => {
+      const siteIdSet = new Set(catalogSiteIds)
+      const currentSet = new Set(current)
+      const allCurrentSitesCollapsed = catalogSiteIds.every((siteId) =>
+        currentSet.has(siteId)
+      )
+
+      if (allCurrentSitesCollapsed) {
+        return current.filter((siteId) => !siteIdSet.has(siteId))
+      }
+
+      return Array.from(new Set([...current, ...catalogSiteIds]))
+    })
+  }, [areAllCatalogSitesCollapsed, catalogSiteIds])
+
+  const yearPanelSummary = useMemo(() => {
+    if (!isYearReady) {
+      return "Chargement..."
+    }
+
+    const classTypes = Array.isArray(yearDraft?.classTypes) ? yearDraft.classTypes : []
+    const defenseDateCount = classTypes.reduce(
+      (count, classType) => count + countDefenseDates(classType),
+      0
+    )
+    const activeSiteCount = (Array.isArray(yearDraft?.siteConfigs) ? yearDraft.siteConfigs : [])
+      .filter((siteConfig) => siteConfig?.active !== false).length
+
+    return [
+      formatCountLabel(classTypes.length, "type"),
+      formatCountLabel(defenseDateCount, "date"),
+      `${activeSiteCount} site${activeSiteCount > 1 ? "s" : ""} actif${activeSiteCount > 1 ? "s" : ""}`
+    ].join(" · ")
+  }, [isYearReady, yearDraft?.classTypes, yearDraft?.siteConfigs])
+  const catalogPanelSummary = useMemo(() => {
+    if (!isCatalogReady) {
+      return "Chargement..."
+    }
+
+    const totals = siteCards.reduce(
+      (acc, site) => {
+        const stats = getSiteStatistics(site)
+
+        return {
+          activeSites: acc.activeSites + (site?.active === false ? 0 : 1),
+          rooms: acc.rooms + stats.roomCount,
+          activeRooms: acc.activeRooms + stats.activeRoomCount,
+          activeClasses: acc.activeClasses + stats.activeClassCount
+        }
+      },
+      { activeSites: 0, rooms: 0, activeRooms: 0, activeClasses: 0 }
+    )
+
+    return [
+      `${totals.activeSites} site${totals.activeSites > 1 ? "s" : ""} actif${totals.activeSites > 1 ? "s" : ""}`,
+      `${totals.activeRooms}/${totals.rooms} salle${totals.rooms > 1 ? "s" : ""}`,
+      `${totals.activeClasses} classe${totals.activeClasses > 1 ? "s" : ""} active${totals.activeClasses > 1 ? "s" : ""}`
+    ].join(" · ")
+  }, [isCatalogReady, siteCards])
   const [headerStatusSlot, setHeaderStatusSlot] = useState(null)
 
   useEffect(() => {
@@ -3158,10 +3811,6 @@ const PlanningConfiguration = () => {
     return undefined
   }, [])
 
-  const toolbarNavigationLinks = useMemo(
-    () => MAIN_NAVIGATION_LINKS.filter((link) => link?.to !== "/configuration"),
-    []
-  )
   const headerStatusPortal = headerStatusSlot
     ? createPortal(
         <span
@@ -3214,14 +3863,12 @@ const PlanningConfiguration = () => {
       {headerStatusPortal}
       <div className='configuration-page'>
         <PageToolbar
-          id='configuration-hero'
-          className='configuration-hero'
-          eyebrow='Paramètres partagés'
+          id='tools'
+          className='configuration-hero configuration-tools'
           title='Configuration'
-          description='Année, sites, salles, classes.'
           actions={actions}
-          navigationLinks={toolbarNavigationLinks}
-          navigationMode='body'
+          toggleArrow={toggleArrow}
+          isArrowUp={isArrowUp}
           ariaLabel='Outils de configuration'
         />
 
@@ -3233,13 +3880,16 @@ const PlanningConfiguration = () => {
         />
 
         <div className='configuration-grid'>
-        <section className='configuration-panel configuration-panel--year'>
+        <section className={`configuration-panel configuration-panel--year${isYearPanelExpanded ? "" : " is-collapsed"}`}>
           <div className='configuration-panel-head'>
             <div className='configuration-panel-head-copy'>
-              <h3>Année</h3>
-              <p className='configuration-section-note'>
-                Types, dates et rythme.
-              </p>
+              <div className='configuration-panel-title-row'>
+                <span className='configuration-card-kicker'>
+                  <CalendarIcon className='configuration-panel-icon' />
+                </span>
+                <h3>Année</h3>
+              </div>
+              <p className='configuration-section-note'>{yearPanelSummary}</p>
             </div>
             <div className='configuration-card-head-actions'>
               <button
@@ -3262,10 +3912,18 @@ const PlanningConfiguration = () => {
                 closeLabel='Réduire'
                 disabled={yearClassTypeIds.length === 0}
               />
+              <SectionToggleButton
+                isOpen={isYearPanelExpanded}
+                onClick={() => setIsYearPanelExpanded((current) => !current)}
+                controlsId='configuration-year-panel-body'
+                subject='le bloc année'
+                iconOnly={true}
+                className='configuration-collapse-toggle--icon-only'
+              />
             </div>
           </div>
 
-          <div className='configuration-panel-body'>
+          <div id='configuration-year-panel-body' className='configuration-panel-body' hidden={!isYearPanelExpanded}>
             <div className='configuration-class-list'>
               {Array.isArray(yearDraft?.classTypes) && yearDraft.classTypes.length > 0 ? (
                 yearDraft.classTypes.map((classType) => (
@@ -3298,17 +3956,16 @@ const PlanningConfiguration = () => {
           </div>
         </section>
 
-        <section className='configuration-panel configuration-panel--catalog'>
+        <section className={`configuration-panel configuration-panel--catalog${isCatalogPanelExpanded ? "" : " is-collapsed"}`}>
           <div className='configuration-panel-head'>
             <div className='configuration-panel-head-copy'>
-              <span className='page-tools-chip'>
-                <RoomIcon className='configuration-panel-icon' />
-                Catalogue
-              </span>
-              <h3>Sites</h3>
-              <p className='configuration-section-note'>
-                Salles, horaires et classes par site.
-              </p>
+              <div className='configuration-panel-title-row'>
+                <span className='configuration-card-kicker'>
+                  <RoomIcon className='configuration-panel-icon' />
+                </span>
+                <h3>Sites</h3>
+              </div>
+              <p className='configuration-section-note'>{catalogPanelSummary}</p>
             </div>
             <div className='configuration-card-head-actions'>
               <button
@@ -3321,51 +3978,78 @@ const PlanningConfiguration = () => {
               >
                 <IconButtonContent label='Ajouter' icon={PlusIcon} />
               </button>
+              <SectionToggleButton
+                isOpen={!areAllCatalogSitesCollapsed}
+                onClick={toggleAllCatalogSites}
+                subject='tous les sites'
+                iconOnly={true}
+                className='configuration-collapse-toggle--icon-only'
+                openLabel='Ouvrir'
+                closeLabel='Réduire'
+                disabled={catalogSiteIds.length === 0}
+              />
+              <SectionToggleButton
+                isOpen={isCatalogPanelExpanded}
+                onClick={() => setIsCatalogPanelExpanded((current) => !current)}
+                controlsId='configuration-catalog-panel-body'
+                subject='le bloc sites'
+                iconOnly={true}
+                className='configuration-collapse-toggle--icon-only'
+              />
             </div>
           </div>
 
-          <div className='configuration-panel-body'>
+          <div id='configuration-catalog-panel-body' className='configuration-panel-body' hidden={!isCatalogPanelExpanded}>
             <div className='configuration-site-groups'>
-              <StakeholderIconsCard
-                icons={catalogDraft?.stakeholderIcons}
-                onChange={updateStakeholderIcon}
+              <DefenseRoomsAppearanceCard
+                sites={siteCards}
+                stakeholderIcons={catalogDraft?.stakeholderIcons}
+                onSiteColorChange={(siteId, value) => updateSiteField(siteId, "soutenanceColor", value)}
+                onRoomColorChange={(siteId, roomId, value) => updateRoomField(siteId, roomId, "soutenanceColor", value)}
+                onIconChange={updateStakeholderIcon}
                 disabled={!isCatalogReady}
               />
 
               {siteCards.length > 0 ? (
-                siteCards.map((site) => (
-                  <CatalogSiteCard
-                    key={site.id}
-                    site={site}
-                    schedule={siteScheduleById.get(compactText(site.id).toLowerCase())}
-                    sites={siteCards}
-                    onSiteChange={(field, value) => updateSiteField(site.id, field, value)}
-                    onAddressChange={(field, value) => updateSiteAddressField(site.id, field, value)}
-                    onRoomChange={(roomId, field, value) => updateRoomField(site.id, roomId, field, value)}
-                    onAddRoom={() => addRoom(site.id)}
-                    onGenerateRooms={(count) => generateRoomsFromTarget(site.id, count)}
-                    onRemoveRoom={(roomId) => removeRoom(site.id, roomId)}
-                    onRemoveSite={() => removeSite(site.id)}
-                    onScheduleChange={(field, value) => {
-                      setYearDraft((current) => ({
-                        ...current,
-                        siteConfigs: syncSiteConfigsToCatalog(
-                          (current.siteConfigs || []).map((siteConfig) =>
-                            compactText(siteConfig.siteId).toLowerCase() === compactText(site.id).toLowerCase()
-                              ? { ...siteConfig, [field]: value }
-                              : siteConfig
-                          ),
-                          catalogDraft.sites
-                        )
-                      }))
-                    }}
-                    onClassChange={updateSiteClassEntryField}
-                    onAddClass={addSiteClassEntry}
-                    onRemoveClass={removeSiteClassEntry}
-                    onCopyClassesFromSite={(sourceSiteId) => copySiteClassGroups(site.id, sourceSiteId)}
-                    disabled={!isCatalogReady}
-                  />
-                ))
+                siteCards.map((site, siteIndex) => {
+                  const siteCollapseId = getSiteCollapseId(site, siteIndex)
+
+                  return (
+                    <CatalogSiteCard
+                      key={site.id || siteCollapseId}
+                      site={site}
+                      schedule={siteScheduleById.get(compactText(site.id).toLowerCase())}
+                      sites={siteCards}
+                      onSiteChange={(field, value) => updateSiteField(site.id, field, value)}
+                      onAddressChange={(field, value) => updateSiteAddressField(site.id, field, value)}
+                      onRoomChange={(roomId, field, value) => updateRoomField(site.id, roomId, field, value)}
+                      onAddRoom={() => addRoom(site.id)}
+                      onGenerateRooms={(count) => generateRoomsFromTarget(site.id, count)}
+                      onRemoveRoom={(roomId) => removeRoom(site.id, roomId)}
+                      onRemoveSite={() => removeSite(site.id)}
+                      onScheduleChange={(field, value) => {
+                        setYearDraft((current) => ({
+                          ...current,
+                          siteConfigs: syncSiteConfigsToCatalog(
+                            (current.siteConfigs || []).map((siteConfig) =>
+                              compactText(siteConfig.siteId).toLowerCase() === compactText(site.id).toLowerCase()
+                                ? { ...siteConfig, [field]: value }
+                                : siteConfig
+                            ),
+                            catalogDraft.sites
+                          )
+                        }))
+                      }}
+                      onClassChange={updateSiteClassEntryField}
+                      onAddClass={addSiteClassEntry}
+                      onRemoveClass={removeSiteClassEntry}
+                      onCopyClassesFromSite={(sourceSiteId) => copySiteClassGroups(site.id, sourceSiteId)}
+                      disabled={!isCatalogReady}
+                      isExpanded={!collapsedSiteIds.includes(siteCollapseId)}
+                      onToggle={() => toggleCatalogSiteExpanded(siteCollapseId)}
+                    />
+                  )
+                })
               ) : (
                 <div className='configuration-empty-state'>
                   <p>Aucun site.</p>

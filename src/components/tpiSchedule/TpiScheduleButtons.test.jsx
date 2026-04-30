@@ -85,6 +85,9 @@ const baseProps = {
     ETML: ['A101', 'B202']
   },
   onGenerateRoomsFromCatalog: jest.fn(),
+  onShowNewRoomForm: jest.fn(),
+  onCreateRoom: jest.fn(),
+  onCancelCreateRoom: jest.fn(),
   soutenanceDates: [
     { date: '2026-06-10' },
     { date: '2026-06-12', classes: ['MATU', 'M'] }
@@ -339,6 +342,15 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('button', { name: /Créer les rooms du planning/i }))
 
     expect(baseProps.onGenerateRoomsFromCatalog).toHaveBeenCalledTimes(1)
+  })
+
+  test('ouvre le formulaire de création d une room manuelle', () => {
+    renderButtons()
+
+    fireEvent.click(screen.getByRole('button', { name: /Salles/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Créer une room/i }))
+
+    expect(baseProps.onShowNewRoomForm).toHaveBeenCalledTimes(1)
   })
 
   test('affiche le bouton focus dans le panneau des salles et déclenche le callback', () => {

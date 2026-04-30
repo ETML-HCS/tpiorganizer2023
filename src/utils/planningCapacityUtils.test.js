@@ -79,7 +79,7 @@ describe("planningCapacityUtils", () => {
     expect(overview.sites[0].siteLabel).toBe("Sébeillon")
     expect(overview.sites[0].siteStatusLabel).toBe("Actif")
     expect(overview.sites[0].classTypeCounts).toEqual([{ code: "CFC", count: 4 }])
-    expect(overview.sites[0].scheduleLabel).toBe("4 créneaux/salle · 60 min/TPI · pause 10 min")
+    expect(overview.sites[0].scheduleLabel).toBe("4 créneaux/salle · min 3 TPI/salle · 60 min/TPI · pause 10 min")
     expect(overview.sites[0].typeBreakdowns).toEqual([
       expect.objectContaining({
         code: "CFC",

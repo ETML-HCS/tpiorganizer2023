@@ -1,39 +1,18 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const jwt = require('jsonwebtoken')
 const mongoose = require('mongoose')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
+const {
+  buildSessionToken,
+  closeServer,
+  DEFAULT_USER_ID,
+  startServer
+} = require('./helpers/httpTest')
 const Person = require('../models/personModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const Slot = require('../models/slotModel')
 const { MagicLink } = require('../models/magicLinkModel')
-
-const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
-
-async function startServer(app) {
-  return await new Promise(resolve => {
-    const server = app.listen(0, () => {
-      const address = server.address()
-      resolve({
-        server,
-        baseUrl: `http://127.0.0.1:${address.port}`
-      })
-    })
-  })
-}
-
-function buildSessionToken(secret) {
-  return jwt.sign(
-    {
-      id: VALID_OBJECT_ID,
-      email: 'planner@example.com',
-      roles: ['admin']
-    },
-    secret,
-    { expiresIn: '1h' }
-  )
-}
 
 test('POST /api/planning/persons/import rejects empty content', async () => {
   const jwtSecret = 'test-jwt-secret'
@@ -59,7 +38,7 @@ test('POST /api/planning/persons/import rejects empty content', async () => {
     const error = await response.json()
     assert.equal(error.error, 'Contenu CSV requis')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -88,7 +67,7 @@ test('POST /api/planning/persons/purge requires confirmation', async () => {
     const error = await response.json()
     assert.equal(error.error, 'Confirmation requise')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -164,7 +143,7 @@ test('POST /api/planning/persons merges roles when the email already exists', as
   } finally {
     Person.findOne = originalFindOne
     Person.prototype.save = originalSave
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -245,7 +224,7 @@ test('POST /api/planning/persons updates a synthetic organizer email when the na
     Person.findOne = originalFindOne
     Person.find = originalFind
     Person.prototype.save = originalSave
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -270,7 +249,7 @@ test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferr
       options
     })
 
-    const response = await fetch(`${baseUrl}/api/planning/persons/${VALID_OBJECT_ID}`, {
+    const response = await fetch(`${baseUrl}/api/planning/persons/${DEFAULT_USER_ID}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -294,7 +273,7 @@ test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferr
 
     assert.equal(response.status, 200)
     const body = await response.json()
-    assert.equal(body._id, VALID_OBJECT_ID)
+    assert.equal(body._id, DEFAULT_USER_ID)
     assert.equal(body.sendEmails, false)
     assert.deepEqual(body.candidateYears, [2025, 2026])
     assert.deepEqual(body.preferredSoutenanceDates, ['2026-06-12', '2026-06-10'])
@@ -307,7 +286,7 @@ test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferr
   } finally {
     Person.findByIdAndUpdate = originalFindByIdAndUpdate
     Person.findOne = originalFindOne
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -334,7 +313,7 @@ test('GET /api/planning/persons accepts prefixed short id search', async () => {
             sort() {
               return Promise.resolve([
                 {
-                  _id: VALID_OBJECT_ID,
+                  _id: DEFAULT_USER_ID,
                   firstName: 'Alice',
                   lastName: 'Martin',
                   email: 'alice@example.com',
@@ -363,7 +342,7 @@ test('GET /api/planning/persons accepts prefixed short id search', async () => {
     assert.ok(receivedFilter.$or.some((entry) => entry?.shortId === 1))
   } finally {
     Person.find = originalFind
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -532,7 +511,7 @@ test('POST /api/planning/persons/merge merges duplicate people and rewires refer
     Slot.updateMany = originalSlotUpdateMany
     MagicLink.updateMany = originalMagicLinkUpdateMany
     mongoose.connection.db = originalDb
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -638,7 +617,7 @@ test('POST /api/planning/persons/merge allows manual merge when identities diffe
     Slot.updateMany = originalSlotUpdateMany
     MagicLink.updateMany = originalMagicLinkUpdateMany
     mongoose.connection.db = originalDb
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })

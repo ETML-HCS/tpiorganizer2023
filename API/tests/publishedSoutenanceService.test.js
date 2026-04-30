@@ -89,28 +89,41 @@ test('enrichPublishedRoomsAppearance applique la couleur et les SVG configurés'
           soutenanceColor: '#123456'
         },
         tpiDatas: []
+      },
+      {
+        idRoom: 4,
+        site: 'ETML',
+        name: 'A102',
+        configSite: {
+          numSlots: 8
+        },
+        tpiDatas: []
       }
     ],
     {
       stakeholderIcons: {
-        candidate: 'candidate',
-        expert1: 'candidate',
-        expert2: 'participant',
-        projectManager: 'participant'
+        candidate: 'candidate-rose',
+        expert1: 'helmet-orange',
+        expert2: 'helmet-blue',
+        projectManager: 'helmet-gray'
       },
       siteAppearanceByCode: new Map([
         ['ETML', { soutenanceColor: '#0f766e' }]
+      ]),
+      roomAppearanceByKey: new Map([
+        ['ETML|A101', { soutenanceColor: '#be185d' }]
       ])
     }
   )
 
   assert.equal(enriched[0].configSite.numSlots, 8)
-  assert.equal(enriched[0].configSite.soutenanceColor, '#0F766E')
+  assert.equal(enriched[0].configSite.soutenanceColor, '#BE185D')
+  assert.equal(enriched[1].configSite.soutenanceColor, '#0F766E')
   assert.deepEqual(enriched[0].configSite.stakeholderIcons, {
-    candidate: 'candidate',
-    expert1: 'candidate',
-    expert2: 'participant',
-    projectManager: 'participant'
+    candidate: 'candidate-rose',
+    expert1: 'helmet-orange',
+    expert2: 'helmet-blue',
+    projectManager: 'helmet-gray'
   })
 })
 
@@ -143,6 +156,7 @@ test('enrichPublishedRoomsScheduleConfig garde le nombre total de créneaux conf
           tpiTimeMinutes: 60,
           firstTpiStartTime: '08:00',
           numSlots: 4,
+          minTpiPerRoom: 2,
           active: true
         }
       ]
@@ -151,6 +165,7 @@ test('enrichPublishedRoomsScheduleConfig garde le nombre total de créneaux conf
 
   assert.equal(rooms[0].configSite.numSlots, 4)
   assert.equal(rooms[0].configSite.firstTpiStart, 8)
+  assert.equal(rooms[0].configSite.minTpiPerRoom, 2)
   assert.equal(rooms[0].tpiDatas.length, 4)
   assert.equal(rooms[0].tpiDatas[1].refTpi, '2163')
   assert.equal(rooms[0].tpiDatas[0].refTpi, null)

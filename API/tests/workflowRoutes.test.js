@@ -1,42 +1,13 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const jwt = require('jsonwebtoken')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
-
-const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
-
-async function startServer(app) {
-  return await new Promise(resolve => {
-    const server = app.listen(0, () => {
-      const address = server.address()
-      resolve({
-        server,
-        baseUrl: `http://127.0.0.1:${address.port}`
-      })
-    })
-  })
-}
-
-function buildSessionToken(secret, roles = ['admin']) {
-  return jwt.sign(
-    {
-      id: VALID_OBJECT_ID,
-      email: 'planner@example.com',
-      roles
-    },
-    secret,
-    { expiresIn: '1h' }
-  )
-}
-
-function patchMethod(target, key, implementation) {
-  const original = target[key]
-  target[key] = implementation
-  return () => {
-    target[key] = original
-  }
-}
+const {
+  buildSessionToken,
+  closeServer,
+  startServer
+} = require('./helpers/httpTest')
+const { replaceProperty: patchMethod } = require('./helpers/stubSandbox')
 
 test('GET /api/workflow/:year rejects invalid year format', async () => {
   const jwtSecret = 'test-jwt-secret'
@@ -54,7 +25,7 @@ test('GET /api/workflow/:year rejects invalid year format', async () => {
     const body = await response.json()
     assert.equal(body.error, 'Ann\u00e9e invalide.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -75,7 +46,7 @@ test('GET /api/workflow/:year/planification/validate rejects invalid year format
     const body = await response.json()
     assert.equal(body.error, 'Ann\u00e9e invalide.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -100,7 +71,7 @@ test('POST /api/workflow/:year/planification/freeze requires authentication', as
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -129,7 +100,7 @@ test('POST /api/workflow/:year/planification/freeze enforces admin role', async 
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -153,7 +124,7 @@ test('POST /api/workflow/:year/votes/start requires authentication', async () =>
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -181,7 +152,7 @@ test('POST /api/workflow/:year/votes/start enforces admin role', async () => {
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -240,7 +211,7 @@ test('POST /api/workflow/:year/votes/start accepts skipEmails in debug mode', as
     while (restore.length > 0) {
       restore.pop()()
     }
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -290,7 +261,7 @@ test('POST /api/workflow/:year/votes/start rejects skipEmails outside debug mode
     while (restore.length > 0) {
       restore.pop()()
     }
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -315,7 +286,7 @@ test('POST /api/workflow/:year/access-links/preview requires authentication', as
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -344,7 +315,7 @@ test('POST /api/workflow/:year/access-links/preview enforces admin role', async 
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -369,7 +340,7 @@ test('POST /api/workflow/:year/votes/dev-email requires authentication', async (
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -398,7 +369,7 @@ test('POST /api/workflow/:year/votes/dev-email enforces admin role', async () =>
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -428,7 +399,7 @@ test('POST /api/workflow/:year/votes/dev-email is unavailable outside debug mode
     const body = await response.json()
     assert.equal(body.error, 'Route indisponible.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -453,7 +424,7 @@ test('POST /api/workflow/:year/publication/dev-email requires authentication', a
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -482,7 +453,7 @@ test('POST /api/workflow/:year/publication/dev-email enforces admin role', async
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -512,7 +483,7 @@ test('POST /api/workflow/:year/publication/dev-email is unavailable outside debu
     const body = await response.json()
     assert.equal(body.error, 'Route indisponible.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -536,7 +507,7 @@ test('POST /api/workflow/:year/votes/close requires authentication', async () =>
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -560,7 +531,7 @@ test('POST /api/workflow/:year/publication/publish requires authentication', asy
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -588,7 +559,7 @@ test('POST /api/workflow/:year/publication/publish enforces admin role', async (
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -635,7 +606,7 @@ test('POST /api/workflow/:year/publication/publish waits until all votes are res
     while (restore.length > 0) {
       restore.pop()()
     }
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -759,7 +730,7 @@ test('POST /api/workflow/:year/publication/publish can publish directly from a v
     while (restore.length > 0) {
       restore.pop()()
     }
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -783,7 +754,7 @@ test('POST /api/workflow/:year/publication/send-links requires authentication', 
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -813,7 +784,7 @@ test('POST /api/workflow/:year/reset validates confirmation phrase', async () =>
     assert.equal(body.error, 'Confirmation de reset invalide.')
     assert.equal(body.details.expectedConfirmation, 'RECOMMENCER 2026')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -873,7 +844,7 @@ test('POST /api/workflow/:year/reset resets workflow and returns planning state'
     while (restore.length > 0) {
       restore.pop()()
     }
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -898,7 +869,7 @@ test('POST /api/workflow/:year/transition requires authentication', async () => 
 
     assert.equal(response.status, 401)
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -927,7 +898,7 @@ test('POST /api/workflow/:year/transition enforces admin role', async () => {
     const body = await response.json()
     assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })
@@ -956,7 +927,7 @@ test('POST /api/workflow/:year/transition validates targetState', async () => {
     const body = await response.json()
     assert.equal(body.error, 'Etat workflow invalide.')
   } finally {
-    await new Promise(resolve => server.close(resolve))
+    await closeServer(server)
     restoreEnv()
   }
 })

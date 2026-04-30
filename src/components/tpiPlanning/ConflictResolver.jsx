@@ -275,14 +275,14 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
                     <div className="participants-list">
                       <div className="participant">
                         <span className="role">
-                          <ExpertIcon className="participant-icon" />
+                          <ExpertIcon className="participant-icon" badge="1" />
                           Expert 1:
                         </span>
                         <span className="name">{tpi.expert1?.firstName} {tpi.expert1?.lastName}</span>
                       </div>
                       <div className="participant">
                         <span className="role">
-                          <ExpertIcon className="participant-icon" />
+                          <ExpertIcon className="participant-icon" badge="2" />
                           Expert 2:
                         </span>
                         <span className="name">{tpi.expert2?.firstName} {tpi.expert2?.lastName}</span>

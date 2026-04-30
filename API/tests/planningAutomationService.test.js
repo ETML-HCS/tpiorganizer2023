@@ -5,7 +5,8 @@ const Person = require('../models/personModel')
 const {
   buildAutomaticSlotDocuments,
   buildLegacyRoomsFromAutomaticSlots,
-  computeAutomaticAssignments
+  computeAutomaticAssignments,
+  resolveTaskAllowedDateKeys
 } = require('../services/planningAutomationService')
 
 function makeSiteContext(overrides = {}) {
@@ -18,6 +19,7 @@ function makeSiteContext(overrides = {}) {
     roomCapacityByName: new Map([['A101', 18]]),
     numSlots: 4,
     maxConsecutiveTpi: 4,
+    minTpiPerRoom: 3,
     tpiTimeMinutes: 60,
     breaklineMinutes: 10,
     firstTpiStartTime: '08:00',
@@ -59,7 +61,8 @@ function makeTask(index, siteContext, overrides = {}) {
   return {
     tpi: {
       _id: id,
-      year: 2026
+      year: 2026,
+      classe: overrides.classe || 'DEV4'
     },
     tpiId: id,
     reference: overrides.reference || `TPI-2026-${String(index).padStart(3, '0')}`,
@@ -138,6 +141,74 @@ test('buildAutomaticSlotDocuments cree une salle supplementaire si un seul crene
   assert.deepEqual(
     slotDocuments.map((slot) => slot.status),
     ['proposed', 'proposed']
+  )
+})
+
+test('computeAutomaticAssignments utilise le minimum de TPI par salle configure comme preference souple', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 4,
+    minTpiPerRoom: 2
+  })
+  const tasks = Array.from({ length: 6 }, (_, index) =>
+    makeTask(index + 1, siteContext)
+  )
+
+  const result = computeAutomaticAssignments(tasks)
+  const loadByRoom = result.assignments.reduce((accumulator, assignment) => {
+    const roomName = assignment.placement.roomName
+    accumulator[roomName] = (accumulator[roomName] || 0) + 1
+    return accumulator
+  }, {})
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.deepEqual(loadByRoom, {
+    A101: 4,
+    'ETML 02': 2
+  })
+})
+
+test('resolveTaskAllowedDateKeys force la date TPI seulement si elle respecte les dates de classe', () => {
+  assert.deepEqual(
+    resolveTaskAllowedDateKeys(
+      { dates: { soutenance: '2026-06-03' } },
+      ['2026-06-03', '2026-06-10']
+    ),
+    ['2026-06-03']
+  )
+  assert.deepEqual(
+    resolveTaskAllowedDateKeys(
+      { dates: { soutenance: '2026-06-03' } },
+      ['2026-06-10']
+    ),
+    ['2026-06-10']
+  )
+  assert.deepEqual(
+    resolveTaskAllowedDateKeys(
+      { dates: { soutenance: '2026-06-03' } },
+      []
+    ),
+    ['2026-06-03']
+  )
+})
+
+test('computeAutomaticAssignments equilibre une salle ouverte avec au moins 3 TPI quand possible', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 4
+  })
+  const tasks = Array.from({ length: 6 }, (_, index) => makeTask(index + 1, siteContext))
+
+  const result = computeAutomaticAssignments(tasks)
+  const roomLoads = result.assignments.reduce((loads, assignment) => {
+    const roomName = assignment.placement.roomName
+    loads.set(roomName, Number(loads.get(roomName) || 0) + 1)
+    return loads
+  }, new Map())
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments.length, 6)
+  assert.deepEqual(
+    Array.from(roomLoads.values()).sort((left, right) => left - right),
+    [3, 3]
   )
 })
 
@@ -257,6 +328,26 @@ test('computeAutomaticAssignments interdit le meme participant sur deux salles a
   assert.deepEqual(assignedPeriods, [1, 2])
 })
 
+test('computeAutomaticAssignments saute une salle MATU incompatible pour un TPI non-MATU', () => {
+  const siteContext = makeSiteContext({
+    roomNames: ['M101', 'A101'],
+    roomCapacityByName: new Map([
+      ['M101', 18],
+      ['A101', 18]
+    ]),
+    numSlots: 1
+  })
+  const task = makeTask(1, siteContext, {
+    classe: 'DEV4'
+  })
+
+  const result = computeAutomaticAssignments([task])
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments.length, 1)
+  assert.equal(result.assignments[0].placement.roomName, 'A101')
+})
+
 test('computeAutomaticAssignments privilegie une date ideale quand deux TPI se disputent les memes creneaux', () => {
   const siteContext = makeSiteContext({
     numSlots: 1
@@ -325,6 +416,111 @@ test('computeAutomaticAssignments privilegie un creneau exact quand la date est 
   assert.equal(result.assignments.length, 2)
   assert.equal(assignmentByReference.get('TPI-2026-001'), 2)
   assert.equal(assignmentByReference.get('TPI-2026-002'), 1)
+})
+
+test('computeAutomaticAssignments revient en arriere quand un choix glouton bloque une contrainte', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 3
+  })
+  const sharedExpert = makeParticipant('expert-shared', 'Expert Shared', { role: 'expert1' })
+  const makeAvailability = (periods) => (_date, period) => periods.includes(Number(period))
+  const tasks = [
+    makeTask(1, siteContext, {
+      participants: [
+        makeParticipant('cand-1', 'Candidate One', {
+          role: 'candidat',
+          isAvailableOn: makeAvailability([1, 2])
+        }),
+        sharedExpert,
+        makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+        makeParticipant('boss-1', 'Boss One', { role: 'chefProjet' })
+      ]
+    }),
+    makeTask(2, siteContext, {
+      participants: [
+        makeParticipant('cand-2', 'Candidate Two', {
+          role: 'candidat',
+          isAvailableOn: makeAvailability([1, 3])
+        }),
+        sharedExpert,
+        makeParticipant('expert-b-2', 'Expert B Two', { role: 'expert2' }),
+        makeParticipant('boss-2', 'Boss Two', { role: 'chefProjet' })
+      ]
+    }),
+    makeTask(3, siteContext, {
+      participants: [
+        makeParticipant('cand-3', 'Candidate Three', {
+          role: 'candidat',
+          isAvailableOn: makeAvailability([1, 3])
+        }),
+        sharedExpert,
+        makeParticipant('expert-b-3', 'Expert B Three', { role: 'expert2' }),
+        makeParticipant('boss-3', 'Boss Three', { role: 'chefProjet' })
+      ]
+    })
+  ]
+
+  const result = computeAutomaticAssignments(tasks)
+  const assignmentByReference = new Map(
+    result.assignments.map((entry) => [entry.task.reference, entry.placement.period])
+  )
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments.length, 3)
+  assert.equal(assignmentByReference.get('TPI-2026-001'), 2)
+  assert.deepEqual(
+    [
+      assignmentByReference.get('TPI-2026-002'),
+      assignmentByReference.get('TPI-2026-003')
+    ].sort((left, right) => left - right),
+    [1, 3]
+  )
+})
+
+test('computeAutomaticAssignments evite une nouvelle salle pour une simple preference', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 2
+  })
+  const sharedExpert = makeParticipant('expert-shared', 'Expert Shared', { role: 'expert1' })
+  const neutralTask = makeTask(1, siteContext, {
+    participants: [
+      makeParticipant('cand-1', 'Candidate One', { role: 'candidat' }),
+      sharedExpert,
+      makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+      makeParticipant('boss-1', 'Boss One', { role: 'chefProjet' })
+    ],
+    allowedDateKeys: ['2026-06-10']
+  })
+  const otherDayTask = makeTask(2, siteContext, {
+    participants: [
+      makeParticipant('cand-2', 'Candidate Two', { role: 'candidat' }),
+      sharedExpert,
+      makeParticipant('expert-b-2', 'Expert B Two', { role: 'expert2' }),
+      makeParticipant('boss-2', 'Boss Two', { role: 'chefProjet' })
+    ],
+    allowedDateKeys: ['2026-06-11']
+  })
+  const preferredTask = makeTask(3, siteContext, {
+    participants: [
+      makeParticipant('cand-3', 'Candidate Three', {
+        role: 'candidat',
+        preferredSoutenanceChoices: [{ date: '2026-06-10', period: 1 }]
+      }),
+      makeParticipant('expert-a-3', 'Expert A Three', { role: 'expert1' }),
+      makeParticipant('expert-b-3', 'Expert B Three', { role: 'expert2' }),
+      makeParticipant('boss-3', 'Boss Three', { role: 'chefProjet' })
+    ],
+    allowedDateKeys: ['2026-06-10']
+  })
+
+  const result = computeAutomaticAssignments([neutralTask, otherDayTask, preferredTask])
+  const preferredAssignment = result.assignments.find((entry) => entry.task.reference === 'TPI-2026-003')
+  const dateTenRooms = result.generatedRoomsBySiteDate.get('ETML|2026-06-10')
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(preferredAssignment.placement.roomName, 'A101')
+  assert.equal(preferredAssignment.placement.period, 2)
+  assert.deepEqual(dateTenRooms, ['A101'])
 })
 
 test('computeAutomaticAssignments respecte les indisponibilites declarees des participants', () => {
@@ -447,6 +643,7 @@ test('buildLegacyRoomsFromAutomaticSlots reconstruit le format legacy attendu pa
   assert.equal(legacyRooms[0].name, 'A101')
   assert.equal(legacyRooms[0].configSite.numSlots, 3)
   assert.equal(legacyRooms[0].configSite.maxConsecutiveTpi, 4)
+  assert.equal(legacyRooms[0].configSite.minTpiPerRoom, 3)
   assert.equal(legacyRooms[0].tpiDatas.length, 3)
   assert.equal(legacyRooms[0].tpiDatas[0].refTpi, '2163')
   assert.equal(legacyRooms[0].tpiDatas[0].id, 'TPI-2026-2163')

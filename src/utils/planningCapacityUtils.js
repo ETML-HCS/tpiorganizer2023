@@ -4,6 +4,7 @@ import { resolvePlanningCatalogSite } from "../components/tpiPlanning/planningCa
 export const DEFAULT_PLANNING_ROOM_SLOTS = 8
 const DEFAULT_PLANNING_TPI_TIME_MINUTES = 60
 const DEFAULT_PLANNING_BREAKLINE_MINUTES = 10
+const DEFAULT_MIN_TPI_PER_ROOM = 3
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -192,6 +193,9 @@ const createBucket = (meta = {}) => ({
   breaklineMinutes: Number.isFinite(Number(meta.breaklineMinutes)) && Number(meta.breaklineMinutes) >= 0
     ? Number(meta.breaklineMinutes)
     : DEFAULT_PLANNING_BREAKLINE_MINUTES,
+  minTpiPerRoom: Number.isInteger(Number(meta.minTpiPerRoom)) && Number(meta.minTpiPerRoom) > 0
+    ? Number(meta.minTpiPerRoom)
+    : DEFAULT_MIN_TPI_PER_ROOM,
   manualRoomTarget: hasManualRoomTarget(meta.manualRoomTarget)
     ? Number(meta.manualRoomTarget)
     : null,
@@ -282,8 +286,8 @@ const getTpiActualDateKeys = (tpi) =>
     tpi?.dates?.soutenance
   ])
 
-const formatScheduleLabel = (slotsPerRoom, tpiTimeMinutes, breaklineMinutes) =>
-  `${slotsPerRoom} créneaux/salle · ${tpiTimeMinutes} min/TPI · pause ${breaklineMinutes} min`
+const formatScheduleLabel = (slotsPerRoom, tpiTimeMinutes, breaklineMinutes, minTpiPerRoom) =>
+  `${slotsPerRoom} créneaux/salle · min ${minTpiPerRoom} TPI/salle · ${tpiTimeMinutes} min/TPI · pause ${breaklineMinutes} min`
 
 const formatDateLabel = (dateKey) => {
   const date = new Date(dateKey)
@@ -415,7 +419,12 @@ const finalizeBucket = (bucket) => {
     classTypeSummary: classTypeCounts
       .map((entry) => `${entry.code} ${entry.count}`)
       .join(" · "),
-    scheduleLabel: formatScheduleLabel(bucket.slotsPerRoom, bucket.tpiTimeMinutes, bucket.breaklineMinutes),
+    scheduleLabel: formatScheduleLabel(
+      bucket.slotsPerRoom,
+      bucket.tpiTimeMinutes,
+      bucket.breaklineMinutes,
+      bucket.minTpiPerRoom
+    ),
     constraintHints,
     siteStatusLabel: bucket.siteKind === "catalog"
       ? (bucket.siteActive ? "Actif" : "Inactif")
@@ -468,6 +477,9 @@ export const buildPlanningRoomSizingOverview = ({
       breaklineMinutes: Number.isFinite(Number(siteConfig?.breaklineMinutes)) && Number(siteConfig.breaklineMinutes) >= 0
         ? Number(siteConfig.breaklineMinutes)
         : DEFAULT_PLANNING_BREAKLINE_MINUTES,
+      minTpiPerRoom: Number.isInteger(Number(siteConfig?.minTpiPerRoom)) && Number(siteConfig.minTpiPerRoom) > 0
+        ? Number(siteConfig.minTpiPerRoom)
+        : DEFAULT_MIN_TPI_PER_ROOM,
       manualRoomTarget: siteConfig?.manualRoomTarget,
       matchedSite: site
     })
@@ -505,6 +517,9 @@ export const buildPlanningRoomSizingOverview = ({
           breaklineMinutes: Number.isFinite(Number(siteConfig?.breaklineMinutes)) && Number(siteConfig.breaklineMinutes) >= 0
             ? Number(siteConfig.breaklineMinutes)
             : DEFAULT_PLANNING_BREAKLINE_MINUTES,
+          minTpiPerRoom: Number.isInteger(Number(siteConfig?.minTpiPerRoom)) && Number(siteConfig.minTpiPerRoom) > 0
+            ? Number(siteConfig.minTpiPerRoom)
+            : DEFAULT_MIN_TPI_PER_ROOM,
           manualRoomTarget: siteConfig?.manualRoomTarget,
           matchedSite
         }))

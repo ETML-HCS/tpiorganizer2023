@@ -413,3 +413,148 @@ test('POST /api/planning/votes/respond/:tpiId enregistre une proposition scoped 
     restoreEnv()
   }
 })
+
+test('POST /api/planning/votes/respond/:tpiId enregistre une réponse OK simple sur la date fixée', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const scopedTpiId = new mongoose.Types.ObjectId().toString()
+  const fixedSlotId = new mongoose.Types.ObjectId().toString()
+  const altSlotId = new mongoose.Types.ObjectId().toString()
+  const fixedVoteId = new mongoose.Types.ObjectId().toString()
+  const altVoteId = new mongoose.Types.ObjectId().toString()
+
+  const token = jwt.sign(
+    {
+      id: VALID_OBJECT_ID,
+      email: 'expert@example.com',
+      roles: ['expert1'],
+      authContext: {
+        type: 'vote_magic_link',
+        year: 2026,
+        personId: VALID_OBJECT_ID,
+        scope: {
+          tpiId: scopedTpiId
+        }
+      }
+    },
+    jwtSecret,
+    { expiresIn: '1h' }
+  )
+
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+  const voterId = new mongoose.Types.ObjectId(VALID_OBJECT_ID)
+  const registerCalls = []
+  const existingVotes = [
+    {
+      _id: new mongoose.Types.ObjectId(fixedVoteId),
+      tpiPlanning: scopedTpiId,
+      slot: fixedSlotId,
+      voter: voterId,
+      voterRole: 'expert1',
+      decision: 'pending',
+      comment: 'Ancien commentaire',
+      availabilityException: true,
+      specialRequestReason: 'Ancienne demande',
+      specialRequestDate: new Date('2026-06-20T00:00:00.000Z'),
+      priority: 2,
+      votedAt: null,
+      magicLinkUsed: null,
+      save: async function save() { return this }
+    },
+    {
+      _id: new mongoose.Types.ObjectId(altVoteId),
+      tpiPlanning: scopedTpiId,
+      slot: altSlotId,
+      voter: voterId,
+      voterRole: 'expert1',
+      decision: 'preferred',
+      comment: '',
+      availabilityException: true,
+      specialRequestReason: 'Ancienne demande',
+      specialRequestDate: new Date('2026-06-20T00:00:00.000Z'),
+      priority: 1,
+      votedAt: null,
+      magicLinkUsed: null,
+      save: async function save() { return this }
+    }
+  ]
+
+  const restore = [
+    patchMethod(TpiPlanning, 'findById', () => ({
+      populate: async () => ({
+        _id: scopedTpiId,
+        year: 2026,
+        expert1: { _id: voterId },
+        expert2: { _id: new mongoose.Types.ObjectId() },
+        chefProjet: { _id: new mongoose.Types.ObjectId() },
+        proposedSlots: [
+          {
+            slot: { _id: fixedSlotId }
+          }
+        ]
+      })
+    })),
+    patchMethod(Vote, 'find', () => makeFindQuery(existingVotes)),
+    patchMethod(schedulingService, 'findAvailableSlotsForTpi', async () => []),
+    patchMethod(schedulingService, 'registerVoteAndCheckValidation', async (voteId, decision, comment) => {
+      registerCalls.push({ voteId: String(voteId), decision, comment })
+      return {
+        success: true,
+        voteId: String(voteId),
+        decision,
+        comment
+      }
+    })
+  ]
+
+  try {
+    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fixedVoteId,
+        mode: 'ok',
+        proposedSlotIds: [],
+        specialRequest: null
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.mode, 'ok')
+    assert.equal(body.proposedCount, 0)
+    assert.equal(body.hasSpecialRequest, false)
+    assert.equal(existingVotes[0].decision, 'accepted')
+    assert.equal(existingVotes[0].comment, '')
+    assert.equal(existingVotes[0].availabilityException, false)
+    assert.equal(existingVotes[0].specialRequestReason, '')
+    assert.equal(existingVotes[0].specialRequestDate, null)
+    assert.equal(existingVotes[0].priority, undefined)
+    assert.equal(existingVotes[1].decision, 'rejected')
+    assert.equal(existingVotes[1].availabilityException, false)
+    assert.equal(existingVotes[1].specialRequestReason, '')
+    assert.equal(existingVotes[1].specialRequestDate, null)
+    assert.equal(existingVotes[1].priority, undefined)
+    assert.deepEqual(registerCalls, [
+      {
+        voteId: fixedVoteId,
+        decision: 'accepted',
+        comment: ''
+      }
+    ])
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})

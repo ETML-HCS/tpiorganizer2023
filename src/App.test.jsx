@@ -2,6 +2,7 @@ import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 
 import App from './App'
+import { STORAGE_KEYS } from './config/appConfig'
 
 jest.mock('react-toastify', () => ({
   toast: {
@@ -18,6 +19,10 @@ jest.mock('./components/footer/Footer', () => function MockFooter() {
 
 jest.mock('./components/LoginPage', () => function MockLoginPage() {
   return <div data-testid='login-page'>Login</div>
+})
+
+jest.mock('./components/tpiSchedule/TpiSchedule', () => function MockTpiSchedule({ isArrowUp }) {
+  return <div data-testid='tpi-schedule'>planification {isArrowUp ? 'open' : 'closed'}</div>
 })
 
 jest.mock('./components/tpiPlanning/PlanningDashboard', () => function MockPlanningDashboard({ isAdmin }) {
@@ -45,6 +50,21 @@ jest.mock('./services/planningService', () => ({
   }
 }))
 
+const createSessionToken = (payload = {}) => {
+  const encodeBase64Url = (value) =>
+    window.btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+
+  return [
+    encodeBase64Url({ alg: 'HS256', typ: 'JWT' }),
+    encodeBase64Url({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      sub: 'admin',
+      ...payload
+    }),
+    'signature'
+  ].join('.')
+}
+
 describe('App routing access', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -57,6 +77,19 @@ describe('App routing access', () => {
 
     expect(await screen.findByTestId('login-page')).toBeInTheDocument()
     expect(screen.queryByTestId('tpi-eval-page')).not.toBeInTheDocument()
+  })
+
+  test('starts the planification tools collapsed by default', async () => {
+    window.localStorage.setItem(STORAGE_KEYS.APP_SESSION_TOKEN, createSessionToken())
+    window.history.pushState({}, '', '/planification')
+
+    render(<App />)
+
+    expect(await screen.findByTestId('tpi-schedule')).toHaveTextContent('planification closed')
+    expect(screen.getByRole('button', { name: 'Afficher les outils' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
   })
 
   test('keeps vote and défense magic-link pages accessible without an admin session', async () => {

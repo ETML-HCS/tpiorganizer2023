@@ -1,10 +1,12 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import TpiSchedule from './TpiSchedule'
 import { getTpiModels } from '../tpiControllers/TpiController'
+import { showNotification } from '../Tools'
 import { planningConfigService, workflowPlanningService } from '../../services/planningService'
+import { installFetchMock } from '../../test-utils/mockFetch'
+import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
 jest.mock('../../config/appConfig', () => {
   const actual = jest.requireActual('../../config/appConfig')
@@ -18,6 +20,9 @@ jest.mock('./TpiScheduleButtons', () => {
   return function MockTpiScheduleButtons({
     onAutomatePlanification,
     onOpenVotesWithoutEmails,
+    onShowNewRoomForm,
+    onCreateRoom,
+    showNewRoomForm,
     roomsCount,
     usedTpiCount,
     totalTpiCount
@@ -30,6 +35,21 @@ jest.mock('./TpiScheduleButtons', () => {
         <button type="button" onClick={onOpenVotesWithoutEmails}>
           open-votes-no-email
         </button>
+        <button type="button" onClick={onShowNewRoomForm}>
+          open-manual-room-form
+        </button>
+        {showNewRoomForm ? (
+          <button
+            type="button"
+            onClick={() => onCreateRoom?.({
+              date: '2026-06-10',
+              nameRoom: 'A101',
+              site: 'etml'
+            })}
+          >
+            submit-manual-room
+          </button>
+        ) : null}
         <div>{`rooms:${roomsCount}`}</div>
         <div>{`usage:${usedTpiCount}/${totalTpiCount}`}</div>
       </div>
@@ -75,17 +95,25 @@ jest.mock('../../services/planningService', () => ({
   }
 }))
 
+function renderSchedule() {
+  return renderWithRouter(<TpiSchedule />, {
+    initialEntries: ['/planification']
+  })
+}
+
 describe('TpiSchedule auto plan', () => {
+  let fetchMock
+
   beforeEach(() => {
     jest.clearAllMocks()
     window.localStorage.clear()
-    global.fetch = jest.fn()
+    fetchMock = installFetchMock()
     jest.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
-    delete global.fetch
+    fetchMock.restore()
   })
 
   test('injecte directement les salles legacy générées après auto-planification', async () => {
@@ -132,11 +160,7 @@ describe('TpiSchedule auto plan', () => {
       ]
     })
 
-    render(
-      <MemoryRouter initialEntries={['/planification']}>
-        <TpiSchedule />
-      </MemoryRouter>
-    )
+    renderSchedule()
 
     expect(await screen.findByText(/aucune salle chargée/i)).toBeInTheDocument()
 
@@ -215,11 +239,7 @@ describe('TpiSchedule auto plan', () => {
       ]
     })
 
-    render(
-      <MemoryRouter initialEntries={['/planification']}>
-        <TpiSchedule />
-      </MemoryRouter>
-    )
+    renderSchedule()
 
     fireEvent.click(await screen.findByRole('button', { name: /auto-plan/i }))
 
@@ -240,11 +260,7 @@ describe('TpiSchedule auto plan', () => {
       details: []
     })
 
-    render(
-      <MemoryRouter initialEntries={['/planification']}>
-        <TpiSchedule />
-      </MemoryRouter>
-    )
+    renderSchedule()
 
     fireEvent.click(await screen.findByRole('button', { name: /open-votes-no-email/i }))
 
@@ -255,5 +271,29 @@ describe('TpiSchedule auto plan', () => {
     const [selectedYear, rooms] = workflowPlanningService.startVotesWithoutEmails.mock.calls[0]
     expect(Number.isInteger(Number(selectedYear))).toBe(true)
     expect(Array.isArray(rooms)).toBe(true)
+  })
+
+  test('crée une room manuelle puis refuse le doublon date site salle', async () => {
+    renderSchedule()
+
+    fireEvent.click(await screen.findByRole('button', { name: /open-manual-room-form/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /submit-manual-room/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-toolbar')).toHaveTextContent('rooms:1')
+    })
+    expect(screen.getByText('A101')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /open-manual-room-form/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /submit-manual-room/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-toolbar')).toHaveTextContent('rooms:1')
+    })
+    expect(showNotification).toHaveBeenCalledWith(
+      'Cette room existe déjà pour cette date et ce site.',
+      'error',
+      3000
+    )
   })
 })

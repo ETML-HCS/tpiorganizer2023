@@ -118,6 +118,10 @@ const planningSiteScheduleSchema = new mongoose.Schema(
       type: Number,
       default: 4
     },
+    minTpiPerRoom: {
+      type: Number,
+      default: 3
+    },
     manualRoomTarget: {
       type: Number,
       default: null

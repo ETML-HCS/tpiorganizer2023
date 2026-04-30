@@ -3,6 +3,7 @@ import {
   optimizePlanningRooms,
   summarizeLocalPersonConflicts
 } from './tpiScheduleOptimization'
+import { buildLocalValidationIssues } from './tpiScheduleValidationUtils'
 
 const makeCard = (refTpi, candidat, expert1, expert2, boss, classe = 'DEV4') => ({
   refTpi,
@@ -21,10 +22,11 @@ const emptyCard = () => ({
   boss: { name: '' }
 })
 
-const makeRoom = ({ date, name, site = 'ETML', cards }) => ({
+const makeRoom = ({ date, name, site = 'ETML', cards, configSite }) => ({
   date,
   name,
   site,
+  configSite,
   tpiDatas: cards
 })
 
@@ -120,6 +122,46 @@ describe('tpiScheduleOptimization', () => {
     expect(before.summary.sequenceExcessCount).toBe(1)
     expect(result.changed).toBe(true)
     expect(result.after.sequenceExcessCount).toBe(0)
+    expect(result.after.score).toBeLessThan(before.summary.score)
+  })
+
+  it('respecte la limite configurable de TPI consecutifs dans l optimisation locale', () => {
+    const soutenanceDates = [{ date: '2026-06-12', min: true }]
+    const limitedRoomConfig = { maxConsecutiveTpi: 2 }
+    const rooms = [
+      makeRoom({
+        date: '2026-06-12',
+        name: 'A301',
+        configSite: limitedRoomConfig,
+        cards: [
+          makeCard('T40', 'Max', 'B1', 'B2', 'B3', 'MIN4'),
+          makeCard('T41', 'Max', 'C1', 'C2', 'C3', 'MIN4'),
+          makeCard('T42', 'Max', 'D1', 'D2', 'D3', 'MIN4'),
+          emptyCard()
+        ]
+      }),
+      makeRoom({
+        date: '2026-06-12',
+        name: 'A302',
+        configSite: limitedRoomConfig,
+        cards: [
+          makeCard('T50', 'Zoe', 'Z1', 'Z2', 'Z3', 'MIN4'),
+          emptyCard(),
+          emptyCard(),
+          emptyCard()
+        ]
+      })
+    ]
+
+    const before = analyzePlanningRooms(rooms, { soutenanceDates })
+    const result = optimizePlanningRooms(rooms, { soutenanceDates })
+    const localValidation = buildLocalValidationIssues(before)
+
+    expect(before.summary.sequenceViolationCount).toBe(1)
+    expect(before.sequenceViolations[0].maxConsecutiveTpi).toBe(2)
+    expect(localValidation.summary.sequenceViolationCount).toBe(1)
+    expect(result.changed).toBe(true)
+    expect(result.after.sequenceViolationCount).toBe(0)
     expect(result.after.score).toBeLessThan(before.summary.score)
   })
 

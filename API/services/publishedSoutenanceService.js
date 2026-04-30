@@ -13,6 +13,25 @@ const DEFAULT_STAKEHOLDER_ICONS = {
   expert2: 'participant',
   projectManager: 'participant'
 }
+const CANDIDATE_STAKEHOLDER_ICON_VALUES = new Set([
+  'candidate',
+  'candidate-green',
+  'candidate-violet',
+  'candidate-rose',
+  'candidate-gold'
+])
+const HELMET_STAKEHOLDER_ICON_VALUES = new Set([
+  'participant',
+  'helmet-orange',
+  'helmet-green',
+  'helmet-blue',
+  'helmet-black',
+  'helmet-gray'
+])
+const STAKEHOLDER_ICON_VALUES = new Set([
+  ...CANDIDATE_STAKEHOLDER_ICON_VALUES,
+  ...HELMET_STAKEHOLDER_ICON_VALUES
+])
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -40,23 +59,33 @@ function normalizeSoutenanceColor(value) {
   return ''
 }
 
-function normalizeStakeholderIconKey(value, fallback = 'participant') {
+function normalizeStakeholderIconKey(value, fallback = 'participant', role = '') {
   const normalizedValue = compactText(value)
-  return normalizedValue === 'candidate' || normalizedValue === 'participant'
+  const allowedValues = role === 'candidate'
+    ? CANDIDATE_STAKEHOLDER_ICON_VALUES
+    : role
+      ? HELMET_STAKEHOLDER_ICON_VALUES
+      : STAKEHOLDER_ICON_VALUES
+  const defaultFallback = role === 'candidate' ? DEFAULT_STAKEHOLDER_ICONS.candidate : 'participant'
+  const normalizedFallback = compactText(fallback)
+  const safeFallback = allowedValues.has(normalizedFallback) ? normalizedFallback : defaultFallback
+
+  return allowedValues.has(normalizedValue)
     ? normalizedValue
-    : fallback
+    : safeFallback
 }
 
 function normalizeStakeholderIcons(value = {}) {
   const source = value && typeof value === 'object' ? value : {}
 
   return {
-    candidate: normalizeStakeholderIconKey(source.candidate, DEFAULT_STAKEHOLDER_ICONS.candidate),
-    expert1: normalizeStakeholderIconKey(source.expert1, DEFAULT_STAKEHOLDER_ICONS.expert1),
-    expert2: normalizeStakeholderIconKey(source.expert2, DEFAULT_STAKEHOLDER_ICONS.expert2),
+    candidate: normalizeStakeholderIconKey(source.candidate, DEFAULT_STAKEHOLDER_ICONS.candidate, 'candidate'),
+    expert1: normalizeStakeholderIconKey(source.expert1, DEFAULT_STAKEHOLDER_ICONS.expert1, 'expert1'),
+    expert2: normalizeStakeholderIconKey(source.expert2, DEFAULT_STAKEHOLDER_ICONS.expert2, 'expert2'),
     projectManager: normalizeStakeholderIconKey(
       source.projectManager || source.boss,
-      DEFAULT_STAKEHOLDER_ICONS.projectManager
+      DEFAULT_STAKEHOLDER_ICONS.projectManager,
+      'projectManager'
     )
   }
 }
@@ -151,8 +180,12 @@ function buildConfigSiteFromPlanning(roomConfig = {}, siteConfig = null, totalSl
     nextConfig.breakline = parsePositiveNumber(siteConfig.breaklineMinutes, parsePositiveNumber(nextConfig.breakline, 0) * 60) / 60
     nextConfig.tpiTime = parsePositiveNumber(siteConfig.tpiTimeMinutes, parsePositiveNumber(nextConfig.tpiTime, 1) * 60) / 60
     nextConfig.firstTpiStart = parseTimeToDecimal(siteConfig.firstTpiStartTime || nextConfig.firstTpiStart)
+    nextConfig.minTpiPerRoom = parsePositiveInteger(siteConfig.minTpiPerRoom, parsePositiveInteger(nextConfig.minTpiPerRoom, 3))
   }
 
+  if (!parsePositiveInteger(nextConfig.minTpiPerRoom, 0)) {
+    nextConfig.minTpiPerRoom = 3
+  }
   nextConfig.numSlots = totalSlots
   return nextConfig
 }
@@ -354,6 +387,7 @@ async function loadSoutenanceAppearance() {
     const catalog = await getSharedPlanningCatalog()
     const sites = Array.isArray(catalog?.sites) ? catalog.sites : []
     const siteAppearanceByCode = new Map()
+    const roomAppearanceByKey = new Map()
 
     sites.forEach((site) => {
       const siteCode = compactText(site?.code || site?.siteCode || site?.label).toUpperCase()
@@ -366,17 +400,41 @@ async function loadSoutenanceAppearance() {
           site?.soutenanceColor || site?.defenseColor || site?.defenceColor || ''
         )
       })
+
+      const rooms = Array.isArray(site?.roomDetails) ? site.roomDetails : []
+      rooms.forEach((room) => {
+        const soutenanceColor = normalizeSoutenanceColor(
+          room?.soutenanceColor || room?.defenseColor || room?.defenceColor || ''
+        )
+        if (!soutenanceColor) {
+          return
+        }
+
+        const roomKeys = Array.from(new Set([
+          compactText(room?.code),
+          compactText(room?.label),
+          compactText(room?.name)
+        ].filter(Boolean)))
+
+        roomKeys.forEach((roomKey) => {
+          roomAppearanceByKey.set(`${siteCode}|${roomKey.toUpperCase()}`, {
+            soutenanceColor
+          })
+        })
+      })
     })
 
     return {
       stakeholderIcons: normalizeStakeholderIcons(catalog?.stakeholderIcons),
-      siteAppearanceByCode
+      siteAppearanceByCode,
+      roomAppearanceByKey
     }
   } catch (error) {
     console.error('Erreur chargement apparence défenses:', error)
     return {
       stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
-      siteAppearanceByCode: new Map()
+      siteAppearanceByCode: new Map(),
+      roomAppearanceByKey: new Map()
     }
   }
 }
@@ -386,9 +444,14 @@ function getRoomAppearance(room, appearance = {}) {
   const siteAppearance = appearance.siteAppearanceByCode instanceof Map
     ? appearance.siteAppearanceByCode.get(siteCode)
     : null
+  const roomName = compactText(room?.name || room?.roomName)
+  const roomAppearance = appearance.roomAppearanceByKey instanceof Map && siteCode && roomName
+    ? appearance.roomAppearanceByKey.get(`${siteCode}|${roomName.toUpperCase()}`)
+    : null
+  const soutenanceColor = roomAppearance?.soutenanceColor || siteAppearance?.soutenanceColor
 
   return {
-    ...(siteAppearance ? { soutenanceColor: normalizeSoutenanceColor(siteAppearance.soutenanceColor) } : {}),
+    ...(soutenanceColor !== undefined ? { soutenanceColor: normalizeSoutenanceColor(soutenanceColor) } : {}),
     stakeholderIcons: normalizeStakeholderIcons(appearance.stakeholderIcons)
   }
 }

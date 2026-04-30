@@ -5,6 +5,7 @@ import { IS_DEBUG } from "../../config/appConfig"
 import PageToolbar from "../shared/PageToolbar"
 import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
 import IconButtonContent from "../shared/IconButtonContent"
+import NewRoomForm from "./NewRoomForm"
 import {
   ArrowRightIcon,
   BanIcon,
@@ -78,6 +79,11 @@ const TpiScheduleButtons = ({
   soutenanceDates = [],
   roomCatalogBySite = {},
   onGenerateRoomsFromCatalog = null,
+  onShowNewRoomForm = null,
+  onCreateRoom = null,
+  onCancelCreateRoom = null,
+  showNewRoomForm = false,
+  existingRooms = [],
   isRoomsFocusMode = false,
   isRoomsWrapMode = false,
   onToggleRoomsFocusMode = null,
@@ -678,6 +684,22 @@ const TpiScheduleButtons = ({
               <p>Crée les salles du planning depuis Configuration.</p>
             </div>
             <div className="planning-room-form-head-actions">
+              {typeof onShowNewRoomForm === "function" ? (
+                <button
+                  type="button"
+                  className="page-tools-action-btn primary"
+                  onClick={onShowNewRoomForm}
+                  aria-label="Créer une room"
+                  title="Créer une room manuellement"
+                >
+                  <IconButtonContent
+                    label="Créer une room"
+                    icon={RoomAddIcon}
+                    iconClassName="planning-button-icon"
+                    showLabel={true}
+                  />
+                </button>
+              ) : null}
               {typeof onGenerateRoomsFromCatalog === "function" ? (
                 <button
                   type="button"
@@ -707,6 +729,21 @@ const TpiScheduleButtons = ({
               </Link>
             </div>
           </div>
+
+          {showNewRoomForm && typeof onCreateRoom === "function" ? (
+            <NewRoomForm
+              onNewRoom={onCreateRoom}
+              setShowForm={(nextValue) => {
+                if (!nextValue) {
+                  onCancelCreateRoom?.()
+                }
+              }}
+              soutenanceDates={soutenanceDates}
+              roomCatalogBySite={roomCatalogBySite}
+              existingRooms={existingRooms}
+              selectedYear={effectiveYear}
+            />
+          ) : null}
 
           <div className="planning-room-overview-grid">
             <article className="planning-room-overview-card">

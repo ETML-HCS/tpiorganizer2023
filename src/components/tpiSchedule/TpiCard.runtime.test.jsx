@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import TpiCard from './TpiCard'
+import { installFetchMock } from '../../test-utils/mockFetch'
+import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
 jest.mock('react-dnd', () => ({
   useDrag: () => [{ isDragging: false }, jest.fn()]
@@ -36,15 +37,11 @@ function TpiCardHarness({ initialTpi = baseTpi }) {
   )
 }
 
-const renderWithRouter = (ui) => render(
-  <MemoryRouter>
-    {ui}
-  </MemoryRouter>
-)
-
 describe('TpiCard editing overlay', () => {
+  let fetchMock
+
   beforeEach(() => {
-    global.fetch = jest.fn(async () => ({
+    fetchMock = installFetchMock(async () => ({
       ok: true,
       status: 200,
       json: async () => ([
@@ -69,7 +66,7 @@ describe('TpiCard editing overlay', () => {
   })
 
   afterEach(() => {
-    delete global.fetch
+    fetchMock.restore()
   })
 
   it('opens the selector without crashing and starts loading models', async () => {

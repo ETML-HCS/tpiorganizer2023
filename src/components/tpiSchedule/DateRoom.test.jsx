@@ -10,8 +10,10 @@ jest.mock('react-dnd-html5-backend', () => ({
   HTML5Backend: {}
 }))
 
-jest.mock('./TpiSlot', () => ({ timeValues }) => (
-  <div data-testid="tpi-slot">{Array.isArray(timeValues) ? timeValues.join(' - ') : ''}</div>
+jest.mock('./TpiSlot', () => ({ timeValues, roomPeriod }) => (
+  <div data-testid="tpi-slot" data-room-period={roomPeriod}>
+    {Array.isArray(timeValues) ? timeValues.join(' - ') : ''}
+  </div>
 ))
 jest.mock('./BreakLine', () => ({ duration }) => (
   <div data-testid="break-line">{duration}</div>
@@ -150,6 +152,8 @@ describe('DateRoom', () => {
     expect(screen.getByTestId('break-line')).toHaveTextContent('10')
     expect(screen.getAllByTestId('tpi-slot')[0]).toHaveTextContent('08:00 - 09:00')
     expect(screen.getAllByTestId('tpi-slot')[1]).toHaveTextContent('09:10 - 10:10')
+    expect(screen.getAllByTestId('tpi-slot')[0]).toHaveAttribute('data-room-period', '1')
+    expect(screen.getAllByTestId('tpi-slot')[1]).toHaveAttribute('data-room-period', '2')
   })
 
   test('applique la couleur de planning configurée pour un site non legacy', () => {

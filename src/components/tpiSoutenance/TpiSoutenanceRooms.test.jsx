@@ -123,6 +123,57 @@ describe('TpiSoutenanceRooms', () => {
     expect(room.style.getPropertyValue('--soutenance-room-accent')).toBe('#0F766E')
   })
 
+  test('applique les SVG de rôles configurés sur une salle publiée', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <RenderRooms
+          year={2026}
+          tpiDatas={[
+            {
+              site: 'ETML',
+              date: '2026-06-10',
+              name: 'A101',
+              configSite: {
+                stakeholderIcons: {
+                  candidate: 'candidate-green',
+                  expert1: 'helmet-blue',
+                  expert2: 'participant',
+                  projectManager: 'helmet-gray'
+                }
+              },
+              tpiDatas: [
+                {
+                  id: 'tpi-1',
+                  refTpi: '2163',
+                  candidat: 'Alice Martin',
+                  expert1: { name: 'Expert 1' },
+                  expert2: { name: 'Expert 2' },
+                  boss: { name: 'Chef de projet' }
+                }
+              ]
+            }
+          ]}
+          schedule={[
+            {
+              startTime: '08:00',
+              endTime: '09:00'
+            }
+          ]}
+          listOfPerson={[]}
+          isAnyFilterApplied={false}
+          loadData={jest.fn()}
+          token=''
+          isOn={false}
+          updateSoutenanceData={jest.fn()}
+        />
+      </MemoryRouter>
+    )
+
+    expect(container.querySelector('.stakeholder-icon--candidate')).toHaveClass('stakeholder-icon--visual-candidate-green')
+    expect(container.querySelector('.stakeholder-icon--expert1')).toHaveClass('stakeholder-icon--visual-helmet-blue')
+    expect(container.querySelector('.stakeholder-icon--projectManager')).toHaveClass('stakeholder-icon--visual-helmet-gray')
+  })
+
   test('affiche tous les créneaux configurés et laisse les créneaux sans TPI vides', () => {
     const { container } = render(
       <MemoryRouter>

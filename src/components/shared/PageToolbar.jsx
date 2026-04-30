@@ -54,6 +54,40 @@ const PageToolbar = ({
     shouldRenderNavigation && !shouldRenderNavigationInHeader
   const hasToolbarContent = hasHeaderSection || hasTabs || shouldRenderNavigation || hasBodyContent
 
+  React.useLayoutEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined
+    }
+
+    const notifyLayoutChange = () => {
+      window.dispatchEvent(new Event("tpi:page-toolbar-layout"))
+    }
+    const animationFrameId = typeof window.requestAnimationFrame === "function"
+      ? window.requestAnimationFrame(notifyLayoutChange)
+      : null
+
+    notifyLayoutChange()
+
+    return () => {
+      if (
+        animationFrameId !== null &&
+        typeof window.cancelAnimationFrame === "function"
+      ) {
+        window.cancelAnimationFrame(animationFrameId)
+      }
+      notifyLayoutChange()
+    }
+  }, [
+    activeTab,
+    bodyItems.length,
+    className,
+    hasHeaderSection,
+    id,
+    isArrowUp,
+    navItems.length,
+    tabItems.length
+  ])
+
   if (hideWhenEmpty && !hasToolbarContent) {
     return null
   }
@@ -151,7 +185,12 @@ const PageToolbar = ({
   )
 
   return (
-    <div id={id} className={toolbarClassName} data-page-toolbar='true'>
+    <div
+      id={id}
+      className={toolbarClassName}
+      data-page-toolbar='true'
+      style={{ display: isArrowUp ? "block" : "none" }}
+    >
       <div className='page-tools-shell' role='toolbar' aria-label={ariaLabel}>
         {hasHeaderSection && flatHeader ? (
           <div className='page-tools-topline'>

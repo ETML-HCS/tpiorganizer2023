@@ -31,5 +31,6 @@ describe('tpiScheduleData', () => {
     expect(room.configSite.planningColor).toBe('#14532D')
     expect(room.configSite.tpiColor).toBe('#FEE2E2')
     expect(room.configSite.numSlots).toBe(6)
+    expect(room.configSite.minTpiPerRoom).toBe(3)
   })
 })

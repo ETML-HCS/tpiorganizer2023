@@ -11,6 +11,7 @@ import {
 
 import Footer from "./components/footer/Footer"
 import { ChevronDownIcon, WrenchIcon } from "./components/shared/InlineIcons"
+import { MAIN_NAVIGATION_LINKS } from "./components/shared/mainNavigation"
 
 import { toast } from "react-toastify"
 
@@ -57,24 +58,62 @@ const SOUTENANCE_ROUTE_ALIASES = [
   ROUTES.SOUTENANCE_LEGACY_LOWER,
   ROUTES.DEFENSE_LEGACY
 ]
-const TOOLBAR_DEFAULT_OPEN_PATHS = [
+const APP_HEADER_MODULE_LINKS = [
+  ...MAIN_NAVIGATION_LINKS,
+  {
+    label: "Suivi des profils",
+    title: "Suivi des profils",
+    match: [ROUTES.SUIVI_ETUDIANTS, ROUTES.SUIVI_ETUDIANTS_LEGACY]
+  },
+  {
+    label: "Défenses",
+    title: "Agenda des défenses",
+    match: [
+      ROUTES.SOUTENANCES,
+      `${ROUTES.SOUTENANCES}/`,
+      ...SOUTENANCE_ROUTE_ALIASES,
+      ...SOUTENANCE_ROUTE_ALIASES.map((routePath) => `${routePath}/`)
+    ]
+  }
+]
+const STATIC_TOOLBAR_PATHS = [
   ROUTES.PLANIFICATION,
   ROUTES.GESTION_TPI,
   '/configuration',
-  ROUTES.PARTIES_PRENANTES,
   ROUTES.GEN_TOKENS,
   ROUTES.TPI_EVAL,
   ROUTES.GESTION_TPI_LEGACY,
-  ROUTES.PARTIES_PRENANTES_LEGACY,
   ROUTES.GEN_TOKENS_LEGACY,
   ROUTES.TPI_EVAL_LEGACY
 ]
+const PAGE_TOOLBAR_SELECTOR = "[data-page-toolbar='true']"
+const PAGE_TOOLBAR_LAYOUT_EVENT = "tpi:page-toolbar-layout"
+
+const isPlanningToolbarPage = (pathname) =>
+  pathname === ROUTES.PLANIFICATION ||
+  pathname === ROUTES.PLANNING ||
+  pathname.startsWith(`${ROUTES.PLANNING}/`) ||
+  pathname.startsWith('/planification-votes/')
 
 const isToolbarPage = (pathname) =>
-  TOOLBAR_DEFAULT_OPEN_PATHS.includes(pathname) ||
-  pathname === '/planning' ||
-  pathname.startsWith('/planning/') ||
+  STATIC_TOOLBAR_PATHS.includes(pathname) ||
+  isPlanningToolbarPage(pathname) ||
   pathname.startsWith('/tpi/')
+
+const shouldOpenToolbarByDefault = (pathname) =>
+  isToolbarPage(pathname) && !isPlanningToolbarPage(pathname)
+
+const isVisibleFixedToolbar = (element) => {
+  if (!element || typeof window === "undefined") {
+    return false
+  }
+
+  const style = window.getComputedStyle(element)
+
+  return style.position === "fixed" &&
+    style.display !== "none" &&
+    style.visibility !== "hidden"
+}
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -82,6 +121,44 @@ const compactText = (value) => {
   }
 
   return String(value).trim()
+}
+
+const routePatternMatchesPathname = (pathname, routePattern) => {
+  const normalizedPattern = compactText(routePattern)
+
+  if (!normalizedPattern) {
+    return false
+  }
+
+  if (normalizedPattern === "/") {
+    return pathname === "/"
+  }
+
+  if (normalizedPattern.includes(":")) {
+    const dynamicSegmentIndex = normalizedPattern.indexOf(":")
+    const staticPrefix = normalizedPattern.slice(0, dynamicSegmentIndex)
+
+    return pathname.startsWith(staticPrefix)
+  }
+
+  if (normalizedPattern.endsWith("/")) {
+    return pathname.startsWith(normalizedPattern)
+  }
+
+  return pathname === normalizedPattern
+}
+
+const getAppHeaderModule = (pathname) => {
+  const moduleLink = APP_HEADER_MODULE_LINKS.find((link) =>
+    (link.match || [link.to]).some((routePattern) =>
+      routePatternMatchesPathname(pathname, routePattern)
+    )
+  )
+
+  return {
+    label: moduleLink?.label || "TPI Organizer",
+    title: moduleLink?.title || moduleLink?.label || "TPI Organizer"
+  }
 }
 
 const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessionToken }) => {
@@ -257,7 +334,9 @@ const Layout = ({ isAuthenticated, login, logout }) => {
   const location = useLocation()
   const navigate = useNavigate()
   const isToolbarRoute = useMemo(() => isToolbarPage(location.pathname), [location.pathname])
-  const [isArrowUp, setIsArrowUp] = useState(() => isToolbarRoute)
+  const [isArrowUp, setIsArrowUp] = useState(() =>
+    shouldOpenToolbarByDefault(location.pathname)
+  )
   const appSessionToken = getStoredAuthToken('/api/me')
   const planningSessionToken = getStoredAuthToken('/api/planning')
   const connectedUserName = useMemo(
@@ -269,10 +348,10 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     [appSessionToken, isAuthenticated, planningSessionToken]
   )
   const preferredPlanningYear = getPreferredPlanningYear()
-  // Mémoriser la date formatée pour éviter les recalculs
-  const dateFormatted = useMemo(() => {
-    return new Date().toLocaleDateString('fr-CH')
-  }, [])
+  const currentModule = useMemo(
+    () => getAppHeaderModule(location.pathname),
+    [location.pathname]
+  )
 
   // Fonction mémorisée pour déterminer si l'en-tête doit être affiché
   const shouldShowHeader = useMemo(() => {
@@ -284,7 +363,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     return isToolbarRoute && !isArrowUp
   }, [isArrowUp, isToolbarRoute])
   const getToolbarElement = useCallback(
-    () => document.querySelector("[data-page-toolbar='true']"),
+    () => document.querySelector(PAGE_TOOLBAR_SELECTOR),
     []
   )
 
@@ -316,8 +395,8 @@ const Layout = ({ isAuthenticated, login, logout }) => {
   }, [isAuthenticated, logout, navigate])
 
   useEffect(() => {
-    setIsArrowUp(isToolbarRoute)
-  }, [isToolbarRoute])
+    setIsArrowUp(shouldOpenToolbarByDefault(location.pathname))
+  }, [location.pathname])
 
   useLayoutEffect(() => {
     if (!isToolbarRoute) {
@@ -343,19 +422,46 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 
   useLayoutEffect(() => {
     const rootElement = document.documentElement
-    const headerElement = document.getElementById("header")
-    const toolsElement = isToolbarRoute ? getToolbarElement() : null
-
     if (!rootElement) {
       return undefined
     }
 
+    let resizeObserver = null
+    let observedHeaderElement = null
+    let observedToolsElement = null
+
+    const observeLayoutElement = (element, target) => {
+      if (!resizeObserver || !element) {
+        return
+      }
+
+      if (target === "header" && observedHeaderElement !== element) {
+        if (observedHeaderElement) {
+          resizeObserver.unobserve(observedHeaderElement)
+        }
+        resizeObserver.observe(element)
+        observedHeaderElement = element
+      }
+
+      if (target === "tools" && observedToolsElement !== element) {
+        if (observedToolsElement) {
+          resizeObserver.unobserve(observedToolsElement)
+        }
+        resizeObserver.observe(element)
+        observedToolsElement = element
+      }
+    }
+
     const updateLayoutMetrics = () => {
+      const headerElement = document.getElementById("header")
+      const toolsElement = isToolbarRoute ? getToolbarElement() : null
+      observeLayoutElement(headerElement, "header")
+      observeLayoutElement(toolsElement, "tools")
       const headerHeight = headerElement
         ? Math.ceil(headerElement.getBoundingClientRect().height)
         : 0
       const toolsHeight =
-        isToolbarRoute && isArrowUp && toolsElement && toolsElement.style.display !== "none"
+        isToolbarRoute && isArrowUp && isVisibleFixedToolbar(toolsElement)
           ? Math.ceil(toolsElement.getBoundingClientRect().height)
           : 0
       const contentOffset = Math.max(headerHeight + toolsHeight + 12, headerHeight + 12, 72)
@@ -369,31 +475,23 @@ const Layout = ({ isAuthenticated, login, logout }) => {
       }
     }
 
-    updateLayoutMetrics()
-
-    const observers = []
-
     if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(() => {
+      resizeObserver = new ResizeObserver(() => {
         updateLayoutMetrics()
       })
-
-      if (headerElement) {
-        observer.observe(headerElement)
-      }
-
-      if (toolsElement) {
-        observer.observe(toolsElement)
-      }
-
-      observers.push(observer)
     }
 
+    updateLayoutMetrics()
+
     window.addEventListener("resize", updateLayoutMetrics)
+    window.addEventListener(PAGE_TOOLBAR_LAYOUT_EVENT, updateLayoutMetrics)
 
     return () => {
       window.removeEventListener("resize", updateLayoutMetrics)
-      observers.forEach((observer) => observer.disconnect())
+      window.removeEventListener(PAGE_TOOLBAR_LAYOUT_EVENT, updateLayoutMetrics)
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      }
     }
   }, [getToolbarElement, isArrowUp, isToolbarRoute, location.pathname])
 
@@ -445,10 +543,13 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 <span className='app-header-brand-sep'>/</span>
                 <span className='cfpv'>CFPV</span>
               </span>
+              <span className='app-header-module' title={currentModule.title}>
+                <span className='app-header-module-kicker'>Module</span>
+                <span className='app-header-module-name'>{currentModule.label}</span>
+              </span>
             </div>
 
             <div className='app-header-center'>
-              <span className='app-header-date'>{dateFormatted}</span>
               <div id='page-header-center-slot' className='app-header-page-slot'></div>
             </div>
 
@@ -476,6 +577,9 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                   <span className='sr-only'>Outils</span>
                   <span className='app-header-tools-toggle-glyph' aria-hidden='true'>
                     <WrenchIcon />
+                  </span>
+                  <span className='app-header-tools-toggle-label' aria-hidden='true'>
+                    Outils
                   </span>
                   <span className='collapse-toggle-icon' aria-hidden='true'>
                     <ChevronDownIcon />
@@ -535,7 +639,12 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path='/configuration'
-                element={<PlanningConfiguration />}
+                element={
+                  <PlanningConfiguration
+                    toggleArrow={toggleArrow}
+                    isArrowUp={isArrowUp}
+                  />
+                }
               />
               <Route
                 path={ROUTES.GESTION_TPI}
@@ -557,21 +666,11 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path={ROUTES.PARTIES_PRENANTES}
-                element={
-                  <PartiesPrenantes
-                    toggleArrow={toggleArrow}
-                    isArrowUp={isArrowUp}
-                  />
-                }
+                element={<PartiesPrenantes />}
               />
               <Route
                 path={ROUTES.PARTIES_PRENANTES_LEGACY}
-                element={
-                  <PartiesPrenantes
-                    toggleArrow={toggleArrow}
-                    isArrowUp={isArrowUp}
-                  />
-                }
+                element={<PartiesPrenantes />}
               />
               <Route
                 path={ROUTES.SUIVI_ETUDIANTS}

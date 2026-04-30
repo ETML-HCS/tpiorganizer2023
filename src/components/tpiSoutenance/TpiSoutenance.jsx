@@ -8,6 +8,7 @@ import { jsPDF } from "jspdf"
 import {
   formatDate,
   formatTimeRange,
+  getRoomClassFilterLabel,
   getRoomClassLabel,
   getRoomSlotCount,
   getRoomSlots
@@ -168,7 +169,7 @@ const getActiveFilterEntries = (filters = {}) =>
     .filter((entry) => entry.value)
 
 const shouldShowEmptySlotsForFilters = (filters = {}) => {
-  const structuralFilterKeys = new Set(["date", "nameRoom"])
+  const structuralFilterKeys = new Set(["date", "nameRoom", "classType"])
   const activeFilters = getActiveFilterEntries(filters)
 
   return (
@@ -1762,6 +1763,13 @@ const TpiSoutenance = () => {
 
     if (filters.nameRoom) {
       items.push(`Salle : ${filters.nameRoom}`)
+    }
+
+    if (filters.classType) {
+      const classTypeLabel = getRoomClassFilterLabel(filters.classType)
+      if (classTypeLabel) {
+        items.push(`Type de classe : ${classTypeLabel}`)
+      }
     }
 
     if (filters.experts) {

@@ -5,7 +5,12 @@ import { soutenancesService } from "../../services/apiService"
 import { workflowPlanningService } from "../../services/planningService"
 import { getStoredAuthToken } from "../../utils/storage"
 import { showNotification } from "../Tools"
-import { formatDate, getLegacyScheduleIndex, getRoomSchedule } from "./TpiSoutenanceParts"
+import {
+  formatDate,
+  getLegacyScheduleIndex,
+  getRoomClassFilterValue,
+  getRoomSchedule
+} from "./TpiSoutenanceParts"
 
 const defaultFilters = {
   site: "",
@@ -15,6 +20,7 @@ const defaultFilters = {
   experts: "",
   projectManagerButton: "",
   projectManager: "",
+  classType: "",
   nameRoom: ""
 }
 
@@ -212,8 +218,12 @@ const doesTpiMatchViewer = (tpi, viewer = null) => {
   return names.some(name => normalizeText(name).includes(normalizedViewer))
 }
 
-const filterRooms = (rooms, filters, magicLinkViewer = null) =>
+export const filterRooms = (rooms, filters, magicLinkViewer = null) =>
   rooms.flatMap((room) => {
+    if (filters.classType && getRoomClassFilterValue(room) !== filters.classType) {
+      return []
+    }
+
     const filteredTpis = room.tpiDatas.filter((tpi) => {
       if (!doesTpiMatchViewer(tpi, magicLinkViewer)) {
         return false
@@ -264,6 +274,7 @@ export const isFilterApplied = (filters) =>
   filters.experts !== "" ||
   filters.candidate !== "" ||
   filters.projectManager !== "" ||
+  Boolean(filters.classType) ||
   filters.projectManagerButton !== ""
 
 export const useSoutenanceData = (year) => {

@@ -1,12 +1,13 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { useLocation } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
 import PlanningDashboard from './PlanningDashboard'
 import * as planningServices from '../../services/planningService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
 import { ROUTES } from '../../config/appConfig'
+import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
 jest.mock('../../config/appConfig', () => {
   const actual = jest.requireActual('../../config/appConfig')
@@ -55,6 +56,21 @@ jest.mock('../shared/PageToolbar', () => ({ children, title }) => (
 function LocationDisplay() {
   const location = useLocation()
   return <div data-testid='location-display'>{`${location.pathname}${location.search}`}</div>
+}
+
+function renderDashboard({
+  initialEntries = ['/'],
+  year = '2026',
+  isAdmin = true,
+  children = null
+} = {}) {
+  return renderWithRouter(
+    <>
+      <PlanningDashboard year={year} isAdmin={isAdmin} />
+      {children}
+    </>,
+    { initialEntries }
+  )
 }
 
 function buildVoteProposalTpi(overrides = {}) {
@@ -248,11 +264,7 @@ describe('PlanningDashboard', () => {
   })
 
   test('ouvre une sidebar allégée quand un TPI est sélectionné', async () => {
-    render(
-      <MemoryRouter>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard()
 
     fireEvent.click(await screen.findByRole('button', { name: /liste complète/i }))
     fireEvent.click(await screen.findByRole('button', { name: /sélectionner un tpi/i }))
@@ -277,11 +289,7 @@ describe('PlanningDashboard', () => {
     planningServices.workflowPlanningService.getActiveSnapshot.mockResolvedValue(null)
     tpiController.getTpiModels.mockResolvedValue(null)
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.queryByText(/workflow planification/i)).not.toBeInTheDocument()
@@ -290,11 +298,7 @@ describe('PlanningDashboard', () => {
   })
 
   test('applique automatiquement un focus transmis par la fiche TPI', async () => {
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=list&focus=TPI-2026-001']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=list&focus=TPI-2026-001'] })
 
     expect(await screen.findByDisplayValue('TPI-2026-001')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /tpi-2026-001/i })).toBeInTheDocument()
@@ -303,22 +307,14 @@ describe('PlanningDashboard', () => {
   })
 
   test('signale explicitement un focus sans résultat visible', async () => {
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=list&focus=TPI-2026-999']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=list&focus=TPI-2026-999'] })
 
     expect(await screen.findByDisplayValue('TPI-2026-999')).toBeInTheDocument()
     expect(screen.getByText(/aucun tpi visible ne correspond/i)).toBeInTheDocument()
   })
 
   test('ne rend plus le bloc workflow admin', async () => {
-    render(
-      <MemoryRouter>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard()
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.queryByText(/poste de pilotage du workflow/i)).not.toBeInTheDocument()
@@ -332,11 +328,7 @@ describe('PlanningDashboard', () => {
       isActive: true
     })
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', { name: /ouvrir votes sans emails/i }))
 
@@ -351,12 +343,11 @@ describe('PlanningDashboard', () => {
     planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
     const targetYear = '2026'
 
-    render(
-      <MemoryRouter initialEntries={[`/planning/${targetYear}?tab=votes`]}>
-        <PlanningDashboard year={targetYear} isAdmin />
-        <LocationDisplay />
-      </MemoryRouter>
-    )
+    renderDashboard({
+      initialEntries: [`/planning/${targetYear}?tab=votes`],
+      year: targetYear,
+      children: <LocationDisplay />
+    })
 
     fireEvent.click(await screen.findByRole('button', { name: /aperçu des liens vote/i }))
 
@@ -468,11 +459,7 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /relancer non-repondants/i })).toBeInTheDocument()
@@ -537,11 +524,7 @@ describe('PlanningDashboard', () => {
       swapCandidate: null
     })
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /simuler le déplacement de tpi-2026-042 vers 11\.06\.2026 .* b202/i
@@ -563,11 +546,7 @@ describe('PlanningDashboard', () => {
     planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
     planningServices.tpiPlanningService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /simuler le déplacement de tpi-2026-042 vers 11\.06\.2026 .* b202/i
@@ -592,11 +571,7 @@ describe('PlanningDashboard', () => {
       voter: { name: 'Carla Expert' }
     })
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /ajouter 11\.06\.2026 .* b202 aux dates idéales de carla expert/i
@@ -682,11 +657,7 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', { name: /forcer un créneau pour tpi-2026-077/i }))
 
@@ -766,11 +737,7 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', { name: /valider 12\.06\.2026 .* tpi-2026-088/i }))
 
@@ -803,11 +770,7 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    render(
-      <MemoryRouter initialEntries={['/planning/2026?tab=votes']}>
-        <PlanningDashboard year='2026' isAdmin />
-      </MemoryRouter>
-    )
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     await waitFor(() => {
       expect(planningServices.planningConfigService.getByYear).toHaveBeenCalledWith('2026')

@@ -636,6 +636,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   const [newRooms, setNewRooms] = useState([])
   const [isEditing, setIsEditing] = useState(false)
+  const [isNewRoomFormOpen, setIsNewRoomFormOpen] = useState(false)
   const [tpiCardDetailLevel, setTpiCardDetailLevel] = useState(() => getInitialTpiCardDetailLevel())
   const [roomFilters, setRoomFilters] = useState({
     site: "",
@@ -1950,6 +1951,48 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     )
   }, [effectiveConfigData, notify, roomCatalogBySite, roomEntries, selectedYear, soutenanceDates])
 
+  const handleCreateManualRoom = useCallback(({ date, nameRoom, site }) => {
+    const normalizedDate = String(date || "").trim()
+    const normalizedRoomName = String(nameRoom || "").trim()
+    const normalizedSite = String(site || "").trim().toUpperCase()
+
+    if (!normalizedDate || !normalizedRoomName || !normalizedSite) {
+      notify("Renseigne la date, le site et la salle avant de valider.", "error")
+      return
+    }
+
+    clearValidationState()
+    const normalizedExistingRooms = normalizeOrganizerRooms(roomEntries, effectiveConfigData)
+    const roomKey = buildPlanningRoomKey(normalizedSite, normalizedDate, normalizedRoomName)
+    const duplicateRoom = normalizedExistingRooms.some((room) =>
+      buildPlanningRoomKey(room?.site, room?.date, room?.name || room?.nameRoom) === roomKey
+    )
+
+    if (duplicateRoom) {
+      notify("Cette room existe déjà pour cette date et ce site.", "error")
+      return
+    }
+
+    const createdRoom = normalizeRoom(
+      {
+        idRoom: Date.now(),
+        site: normalizedSite,
+        date: normalizedDate,
+        name: normalizedRoomName,
+        year: Number.isInteger(Number(selectedYear)) ? Number(selectedYear) : undefined,
+        tpiDatas: []
+      },
+      normalizedExistingRooms.length,
+      effectiveConfigData
+    )
+    const updatedRooms = [...normalizedExistingRooms, createdRoom]
+
+    setNewRooms(updatedRooms)
+    writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, updatedRooms)
+    setIsNewRoomFormOpen(false)
+    notify(`Room ${normalizedRoomName} créée pour ${normalizedSite}.`, "success")
+  }, [effectiveConfigData, notify, roomEntries, selectedYear])
+
   const handleExport = async () => {
     if (roomEntries.length === 0) {
       notify(`Aucune salle à exporter pour ${selectedYear}.`, "error")
@@ -2259,6 +2302,11 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           onClearRoomFilters={clearRoomFilters}
           roomCatalogBySite={roomCatalogBySite}
           onGenerateRoomsFromCatalog={handleGenerateRoomsFromCatalog}
+          onShowNewRoomForm={() => setIsNewRoomFormOpen(true)}
+          onCreateRoom={handleCreateManualRoom}
+          onCancelCreateRoom={() => setIsNewRoomFormOpen(false)}
+          showNewRoomForm={isNewRoomFormOpen}
+          existingRooms={roomEntries}
           roomsHashAtFreeze={roomsHashAtFreeze}
           currentRoomsHash={JSON.stringify(newRooms.map(r => ({ name: r.name, date: r.date, tpiCount: r.tpiDatas?.length || 0 })))}
           isRoomsFocusMode={isRoomsFocusMode}

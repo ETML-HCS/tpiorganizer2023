@@ -66,6 +66,7 @@ const tpiPlanningSchema = new Schema({
   
   // Dates importantes
   dates: {
+    soutenance: { type: Date },
     debut: { type: Date },
     fin: { type: Date },
     premiereVisite: { type: Date },
