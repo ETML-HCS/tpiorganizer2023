@@ -534,13 +534,25 @@ const MobileRoomFilter = ({
   )
 }
 
-const ToggleFilterButton = ({ isOn, setIsOn, updateFilter, expertOrBoss }) => {
+const ToggleFilterButton = ({
+  isOn,
+  setIsOn,
+  updateFilter,
+  expertOrBoss,
+  onShowPersonalView
+}) => {
+  const isMagicLinkViewer = expertOrBoss.role === "viewer"
   const role =
     expertOrBoss.role === "projectManager"
       ? "projectManagerButton"
       : "experts"
 
   const handleClick = () => {
+    if (isMagicLinkViewer) {
+      onShowPersonalView?.()
+      return
+    }
+
     setIsOn((prevIsOn) => {
       const newIsOn = !prevIsOn
       if (newIsOn) {
@@ -584,7 +596,8 @@ const SoutenanceDesktopHeader = ({
   uniqueCandidates,
   uniqueDates,
   uniqueSites,
-  uniqueSalles
+  uniqueSalles,
+  onShowPersonalView
 }) => {
   const userGreeting = hasToken
     ? `Bonjour ${expertOrBoss?.name || "Collaborateur"}`
@@ -710,6 +723,7 @@ const SoutenanceDesktopHeader = ({
               setIsOn={setIsOn}
               updateFilter={updateFilter}
               expertOrBoss={expertOrBoss}
+              onShowPersonalView={onShowPersonalView}
             />
           )}
         </div>

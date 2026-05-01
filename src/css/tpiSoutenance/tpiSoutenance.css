@@ -43,7 +43,7 @@
   max-width: var(--app-page-width);
   margin-inline: auto;
   padding:
-    calc(var(--room-padding-top, 72px) + var(--soutenance-space-2))
+    var(--room-padding-top, 72px)
     var(--soutenance-page-gutter-inline)
     48px;
   display: flex;

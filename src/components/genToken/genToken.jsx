@@ -137,76 +137,88 @@ function buildVoteLinkDetails(link) {
   }))
 }
 
-const LinkRow = ({ label, subtitle, badges = [], details = [], url, expiresAt, onCopy, onOpen }) => (
-  <article className='token-access-link-row'>
-    <div className='token-access-link-copy'>
-      <div className='token-access-link-head'>
-        <strong>{label}</strong>
-        {subtitle ? <span>{subtitle}</span> : null}
+const LinkRow = ({ label, subtitle, badges = [], details = [], url, expiresAt, onCopy, onOpen }) => {
+  const hasUrl = typeof url === 'string' && url.length > 0
+
+  return (
+    <article className='token-access-link-row'>
+      <div className='token-access-link-copy'>
+        <div className='token-access-link-head'>
+          <strong>{label}</strong>
+          {subtitle ? <span>{subtitle}</span> : null}
+        </div>
+
+        {badges.length > 0 ? (
+          <div className='token-access-badges'>
+            {badges.map((badge) => (
+              <span
+                key={`${badge.variant || 'default'}-${badge.label}`}
+                className={`token-access-badge ${badge.variant ? `is-${badge.variant}` : ''}`.trim()}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {details.length > 0 ? (
+          <div className='token-access-link-details'>
+            {details.map((detail) => (
+              <span key={detail.key || detail.label} className='token-access-link-detail'>
+                <strong>{detail.label}</strong>
+                {detail.text ? <span>{detail.text}</span> : null}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {hasUrl ? (
+          <a
+            href={url}
+            target='_blank'
+            rel='noopener noreferrer'
+            className='token-access-link-url'
+            title={`Ouvrir le lien : ${label}`}
+            aria-label={`Ouvrir le lien ${label}`}
+          >
+            {url}
+          </a>
+        ) : (
+          <span className='token-access-link-url is-placeholder'>
+            Lien non généré
+          </span>
+        )}
+
+        <span className='token-access-link-expiry'>
+          {expiresAt ? `Expire le ${formatDateTime(expiresAt)}` : 'Expiration définie à la génération'}
+        </span>
       </div>
 
-      {badges.length > 0 ? (
-        <div className='token-access-badges'>
-          {badges.map((badge) => (
-            <span
-              key={`${badge.variant || 'default'}-${badge.label}`}
-              className={`token-access-badge ${badge.variant ? `is-${badge.variant}` : ''}`.trim()}
-            >
-              {badge.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      {details.length > 0 ? (
-        <div className='token-access-link-details'>
-          {details.map((detail) => (
-            <span key={detail.key || detail.label} className='token-access-link-detail'>
-              <strong>{detail.label}</strong>
-              {detail.text ? <span>{detail.text}</span> : null}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <a
-        href={url}
-        target='_blank'
-        rel='noopener noreferrer'
-        className='token-access-link-url'
-        title={`Ouvrir le lien : ${label}`}
-        aria-label={`Ouvrir le lien ${label}`}
-      >
-        {url}
-      </a>
-
-      <span className='token-access-link-expiry'>
-        Expire le {formatDateTime(expiresAt)}
-      </span>
-    </div>
-
       <div className='token-access-link-actions'>
-      <button
-        type='button'
-        className='token-access-btn secondary'
-        onClick={onCopy}
-        title={`Copier le lien : ${url}`}
-        aria-label={`Copier le lien ${label}`}
-      >
-        Copier
-      </button>
-      <button
-        type='button'
-        className='token-access-btn primary'
-        onClick={onOpen}
-        title={`Ouvrir le lien : ${url}`}
-        aria-label={`Ouvrir le lien ${label}`}
-      >
-        Ouvrir
-      </button>
-    </div>
-  </article>
-)
+        <button
+          type='button'
+          className='token-access-btn secondary'
+          onClick={hasUrl ? onCopy : undefined}
+          disabled={!hasUrl}
+          title={hasUrl ? `Copier le lien : ${url}` : 'Lien à générer'}
+          aria-label={`Copier le lien ${label}`}
+        >
+          Copier
+        </button>
+        <button
+          type='button'
+          className='token-access-btn primary'
+          onClick={hasUrl ? onOpen : undefined}
+          disabled={!hasUrl}
+          title={hasUrl ? `Ouvrir le lien : ${url}` : 'Lien à générer'}
+          aria-label={`Ouvrir le lien ${label}`}
+        >
+          Ouvrir
+        </button>
+      </div>
+    </article>
+  )
+}
 
 const PersonCard = ({ entry, onCopy, onOpen }) => {
   const roleLabels = Array.isArray(entry?.person?.roles)
@@ -254,9 +266,9 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
 
         {voteLinks.length > 0 ? (
           <div className='token-access-link-list'>
-            {voteLinks.map((link) => (
+            {voteLinks.map((link, index) => (
               <LinkRow
-                key={link.url}
+                key={link.url || `${entry?.person?.id}-vote-${link.reference || index}`}
                 label={formatVoteLinkLabel(link)}
                 subtitle={formatVoteLinkSubtitle(link)}
                 badges={[
@@ -331,6 +343,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       : 'all'
   ))
   const [previewPayload, setPreviewPayload] = useState(null)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -405,7 +418,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   }, [linkTypeFilter, previewPayload?.people, searchQuery])
 
   const handleGeneratePreview = useCallback(async () => {
-    setIsGenerating(true)
+    setIsPreviewLoading(true)
     setErrorMessage('')
     setSuccessMessage('')
 
@@ -417,10 +430,34 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
       setPreviewPayload(preview)
       setSuccessMessage(
-        `${preview?.summary?.peopleCount || 0} personne(s) préparée(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense.`
+        `Aperçu préparé: ${preview?.summary?.peopleCount || 0} personne(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense.`
       )
     } catch (error) {
       setPreviewPayload(null)
+      setErrorMessage(
+        error?.data?.error || error?.message || 'Impossible de préparer l’aperçu des liens d’accès.'
+      )
+    } finally {
+      setIsPreviewLoading(false)
+    }
+  }, [selectedYear])
+
+  const handleGenerateLinks = useCallback(async () => {
+    setIsGenerating(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const result = await workflowPlanningService.generateAccessLinks(
+        selectedYear,
+        window.location.origin
+      )
+
+      setPreviewPayload(result)
+      setSuccessMessage(
+        `${result?.summary?.peopleCount || 0} personne(s) préparée(s), ${result?.summary?.voteLinkCount || 0} lien(s) vote, ${result?.summary?.soutenanceLinkCount || 0} lien(s) défense généré(s).`
+      )
+    } catch (error) {
       setErrorMessage(
         error?.data?.error || error?.message || 'Impossible de générer les liens d’accès.'
       )
@@ -460,6 +497,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const previewContexts = previewPayload?.contexts || {}
   const workflowLabel = formatWorkflowLabel(previewPayload?.workflowState)
   const publicationVersion = previewContexts?.soutenance?.publicationVersion
+  const isBusy = isPreviewLoading || isGenerating
 
   return (
     <div className='token-generator-page page-with-toolbar'>
@@ -467,14 +505,19 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         id='tools'
         className='token-generator-tools'
         eyebrow='Accès'
-        title='Aperçu des magic links'
-        description='Liens vote et défense.'
+        title='Liens d’accès'
+        description='Aperçu puis génération des magic links.'
         meta={
           <div className='token-access-toolbar-meta'>
             <span className='page-tools-chip'>{workflowLabel}</span>
             <span className='page-tools-chip'>
               Publication {publicationVersion ? `v${publicationVersion}` : 'absente'}
             </span>
+            {previewPayload ? (
+              <span className='page-tools-chip'>
+                {previewPayload.linksGenerated ? 'Liens générés' : 'Aperçu seul'}
+              </span>
+            ) : null}
           </div>
         }
         toggleArrow={toggleArrow}
@@ -529,9 +572,22 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
           <div className='page-tools-field page-tools-field-action'>
             <button
               type='button'
-              className='page-tools-action-btn primary'
+              className='page-tools-action-btn secondary'
               onClick={handleGeneratePreview}
-              disabled={isGenerating}
+              disabled={isBusy}
+              title={isPreviewLoading ? 'Préparation de l’aperçu en cours.' : 'Préparer l’aperçu des liens d’accès.'}
+              aria-label={isPreviewLoading ? 'Préparation de l’aperçu en cours.' : 'Préparer l’aperçu des liens d’accès.'}
+            >
+              {isPreviewLoading ? 'Préparation...' : 'Préparer l’aperçu'}
+            </button>
+          </div>
+
+          <div className='page-tools-field page-tools-field-action'>
+            <button
+              type='button'
+              className='page-tools-action-btn primary'
+              onClick={handleGenerateLinks}
+              disabled={isBusy}
               title={isGenerating ? 'Génération des liens en cours.' : 'Générer les liens d’accès.'}
               aria-label={isGenerating ? 'Génération des liens en cours.' : 'Générer les liens d’accès.'}
             >
@@ -541,7 +597,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         </div>
 
         <div className='token-access-toolbar-note'>
-          Les liens générés remplacent les précédents.
+          L’aperçu ne crée aucun lien. La génération remplace les liens admin précédents.
         </div>
       </PageToolbar>
 
@@ -585,9 +641,9 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
           {!previewSummary ? (
             <div className='token-generator-empty-state'>
-              <h3>Aucun aperçu généré</h3>
+              <h3>Aucun aperçu préparé</h3>
               <p>
-                Choisissez une année, puis générez.
+                Choisissez une année, puis préparez l’aperçu.
               </p>
             </div>
           ) : filteredPeople.length === 0 ? (

@@ -70,6 +70,10 @@ const baseProps = {
   onCloseVotes: jest.fn(),
   onPublishDefinitive: jest.fn(),
   onSendSoutenanceLinks: jest.fn(),
+  onGenerateStaticPublication: jest.fn(),
+  onPreviewStaticPublication: jest.fn(),
+  onPublishStaticPublication: jest.fn(),
+  staticPublicationInfo: null,
   onOpenVotesTracking: jest.fn(),
   onOpenSoutenances: jest.fn(),
   roomsCount: 4,
@@ -484,6 +488,33 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(publishButton)
 
     expect(onPublishDefinitive).toHaveBeenCalledTimes(1)
+  })
+
+  test('affiche la publication statique après Finalisation dans le workflow', () => {
+    renderButtons()
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
+
+    expect(screen.getByText(/Page publique statique/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Générer page statique/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Prévisualiser/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Publier sur tpi26\.ch/i })).toBeEnabled()
+  })
+
+  test('déclenche les actions de publication statique', () => {
+    renderButtons()
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Générer page statique/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Prévisualiser/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Publier sur tpi26\.ch/i }))
+
+    expect(baseProps.onGenerateStaticPublication).toHaveBeenCalledTimes(1)
+    expect(baseProps.onPreviewStaticPublication).toHaveBeenCalledTimes(1)
+    expect(baseProps.onPublishStaticPublication).toHaveBeenCalledTimes(1)
   })
 
   test('déclenche l aperçu des liens de vote en mode debug', () => {

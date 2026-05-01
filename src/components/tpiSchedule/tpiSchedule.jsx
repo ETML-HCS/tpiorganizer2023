@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react"
 import { createPortal } from "react-dom"
+import { DndProvider } from "react-dnd"
+import { HTML5Backend } from "react-dnd-html5-backend"
 import { useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
 
@@ -26,6 +28,7 @@ import {
   TrashIcon
 } from "../shared/InlineIcons"
 import {
+  buildPlanningJsonExportFileName,
   combinedScheduleConfig,
   buildPlanningConfigForYear,
   createEmptyOffer,
@@ -68,6 +71,18 @@ import { getPlanningPerimeterState } from "../../utils/planningScopeUtils"
 
 const apiUrl = API_URL
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== "test"
+
+function buildApiAbsoluteUrl(path) {
+  if (!path) {
+    return ""
+  }
+
+  try {
+    return new URL(path, API_URL).toString()
+  } catch (error) {
+    return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`
+  }
+}
 
 function updateTpiDatas(room, sourceConfig = combinedScheduleConfig) {
   const normalizedRoom = normalizeRoom(room, 0, sourceConfig)
@@ -655,6 +670,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [validationResult, setValidationResult] = useState(null)
   const [workflowActionLoading, setWorkflowActionLoading] = useState(false)
   const [pendingWorkflowAction, setPendingWorkflowAction] = useState("")
+  const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [pendingYearChange, setPendingYearChange] = useState(null)
   const [isReplacingPlanningYear, setIsReplacingPlanningYear] = useState(false)
   const [isDeleteAllRoomsDialogOpen, setIsDeleteAllRoomsDialogOpen] = useState(false)
@@ -1310,6 +1326,26 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     refreshWorkflowContext(selectedYear).catch(console.error)
   }, [refreshWorkflowContext, selectedYear])
 
+  const refreshStaticPublicationStatus = useCallback(async (year) => {
+    if (typeof workflowPlanningService.getStaticPublicationStatus !== "function") {
+      return null
+    }
+
+    try {
+      const status = await workflowPlanningService.getStaticPublicationStatus(year)
+      setStaticPublicationInfo(status || null)
+      return status
+    } catch (error) {
+      console.warn("Erreur chargement publication statique:", error?.status, error?.message)
+      setStaticPublicationInfo(null)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshStaticPublicationStatus(selectedYear).catch(console.error)
+  }, [refreshStaticPublicationStatus, selectedYear])
+
   const executeWorkflowAction = async ({
     actionKey,
     confirmMessage = "",
@@ -1592,6 +1628,46 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       run: () => workflowPlanningService.sendPublicationLinks(selectedYear),
       successMessage: (result) =>
         `Liens défense envoyes: ${result?.sentLinks?.emailsSucceeded || 0}/${result?.sentLinks?.emailsSent || 0}.`
+    })
+  }
+
+  const handleGenerateStaticPublication = async () => {
+    await executeWorkflowAction({
+      actionKey: "staticGenerate",
+      run: () => workflowPlanningService.generateStaticPublication(selectedYear),
+      successMessage: (result) =>
+        `Page statique générée: ${result?.defenseCount || 0} défense(s), ${result?.roomCount || 0} salle(s).`,
+      onSuccess: (result) => {
+        setStaticPublicationInfo(result || null)
+      }
+    })
+  }
+
+  const handlePreviewStaticPublication = async () => {
+    let status = staticPublicationInfo
+
+    if (!status?.available) {
+      status = await refreshStaticPublicationStatus(selectedYear)
+    }
+
+    if (!status?.available || !status.previewPath) {
+      notify("Génère la page statique avant de la prévisualiser.", "warning", 3200)
+      return
+    }
+
+    window.open(buildApiAbsoluteUrl(status.previewPath), "_blank", "noopener,noreferrer")
+  }
+
+  const handlePublishStaticPublication = async () => {
+    await executeWorkflowAction({
+      actionKey: "staticPublish",
+      confirmMessage: "Publier la page statique générée sur tpi26.ch par FTP ?",
+      run: () => workflowPlanningService.publishStaticPublication(selectedYear),
+      successMessage: (result) =>
+        `Page statique publiée${result?.publicUrl ? `: ${result.publicUrl}` : "."}`,
+      onSuccess: (result) => {
+        setStaticPublicationInfo(result || null)
+      }
     })
   }
 
@@ -2015,7 +2091,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `planning-${selectedYear}.json`
+      link.download = buildPlanningJsonExportFileName(selectedYear)
       link.click()
       URL.revokeObjectURL(url)
 
@@ -2276,6 +2352,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           onCloseVotes={handleCloseVotes}
           onPublishDefinitive={handlePublishDefinitive}
           onSendSoutenanceLinks={handleSendSoutenanceLinks}
+          onGenerateStaticPublication={handleGenerateStaticPublication}
+          onPreviewStaticPublication={handlePreviewStaticPublication}
+          onPublishStaticPublication={handlePublishStaticPublication}
+          staticPublicationInfo={staticPublicationInfo}
           onOpenVotesTracking={handleOpenVoteTracking}
           onOpenSoutenances={() => {
             const normalizedYear = Number.parseInt(selectedYear, 10)
@@ -2552,35 +2632,37 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           </button>
         </div>
       ) : (
-        <div id='rooms' ref={roomsContainerRef}>
-          {visibleRooms.map((room) => {
-            const originalIndex = roomEntries.findIndex((candidate) => candidate.idRoom === room.idRoom)
+        <DndProvider backend={HTML5Backend}>
+          <div id='rooms' ref={roomsContainerRef}>
+            {visibleRooms.map((room) => {
+              const originalIndex = roomEntries.findIndex((candidate) => candidate.idRoom === room.idRoom)
 
-            return (
-              <DateRoom
-                key={room.idRoom ?? originalIndex}
-                roomIndex={originalIndex >= 0 ? originalIndex : 0}
-                roomData={room}
-                isEditOfRoom={isEditing}
-                onUpdateRoom={handleUpdateRoom}
-                tpiCardDetailLevel={tpiCardDetailLevel}
-                peopleRegistry={peopleRegistry}
-                stakeholderShortIdHints={stakeholderShortIdHints}
-                soutenanceDates={soutenanceDates}
-                roomCatalogBySite={roomCatalogBySite}
-                allRooms={roomEntries}
-                onUpdateTpi={(tpiIndex, updatedTpi) =>
-                  handleUpdateTpi(originalIndex >= 0 ? originalIndex : 0, tpiIndex, updatedTpi)
-                }
-                onSwapTpiCards={(draggedTpi, targetTpi) =>
-                  handleSwapTpiCards(draggedTpi, targetTpi)
-                }
-                onDelete={() => handleDelete(room.idRoom)}
-                validationMarkersBySlotKey={validationMarkersBySlotKey}
-              />
-            )
-          })}
-        </div>
+              return (
+                <DateRoom
+                  key={room.idRoom ?? originalIndex}
+                  roomIndex={originalIndex >= 0 ? originalIndex : 0}
+                  roomData={room}
+                  isEditOfRoom={isEditing}
+                  onUpdateRoom={handleUpdateRoom}
+                  tpiCardDetailLevel={tpiCardDetailLevel}
+                  peopleRegistry={peopleRegistry}
+                  stakeholderShortIdHints={stakeholderShortIdHints}
+                  soutenanceDates={soutenanceDates}
+                  roomCatalogBySite={roomCatalogBySite}
+                  allRooms={roomEntries}
+                  onUpdateTpi={(tpiIndex, updatedTpi) =>
+                    handleUpdateTpi(originalIndex >= 0 ? originalIndex : 0, tpiIndex, updatedTpi)
+                  }
+                  onSwapTpiCards={(draggedTpi, targetTpi) =>
+                    handleSwapTpiCards(draggedTpi, targetTpi)
+                  }
+                  onDelete={() => handleDelete(room.idRoom)}
+                  validationMarkersBySlotKey={validationMarkersBySlotKey}
+                />
+              )
+            })}
+          </div>
+        </DndProvider>
       )}
     </div>
   )

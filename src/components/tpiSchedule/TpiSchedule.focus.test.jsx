@@ -3,6 +3,22 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TpiSchedule from './TpiSchedule'
 
+jest.mock('react-dnd', () => {
+  const React = require('react')
+
+  return {
+    DndProvider: ({ children }) => React.createElement(
+      'div',
+      { 'data-testid': 'dnd-provider' },
+      children
+    )
+  }
+})
+
+jest.mock('react-dnd-html5-backend', () => ({
+  HTML5Backend: jest.fn()
+}))
+
 jest.mock('./TpiScheduleButtons', () => {
   return function MockTpiScheduleButtons({
     isRoomsFocusMode,

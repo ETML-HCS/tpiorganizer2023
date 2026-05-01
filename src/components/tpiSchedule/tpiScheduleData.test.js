@@ -1,6 +1,15 @@
-import { buildPlanningConfigForYear, normalizeRoom } from './tpiScheduleData'
+import {
+  buildPlanningConfigForYear,
+  buildPlanningJsonExportFileName,
+  normalizeRoom
+} from './tpiScheduleData'
 
 describe('tpiScheduleData', () => {
+  test('construit le nom du fichier export JSON de planification', () => {
+    expect(buildPlanningJsonExportFileName(2026)).toBe('tpiOrganizer_planning_2026.json')
+    expect(buildPlanningJsonExportFileName('2027')).toBe('tpiOrganizer_planning_2027.json')
+  })
+
   test('propage la couleur planning du site dans la configuration de salle', () => {
     const config = buildPlanningConfigForYear(
       {

@@ -1236,6 +1236,12 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   min-width: 0;
 }
 
+#tools.planning-tools .planning-workflow-stage-static {
+  align-items: stretch;
+  justify-content: stretch;
+  flex: 1 1 780px;
+}
+
 #tools.planning-tools .planning-workflow-section {
   display: flex;
   flex-direction: column;
@@ -1245,6 +1251,52 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+#tools.planning-tools .planning-workflow-section-static {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+}
+
+#tools.planning-tools .planning-static-publication-copy {
+  display: grid;
+  gap: 4px;
+  max-width: none;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+#tools.planning-tools .planning-static-publication-copy strong {
+  color: #0f172a;
+  font-size: 0.78rem;
+  line-height: 1.15;
+}
+
+#tools.planning-tools .planning-static-publication-copy p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.72rem;
+  line-height: 1.28;
+}
+
+#tools.planning-tools .planning-static-publication-status {
+  color: #0f766e;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+#tools.planning-tools .planning-workflow-section-static .planning-workflow-section-actions {
+  justify-content: flex-end;
+  align-self: center;
+  border-radius: 16px;
 }
 
 #tools.planning-tools .planning-workflow-section-actions {
@@ -2733,6 +2785,15 @@ label.icon-button:not(.icon-button--with-badge) {
   #tools.planning-tools .planning-workflow-stage {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  #tools.planning-tools .planning-workflow-stage-static {
+    flex-basis: auto;
+  }
+
+  #tools.planning-tools .planning-workflow-section-static {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   #tools.planning-tools .planning-workflow-section-actions {

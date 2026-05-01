@@ -1,6 +1,88 @@
 const { defineConfig, loadEnv } = require('vite')
-const path = require('path')
 const react = require('@vitejs/plugin-react')
+
+const normalizeModuleId = (id = '') => String(id).replace(/\\/g, '/')
+
+const getNodePackageName = (normalizedId) => {
+  const match = normalizedId.match(/\/node_modules\/((?:@[^/]+\/)?[^/]+)/)
+  return match?.[1] || ''
+}
+
+const isNodePackage = (normalizedId, packageName) => {
+  return getNodePackageName(normalizedId) === packageName
+}
+
+const isPdfLibPackage = (packageName) =>
+  packageName === 'pdf-lib' ||
+  packageName === 'tslib' ||
+  packageName.startsWith('@pdf-lib/')
+
+const lazyRouteDependencyPackages = new Set([
+  '@babel/runtime',
+  'canvg',
+  'core-js',
+  'dnd-core',
+  'dompurify',
+  'fast-deep-equal',
+  'fflate',
+  'html2canvas',
+  'jspdf',
+  'pako',
+  'performance-now',
+  'raf',
+  'react-dnd',
+  'react-dnd-html5-backend',
+  'redux',
+  'rgbcolor',
+  'stackblur-canvas',
+  'svg-pathdata'
+])
+
+const isLazyRouteDependencyPackage = (packageName) =>
+  lazyRouteDependencyPackages.has(packageName) ||
+  packageName.startsWith('@react-dnd/')
+
+const getManualChunkName = (id) => {
+  const normalizedId = normalizeModuleId(id)
+  const packageName = getNodePackageName(normalizedId)
+
+  if (!packageName) {
+    return undefined
+  }
+
+  if (
+    isNodePackage(normalizedId, 'react') ||
+    isNodePackage(normalizedId, 'react-dom') ||
+    isNodePackage(normalizedId, 'scheduler')
+  ) {
+    return 'react-vendor'
+  }
+
+  if (
+    isNodePackage(normalizedId, 'react-router') ||
+    isNodePackage(normalizedId, 'react-router-dom')
+  ) {
+    return 'router-vendor'
+  }
+
+  if (isNodePackage(normalizedId, 'react-toastify')) {
+    return 'toastify-vendor'
+  }
+
+  if (isNodePackage(normalizedId, 'papaparse')) {
+    return 'csv-vendor'
+  }
+
+  if (isPdfLibPackage(packageName)) {
+    return 'pdf-lib-vendor'
+  }
+
+  if (isLazyRouteDependencyPackage(packageName)) {
+    return undefined
+  }
+
+  return 'vendor'
+}
 
 module.exports = defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -22,39 +104,7 @@ module.exports = defineConfig(({ mode }) => {
       emptyOutDir: true,
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            if (!id.includes('node_modules')) {
-              return undefined
-            }
-
-            if (
-              id.includes('react-dom') ||
-              id.includes(`${path.sep}react${path.sep}`) ||
-              id.includes('/react/') ||
-              id.includes('\\react\\') ||
-              id.includes('scheduler')
-            ) {
-              return 'react-vendor'
-            }
-
-            if (id.includes('react-router')) {
-              return 'router-vendor'
-            }
-
-            if (id.includes('react-toastify')) {
-              return 'toastify-vendor'
-            }
-
-            if (id.includes('react-dnd')) {
-              return 'dnd-vendor'
-            }
-
-            if (id.includes('pdf-lib')) {
-              return 'pdf-vendor'
-            }
-
-            return 'vendor'
-          }
+          manualChunks: getManualChunkName
         }
       }
     },
@@ -66,3 +116,5 @@ module.exports = defineConfig(({ mode }) => {
     }
   }
 })
+
+module.exports.getManualChunkName = getManualChunkName

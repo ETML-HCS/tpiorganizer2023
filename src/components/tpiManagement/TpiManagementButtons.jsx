@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Papa from 'papaparse'
 import { Link } from 'react-router-dom'
 
 import { createTpiModel, deleteTpiModelsByYear } from '../tpiControllers/TpiController.jsx'
@@ -23,6 +22,7 @@ import {
   getImportMode,
   getMissingRequiredMappingKeys
 } from './tpiImportWorkflow.js'
+import { loadCsvParser } from './csvParserLoader.js'
 import {
   buildStakeholderDraftEntries,
   mergeStakeholderDraftEntries
@@ -140,7 +140,7 @@ const TpiManagementButtons = ({
     }
   }
 
-  const handleImportFileChange = (event) => {
+  const handleImportFileChange = async (event) => {
     const input = event.target
     const file = input.files?.[0]
 
@@ -157,74 +157,93 @@ const TpiManagementButtons = ({
 
     setIsParsingFile(true)
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (result) => {
-        try {
-          const headers = Array.isArray(result.meta?.fields)
-            ? result.meta.fields.filter(Boolean)
-            : Object.keys(result.data?.[0] || {})
+    try {
+      const Papa = await loadCsvParser()
 
-          if (!headers.length) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (result) => {
+          try {
+            const headers = Array.isArray(result.meta?.fields)
+              ? result.meta.fields.filter(Boolean)
+              : Object.keys(result.data?.[0] || {})
+
+            if (!headers.length) {
+              setImportFeedback({
+                type: 'error',
+                title: 'CSV vide',
+                message: 'Aucune colonne exploitable n’a été trouvée.',
+                stats: null,
+                issues: []
+              })
+              setImportFileName('')
+              setImportHeaders([])
+              setImportRows([])
+              setImportMapping(buildDefaultImportMapping([]))
+              input.value = ''
+              return
+            }
+
+            const rows = Array.isArray(result.data)
+              ? result.data.filter((row) =>
+                  Object.values(row || {}).some((value) => String(value ?? '').trim())
+                )
+              : []
+
+            setImportFileName(file.name)
+            setImportHeaders(headers)
+            setImportRows(rows)
+            setImportMapping(buildDefaultImportMapping(headers))
+            setShowImportForm(true)
+            input.value = ''
+          } catch (error) {
+            console.error("Erreur lors de l'analyse du fichier CSV:", error)
             setImportFeedback({
               type: 'error',
-              title: 'CSV vide',
-              message: 'Aucune colonne exploitable n’a été trouvée.',
+              title: 'CSV illisible',
+              message: "Le fichier CSV n'a pas pu être analysé.",
               stats: null,
               issues: []
             })
-            setImportFileName('')
-            setImportHeaders([])
-            setImportRows([])
-            setImportMapping(buildDefaultImportMapping([]))
             input.value = ''
-            return
+          } finally {
+            setIsParsingFile(false)
           }
-
-          const rows = Array.isArray(result.data)
-            ? result.data.filter((row) =>
-                Object.values(row || {}).some((value) => String(value ?? '').trim())
-              )
-            : []
-
-          setImportFileName(file.name)
-          setImportHeaders(headers)
-          setImportRows(rows)
-          setImportMapping(buildDefaultImportMapping(headers))
-          setShowImportForm(true)
-          input.value = ''
-        } catch (error) {
-          console.error("Erreur lors de l'analyse du fichier CSV:", error)
+        },
+        error: (error) => {
+          console.error("Erreur lors de la lecture du fichier CSV:", error)
           setImportFeedback({
             type: 'error',
             title: 'CSV illisible',
-            message: "Le fichier CSV n'a pas pu être analysé.",
+            message: 'Le fichier CSV est invalide ou illisible.',
             stats: null,
             issues: []
           })
+          setImportFileName('')
+          setImportHeaders([])
+          setImportRows([])
+          setImportMapping(buildDefaultImportMapping([]))
           input.value = ''
-        } finally {
           setIsParsingFile(false)
         }
-      },
-      error: (error) => {
-        console.error("Erreur lors de la lecture du fichier CSV:", error)
-        setImportFeedback({
-          type: 'error',
-          title: 'CSV illisible',
-          message: 'Le fichier CSV est invalide ou illisible.',
-          stats: null,
-          issues: []
-        })
-        setImportFileName('')
-        setImportHeaders([])
-        setImportRows([])
-        setImportMapping(buildDefaultImportMapping([]))
-        input.value = ''
-        setIsParsingFile(false)
-      }
-    })
+      })
+    } catch (error) {
+      console.error("Erreur lors du chargement du parseur CSV:", error)
+      setImportFeedback({
+        type: 'error',
+        title: 'Import CSV indisponible',
+        message: 'Le parseur CSV n’a pas pu être chargé.',
+        stats: null,
+        issues: []
+      })
+      setImportFileName('')
+      setImportHeaders([])
+      setImportRows([])
+      setImportMapping(buildDefaultImportMapping([]))
+      input.value = ''
+      setIsParsingFile(false)
+    }
   }
 
   const handleMappingChange = (fieldKey) => (event) => {

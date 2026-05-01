@@ -180,6 +180,69 @@ async function createSoutenanceMagicLink({
   })
 }
 
+async function revokeActiveMagicLinks({
+  year,
+  type,
+  person = null,
+  recipientEmail = null,
+  sources = [],
+  excludeIds = []
+}) {
+  if (!['vote', 'soutenance'].includes(type)) {
+    throw new Error('Type de magic link invalide.')
+  }
+
+  const normalizedYear = Number.parseInt(year, 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour revocation magic link.')
+  }
+
+  const normalizedRecipientEmail = typeof recipientEmail === 'string' && recipientEmail.trim().length > 0
+    ? recipientEmail.trim().toLowerCase()
+    : typeof person?.email === 'string' && person.email.trim().length > 0
+      ? person.email.trim().toLowerCase()
+      : ''
+
+  const query = {
+    year: normalizedYear,
+    type,
+    revokedAt: null,
+    expiresAt: { $gt: new Date() }
+  }
+
+  if (person?._id) {
+    query.personId = person._id
+  } else if (normalizedRecipientEmail) {
+    query.recipientEmail = normalizedRecipientEmail
+  } else {
+    throw new Error('Personne cible invalide pour revocation magic link.')
+  }
+
+  const normalizedSources = Array.isArray(sources)
+    ? sources.filter((source) => typeof source === 'string' && source.trim().length > 0)
+    : []
+
+  if (normalizedSources.length > 0) {
+    query['scope.source'] = { $in: normalizedSources }
+  }
+
+  const normalizedExcludeIds = Array.isArray(excludeIds)
+    ? excludeIds.filter((id) => id !== null && id !== undefined && String(id).trim().length > 0)
+    : []
+
+  if (normalizedExcludeIds.length > 0) {
+    query._id = { $nin: normalizedExcludeIds }
+  }
+
+  const revokedAt = new Date()
+  return await MagicLink.updateMany(query, {
+    $set: {
+      revokedAt,
+      updatedAt: revokedAt
+    }
+  })
+}
+
 function isTokenLooksValid(rawToken) {
   return (
     typeof rawToken === 'string' &&
@@ -246,6 +309,7 @@ module.exports = {
   createTypedMagicLink,
   createVoteMagicLink,
   createSoutenanceMagicLink,
+  revokeActiveMagicLinks,
   resolveMagicLink,
   isTokenLooksValid
 }

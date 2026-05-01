@@ -275,6 +275,32 @@ describe('SoutenanceDesktopHeader', () => {
     expect(screen.getByText('Bonjour Alice Martin')).toBeInTheDocument()
   })
 
+  test('le bouton Mes TPI d un lien magique rétablit la vue personnelle', () => {
+    const onShowPersonalView = jest.fn()
+
+    renderHeader({
+      hasToken: true,
+      expertOrBoss: { name: 'Alice Martin', role: 'viewer' },
+      isOn: true,
+      onShowPersonalView,
+      filters: {
+        date: '10 juin 2026',
+        site: 'ETML',
+        nameRoom: 'A101',
+        classType: 'matu',
+        reference: '2163',
+        candidate: 'Alice',
+        experts: 'Alice Martin',
+        projectManagerButton: 'Alice Martin',
+        projectManager: 'Alice Martin'
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /mes tpi/i }))
+
+    expect(onShowPersonalView).toHaveBeenCalledTimes(1)
+  })
+
   test('utilise des libellés courts pour les options par défaut des filtres', () => {
     renderHeader()
 

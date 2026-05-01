@@ -10,8 +10,8 @@ import {
   TrashIcon
 } from "../shared/InlineIcons"
 
-import { PDFDocument } from "pdf-lib"
 import { API_URL, STORAGE_KEYS } from "../../config/appConfig"
+import { loadPdfDocumentConstructor } from "./pdfDocumentLoader"
 import { getEvaluationStorageKey } from "./tpiEvalUtils"
 import {
   readJSONListValue,
@@ -84,6 +84,7 @@ const populatePdfFields = async () => {
 
     const copiedPdfBytes = new Uint8Array(existingPdfBytes) // Créer une copie du document PDF
 
+    const PDFDocument = await loadPdfDocumentConstructor()
     const pdfDoc = await PDFDocument.load(copiedPdfBytes) // Charger la copie du document PDF
 
     const form = pdfDoc.getForm() // Récupérer le formulaire du PDF

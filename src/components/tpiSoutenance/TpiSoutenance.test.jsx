@@ -77,7 +77,8 @@ jest.mock('./TpiSoutenanceParts', () => ({
     onPreviewPdf,
     isPrintEnabled,
     pdfViewMode,
-    onPdfViewModeChange
+    onPdfViewModeChange,
+    onShowPersonalView
   }) => (
     <div>
       <select
@@ -96,6 +97,11 @@ jest.mock('./TpiSoutenanceParts', () => ({
       <button type='button' onClick={onGeneratePdf} disabled={!isPrintEnabled}>
         Générer le PDF
       </button>
+      {onShowPersonalView ? (
+        <button type='button' onClick={onShowPersonalView}>
+          Mes TPI
+        </button>
+      ) : null}
     </div>
   ),
   formatDate: () => '10 juin 2026',
@@ -542,6 +548,69 @@ describe('TpiSoutenance focus UX', () => {
       name: 'Expert 1',
       role: 'expert'
     })
+  })
+
+  test('active l iCal personnel et masque les créneaux vides avec un lien magique', () => {
+    renderSoutenance(
+      buildHookData({
+        magicLinkToken: 'magic-token',
+        magicLinkViewer: {
+          personId: 'person-1',
+          name: 'Paul Chef'
+        },
+        isFilterApplied: false
+      })
+    )
+
+    const props = getLastRenderRoomsProps()
+    expect(props.showEmptySlots).toBe(false)
+    expect(props.personIcalFilter).toEqual({
+      name: 'Paul Chef',
+      role: 'viewer'
+    })
+    expect(props.aggregatedICalPersonLabel).toBe('Paul Chef')
+    expect(props.onClearPersonFilters).toBeUndefined()
+  })
+
+  test('le bouton Mes TPI du lien magique réinitialise uniquement les filtres de la page', () => {
+    const updateFilter = jest.fn()
+
+    renderSoutenance(
+      buildHookData({
+        magicLinkToken: 'magic-token',
+        magicLinkViewer: {
+          personId: 'person-1',
+          name: 'Paul Chef'
+        },
+        filters: {
+          ...defaultFilters,
+          date: '10 juin 2026',
+          site: 'ETML',
+          nameRoom: 'A101',
+          classType: 'matu',
+          reference: '2163',
+          candidate: 'Alice',
+          experts: 'Paul Chef',
+          projectManagerButton: 'Paul Chef',
+          projectManager: 'Paul Chef'
+        },
+        updateFilter
+      })
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /mes tpi/i }))
+
+    expect(updateFilter.mock.calls).toEqual([
+      ['date', ''],
+      ['site', ''],
+      ['nameRoom', ''],
+      ['classType', ''],
+      ['reference', ''],
+      ['candidate', ''],
+      ['experts', ''],
+      ['projectManagerButton', ''],
+      ['projectManager', '']
+    ])
   })
 
   test('transmet un handler qui vide les filtres expert et chef de projet', () => {

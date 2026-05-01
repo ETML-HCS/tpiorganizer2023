@@ -5,6 +5,9 @@ const magicLinkV2Service = require('./magicLinkV2Service')
 const { getActivePublicationVersion } = require('./publishedSoutenanceService')
 const { buildDefensePublicPath } = require('../utils/publicRoutes')
 
+const ADMIN_ACCESS_LINK_SOURCE = 'admin_access_generated'
+const ADMIN_ACCESS_REVOKE_SOURCES = ['admin_access_preview', ADMIN_ACCESS_LINK_SOURCE]
+
 function formatPersonName(person) {
   return [person?.firstName, person?.lastName]
     .filter(Boolean)
@@ -119,11 +122,110 @@ function sortSoutenanceLinks(links = []) {
   })
 }
 
+function buildPendingLink({ redirectPath }) {
+  return {
+    redirectPath,
+    expiresAt: null,
+    token: null,
+    url: null,
+    generated: false
+  }
+}
+
+async function revokeAdminAccessLinks({ magicLinks, year, type, person, excludeLinkIds = [] }) {
+  if (typeof magicLinks.revokeActiveMagicLinks !== 'function') {
+    throw new Error('Revocation des anciens magic links indisponible.')
+  }
+
+  return await magicLinks.revokeActiveMagicLinks({
+    year,
+    type,
+    person,
+    sources: ADMIN_ACCESS_REVOKE_SOURCES,
+    excludeIds: excludeLinkIds
+  })
+}
+
+async function buildVoteAccessLink({ year, baseUrl, person, generateLinks, magicLinks }) {
+  const redirectPath = `/planning/${year}`
+
+  if (!generateLinks) {
+    return buildPendingLink({ redirectPath })
+  }
+
+  const link = await magicLinks.createVoteMagicLink({
+    year,
+    person,
+    role: null,
+    scope: {
+      year,
+      kind: 'stakeholder_votes',
+      source: ADMIN_ACCESS_LINK_SOURCE
+    },
+    baseUrl,
+    redirectPath
+  })
+
+  await revokeAdminAccessLinks({
+    magicLinks,
+    year,
+    type: 'vote',
+    person,
+    excludeLinkIds: link?.id ? [link.id] : []
+  })
+
+  return {
+    ...link,
+    generated: true
+  }
+}
+
+async function buildSoutenanceAccessLink({
+  year,
+  baseUrl,
+  person,
+  publicationVersion,
+  generateLinks,
+  magicLinks
+}) {
+  const redirectPath = buildDefensePublicPath(year)
+
+  if (!generateLinks) {
+    return buildPendingLink({ redirectPath })
+  }
+
+  const link = await magicLinks.createSoutenanceMagicLink({
+    year,
+    person,
+    scope: {
+      kind: 'published_soutenances',
+      publicationVersion: publicationVersion || null,
+      source: ADMIN_ACCESS_LINK_SOURCE
+    },
+    baseUrl,
+    redirectPath
+  })
+
+  await revokeAdminAccessLinks({
+    magicLinks,
+    year,
+    type: 'soutenance',
+    person,
+    excludeLinkIds: link?.id ? [link.id] : []
+  })
+
+  return {
+    ...link,
+    generated: true
+  }
+}
+
 async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
   const {
     TpiPlanningModel,
     VoteModel,
-    magicLinks
+    magicLinks,
+    generateLinks
   } = dependencies
 
   const votingTpis = await TpiPlanningModel.find({
@@ -192,16 +294,12 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       continue
     }
 
-    const link = await magicLinks.createVoteMagicLink({
+    const link = await buildVoteAccessLink({
       year,
       person: item.voter,
-      role: null,
-      scope: {
-        year,
-        kind: 'stakeholder_votes',
-        source: 'admin_access_preview'
-      },
-      baseUrl
+      baseUrl,
+      generateLinks,
+      magicLinks
     })
 
     const tpis = Array.from(item.tpisById.values())
@@ -225,7 +323,8 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       redirectPath: link.redirectPath || `/planning/${year}`,
       expiresAt: link.expiresAt,
       token: link.token,
-      url: link.url
+      url: link.url,
+      generated: link.generated === true
     })
 
     uniqueRecipients.add(String(item.voter._id))
@@ -269,7 +368,8 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
   const {
     PersonModel,
     magicLinks,
-    getActivePublication
+    getActivePublication,
+    generateLinks
   } = dependencies
 
   const publicationVersion = await getActivePublication(year)
@@ -314,15 +414,13 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
       continue
     }
 
-    const link = await magicLinks.createSoutenanceMagicLink({
+    const link = await buildSoutenanceAccessLink({
       year,
       person: recipient,
-      scope: {
-        kind: 'published_soutenances',
-        publicationVersion: publicationVersion.version || null,
-        source: 'admin_access_preview'
-      },
-      baseUrl
+      baseUrl,
+      publicationVersion: publicationVersion.version || null,
+      generateLinks,
+      magicLinks
     })
 
     entry.soutenanceLinks.push({
@@ -331,7 +429,8 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
       redirectPath: link.redirectPath || buildDefensePublicPath(year),
       expiresAt: link.expiresAt,
       token: link.token,
-      url: link.url
+      url: link.url,
+      generated: link.generated === true
     })
 
     linkedRecipientIds.add(String(recipient._id))
@@ -346,7 +445,7 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
   }
 }
 
-async function buildAccessLinkPreview({ year, baseUrl, dependencies = {} }) {
+async function buildAccessLinkPreview({ year, baseUrl, generateLinks = false, dependencies = {} }) {
   const normalizedYear = Number.parseInt(year, 10)
   const peopleMap = new Map()
   const resolvedDependencies = {
@@ -354,7 +453,8 @@ async function buildAccessLinkPreview({ year, baseUrl, dependencies = {} }) {
     TpiPlanningModel: dependencies.TpiPlanningModel || TpiPlanning,
     VoteModel: dependencies.VoteModel || Vote,
     magicLinks: dependencies.magicLinks || magicLinkV2Service,
-    getActivePublication: dependencies.getActivePublication || getActivePublicationVersion
+    getActivePublication: dependencies.getActivePublication || getActivePublicationVersion,
+    generateLinks: generateLinks === true
   }
 
   const votePreview = await buildVoteLinkPreview(
@@ -379,6 +479,7 @@ async function buildAccessLinkPreview({ year, baseUrl, dependencies = {} }) {
 
   return {
     year: normalizedYear,
+    linksGenerated: generateLinks === true,
     generatedAt: new Date().toISOString(),
     summary: {
       peopleCount: people.length,

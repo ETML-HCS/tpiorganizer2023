@@ -61,6 +61,10 @@ const TpiScheduleButtons = ({
   onCloseVotes,
   onPublishDefinitive,
   onSendSoutenanceLinks,
+  onGenerateStaticPublication = null,
+  onPreviewStaticPublication = null,
+  onPublishStaticPublication = null,
+  staticPublicationInfo = null,
   onOpenVotesTracking,
   onOpenSoutenances,
   roomsCount = 0,
@@ -204,6 +208,13 @@ const TpiScheduleButtons = ({
       : "Publier définitif"
   const sendLinksLabel = isActionRunning("sendLinks") ? "Envoi..." : "Envoyer liens"
   const openSoutenancesLabel = "Ouvrir Défenses"
+  const generateStaticPublicationLabel = isActionRunning("staticGenerate")
+    ? "Génération..."
+    : "Générer page statique"
+  const previewStaticPublicationLabel = "Prévisualiser"
+  const publishStaticPublicationLabel = isActionRunning("staticPublish")
+    ? "Publication FTP..."
+    : "Publier sur tpi26.ch"
   const workflowActionLabels = {
     autoPlan: "Automatisation",
     validate: "Vérification",
@@ -213,7 +224,9 @@ const TpiScheduleButtons = ({
     remindVotes: "Relance des votes",
     closeVotes: "Clôture des votes",
     publish: "Publication",
-    sendLinks: "Envoi des liens"
+    sendLinks: "Envoi des liens",
+    staticGenerate: "Génération page statique",
+    staticPublish: "Publication FTP"
   }
 
   const validationIssueDetails = []
@@ -273,8 +286,24 @@ const TpiScheduleButtons = ({
       label: "Finalisation",
       state: "published",
       icon: CheckIcon
+    },
+    {
+      id: "static-publication",
+      label: "Page statique",
+      icon: DownloadIcon
     }
   ]), [])
+
+  const staticPublicationGeneratedAt = staticPublicationInfo?.generatedAt
+    ? new Date(staticPublicationInfo.generatedAt)
+    : null
+  const staticPublicationGeneratedAtLabel =
+    staticPublicationGeneratedAt && !Number.isNaN(staticPublicationGeneratedAt.getTime())
+      ? staticPublicationGeneratedAt.toLocaleString("fr-CH")
+      : ""
+  const staticPublicationPublicUrl = typeof staticPublicationInfo?.publicUrl === "string"
+    ? staticPublicationInfo.publicUrl
+    : ""
 
   useEffect(() => {
     const nextActiveWorkflowTab =
@@ -975,7 +1004,11 @@ const TpiScheduleButtons = ({
               })}
             </div>
 
-            <div className="planning-workflow-stage">
+            <div
+              className={`planning-workflow-stage ${
+                activeWorkflowTab === "static-publication" ? "planning-workflow-stage-static" : ""
+              }`.trim()}
+            >
               {activeWorkflowTab === "preparation" ? (
                 <section
                   className="planning-workflow-section"
@@ -1228,6 +1261,79 @@ const TpiScheduleButtons = ({
                       <IconButtonContent
                         label={openSoutenancesLabel}
                         icon={ArrowRightIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeWorkflowTab === "static-publication" ? (
+                <section
+                  className="planning-workflow-section planning-workflow-section-static"
+                  id="planning-workflow-panel-static-publication"
+                  role="tabpanel"
+                >
+                  <div className="planning-static-publication-copy">
+                    <strong>Page publique statique</strong>
+                    <p>
+                      Génère une page HTML autonome pour les soutenances, vérifie le rendu localement,
+                      puis publie le dossier prêt à consulter sur tpi26.ch par FTP.
+                    </p>
+                    {staticPublicationGeneratedAtLabel || staticPublicationPublicUrl ? (
+                      <span className="planning-static-publication-status">
+                        {staticPublicationGeneratedAtLabel
+                          ? `Dernière génération: ${staticPublicationGeneratedAtLabel}`
+                          : "Prête pour publication"}
+                        {staticPublicationPublicUrl ? ` · ${staticPublicationPublicUrl}` : ""}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="planning-workflow-section-actions">
+                    <button
+                      type="button"
+                      className="planning-workflow-btn primary"
+                      onClick={onGenerateStaticPublication}
+                      disabled={workflowActionLoading || !onGenerateStaticPublication}
+                      title="Générer le dossier HTML statique depuis les défenses publiées."
+                      aria-label={generateStaticPublicationLabel}
+                    >
+                      <IconButtonContent
+                        label={generateStaticPublicationLabel}
+                        icon={DownloadIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="planning-workflow-btn neutral"
+                      onClick={onPreviewStaticPublication}
+                      disabled={workflowActionLoading || !onPreviewStaticPublication}
+                      title="Ouvrir la page statique générée en prévisualisation."
+                      aria-label={previewStaticPublicationLabel}
+                    >
+                      <IconButtonContent
+                        label={previewStaticPublicationLabel}
+                        icon={SearchIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="planning-workflow-btn success"
+                      onClick={onPublishStaticPublication}
+                      disabled={workflowActionLoading || !onPublishStaticPublication}
+                      title="Publier le dossier généré sur tpi26.ch via FTP."
+                      aria-label={publishStaticPublicationLabel}
+                    >
+                      <IconButtonContent
+                        label={publishStaticPublicationLabel}
+                        icon={SendIcon}
                         showLabel
                         iconClassName="planning-button-icon"
                       />

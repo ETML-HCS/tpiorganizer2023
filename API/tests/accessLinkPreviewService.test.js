@@ -117,25 +117,18 @@ test('buildAccessLinkPreview groups vote and défense links by person', async ()
       },
       getActivePublication: async () => publication,
       magicLinks: {
-        async createVoteMagicLink({ year, person, scope }) {
-          return {
-            token: `${person._id}-${scope.kind}`,
-            url: `http://localhost:3000/planning/${year}?ml=${person._id}-${scope.kind}`,
-            expiresAt: new Date('2026-05-01T12:00:00Z')
-          }
+        async createVoteMagicLink() {
+          throw new Error('Preview should not create vote links')
         },
-        async createSoutenanceMagicLink({ year, person }) {
-          return {
-            token: `${person._id}-soutenance`,
-            url: `http://localhost:3000/defenses/${year}?ml=${person._id}-soutenance`,
-            expiresAt: new Date('2026-06-01T12:00:00Z')
-          }
+        async createSoutenanceMagicLink() {
+          throw new Error('Preview should not create soutenance links')
         }
       }
     }
   })
 
   assert.equal(preview.year, 2026)
+  assert.equal(preview.linksGenerated, false)
   assert.equal(preview.summary.peopleCount, 6)
   assert.equal(preview.summary.voteLinkCount, 4)
   assert.equal(preview.summary.soutenanceLinkCount, 6)
@@ -158,7 +151,123 @@ test('buildAccessLinkPreview groups vote and défense links by person', async ()
   assert.equal(alice.soutenanceLinks.length, 1)
   assert.equal(eva.voteLinks.length, 0)
   assert.equal(eva.soutenanceLinks.length, 1)
-  assert.match(alice.voteLinks[0].url, /planning\/2026\?ml=/)
+  assert.equal(alice.voteLinks[0].url, null)
+  assert.equal(alice.voteLinks[0].generated, false)
+  assert.equal(alice.voteLinks[0].redirectPath, '/planning/2026')
   assert.equal(eva.soutenanceLinks[0].redirectPath, '/defenses/2026')
-  assert.match(eva.soutenanceLinks[0].url, /defenses\/2026\?ml=/)
+  assert.equal(eva.soutenanceLinks[0].url, null)
+  assert.equal(eva.soutenanceLinks[0].generated, false)
+})
+
+test('buildAccessLinkPreview generates links and revokes previous admin links when requested', async () => {
+  const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
+  const candidate = createPerson('p2', 'Eva', 'Candidate', 'eva@example.com', ['candidat'])
+  const tpis = [
+    {
+      _id: 'tpi-1',
+      reference: 'TPI-2026-001',
+      sujet: 'Sujet 1',
+      status: 'voting',
+      candidat: candidate
+    }
+  ]
+  const votes = [
+    { tpiPlanning: 'tpi-1', voter: expert, voterRole: 'expert1' }
+  ]
+  const publication = {
+    version: 3,
+    rooms: [
+      {
+        tpiDatas: [
+          {
+            candidatPersonId: candidate._id,
+            expert1: { personId: expert._id }
+          }
+        ]
+      }
+    ]
+  }
+  const revokeCalls = []
+  const voteCreateCalls = []
+  const soutenanceCreateCalls = []
+
+  const preview = await buildAccessLinkPreview({
+    year: 2026,
+    baseUrl: 'http://localhost:3000',
+    generateLinks: true,
+    dependencies: {
+      TpiPlanningModel: {
+        find() {
+          return createQuery(tpis)
+        }
+      },
+      VoteModel: {
+        find() {
+          return createQuery(votes)
+        }
+      },
+      PersonModel: {
+        find() {
+          return createQuery([expert, candidate])
+        }
+      },
+      getActivePublication: async () => publication,
+      magicLinks: {
+        async revokeActiveMagicLinks(params) {
+          revokeCalls.push(params)
+          return { modifiedCount: 1 }
+        },
+        async createVoteMagicLink(params) {
+          voteCreateCalls.push(params)
+          return {
+            id: 'new-vote-link',
+            token: 'vote-token',
+            redirectPath: `/planning/${params.year}`,
+            url: `http://localhost:3000/planning/${params.year}?ml=vote-token`,
+            expiresAt: new Date('2026-05-01T12:00:00Z')
+          }
+        },
+        async createSoutenanceMagicLink(params) {
+          soutenanceCreateCalls.push(params)
+          return {
+            id: `new-soutenance-link-${soutenanceCreateCalls.length}`,
+            token: 'soutenance-token',
+            redirectPath: `/defenses/${params.year}`,
+            url: `http://localhost:3000/defenses/${params.year}?ml=soutenance-token`,
+            expiresAt: new Date('2026-06-01T12:00:00Z')
+          }
+        }
+      }
+    }
+  })
+
+  assert.equal(preview.linksGenerated, true)
+  assert.equal(preview.summary.voteLinkCount, 1)
+  assert.equal(preview.summary.soutenanceLinkCount, 2)
+  assert.equal(voteCreateCalls.length, 1)
+  assert.equal(soutenanceCreateCalls.length, 2)
+  assert.equal(revokeCalls.length, 3)
+  assert.deepEqual(
+    revokeCalls.map((call) => call.type).sort(),
+    ['soutenance', 'soutenance', 'vote']
+  )
+  assert.equal(
+    revokeCalls.every((call) => call.sources.includes('admin_access_preview') && call.sources.includes('admin_access_generated')),
+    true
+  )
+  assert.deepEqual(revokeCalls[0].excludeIds, ['new-vote-link'])
+  assert.equal(
+    revokeCalls
+      .filter((call) => call.type === 'soutenance')
+      .every((call) => call.excludeIds.length === 1 && call.excludeIds[0].startsWith('new-soutenance-link-')),
+    true
+  )
+  assert.equal(voteCreateCalls[0].scope.source, 'admin_access_generated')
+  assert.equal(soutenanceCreateCalls[0].scope.source, 'admin_access_generated')
+
+  const alice = preview.people.find((entry) => entry.person.id === expert._id)
+  assert.match(alice.voteLinks[0].url, /planning\/2026\?ml=vote-token/)
+  assert.equal(alice.voteLinks[0].generated, true)
+  assert.match(alice.soutenanceLinks[0].url, /defenses\/2026\?ml=soutenance-token/)
+  assert.equal(alice.soutenanceLinks[0].generated, true)
 })

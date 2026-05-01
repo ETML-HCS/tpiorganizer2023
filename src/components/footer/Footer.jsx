@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 
-const VERSION = "26.4.19";
+const VERSION = "26.4.30";
 
 const Footer = () => {
   const footerRef = useRef(null);

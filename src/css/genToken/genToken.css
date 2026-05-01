@@ -323,6 +323,15 @@
   text-decoration: underline;
 }
 
+.token-access-link-url.is-placeholder {
+  color: #64748b;
+  font-style: italic;
+}
+
+.token-access-link-url.is-placeholder:hover {
+  text-decoration: none;
+}
+
 .token-access-link-expiry {
   color: #64748b;
   font-size: 0.9rem;
@@ -349,6 +358,12 @@
 
 .token-access-btn:hover {
   transform: translateY(-1px);
+}
+
+.token-access-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
 }
 
 .token-access-btn.primary {

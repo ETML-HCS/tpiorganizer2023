@@ -15,6 +15,7 @@ import {
 
 const PLANNING_BASE_URL = '/api/planning'
 const WORKFLOW_BASE_URL = '/api/workflow'
+const STATIC_PUBLICATION_TIMEOUT = 120000
 
 function buildStartVotesBody(legacyRooms = null, options = {}) {
   const body = Array.isArray(legacyRooms) ? { legacyRooms } : {}
@@ -440,6 +441,16 @@ export const workflowPlanningService = {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/preview`, body)
   },
 
+  generateAccessLinks: async (year, baseUrl = null) => {
+    const body = {}
+
+    if (baseUrl) {
+      body.baseUrl = baseUrl
+    }
+
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/generate`, body)
+  },
+
   remindVotes: async (year) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/remind`, {})
   },
@@ -454,6 +465,26 @@ export const workflowPlanningService = {
 
   sendPublicationLinks: async (year) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/send-links`, {})
+  },
+
+  getStaticPublicationStatus: async (year) => {
+    return await apiService.get(`${WORKFLOW_BASE_URL}/${year}/static-publication/status`)
+  },
+
+  generateStaticPublication: async (year) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/static-publication/generate`,
+      {},
+      STATIC_PUBLICATION_TIMEOUT
+    )
+  },
+
+  publishStaticPublication: async (year) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/static-publication/publish`,
+      {},
+      STATIC_PUBLICATION_TIMEOUT
+    )
   },
 
   resetYear: async (year) => {

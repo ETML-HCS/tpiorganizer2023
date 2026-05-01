@@ -1,7 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-
-import { DndProvider } from 'react-dnd'
-import { HTML5Backend } from 'react-dnd-html5-backend'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -539,13 +536,12 @@ const DateRoom = ({
   }
 
   return (
-    <DndProvider backend={HTML5Backend}>
-      <div className='room'>
-        <div
-          ref={menuRef}
-          className={`date-room site_${String(safeRoomData.site || 'etml').toLowerCase()} detail-level-${tpiCardDetailLevel}`}
-          style={roomThemeStyle}
-        >
+    <div className='room'>
+      <div
+        ref={menuRef}
+        className={`date-room site_${String(safeRoomData.site || 'etml').toLowerCase()} detail-level-${tpiCardDetailLevel}`}
+        style={roomThemeStyle}
+      >
           <div className='date-room-topbar'>
             <div className='date-room-copy'>
               {isEditingRoom ? (
@@ -742,9 +738,8 @@ const DateRoom = ({
               </React.Fragment>
             )
           })}
-        </div>
       </div>
-    </DndProvider>
+    </div>
   )
 }
 

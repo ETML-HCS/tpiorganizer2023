@@ -375,8 +375,11 @@ export const useSoutenanceData = (year) => {
 
     const resolveMagicLink = async () => {
       if (!magicLinkToken) {
+        setMagicLinkViewer(null)
         return
       }
+
+      setMagicLinkViewer(null)
 
       try {
         const resolved = await workflowPlanningService.resolveMagicLink(magicLinkToken)
@@ -403,7 +406,7 @@ export const useSoutenanceData = (year) => {
   }, [magicLinkToken, year])
 
   useEffect(() => {
-    if (magicLinkViewer?.name) {
+    if (magicLinkViewer?.personId || magicLinkViewer?.name) {
       setFilters((previousFilters) => ({
         ...previousFilters,
         experts: "",
@@ -411,7 +414,7 @@ export const useSoutenanceData = (year) => {
         projectManager: ""
       }))
       setExpertOrBoss({
-        name: magicLinkViewer.name,
+        name: magicLinkViewer.name || "Collaborateur",
         role: "viewer"
       })
       return
@@ -443,7 +446,7 @@ export const useSoutenanceData = (year) => {
           ? matchedParticipant.name
           : previousFilters.projectManagerButton
     }))
-  }, [listOfExpertsOrBoss, token])
+  }, [listOfExpertsOrBoss, magicLinkViewer, token])
 
   useEffect(() => {
     setFilters((previousFilters) => {
@@ -509,6 +512,7 @@ export const useSoutenanceData = (year) => {
 
   return {
     token,
+    magicLinkToken,
     magicLinkViewer,
     soutenanceData,
     expertOrBoss,

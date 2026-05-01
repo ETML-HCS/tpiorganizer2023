@@ -110,6 +110,15 @@ function makeStableId(prefix, ...parts) {
   return [prefix, ...normalizedParts].join("-")
 }
 
+export const buildPlanningJsonExportFileName = (year) => {
+  const parsedYear = Number(year)
+  const yearSegment = Number.isInteger(parsedYear)
+    ? String(parsedYear)
+    : normalizeIdSegment(year) || "unknown"
+
+  return `tpiOrganizer_planning_${yearSegment}.json`
+}
+
 function padTwo(value) {
   return String(value).padStart(2, "0")
 }

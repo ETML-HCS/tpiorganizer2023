@@ -173,12 +173,12 @@ const apiService = {
   /**
    * Requête POST
    */
-  post: async (endpoint, body) => {
+  post: async (endpoint, body, timeout = TIMEOUTS.API_REQUEST) => {
     const response = await fetchWithTimeout(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: getDefaultHeaders(endpoint),
       body: JSON.stringify(body)
-    })
+    }, timeout)
     return handleResponse(response, endpoint)
   },
 

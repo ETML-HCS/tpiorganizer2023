@@ -4,7 +4,6 @@ import { useLocation, useNavigate, useParams } from "react-router-dom"
 import RenderRooms from "./TpiSoutenanceRooms"
 import { showNotification } from "../Tools"
 import { useSoutenanceData } from "./useSoutenanceData"
-import { jsPDF } from "jspdf"
 import {
   formatDate,
   formatTimeRange,
@@ -67,6 +66,13 @@ const PDF_MODE_ACCENTS = {
   [PDF_VIEW_MODES.ROOM_GRID]: PDF_COLORS.primary,
   [PDF_VIEW_MODES.PEOPLE]: PDF_COLORS.rose
 }
+
+const loadJsPdfConstructor = async () => {
+  const jsPdfModule = await import("jspdf")
+
+  return jsPdfModule.jsPDF || jsPdfModule.default?.jsPDF || jsPdfModule.default
+}
+
 const PDF_COLUMN_DEFINITIONS = {
   [PDF_VIEW_MODES.GENERAL]: {
     landscape: [
@@ -178,6 +184,18 @@ const shouldShowEmptySlotsForFilters = (filters = {}) => {
   )
 }
 
+const PERSONAL_VIEW_RESET_FILTERS = [
+  "date",
+  "site",
+  "nameRoom",
+  "classType",
+  "reference",
+  "candidate",
+  "experts",
+  "projectManagerButton",
+  "projectManager"
+]
+
 const getSinglePersonIcalFilter = (filters = {}) => {
   const activeFilters = getActiveFilterEntries(filters)
   if (activeFilters.length !== 1) {
@@ -204,6 +222,9 @@ const getSinglePersonIcalFilter = (filters = {}) => {
 
   return null
 }
+
+const getMagicLinkViewerName = (viewer = null) =>
+  String(viewer?.name || "").trim() || "Collaborateur"
 
 const getSortableDateValue = (date) => {
   const time = new Date(date).getTime()
@@ -1636,6 +1657,8 @@ const TpiSoutenance = () => {
 
   const {
     token,
+    magicLinkToken,
+    magicLinkViewer,
     soutenanceData,
     expertOrBoss,
     listOfExpertsOrBoss,
@@ -1656,10 +1679,28 @@ const TpiSoutenance = () => {
     isFilterApplied,
     aggregatedICalPersonLabel
   } = useSoutenanceData(year)
+  const hasMagicLinkPersonalView = Boolean(
+    magicLinkToken ||
+    magicLinkViewer?.personId ||
+    magicLinkViewer?.name
+  )
+  const magicLinkViewerName = hasMagicLinkPersonalView
+    ? getMagicLinkViewerName(magicLinkViewer)
+    : ""
+  const headerExpertOrBoss = hasMagicLinkPersonalView
+    ? {
+        name: magicLinkViewerName,
+        role: "viewer"
+      }
+    : expertOrBoss
   const focusReference = String(filters.reference || '').trim()
   const hasFocusedResults = filteredData.length > 0
-  const clearFocusedView = () => {
+  const clearFocusQueryParam = () => {
     const params = new URLSearchParams(location.search)
+    if (!params.has("focus")) {
+      return
+    }
+
     params.delete("focus")
     navigate(
       {
@@ -1668,6 +1709,9 @@ const TpiSoutenance = () => {
       },
       { replace: true }
     )
+  }
+  const clearFocusedView = () => {
+    clearFocusQueryParam()
     updateFilter("reference", "")
   }
   const clearPersonFilters = () => {
@@ -1675,6 +1719,11 @@ const TpiSoutenance = () => {
     updateFilter("experts", "")
     updateFilter("projectManagerButton", "")
     updateFilter("projectManager", "")
+  }
+  const showPersonalView = () => {
+    clearFocusQueryParam()
+    setIsOn(true)
+    PERSONAL_VIEW_RESET_FILTERS.forEach((filterName) => updateFilter(filterName, ""))
   }
 
   const getResponsiveColumns = (width) => {
@@ -1721,7 +1770,9 @@ const TpiSoutenance = () => {
     }
   }, [])
 
-  const showEmptySlots = shouldShowEmptySlotsForFilters(filters)
+  const showEmptySlots = hasMagicLinkPersonalView
+    ? false
+    : shouldShowEmptySlotsForFilters(filters)
   const totalSlots = filteredData?.reduce(
     (acc, room) => acc + getVisibleRoomSlotCount(room, schedule, showEmptySlots),
     0
@@ -1736,7 +1787,15 @@ const TpiSoutenance = () => {
   )
   const isPrintEnabled = rowCount > 0
   const isCompactMode = totalSlots > 20
-  const personIcalFilter = getSinglePersonIcalFilter(filters)
+  const personIcalFilter = hasMagicLinkPersonalView
+    ? {
+        name: magicLinkViewerName,
+        role: "viewer"
+      }
+    : getSinglePersonIcalFilter(filters)
+  const effectiveAggregatedICalPersonLabel = hasMagicLinkPersonalView
+    ? magicLinkViewerName
+    : aggregatedICalPersonLabel
 
   if (isLoading) {
     return <div>Chargement...</div>
@@ -1882,7 +1941,8 @@ const TpiSoutenance = () => {
 
     showNotification("Génération du PDF en cours...", "info")
     try {
-      const documentPdf = new jsPDF({
+      const JsPDF = await loadJsPdfConstructor()
+      const documentPdf = new JsPDF({
         orientation: selectedOrientation,
         unit: "mm",
         format: "a4",
@@ -2066,7 +2126,7 @@ const TpiSoutenance = () => {
           {activeMobileFilter === "MesTPI" && (
             <MobileMesTpiFilter
               mesTpi={filteredData}
-              hasToken={Boolean(token)}
+              hasToken={Boolean(token || hasMagicLinkPersonalView)}
               year={year}
               focusReference={focusReference}
             />
@@ -2090,8 +2150,8 @@ const TpiSoutenance = () => {
           <SoutenanceDesktopHeader
             isDemo={isDemo}
             year={year}
-            expertOrBoss={expertOrBoss}
-            isOn={isOn}
+            expertOrBoss={headerExpertOrBoss}
+            isOn={isOn || hasMagicLinkPersonalView}
             setIsOn={setIsOn}
             updateFilter={updateFilter}
             filters={filters}
@@ -2103,12 +2163,13 @@ const TpiSoutenance = () => {
             uniqueDates={uniqueDates}
             uniqueSites={uniqueSites}
             uniqueSalles={uniqueSalles}
-            hasToken={Boolean(token)}
+            hasToken={Boolean(token || hasMagicLinkPersonalView)}
             onPreviewPdf={() => handleGeneratePdf({ previewOnly: true })}
             pdfOrientationMode={pdfOrientationMode}
             onPdfOrientationModeChange={setPdfOrientationMode}
             pdfViewMode={pdfViewMode}
             onPdfViewModeChange={setPdfViewMode}
+            onShowPersonalView={showPersonalView}
           />
 
           {focusReference && (
@@ -2150,13 +2211,13 @@ const TpiSoutenance = () => {
                 tpiDatas={filteredData}
                 schedule={schedule}
                 listOfPerson={listOfExpertsOrBoss}
-                aggregatedICalPersonLabel={aggregatedICalPersonLabel}
+                aggregatedICalPersonLabel={effectiveAggregatedICalPersonLabel}
                 focusReference={focusReference}
                 layoutColumns={layoutColumns}
                 isAnyFilterApplied={isFilterApplied}
                 showEmptySlots={showEmptySlots}
                 personIcalFilter={personIcalFilter}
-                onClearPersonFilters={clearPersonFilters}
+                onClearPersonFilters={hasMagicLinkPersonalView ? undefined : clearPersonFilters}
                 loadData={loadData}
                 token={token}
                 isOn={isOn}

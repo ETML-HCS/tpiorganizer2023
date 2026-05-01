@@ -8,6 +8,22 @@ import { planningConfigService, workflowPlanningService } from '../../services/p
 import { installFetchMock } from '../../test-utils/mockFetch'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
+jest.mock('react-dnd', () => {
+  const React = require('react')
+
+  return {
+    DndProvider: ({ children }) => React.createElement(
+      'div',
+      { 'data-testid': 'dnd-provider' },
+      children
+    )
+  }
+})
+
+jest.mock('react-dnd-html5-backend', () => ({
+  HTML5Backend: jest.fn()
+}))
+
 jest.mock('../../config/appConfig', () => {
   const actual = jest.requireActual('../../config/appConfig')
   return {
@@ -171,6 +187,7 @@ describe('TpiSchedule auto plan', () => {
     })
 
     expect(await screen.findByText('A101')).toBeInTheDocument()
+    expect(screen.getAllByTestId('dnd-provider')).toHaveLength(1)
     expect(screen.getByTestId('mock-toolbar')).toHaveTextContent('rooms:1')
     expect(global.fetch).not.toHaveBeenCalled()
   })

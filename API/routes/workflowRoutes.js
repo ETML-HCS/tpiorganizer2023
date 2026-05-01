@@ -10,6 +10,7 @@ const publishedSoutenanceService = require('../services/publishedSoutenanceServi
 const planningAutomationService = require('../services/planningAutomationService')
 const planningValidationService = require('../services/planningValidationService')
 const schedulingService = require('../services/schedulingService')
+const staticDefensePublicationService = require('../services/staticDefensePublicationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
 const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
@@ -1257,34 +1258,80 @@ router.post(
   handleDevSoutenanceEmails
 )
 
+async function safeLogAccessLinksAudit(event) {
+  try {
+    await workflowService.logWorkflowAuditEvent(event)
+  } catch (error) {
+    console.error('Erreur audit liens d acces:', error)
+  }
+}
+
+async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
+  const year = req.validatedParams.year
+  const actionLabel = generateLinks ? 'generation' : 'preparation'
+
+  try {
+    const workflow = await workflowService.getWorkflowYearState(year)
+    const baseUrl = getFrontendBaseUrl(req)
+    const preview = await buildAccessLinkPreview({
+      year,
+      baseUrl,
+      generateLinks
+    })
+
+    if (generateLinks) {
+      await safeLogAccessLinksAudit({
+        year,
+        action: 'workflow.access-links.generate',
+        user: req.user,
+        payload: {
+          summary: preview.summary,
+          contexts: preview.contexts
+        },
+        success: true
+      })
+    }
+
+    return res.status(200).json({
+      success: true,
+      workflowState: workflow?.state || 'planning',
+      ...preview
+    })
+  } catch (error) {
+    if (generateLinks) {
+      await safeLogAccessLinksAudit({
+        year,
+        action: 'workflow.access-links.generate',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+    }
+
+    console.error(`Erreur ${actionLabel} liens d acces:`, error)
+    return res.status(500).json({
+      error: generateLinks
+        ? 'Erreur lors de la generation des liens d acces.'
+        : 'Erreur lors de la preparation des liens d acces.'
+    })
+  }
+}
+
 router.post(
   '/:year/access-links/preview',
   requireYearParam('year'),
   authMiddleware,
   requireRole('admin'),
-  async (req, res) => {
-    const year = req.validatedParams.year
+  async (req, res) => handleAccessLinks(req, res, { generateLinks: false })
+)
 
-    try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-      const baseUrl = getFrontendBaseUrl(req)
-      const preview = await buildAccessLinkPreview({
-        year,
-        baseUrl
-      })
-
-      return res.status(200).json({
-        success: true,
-        workflowState: workflow?.state || 'planning',
-        ...preview
-      })
-    } catch (error) {
-      console.error('Erreur generation apercu liens d acces:', error)
-      return res.status(500).json({
-        error: 'Erreur lors de la generation des liens d acces.'
-      })
-    }
-  }
+router.post(
+  '/:year/access-links/generate',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => handleAccessLinks(req, res, { generateLinks: true })
 )
 
 router.post(
@@ -1653,6 +1700,132 @@ router.post(
 
       console.error('Erreur reset workflow annuel:', error)
       return res.status(500).json({ error: 'Erreur lors de la réinitialisation du workflow annuel.' })
+    }
+  }
+)
+
+router.get(
+  '/:year/static-publication/status',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const status = await staticDefensePublicationService.getStaticPublicationStatus(req.validatedParams.year)
+
+      return res.status(200).json(status)
+    } catch (error) {
+      console.error('Erreur statut publication statique:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la lecture de la publication statique.'
+      })
+    }
+  }
+)
+
+router.get(
+  '/:year/static-publication/preview',
+  requireYearParam('year'),
+  async (req, res) => {
+    try {
+      const status = await staticDefensePublicationService.getStaticPublicationStatus(req.validatedParams.year)
+
+      if (!status.available) {
+        return res.status(404).send('Page statique non generee.')
+      }
+
+      res.setHeader('Cache-Control', 'no-store')
+      return res.sendFile(status.indexPath)
+    } catch (error) {
+      console.error('Erreur aperçu publication statique:', error)
+      return res.status(error.statusCode || 500).send(
+        error.message || 'Erreur lors de l aperçu de la publication statique.'
+      )
+    }
+  }
+)
+
+router.post(
+  '/:year/static-publication/generate',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const result = await staticDefensePublicationService.generateStaticDefensesSite(year)
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticPublication.generate',
+        user: req.user,
+        payload: {
+          roomCount: result.roomCount,
+          defenseCount: result.defenseCount,
+          previewPath: result.previewPath,
+          remoteDir: result.remoteDir
+        },
+        success: true
+      })
+
+      return res.status(200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticPublication.generate',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error.message
+      })
+
+      console.error('Erreur generation publication statique:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la generation de la page statique.'
+      })
+    }
+  }
+)
+
+router.post(
+  '/:year/static-publication/publish',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const result = await staticDefensePublicationService.publishStaticDefensesSite(year)
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticPublication.publish',
+        user: req.user,
+        payload: {
+          publicUrl: result.publicUrl,
+          remoteDir: result.remoteDir,
+          defenseCount: result.defenseCount
+        },
+        success: true
+      })
+
+      return res.status(200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticPublication.publish',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error.message
+      })
+
+      console.error('Erreur publication statique FTP:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la publication statique par FTP.'
+      })
     }
   }
 )
