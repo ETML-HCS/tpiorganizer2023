@@ -90,7 +90,6 @@ async function diagnose(year = 2026) {
 
     // 7. Legacy tpis (tpiList_2026)
     try {
-      const TpiModelsYear = require('./API/models/tpiModels')
       const LegacyTpiModel = TpiModelsYear(year)
       const legacyTpis = await LegacyTpiModel.find().lean()
       console.log(`\n📄 tpiList_${year} (legacy fiches): ${legacyTpis.length} fiches`)

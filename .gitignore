@@ -12,6 +12,7 @@
 
 # production
 /build
+/static-publication
 
 # misc
 .DS_Store
