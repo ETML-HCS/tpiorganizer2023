@@ -28,6 +28,7 @@ import {
   ClipboardIcon,
   ConfigurationIcon,
   ExpertIcon,
+  MailIcon,
   PlusIcon,
   RefreshIcon,
   RoomIcon,
@@ -74,6 +75,20 @@ const DEFAULT_SITE_PLANNING_COLORS = [
   "#4F46E5",
   "#65A30D"
 ]
+
+const DEFAULT_EMAIL_SETTINGS = {
+  senderName: "TPI Organizer",
+  senderEmail: "",
+  replyToEmail: "",
+  defaultDeliveryMode: "outlook"
+}
+
+const EMAIL_DELIVERY_MODE_OPTIONS = [
+  { value: "outlook", label: "Outlook manuel" },
+  { value: "automatic", label: "Envoi automatique" }
+]
+
+const EMAIL_DELIVERY_MODE_VALUES = new Set(EMAIL_DELIVERY_MODE_OPTIONS.map((option) => option.value))
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -773,6 +788,20 @@ const normalizeYearDraft = (payload, year, catalogSites = []) => {
   }
 }
 
+const normalizeEmailSettings = (value = {}) => {
+  const source = value && typeof value === "object" ? value : {}
+  const deliveryMode = compactText(source.defaultDeliveryMode || DEFAULT_EMAIL_SETTINGS.defaultDeliveryMode)
+
+  return {
+    senderName: compactText(source.senderName || DEFAULT_EMAIL_SETTINGS.senderName),
+    senderEmail: compactText(source.senderEmail).toLowerCase(),
+    replyToEmail: compactText(source.replyToEmail).toLowerCase(),
+    defaultDeliveryMode: EMAIL_DELIVERY_MODE_VALUES.has(deliveryMode)
+      ? deliveryMode
+      : DEFAULT_EMAIL_SETTINGS.defaultDeliveryMode
+  }
+}
+
 const normalizeCatalogDraft = (payload) => {
   const source = payload && typeof payload === "object" ? payload : {}
 
@@ -780,6 +809,7 @@ const normalizeCatalogDraft = (payload) => {
     key: compactText(source.key || "shared") || "shared",
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
     stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons),
+    emailSettings: normalizeEmailSettings(source.emailSettings),
     sites: normalizeCatalogSites(source.sites || [])
   }
 }
@@ -859,6 +889,7 @@ const buildCatalogPayload = (draft) => {
     key: compactText(source.key || "shared") || "shared",
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
     stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons),
+    emailSettings: normalizeEmailSettings(source.emailSettings),
     sites: normalizeCatalogSites(source.sites || []).map((site) => {
       const roomDetails = normalizeRoomDetails(site.roomDetails, compactText(site.id))
       const classGroups = Array.isArray(site.classGroups)
@@ -2160,6 +2191,124 @@ const StakeholderIconPreview = ({ iconKey, className = "" }) => {
     <span className={`configuration-defense-role-icon configuration-defense-role-icon--${iconKey} ${className}`.trim()} aria-hidden='true'>
       <Icon className='configuration-defense-role-icon-svg' />
     </span>
+  )
+}
+
+const EmailSettingsCard = ({
+  settings,
+  onChange,
+  disabled = false
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const normalizedSettings = normalizeEmailSettings(settings)
+  const bodyId = "configuration-email-settings-body"
+  const deliveryModeLabel = EMAIL_DELIVERY_MODE_OPTIONS.find(
+    (option) => option.value === normalizedSettings.defaultDeliveryMode
+  )?.label || "Outlook manuel"
+  const senderLine = normalizedSettings.senderEmail
+    ? `${normalizedSettings.senderName} · ${normalizedSettings.senderEmail}`
+    : `${normalizedSettings.senderName} · email non défini`
+
+  return (
+    <article className={`configuration-card configuration-email-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <MailIcon className='configuration-card-icon' />
+            </span>
+            <h4>Email</h4>
+            <p className='configuration-section-note'>
+              Expéditeur utilisé pour préparer les invitations de consultation.
+            </p>
+          </div>
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject='la configuration email'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>Email · {senderLine} · {deliveryModeLabel}</p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject='la configuration email'
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-body configuration-email-card-body' hidden={!isExpanded}>
+        <div className='configuration-card-grid configuration-card-grid--email'>
+          <label className='page-tools-field' htmlFor='configuration-email-sender-name'>
+            <span className='page-tools-field-label'>Nom expéditeur</span>
+            <input
+              id='configuration-email-sender-name'
+              className='page-tools-field-control'
+              value={normalizedSettings.senderName}
+              onChange={(event) => onChange("senderName", event.target.value)}
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-email-sender-email'>
+            <span className='page-tools-field-label'>Email expéditeur</span>
+            <input
+              id='configuration-email-sender-email'
+              type='email'
+              className='page-tools-field-control'
+              value={normalizedSettings.senderEmail}
+              onChange={(event) => onChange("senderEmail", event.target.value)}
+              autoComplete='email'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-email-reply-to'>
+            <span className='page-tools-field-label'>Réponse à</span>
+            <input
+              id='configuration-email-reply-to'
+              type='email'
+              className='page-tools-field-control'
+              value={normalizedSettings.replyToEmail}
+              onChange={(event) => onChange("replyToEmail", event.target.value)}
+              autoComplete='email'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-email-delivery-mode'>
+            <span className='page-tools-field-label'>Mode par défaut</span>
+            <select
+              id='configuration-email-delivery-mode'
+              className='page-tools-field-control'
+              value={normalizedSettings.defaultDeliveryMode}
+              onChange={(event) => onChange("defaultDeliveryMode", event.target.value)}
+              disabled={disabled}
+            >
+              {EMAIL_DELIVERY_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <p className='configuration-field-hint'>
+          L'envoi automatique reste désactivé dans Accès-liens pour le moment.
+        </p>
+      </div>
+    </article>
   )
 }
 
@@ -3481,6 +3630,16 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
     }))
   }, [])
 
+  const updateEmailSettingsField = useCallback((field, value) => {
+    setCatalogDraft((current) => ({
+      ...current,
+      emailSettings: normalizeEmailSettings({
+        ...(current.emailSettings || {}),
+        [field]: value
+      })
+    }))
+  }, [])
+
   const updateSiteAddressField = useCallback((siteId, field, value) => {
     setCatalogDraft((current) => ({
       ...current,
@@ -4001,6 +4160,12 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
 
           <div id='configuration-catalog-panel-body' className='configuration-panel-body' hidden={!isCatalogPanelExpanded}>
             <div className='configuration-site-groups'>
+              <EmailSettingsCard
+                settings={catalogDraft?.emailSettings}
+                onChange={updateEmailSettingsField}
+                disabled={!isCatalogReady}
+              />
+
               <DefenseRoomsAppearanceCard
                 sites={siteCards}
                 stakeholderIcons={catalogDraft?.stakeholderIcons}

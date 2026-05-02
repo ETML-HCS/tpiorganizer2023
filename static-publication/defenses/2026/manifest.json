@@ -1,9 +1,11 @@
 {
   "year": 2026,
-  "generatedAt": "2026-05-01T13:26:24.461Z",
+  "generatedAt": "2026-05-02T06:52:22.532Z",
+  "publishedAt": "2026-05-02T06:52:25.144Z",
   "roomCount": 7,
   "defenseCount": 48,
+  "accessLinkCount": 427,
   "previewPath": "/api/workflow/2026/static-publication/preview",
-  "publicUrl": "https://tpi26.ch/soutenances-2026/",
-  "remoteDir": "/soutenances-2026"
+  "publicUrl": "https://tpi26.ch/",
+  "remoteDir": "/public_html"
 }

@@ -88,18 +88,6 @@ export function getLegacyExpert(legacyTpi, key) {
   return compactText(legacyTpi?.experts?.[key] || legacyTpi?.experts?.[Number(key)] || '')
 }
 
-export function getPlanningTpiPlannedSlot(tpi) {
-  if (!tpi) {
-    return null
-  }
-
-  return (
-    tpi.confirmedSlot ||
-    tpi.proposedSlots?.find((proposedSlot) => proposedSlot?.slot)?.slot ||
-    null
-  )
-}
-
 export function getPlannedSlotLabel(slot) {
   if (!slot) {
     return 'Aucun créneau'
@@ -426,54 +414,5 @@ export function buildLegacyPayloadFromDossier(dossier, overrides = {}) {
       lien: compactText(overrideEvaluation?.lien) || compactText(legacyEvaluation?.lien)
     },
     salle: compactText(overrides?.salle) || compactText(legacyTpi?.salle) || compactText(prefilledTpi?.salle)
-  }
-}
-
-function getDefaultVoteSummary() {
-  return {
-    totalVotes: 0,
-    pendingVotes: 0,
-    acceptedVotes: 0,
-    preferredVotes: 0,
-    rejectedVotes: 0,
-    respondedVotes: 0
-  }
-}
-
-export function buildPlanningOnlyDossier({ year, planningTpi }) {
-  if (!planningTpi) {
-    return null
-  }
-
-  const workflowReference = compactText(planningTpi.reference)
-  const workflowId = compactText(planningTpi._id)
-  const legacyRef = extractLegacyRefFromWorkflowReference(workflowReference, year)
-
-  return {
-    year: Number.parseInt(year, 10) || year,
-    ref: legacyRef || workflowReference || workflowId,
-    identifiers: {
-      legacyRef: legacyRef || null,
-      workflowReference: workflowReference || null,
-      legacyId: null,
-      workflowId: workflowId || null
-    },
-    legacy: {
-      exists: false,
-      data: null,
-      stakeholderState: null
-    },
-    planning: {
-      exists: true,
-      data: planningTpi,
-      votes: [],
-      voteSummary: planningTpi.voteStats || getDefaultVoteSummary(),
-      workflowVoteSummary: planningTpi.votingSession?.voteSummary || null,
-      plannedSlot: getPlanningTpiPlannedSlot(planningTpi)
-    },
-    consistency: {
-      importedToPlanning: true,
-      issues: []
-    }
   }
 }

@@ -1286,11 +1286,37 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 #tools.planning-tools .planning-static-publication-status {
-  color: #0f766e;
+  display: grid;
+  gap: 2px;
+  color: #475569;
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+#tools.planning-tools .planning-static-publication-status span {
+  min-width: 0;
+}
+
+#tools.planning-tools .planning-static-publication-status--success {
+  color: #047857;
+}
+
+#tools.planning-tools .planning-static-publication-status--error {
+  color: #b91c1c;
+}
+
+#tools.planning-tools .planning-static-publication-status--pending {
+  color: #0369a1;
+}
+
+#tools.planning-tools .planning-static-publication-status--ready {
+  color: #b45309;
+}
+
+#tools.planning-tools .planning-static-publication-status--idle {
+  color: #64748b;
 }
 
 #tools.planning-tools .planning-workflow-section-static .planning-workflow-section-actions {

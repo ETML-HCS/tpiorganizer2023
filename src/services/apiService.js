@@ -223,29 +223,9 @@ export const authService = {
 }
 
 /**
- * Service TPI
- */
-export const tpiService = {
-  getByYear: (year) => 
-    apiService.get(`/api/tpiyear/${year}`),
-  
-  getByCandidate: (year, candidateName) => 
-    apiService.get(`/api/tpi/${year}/byCandidate/${encodeURIComponent(String(candidateName || ''))}`),
-  
-  save: (tpiData) => 
-    apiService.post('/api/tpi', tpiData),
-  
-  update: (year, tpiId, data) => 
-    apiService.put(`/api/tpiyear/${year}/${tpiId}`, data),
-  
-  delete: (year, tpiId) => 
-    apiService.delete(`/api/tpiyear/${year}/${tpiId}`)
-}
-
-/**
  * Service Experts
  */
-export const expertsService = {
+const expertsService = {
   getAll: () => 
     apiService.get('/api/experts/listExpertsOrBoss'),
   
@@ -254,17 +234,6 @@ export const expertsService = {
   
   getEmails: () => 
     apiService.get('/api/experts/emails')
-}
-
-/**
- * Service Évaluations
- */
-export const evaluationsService = {
-  getByYear: (year) => 
-    apiService.get(`/load-tpiEvals/${year}`),
-  
-  save: (_year, evalData) => 
-    apiService.post('/save-tpiEval', evalData)
 }
 
 /**
@@ -321,5 +290,4 @@ export const soutenancesService = {
     )
 }
 
-export { ApiError }
 export default apiService

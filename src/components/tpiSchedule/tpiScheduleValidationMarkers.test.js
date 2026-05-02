@@ -92,4 +92,53 @@ describe("tpiScheduleValidationMarkers", () => {
     expect(markers[slotA102P1]).toBeDefined()
     expect(markers[slotA102P1].messages).toContain("Ada Lovelace est affecté à plusieurs TPI sur le même créneau.")
   })
+
+  it("marque aussi les conflits locaux avant une validation backend", () => {
+    const rooms = [
+      makeRoom({
+        date: "2026-06-10",
+        name: "A101",
+        cards: [
+          makeCard("TPI-001", "Alice Martin", "Ada Lovelace", "Grace Hopper", "Boss 1")
+        ]
+      }),
+      makeRoom({
+        date: "2026-06-10",
+        name: "A102",
+        cards: [
+          makeCard("TPI-002", "Bob Dupont", "Ada Lovelace", "Expert 2", "Boss 2")
+        ]
+      })
+    ]
+
+    const markers = buildValidationMarkers(rooms, null, {
+      conflictCount: 1,
+      conflicts: [
+        {
+          personName: "Ada Lovelace",
+          slotKey: "2026-06-10|1",
+          period: 1,
+          references: ["TPI-001", "TPI-002"]
+        }
+      ]
+    })
+
+    const slotA101P1 = buildPlanningSlotKey({
+      dateValue: "2026-06-10",
+      period: 1,
+      site: "ETML",
+      roomName: "A101"
+    })
+    const slotA102P1 = buildPlanningSlotKey({
+      dateValue: "2026-06-10",
+      period: 1,
+      site: "ETML",
+      roomName: "A102"
+    })
+
+    expect(markers[slotA101P1]).toBeDefined()
+    expect(markers[slotA102P1]).toBeDefined()
+    expect(markers[slotA101P1].messages[0]).toMatch(/Ada Lovelace est affecté à plusieurs TPI/)
+    expect(markers[slotA102P1].messages[0]).toMatch(/Ada Lovelace est affecté à plusieurs TPI/)
+  })
 })

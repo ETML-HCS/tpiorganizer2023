@@ -113,7 +113,6 @@ router.post('/ical/batch', upload.array('files', 50), async (req, res) => {
     if (specificDates) {
       try {
         targetDates = JSON.parse(specificDates)
-        console.log(`📅 Dates spécifiques de défenses: ${targetDates.length} jours`)
       } catch (e) {
         console.warn('Erreur parsing specificDates:', e)
       }

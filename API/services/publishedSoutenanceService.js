@@ -489,6 +489,13 @@ async function getActivePublicationVersion(year) {
     .lean()
 }
 
+async function listPublicationVersions(year) {
+  return await PublicationVersion.find({ year: parseInt(year, 10) })
+    .sort({ version: -1 })
+    .select('version isActive publishedAt source')
+    .lean()
+}
+
 async function loadConfirmedPlanningTpis(year) {
   return await TpiPlanning.find({
     year: parseInt(year, 10),
@@ -894,6 +901,7 @@ module.exports = {
   syncPublishedSoutenancesToTpiCatalog,
   getActivePublicationVersion,
   getPublicationVersion,
+  listPublicationVersions,
   rollbackPublicationVersion,
   updatePublishedSoutenanceOffers,
   updatePublishedSoutenanceOffersByLegacyId

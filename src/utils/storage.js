@@ -111,7 +111,7 @@ export const decodeJwtPayload = (token) => {
   return null
 }
 
-export const isJwtExpired = (token, graceSeconds = 0) => {
+const isJwtExpired = (token, graceSeconds = 0) => {
   const payload = decodeJwtPayload(token)
 
   if (!payload || typeof payload.exp !== "number") {
@@ -122,7 +122,7 @@ export const isJwtExpired = (token, graceSeconds = 0) => {
   return payload.exp <= nowInSeconds + graceSeconds
 }
 
-export const createStorageId = () => {
+const createStorageId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID()
   }

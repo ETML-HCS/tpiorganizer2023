@@ -301,9 +301,77 @@ const TpiScheduleButtons = ({
     staticPublicationGeneratedAt && !Number.isNaN(staticPublicationGeneratedAt.getTime())
       ? staticPublicationGeneratedAt.toLocaleString("fr-CH")
       : ""
+  const staticPublicationAvailable = staticPublicationInfo?.available === true
+  const staticPublicationPublishedAt = staticPublicationInfo?.publishedAt
+    ? new Date(staticPublicationInfo.publishedAt)
+    : null
+  const staticPublicationPublishedAtLabel =
+    staticPublicationPublishedAt && !Number.isNaN(staticPublicationPublishedAt.getTime())
+      ? staticPublicationPublishedAt.toLocaleString("fr-CH")
+      : ""
+  const staticPublicationLastPublishAt = staticPublicationInfo?.lastPublishAt
+    ? new Date(staticPublicationInfo.lastPublishAt)
+    : null
+  const staticPublicationLastPublishAtLabel =
+    staticPublicationLastPublishAt && !Number.isNaN(staticPublicationLastPublishAt.getTime())
+      ? staticPublicationLastPublishAt.toLocaleString("fr-CH")
+      : ""
+  const staticPublicationLastPublishStatus = String(staticPublicationInfo?.lastPublishStatus || "")
+  const staticPublicationLastPublishMessage = typeof staticPublicationInfo?.lastPublishMessage === "string"
+    ? staticPublicationInfo.lastPublishMessage.trim()
+    : ""
   const staticPublicationPublicUrl = typeof staticPublicationInfo?.publicUrl === "string"
     ? staticPublicationInfo.publicUrl
     : ""
+  const canPreviewStaticPublication = staticPublicationAvailable && typeof onPreviewStaticPublication === "function"
+  const canPublishStaticPublication = staticPublicationAvailable && typeof onPublishStaticPublication === "function"
+  const staticPublicationStatusTone = isActionRunning("staticPublish")
+    ? "pending"
+    : staticPublicationLastPublishStatus === "error"
+      ? "error"
+      : staticPublicationPublishedAtLabel || staticPublicationLastPublishStatus === "success"
+        ? "success"
+        : staticPublicationAvailable
+          ? "ready"
+          : "idle"
+  const staticPublicationStatusItems = []
+
+  if (isActionRunning("staticGenerate")) {
+    staticPublicationStatusItems.push("Génération locale en cours...")
+  } else if (staticPublicationGeneratedAtLabel) {
+    staticPublicationStatusItems.push(`Dernière génération: ${staticPublicationGeneratedAtLabel}`)
+  } else if (staticPublicationInfo) {
+    staticPublicationStatusItems.push("Aucune génération locale disponible.")
+  } else {
+    staticPublicationStatusItems.push("Statut local non chargé.")
+  }
+
+  if (isActionRunning("staticPublish")) {
+    staticPublicationStatusItems.push("Publication FTP en cours...")
+  } else if (staticPublicationLastPublishStatus === "error") {
+    const failedAt = staticPublicationLastPublishAtLabel
+      ? ` (${staticPublicationLastPublishAtLabel})`
+      : ""
+    const errorMessage = staticPublicationLastPublishMessage || "erreur inconnue"
+    staticPublicationStatusItems.push(`Publication FTP échouée${failedAt}: ${errorMessage}`)
+
+    if (staticPublicationPublishedAtLabel) {
+      staticPublicationStatusItems.push(`Dernière réussite FTP: ${staticPublicationPublishedAtLabel}`)
+    }
+  } else if (staticPublicationPublishedAtLabel) {
+    staticPublicationStatusItems.push(`Publication FTP réussie: ${staticPublicationPublishedAtLabel}`)
+  } else if (staticPublicationLastPublishStatus === "success" && staticPublicationLastPublishAtLabel) {
+    staticPublicationStatusItems.push(`Publication FTP réussie: ${staticPublicationLastPublishAtLabel}`)
+  } else if (staticPublicationAvailable) {
+    staticPublicationStatusItems.push("Publication FTP: en attente.")
+  }
+
+  if (staticPublicationAvailable && staticPublicationPublicUrl) {
+    const urlLabel = staticPublicationPublishedAtLabel || staticPublicationLastPublishStatus === "success"
+      ? "URL publique"
+      : "URL cible"
+    staticPublicationStatusItems.push(`${urlLabel}: ${staticPublicationPublicUrl}`)
+  }
 
   useEffect(() => {
     const nextActiveWorkflowTab =
@@ -1281,14 +1349,15 @@ const TpiScheduleButtons = ({
                       Génère une page HTML autonome pour les soutenances, vérifie le rendu localement,
                       puis publie le dossier prêt à consulter sur tpi26.ch par FTP.
                     </p>
-                    {staticPublicationGeneratedAtLabel || staticPublicationPublicUrl ? (
-                      <span className="planning-static-publication-status">
-                        {staticPublicationGeneratedAtLabel
-                          ? `Dernière génération: ${staticPublicationGeneratedAtLabel}`
-                          : "Prête pour publication"}
-                        {staticPublicationPublicUrl ? ` · ${staticPublicationPublicUrl}` : ""}
-                      </span>
-                    ) : null}
+                    <div
+                      className={`planning-static-publication-status planning-static-publication-status--${staticPublicationStatusTone}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {staticPublicationStatusItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
                   </div>
                   <div className="planning-workflow-section-actions">
                     <button
@@ -1311,8 +1380,12 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn neutral"
                       onClick={onPreviewStaticPublication}
-                      disabled={workflowActionLoading || !onPreviewStaticPublication}
-                      title="Ouvrir la page statique générée en prévisualisation."
+                      disabled={workflowActionLoading || !canPreviewStaticPublication}
+                      title={
+                        staticPublicationAvailable
+                          ? "Ouvrir la page statique générée en prévisualisation."
+                          : "Génère la page statique avant la prévisualisation."
+                      }
                       aria-label={previewStaticPublicationLabel}
                     >
                       <IconButtonContent
@@ -1327,8 +1400,12 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn success"
                       onClick={onPublishStaticPublication}
-                      disabled={workflowActionLoading || !onPublishStaticPublication}
-                      title="Publier le dossier généré sur tpi26.ch via FTP."
+                      disabled={workflowActionLoading || !canPublishStaticPublication}
+                      title={
+                        staticPublicationAvailable
+                          ? "Publier le dossier généré sur tpi26.ch via FTP."
+                          : "Génère la page statique avant la publication FTP."
+                      }
                       aria-label={publishStaticPublicationLabel}
                     >
                       <IconButtonContent

@@ -93,7 +93,7 @@ const normalizePlanningClassType = (entry, index = 0) => {
   }
 }
 
-export const normalizePlanningClassTypes = (classTypes = []) => {
+const normalizePlanningClassTypes = (classTypes = []) => {
   const source = Array.isArray(classTypes) ? classTypes : []
   const normalized = []
   const seen = new Set()
@@ -170,7 +170,7 @@ const buildResolvedClassDetails = (baseType, overrides = {}) => {
   }
 }
 
-export const resolvePlanningClassType = (
+const resolvePlanningClassType = (
   value,
   classTypes = [],
   planningCatalogSites = [],
@@ -304,11 +304,3 @@ export const getPlanningClassDisplayInfo = (
       : displayClassLabel
   }
 }
-
-export const isPlanningMatuClass = (
-  value,
-  classTypes = [],
-  planningCatalogSites = [],
-  siteValue = ""
-) =>
-  getPlanningClassModeLabel(value, classTypes, planningCatalogSites, siteValue) === "MATU"

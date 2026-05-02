@@ -70,7 +70,12 @@ export const buildValidationIssueKey = (issue = {}) => {
 }
 
 export const buildLocalValidationIssues = (analysis = {}) => {
-  const personOverlapIssues = (Array.isArray(analysis.personOverlaps) ? analysis.personOverlaps : [])
+  const personOverlaps = Array.isArray(analysis.personOverlaps)
+    ? analysis.personOverlaps
+    : Array.isArray(analysis.conflicts)
+      ? analysis.conflicts
+      : []
+  const personOverlapIssues = personOverlaps
     .map((conflict) => {
       const [dateKey, periodText] = String(conflict?.slotKey || "").split("|")
       const references = toUniqueSortedValues(conflict?.references)

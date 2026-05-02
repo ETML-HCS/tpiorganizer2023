@@ -26,7 +26,6 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
   const originalCreateTpiRoomModel = tpiRoomsModels.createTpiRoomModel
   const originalVoteDeleteMany = Vote.deleteMany
   const originalVoteInsertMany = Vote.insertMany
-  const originalConsoleLog = console.log
   const originalConsoleWarn = console.warn
   const originalTpiModelsModule = require.cache[TpiModelsYearPath]
 
@@ -85,7 +84,6 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
     }
   })
 
-  console.log = () => {}
   console.warn = () => {}
 
   clearLegacyPlanningBridgeService()
@@ -136,7 +134,6 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
     tpiRoomsModels.createTpiRoomModel = originalCreateTpiRoomModel
     Vote.deleteMany = originalVoteDeleteMany
     Vote.insertMany = originalVoteInsertMany
-    console.log = originalConsoleLog
     console.warn = originalConsoleWarn
 
     if (originalTpiModelsModule) {

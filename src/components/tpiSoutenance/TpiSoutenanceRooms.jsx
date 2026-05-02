@@ -403,7 +403,6 @@ const RenderRooms = ({
       return person.token
     }
 
-    console.log(`La personne avec le nom "${name}" n'existe pas.`)
     return undefined
   }
 

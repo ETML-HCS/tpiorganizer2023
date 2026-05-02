@@ -3,10 +3,13 @@ const net = require('net')
 const path = require('path')
 const { rootDir } = require('../config/loadEnv')
 const { listPublishedSoutenances } = require('./publishedSoutenanceService')
+const { MagicLink } = require('../models/magicLinkModel')
 
 const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
 const FTP_RESPONSE_TIMEOUT_MS = 15000
+const DEFAULT_STATIC_PUBLIC_PATH_PREFIX = 'soutenances'
+const STATIC_MAGIC_LINK_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_MAGIC_LINK_BOOTSTRAP -->'
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -41,6 +44,12 @@ function serializeJsonForHtml(value) {
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026')
+}
+
+function serializeJsonForPhp(value) {
+  return JSON.stringify(value)
+    .replace(/<\?/g, '<\\/')
+    .replace(/<\/script/gi, '<\\/script')
 }
 
 function toIsoDate(value) {
@@ -240,16 +249,27 @@ function getIndexPath(year) {
   return path.join(getOutputDir(year), 'index.html')
 }
 
+function getPhpIndexPath(year) {
+  return path.join(getOutputDir(year), 'index.php')
+}
+
+function getDeniedIndexPath(year) {
+  return path.join(getOutputDir(year), 'index-denied.html')
+}
+
 function getPreviewPath(year) {
   return `/api/workflow/${parseYear(year)}/static-publication/preview`
 }
 
-function normalizeRemoteDir(year) {
-  const normalizedYear = parseYear(year)
-  const configured = compactText(process.env.FTP_STATIC_REMOTE_DIR)
-  const rawRemoteDir = configured || `/soutenances-${normalizedYear}`
-  const withYear = rawRemoteDir.replace(/\{year\}/g, String(normalizedYear))
-  const normalized = withYear.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/+$/, '')
+function withPublicationYear(value, year) {
+  return compactText(value).replace(/\{year\}/g, String(parseYear(year)))
+}
+
+function normalizeSlashPath(value) {
+  const normalized = compactText(value)
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/+$/, '')
 
   if (!normalized || normalized === '.') {
     return '/'
@@ -258,15 +278,102 @@ function normalizeRemoteDir(year) {
   return normalized.startsWith('/') ? normalized : `/${normalized}`
 }
 
+function joinSlashPaths(basePath, childPath) {
+  const normalizedBase = normalizeSlashPath(basePath)
+  const normalizedChild = compactText(childPath)
+    .replace(/\\/g, '/')
+    .replace(/^\/+/g, '')
+    .replace(/\/+$/g, '')
+
+  if (!normalizedChild || normalizedChild === '.') {
+    return normalizedBase
+  }
+
+  if (normalizedBase === '/') {
+    return `/${normalizedChild}`
+  }
+
+  return `${normalizedBase}/${normalizedChild}`
+}
+
+function getDefaultStaticPublicPath(year) {
+  return `/${DEFAULT_STATIC_PUBLIC_PATH_PREFIX}-${parseYear(year)}`
+}
+
+function derivePublicPathFromRemoteDir(remoteDir, year) {
+  const normalizedRemoteDir = normalizeSlashPath(withPublicationYear(remoteDir, year))
+  const publicRootMatch = normalizedRemoteDir.match(/\/(?:public_html|htdocs|www)(?:\/(.*))?$/i)
+
+  if (publicRootMatch) {
+    return normalizeSlashPath(publicRootMatch[1] || '/')
+  }
+
+  return normalizedRemoteDir
+}
+
+function normalizeStaticPublicPath(year) {
+  const normalizedYear = parseYear(year)
+  const configuredPublicPath = compactText(
+    process.env.STATIC_PUBLIC_PATH ||
+    process.env.STATIC_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_PUBLIC_PATH
+  )
+
+  if (configuredPublicPath) {
+    return normalizeSlashPath(withPublicationYear(configuredPublicPath, normalizedYear))
+  }
+
+  const configuredStaticRemoteDir = compactText(process.env.FTP_STATIC_REMOTE_DIR)
+  const configuredRemoteBaseDir = compactText(process.env.FTP_REMOTE_DIR)
+
+  if (configuredStaticRemoteDir && !configuredRemoteBaseDir) {
+    return derivePublicPathFromRemoteDir(configuredStaticRemoteDir, normalizedYear)
+  }
+
+  return getDefaultStaticPublicPath(normalizedYear)
+}
+
+function normalizeRemoteDir(year) {
+  const normalizedYear = parseYear(year)
+  const remoteBaseDir = compactText(process.env.FTP_REMOTE_DIR)
+  const staticRemoteDir = compactText(process.env.FTP_STATIC_REMOTE_DIR)
+  const defaultStaticDir = `${DEFAULT_STATIC_PUBLIC_PATH_PREFIX}-${normalizedYear}`
+
+  if (staticRemoteDir) {
+    const configuredStaticDir = withPublicationYear(staticRemoteDir, normalizedYear)
+    return remoteBaseDir && !configuredStaticDir.startsWith('/')
+      ? joinSlashPaths(withPublicationYear(remoteBaseDir, normalizedYear), configuredStaticDir)
+      : normalizeSlashPath(configuredStaticDir)
+  }
+
+  if (remoteBaseDir) {
+    return joinSlashPaths(withPublicationYear(remoteBaseDir, normalizedYear), defaultStaticDir)
+  }
+
+  return normalizeSlashPath(defaultStaticDir)
+}
+
+function getRemoteDirCandidates(remoteDir) {
+  const normalizedRemoteDir = normalizeSlashPath(remoteDir)
+  const candidates = [normalizedRemoteDir]
+  const withoutHomePrefix = normalizedRemoteDir.match(/^\/home\/[^/]+\/(.+)$/i)
+
+  if (withoutHomePrefix) {
+    candidates.push(normalizeSlashPath(withoutHomePrefix[1]))
+  }
+
+  return Array.from(new Set(candidates))
+}
+
 function getPublicUrl(year) {
   const baseUrl = compactText(
     process.env.STATIC_PUBLIC_BASE_URL ||
     process.env.PUBLIC_SITE_BASE_URL ||
     DEFAULT_PUBLIC_BASE_URL
   ).replace(/\/+$/, '')
-  const remoteDir = normalizeRemoteDir(year)
+  const publicPath = normalizeStaticPublicPath(year)
 
-  return `${baseUrl}${remoteDir === '/' ? '/' : `${remoteDir}/`}`
+  return `${baseUrl}${publicPath === '/' ? '/' : `${publicPath}/`}`
 }
 
 function loadSoutenanceCss() {
@@ -561,17 +668,35 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         ></div>
       </section>
     </div>
+
+    <section class="soutenance-person-ical static-hidden" id="static-person-ical">
+      <p>Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.</p>
+      <div class="soutenance-person-ical-actions">
+        <button
+          type="button"
+          class="soutenance-person-ical-button"
+          id="static-person-ical-download"
+          aria-label="Télécharger votre iCal Outlook"
+          disabled
+        >
+          <span id="static-person-ical-label">Télécharger votre iCal</span>
+        </button>
+      </div>
+    </section>
   </div>
 
   <script id="defense-data" type="application/json">${serializeJsonForHtml(payload)}</script>
+  ${STATIC_MAGIC_LINK_BOOTSTRAP_PLACEHOLDER}
   <script>
     (function () {
       var payload = JSON.parse(document.getElementById('defense-data').textContent);
       var rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
       var queryParams = new URLSearchParams(window.location.search);
       var magicLinkToken = (queryParams.get('ml') || '').trim();
-      var magicLinkViewer = null;
-      var magicLinkPending = Boolean(magicLinkToken);
+      var serverMagicLinkValidated = window.__STATIC_MAGIC_LINK_VALIDATED__ === true;
+      var serverMagicLinkViewer = window.__STATIC_MAGIC_LINK_VIEWER__ || null;
+      var magicLinkViewer = serverMagicLinkViewer;
+      var magicLinkPending = Boolean(magicLinkToken && !serverMagicLinkValidated);
       var magicLinkError = '';
       var roomsNode = document.getElementById('rooms');
       var emptyNode = document.getElementById('empty-state');
@@ -580,6 +705,10 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       var focusBanner = document.getElementById('focus-banner');
       var focusTitle = document.getElementById('focus-title');
       var focusText = document.getElementById('focus-text');
+      var personIcalNode = document.getElementById('static-person-ical');
+      var personIcalButton = document.getElementById('static-person-ical-download');
+      var personIcalLabel = document.getElementById('static-person-ical-label');
+      var currentPersonIcalEvents = [];
       var filters = {
         site: '',
         date: '',
@@ -780,6 +909,184 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         });
       }
 
+      function getMagicLinkViewerRooms() {
+        if (!magicLinkViewer || (!magicLinkViewer.personId && !magicLinkViewer.name)) {
+          return [];
+        }
+
+        return rooms.flatMap(function (room) {
+          var tpis = (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).filter(function (tpi) {
+            return tpi && tpi.refTpi && doesTpiMatchViewer(tpi, magicLinkViewer);
+          });
+
+          return tpis.length > 0 ? [Object.assign({}, room, { tpiDatas: tpis })] : [];
+        });
+      }
+
+      function escapeIcsText(value) {
+        var slash = String.fromCharCode(92);
+        return String(value || '')
+          .split(slash).join(slash + slash)
+          .split(String.fromCharCode(13)).join(slash + 'n')
+          .split(String.fromCharCode(10)).join(slash + 'n')
+          .split(',').join(slash + ',')
+          .split(';').join(slash + ';');
+      }
+
+      function buildICalDate(dateValue) {
+        var parsedDate = new Date(dateValue);
+        if (Number.isNaN(parsedDate.getTime())) {
+          return '';
+        }
+
+        return parsedDate.toISOString().slice(0, 10).replace(/-/g, '');
+      }
+
+      function buildICalDateTime(dateValue, timeValue) {
+        var datePart = buildICalDate(dateValue);
+        var parts = String(timeValue || '').split(':');
+        if (!datePart || parts.length < 2 || !parts[0] || !parts[1]) {
+          return '';
+        }
+
+        return datePart + 'T' + parts[0].padStart(2, '0') + parts[1].padStart(2, '0') + '00';
+      }
+
+      function buildIcalEvent(entry, dtStamp, index) {
+        var room = entry.salle || {};
+        var tpi = entry.tpi || {};
+        var start = buildICalDateTime(room.date, entry.startTime);
+        var end = buildICalDateTime(room.date, entry.endTime);
+
+        if (!start || !end) {
+          return null;
+        }
+
+        var eventUid = [payload.year, tpi.refTpi || 'tpi', tpi.id || room.idRoom || room.name || 'room', index].join('-');
+        var eventSummary = 'Défense TPI ' + (tpi.refTpi || 'sans-référence') + ' - ' + (tpi.candidat || '');
+        var eventDescription = [
+          'Défense de TPI ' + (tpi.candidat || ''),
+          'Expert 1: ' + ((tpi.expert1 && tpi.expert1.name) || ''),
+          'Expert 2: ' + ((tpi.expert2 && tpi.expert2.name) || ''),
+          'Encadrant: ' + ((tpi.boss && tpi.boss.name) || '')
+        ].join(String.fromCharCode(10));
+        var location = [room.site, room.name].filter(Boolean).join(' - ');
+
+        return [
+          'BEGIN:VEVENT',
+          'DTSTAMP:' + dtStamp,
+          'UID:' + escapeIcsText(eventUid),
+          'DTSTART;TZID=Europe/Berlin:' + start,
+          'DTEND;TZID=Europe/Berlin:' + end,
+          'SUMMARY:' + escapeIcsText(eventSummary),
+          'DESCRIPTION:' + escapeIcsText(eventDescription),
+          'LOCATION:' + escapeIcsText(location),
+          'TRANSP:TRANSPARENT',
+          'CLASS:PUBLIC',
+          'END:VEVENT'
+        ].join(String.fromCharCode(10));
+      }
+
+      function buildIcalContent(events) {
+        var dtStamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\\.\\d{3}Z/g, 'Z');
+        var lines = [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//tpiOrganizer2023//iCal',
+          'BEGIN:VTIMEZONE',
+          'TZID:Europe/Berlin',
+          'BEGIN:DAYLIGHT',
+          'TZOFFSETFROM:+0100',
+          'TZOFFSETTO:+0200',
+          'DTSTART:19700329T020000',
+          'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+          'END:DAYLIGHT',
+          'BEGIN:STANDARD',
+          'TZOFFSETFROM:+0200',
+          'TZOFFSETTO:+0100',
+          'DTSTART:19701025T030000',
+          'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU',
+          'END:STANDARD',
+          'END:VTIMEZONE'
+        ];
+
+        events.forEach(function (event, index) {
+          var eventBlock = buildIcalEvent(event, dtStamp, index);
+          if (eventBlock) {
+            lines.push(eventBlock);
+          }
+        });
+
+        lines.push('END:VCALENDAR');
+        return lines.join(String.fromCharCode(10));
+      }
+
+      function collectIcalEvents(sourceRooms) {
+        return sourceRooms.flatMap(function (room) {
+          return getRoomSlots(room)
+            .filter(function (slot) {
+              return Boolean(slot.tpiData && slot.tpiData.refTpi);
+            })
+            .map(function (slot) {
+              var displayedSlot = slot.displayedSlot || getDisplayedSlot(slot.tpiData, buildSchedule(room), slot.index);
+              return {
+                salle: room,
+                tpi: slot.tpiData,
+                startTime: displayedSlot.startTime,
+                endTime: displayedSlot.endTime
+              };
+            })
+            .filter(function (entry) {
+              return Boolean(entry.startTime && entry.endTime);
+            });
+        });
+      }
+
+      function sanitizeFileName(value) {
+        return String(value || 'soutenances')
+          .normalize('NFD')
+          .replace(/[\\u0300-\\u036f]/g, '')
+          .replace(/[^\\w.-]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+      }
+
+      function downloadPersonIcal() {
+        if (currentPersonIcalEvents.length === 0) {
+          return;
+        }
+
+        var icalContent = buildIcalContent(currentPersonIcalEvents);
+        var blob = new Blob([icalContent], { type: 'text/calendar;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var anchor = document.createElement('a');
+        var baseName = magicLinkViewer && magicLinkViewer.name ? magicLinkViewer.name : 'soutenances';
+
+        anchor.href = url;
+        anchor.download = sanitizeFileName(baseName) + '_soutenances.ics';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      }
+
+      function syncPersonIcal() {
+        var personRooms = getMagicLinkViewerRooms();
+        currentPersonIcalEvents = collectIcalEvents(personRooms);
+        var shouldShow = Boolean(magicLinkViewer && currentPersonIcalEvents.length > 0);
+
+        personIcalNode.classList.toggle('static-hidden', !shouldShow);
+        personIcalButton.disabled = !shouldShow;
+
+        if (shouldShow) {
+          personIcalButton.setAttribute(
+            'aria-label',
+            'Télécharger votre iCal Outlook pour ' + (magicLinkViewer.name || 'vos défenses')
+          );
+          personIcalLabel.textContent = 'Télécharger votre iCal (' + currentPersonIcalEvents.length + ')';
+        }
+      }
+
       function isAnyFilterApplied() {
         return Boolean(magicLinkViewer || magicLinkPending || magicLinkError) || Object.keys(filters).some(function (key) {
           return Boolean(filters[key]);
@@ -977,6 +1284,7 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         }, 0);
         resultCount.textContent = magicLinkPending ? 'Vérification du lien...' : count + ' défense(s)';
         renderFocusBanner(filteredRooms);
+        syncPersonIcal();
       }
 
       function getResponsiveColumns() {
@@ -989,6 +1297,12 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       }
 
       async function resolveMagicLink() {
+        if (serverMagicLinkValidated) {
+          magicLinkPending = false;
+          render();
+          return;
+        }
+
         if (!magicLinkToken) {
           return;
         }
@@ -1049,6 +1363,7 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       }
 
       document.getElementById('static-print').addEventListener('click', triggerStaticPrint);
+      personIcalButton.addEventListener('click', downloadPersonIcal);
       window.addEventListener('resize', render);
       render();
       resolveMagicLink();
@@ -1056,6 +1371,191 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
   </script>
 </body>
 </html>`
+}
+
+function buildStaticAccessDeniedHtml(year) {
+  const normalizedYear = parseYear(year)
+
+  return `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Accès protégé</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f8fafc;
+      color: #0f172a;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    main {
+      width: min(92vw, 520px);
+      padding: 28px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.4rem;
+    }
+    p {
+      margin: 0;
+      color: #475569;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Accès protégé</h1>
+    <p>La consultation des défenses ${escapeHtml(normalizedYear)} nécessite un lien magique valide.</p>
+  </main>
+</body>
+</html>`
+}
+
+function buildStaticDefensePhp({ html, year, accessLinks = [] }) {
+  const accessPayload = Array.isArray(accessLinks) ? accessLinks : []
+  const normalizedYear = parseYear(year)
+  const phpPreamble = `<?php
+declare(strict_types=1);
+
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow');
+
+$staticAccessLinks = json_decode(<<<'STATIC_ACCESS_JSON'
+${serializeJsonForPhp(accessPayload)}
+STATIC_ACCESS_JSON, true) ?: [];
+
+function staticPublicationDeny(int $statusCode = 403): void
+{
+    http_response_code($statusCode);
+    header('Content-Type: text/html; charset=utf-8');
+    echo <<<'STATIC_DENIED_HTML'
+${buildStaticAccessDeniedHtml(normalizedYear)}
+STATIC_DENIED_HTML;
+    exit;
+}
+
+$staticToken = isset($_GET['ml']) && is_string($_GET['ml']) ? trim($_GET['ml']) : '';
+
+if ($staticToken === '' || strlen($staticToken) < 32 || strlen($staticToken) > 256) {
+    staticPublicationDeny(403);
+}
+
+$staticTokenHash = hash('sha256', $staticToken);
+$staticAccessEntry = null;
+
+foreach ($staticAccessLinks as $candidateAccessEntry) {
+    $candidateHash = isset($candidateAccessEntry['hash']) && is_string($candidateAccessEntry['hash'])
+        ? $candidateAccessEntry['hash']
+        : '';
+
+    if ($candidateHash !== '' && hash_equals($candidateHash, $staticTokenHash)) {
+        $staticAccessEntry = $candidateAccessEntry;
+        break;
+    }
+}
+
+if (!is_array($staticAccessEntry)) {
+    staticPublicationDeny(403);
+}
+
+$staticExpiresAt = isset($staticAccessEntry['expiresAt']) && is_string($staticAccessEntry['expiresAt'])
+    ? strtotime($staticAccessEntry['expiresAt'])
+    : false;
+
+if ($staticExpiresAt !== false && $staticExpiresAt <= time()) {
+    staticPublicationDeny(410);
+}
+
+$staticViewer = [
+    'personId' => $staticAccessEntry['personId'] ?? null,
+    'name' => $staticAccessEntry['name'] ?? null,
+    'email' => $staticAccessEntry['email'] ?? null,
+];
+
+$staticMagicLinkBootstrap = '<script>window.__STATIC_MAGIC_LINK_VALIDATED__=true;window.__STATIC_MAGIC_LINK_VIEWER__=' .
+    json_encode($staticViewer, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) .
+    ';</script>';
+?>
+`
+
+  return `${phpPreamble}${html.replace(
+    STATIC_MAGIC_LINK_BOOTSTRAP_PLACEHOLDER,
+    '<?php echo $staticMagicLinkBootstrap; ?>'
+  )}`
+}
+
+async function listStaticPublicationAccessLinks(year) {
+  const normalizedYear = parseYear(year)
+  const now = new Date()
+  const links = await MagicLink.find({
+    type: 'soutenance',
+    year: normalizedYear,
+    revokedAt: null,
+    expiresAt: { $gt: now }
+  })
+    .select('tokenHash personId personName recipientEmail expiresAt maxUses usageCount')
+    .lean()
+
+  return (Array.isArray(links) ? links : [])
+    .filter((link) => {
+      const tokenHash = compactText(link?.tokenHash)
+      if (!tokenHash) {
+        return false
+      }
+
+      const maxUses = Number(link?.maxUses || 0)
+      const usageCount = Number(link?.usageCount || 0)
+      return maxUses <= 0 || usageCount < maxUses
+    })
+    .map((link) => ({
+      year: normalizedYear,
+      hash: compactText(link.tokenHash),
+      personId: link.personId ? String(link.personId) : null,
+      name: compactText(link.personName) || null,
+      email: compactText(link.recipientEmail) || null,
+      expiresAt: link.expiresAt instanceof Date
+        ? link.expiresAt.toISOString()
+        : new Date(link.expiresAt).toISOString()
+    }))
+}
+
+async function writeStaticPublicationAccessFiles({ year, html }) {
+  const normalizedYear = parseYear(year)
+  const phpIndexPath = getPhpIndexPath(normalizedYear)
+  const deniedIndexPath = getDeniedIndexPath(normalizedYear)
+  const accessLinks = await listStaticPublicationAccessLinks(normalizedYear)
+
+  await fs.promises.writeFile(
+    phpIndexPath,
+    buildStaticDefensePhp({
+      html,
+      year: normalizedYear,
+      accessLinks
+    }),
+    'utf8'
+  )
+  await fs.promises.writeFile(
+    deniedIndexPath,
+    buildStaticAccessDeniedHtml(normalizedYear),
+    'utf8'
+  )
+
+  return {
+    phpIndexPath,
+    deniedIndexPath,
+    accessLinkCount: accessLinks.length
+  }
 }
 
 async function getStaticPublicationStatus(year) {
@@ -1073,15 +1573,17 @@ async function getStaticPublicationStatus(year) {
   const available = fs.existsSync(indexPath)
 
   return {
+    ...(manifest || {}),
     available,
     year: normalizedYear,
     outputDir: getOutputDir(normalizedYear),
     indexPath,
+    phpIndexPath: getPhpIndexPath(normalizedYear),
+    deniedIndexPath: getDeniedIndexPath(normalizedYear),
     manifestPath,
     previewPath: available ? getPreviewPath(normalizedYear) : null,
     publicUrl: getPublicUrl(normalizedYear),
-    remoteDir: normalizeRemoteDir(normalizedYear),
-    ...(manifest || {})
+    remoteDir: normalizeRemoteDir(normalizedYear)
   }
 }
 
@@ -1092,6 +1594,8 @@ async function generateStaticDefensesSite(year) {
   const rows = flattenPublishedRooms(rooms)
   const outputDir = getOutputDir(normalizedYear)
   const indexPath = getIndexPath(normalizedYear)
+  const phpIndexPath = getPhpIndexPath(normalizedYear)
+  const deniedIndexPath = getDeniedIndexPath(normalizedYear)
   const manifestPath = getManifestPath(normalizedYear)
   const html = buildStaticDefenseHtml({
     year: normalizedYear,
@@ -1111,6 +1615,13 @@ async function generateStaticDefensesSite(year) {
 
   await fs.promises.mkdir(outputDir, { recursive: true })
   await fs.promises.writeFile(indexPath, html, 'utf8')
+  const accessFiles = await writeStaticPublicationAccessFiles({
+    year: normalizedYear,
+    html
+  })
+  manifest.accessLinkCount = accessFiles.accessLinkCount
+  manifest.phpIndexPath = phpIndexPath
+  manifest.deniedIndexPath = deniedIndexPath
   await fs.promises.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
 
   return {
@@ -1118,7 +1629,10 @@ async function generateStaticDefensesSite(year) {
     available: true,
     outputDir,
     indexPath,
+    phpIndexPath,
+    deniedIndexPath,
     manifestPath,
+    accessLinkCount: accessFiles.accessLinkCount,
     ...manifest
   }
 }
@@ -1269,22 +1783,51 @@ class SimpleFtpClient {
     }
   }
 
-  async ensureDirectory(remoteDir) {
+  async ensureDirectoryCandidate(remoteDir) {
     const parts = compactText(remoteDir)
       .split('/')
       .map((part) => part.trim())
       .filter(Boolean)
+    const publicRootIndex = parts.findIndex((part) => /^(public_html|htdocs|www)$/i.test(part))
+    const createFromIndex = publicRootIndex >= 0 ? publicRootIndex + 1 : 0
 
     await this.command('CWD /')
 
-    for (const part of parts) {
+    for (const [index, part] of parts.entries()) {
       try {
         await this.command(`CWD ${part}`)
       } catch (error) {
+        if (index < createFromIndex) {
+          throw error
+        }
+
         await this.command(`MKD ${part}`).catch(() => null)
         await this.command(`CWD ${part}`)
       }
     }
+
+    return normalizeSlashPath(remoteDir)
+  }
+
+  async ensureDirectory(remoteDir) {
+    let lastError = null
+    const attemptedDirs = []
+
+    for (const candidate of getRemoteDirCandidates(remoteDir)) {
+      attemptedDirs.push(candidate)
+      try {
+        return await this.ensureDirectoryCandidate(candidate)
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    const error = new Error(
+      `Dossier FTP introuvable: ${attemptedDirs.join(', ')}. ` +
+      'Verifiez que FTP_REMOTE_DIR correspond au dossier racine visible par ce compte FTP.'
+    )
+    error.cause = lastError
+    throw error
   }
 
   uploadFile(localPath, remoteName) {
@@ -1372,6 +1915,11 @@ async function publishStaticDefensesSite(year) {
     throw error
   }
 
+  const html = await fs.promises.readFile(status.indexPath, 'utf8')
+  const accessFiles = await writeStaticPublicationAccessFiles({
+    year: normalizedYear,
+    html
+  })
   const remoteDir = normalizeRemoteDir(normalizedYear)
   const publishedAt = new Date().toISOString()
   const manifest = {
@@ -1380,6 +1928,7 @@ async function publishStaticDefensesSite(year) {
     publishedAt,
     roomCount: status.roomCount || 0,
     defenseCount: status.defenseCount || 0,
+    accessLinkCount: accessFiles.accessLinkCount,
     previewPath: getPreviewPath(normalizedYear),
     publicUrl: getPublicUrl(normalizedYear),
     remoteDir
@@ -1389,8 +1938,9 @@ async function publishStaticDefensesSite(year) {
 
   try {
     await ftpClient.connect()
-    await ftpClient.ensureDirectory(remoteDir)
-    await ftpClient.uploadFile(status.indexPath, 'index.html')
+    manifest.remoteDir = await ftpClient.ensureDirectory(remoteDir)
+    await ftpClient.uploadFile(accessFiles.deniedIndexPath, 'index.html')
+    await ftpClient.uploadFile(accessFiles.phpIndexPath, 'index.php')
     await fs.promises.writeFile(status.manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
     await ftpClient.uploadFile(status.manifestPath, 'manifest.json')
   } finally {
@@ -1405,7 +1955,9 @@ async function publishStaticDefensesSite(year) {
 }
 
 module.exports = {
+  buildStaticAccessDeniedHtml,
   buildStaticDefenseHtml,
+  buildStaticDefensePhp,
   flattenPublishedRooms,
   generateStaticDefensesSite,
   getIndexPath,

@@ -29,7 +29,7 @@ const getHeaderValue = (entry, headerName) => {
   return value === undefined || value === null ? '' : String(value).trim()
 }
 
-export const parseFlexibleDate = (dateStr) => {
+const parseFlexibleDate = (dateStr) => {
   if (!dateStr || !String(dateStr).trim()) {
     return null
   }
@@ -196,7 +196,7 @@ export const buildDefaultImportMapping = (headers = []) =>
     return mapping
   }, {})
 
-export const normalizeImportMapping = (mapping = {}, headers = []) =>
+const normalizeImportMapping = (mapping = {}, headers = []) =>
   IMPORT_FIELD_DEFS.reduce((normalized, field) => {
     const selectedValue = mapping?.[field.key]
     if (!selectedValue) {
@@ -233,7 +233,7 @@ export const getMissingRequiredMappingKeys = (mapping = {}) => {
 
 const getMappedValue = (entry, mapping, key) => getHeaderValue(entry, mapping?.[key])
 
-export const buildImportedTpi = (entry, mapping = {}) => {
+const buildImportedTpi = (entry, mapping = {}) => {
   const refTpi = getMappedValue(entry, mapping, 'refTpi')
 
   if (!refTpi) {
@@ -310,7 +310,7 @@ const getLegacyValidationIssues = (entry, mapping) => {
   return issues
 }
 
-export const hydrateExpertsFromRows = (tpiMap, entry, mapping = {}) => {
+const hydrateExpertsFromRows = (tpiMap, entry, mapping = {}) => {
   const refTpi = getMappedValue(entry, mapping, 'refTpi')
   const currentTpi = tpiMap[refTpi]
 

@@ -750,8 +750,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [roomEntries])
 
   const validationMarkersBySlotKey = useMemo(() => {
-    return buildValidationMarkers(roomEntries, validationResult)
-  }, [roomEntries, validationResult])
+    return buildValidationMarkers(roomEntries, validationResult, localConflictSummary)
+  }, [roomEntries, validationResult, localConflictSummary])
 
   const notify = useCallback((message, type = "info", duration = 3000) => {
     showNotification(message, type, duration)
@@ -1664,9 +1664,23 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       confirmMessage: "Publier la page statique générée sur tpi26.ch par FTP ?",
       run: () => workflowPlanningService.publishStaticPublication(selectedYear),
       successMessage: (result) =>
-        `Page statique publiée${result?.publicUrl ? `: ${result.publicUrl}` : "."}`,
+        `Publication FTP réussie: ${result?.defenseCount || 0} défense(s) en ligne${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,
       onSuccess: (result) => {
-        setStaticPublicationInfo(result || null)
+        const publishedAt = result?.publishedAt || new Date().toISOString()
+        setStaticPublicationInfo({
+          ...(result || {}),
+          lastPublishStatus: "success",
+          lastPublishMessage: "Publication FTP réussie.",
+          lastPublishAt: publishedAt
+        })
+      },
+      onError: (message) => {
+        setStaticPublicationInfo((previousInfo) => ({
+          ...(previousInfo || {}),
+          lastPublishStatus: "error",
+          lastPublishMessage: message || "Erreur lors de la publication statique par FTP.",
+          lastPublishAt: new Date().toISOString()
+        }))
       }
     })
   }

@@ -242,11 +242,6 @@ const populatePdfFields = async () => {
 
       // Désactiver le mode lecture seule du champ PDF après l'avoir rempli
       pdfField.disableReadOnly()
-
-      // Afficher un message indiquant que le champ PDF a été rempli avec succès
-      console.log(
-        `Le champ PDF "${pdfFieldName}" a été rempli avec la valeur : ${fieldValue}`
-      )
     }
     namePdf += ".pdf"
     // Enregistrer le PDF modifié dans un nouveau buffer
@@ -763,7 +758,6 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
         evaluationData
 
       onEvaluationSaved?.(savedEvaluation)
-      console.log("Evaluation saved locally:", savedEvaluation)
       return savedEvaluation
     } catch (error) {
       console.error("Error saving locally:", error.message)
@@ -870,9 +864,6 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
 
     setData(data)
     setShowDownloadButton(true)
-
-    // Affichage dans la console
-    console.log("Données sauvegardées :", data)
   }
   const handleDownload = () => {
     if (data) {
@@ -972,15 +963,11 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
 
       freezeFields(false)
       setShowDownloadButton(false)
-
-      // Affichage dans la console pour confirmer que les données sont effacées
-      console.log("Données effacées")
     }
   }
 
   const toggleActive = () => {
     setIsActive((prevIsActive) => !prevIsActive)
-    console.log("toggle:", isActive)
   }
 
   const handleYearChange = (event) => {

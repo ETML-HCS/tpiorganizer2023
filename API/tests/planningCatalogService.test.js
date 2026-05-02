@@ -12,11 +12,23 @@ test('buildDefaultPlanningCatalog retourne un catalogue partage vide et reutilis
   assert.equal(catalog.key, 'shared')
   assert.equal(catalog.schemaVersion, 2)
   assert.deepEqual(catalog.sites, [])
+  assert.deepEqual(catalog.emailSettings, {
+    senderName: 'TPI Organizer',
+    senderEmail: '',
+    replyToEmail: '',
+    defaultDeliveryMode: 'outlook'
+  })
 })
 
 test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les classes par site', () => {
   const catalog = normalizeStoredCatalog({
     key: 'shared',
+    emailSettings: {
+      senderName: 'Commission TPI',
+      senderEmail: ' TPI@EXAMPLE.CH ',
+      replyToEmail: ' SUPPORT@EXAMPLE.CH ',
+      defaultDeliveryMode: 'automatic'
+    },
     stakeholderIcons: {
       candidate: 'candidate-violet',
       expert1: 'helmet-orange',
@@ -80,6 +92,12 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
     expert1: 'helmet-orange',
     expert2: 'helmet-blue',
     projectManager: 'helmet-gray'
+  })
+  assert.deepEqual(catalog.emailSettings, {
+    senderName: 'Commission TPI',
+    senderEmail: 'tpi@example.ch',
+    replyToEmail: 'support@example.ch',
+    defaultDeliveryMode: 'automatic'
   })
   assert.deepEqual(etml.rooms, ['N101', 'N102'])
   assert.equal(etml.roomDetails.length, 2)

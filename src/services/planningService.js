@@ -431,21 +431,29 @@ export const workflowPlanningService = {
     })
   },
 
-  previewAccessLinks: async (year, baseUrl = null) => {
+  previewAccessLinks: async (year, baseUrl = null, options = {}) => {
     const body = {}
 
     if (baseUrl) {
       body.baseUrl = baseUrl
     }
 
+    if (options.publicationVersion) {
+      body.publicationVersion = options.publicationVersion
+    }
+
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/preview`, body)
   },
 
-  generateAccessLinks: async (year, baseUrl = null) => {
+  generateAccessLinks: async (year, baseUrl = null, options = {}) => {
     const body = {}
 
     if (baseUrl) {
       body.baseUrl = baseUrl
+    }
+
+    if (options.publicationVersion) {
+      body.publicationVersion = options.publicationVersion
     }
 
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/generate`, body)

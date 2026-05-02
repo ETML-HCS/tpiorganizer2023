@@ -79,6 +79,21 @@
   line-height: 1.42;
 }
 
+.token-access-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.token-access-checkbox-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #1756d6;
+}
+
 .token-generator-page .token-generator-alert,
 .token-generator-page .token-generator-success {
   margin-bottom: 16px;
@@ -129,6 +144,86 @@
   color: #0f172a;
   font-size: 1.5rem;
   line-height: 1.1;
+}
+
+.token-access-draft-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 16px;
+  background: #f8fbff;
+}
+
+.token-access-draft-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.token-access-draft-head h3 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.token-access-draft-head p {
+  margin: 0;
+  color: #475569;
+}
+
+.token-access-draft-head > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.token-access-draft-list {
+  display: grid;
+  gap: 8px;
+}
+
+.token-access-draft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.token-access-draft-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.token-access-draft-copy strong,
+.token-access-draft-copy span,
+.token-access-draft-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-draft-copy strong {
+  color: #0f172a;
+}
+
+.token-access-draft-copy span,
+.token-access-draft-copy small {
+  color: #475569;
 }
 
 .token-access-person-list {
@@ -341,6 +436,7 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .token-access-btn {
@@ -424,7 +520,8 @@
   }
 
   .token-access-person-head,
-  .token-access-link-row {
+  .token-access-link-row,
+  .token-access-draft-row {
     grid-template-columns: minmax(0, 1fr);
     display: grid;
   }
@@ -457,6 +554,8 @@
 .token-access-person-card,
 .token-access-link-row,
 .token-access-link-details,
+.token-access-draft-panel,
+.token-access-draft-row,
 .token-generator-page .token-generator-empty-state,
 .token-access-empty-inline,
 .token-generator-page .token-generator-alert,

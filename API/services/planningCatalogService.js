@@ -28,6 +28,13 @@ const DEFAULT_STAKEHOLDER_ICONS = {
   expert2: 'participant',
   projectManager: 'participant'
 }
+const DEFAULT_EMAIL_SETTINGS = {
+  senderName: 'TPI Organizer',
+  senderEmail: '',
+  replyToEmail: '',
+  defaultDeliveryMode: 'outlook'
+}
+const EMAIL_DELIVERY_MODES = new Set(['outlook', 'automatic'])
 const CANDIDATE_STAKEHOLDER_ICON_VALUES = new Set([
   'candidate',
   'candidate-green',
@@ -138,6 +145,21 @@ function normalizeStakeholderIcons(value = {}, fallback = DEFAULT_STAKEHOLDER_IC
       fallbackSource.projectManager || DEFAULT_STAKEHOLDER_ICONS.projectManager,
       'projectManager'
     )
+  }
+}
+
+function normalizeEmailSettings(value = {}, fallback = DEFAULT_EMAIL_SETTINGS) {
+  const source = value && typeof value === 'object' ? value : {}
+  const fallbackSource = fallback && typeof fallback === 'object' ? fallback : DEFAULT_EMAIL_SETTINGS
+  const defaultDeliveryMode = compactText(source.defaultDeliveryMode || fallbackSource.defaultDeliveryMode)
+
+  return {
+    senderName: compactText(source.senderName ?? fallbackSource.senderName),
+    senderEmail: compactText(source.senderEmail ?? fallbackSource.senderEmail).toLowerCase(),
+    replyToEmail: compactText(source.replyToEmail ?? fallbackSource.replyToEmail).toLowerCase(),
+    defaultDeliveryMode: EMAIL_DELIVERY_MODES.has(defaultDeliveryMode)
+      ? defaultDeliveryMode
+      : DEFAULT_EMAIL_SETTINGS.defaultDeliveryMode
   }
 }
 
@@ -569,6 +591,7 @@ function buildDefaultPlanningCatalog() {
     key: 'shared',
     schemaVersion: DEFAULT_SCHEMA_VERSION,
     stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
+    emailSettings: { ...DEFAULT_EMAIL_SETTINGS },
     sites: []
   }
 }
@@ -621,6 +644,7 @@ function normalizeStoredCatalog(document, fallbackCatalog = buildDefaultPlanning
         ? Number(fallback.schemaVersion)
         : DEFAULT_SCHEMA_VERSION,
     stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons, fallback.stakeholderIcons),
+    emailSettings: normalizeEmailSettings(source.emailSettings, fallback.emailSettings),
     sites: sortSitesByInputOrder(normalizedInOrder)
   }
 }
@@ -644,6 +668,7 @@ async function getSharedPlanningCatalog() {
         key: 'shared',
         schemaVersion: DEFAULT_SCHEMA_VERSION,
         stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
+        emailSettings: { ...DEFAULT_EMAIL_SETTINGS },
         sites: []
       }
     },
@@ -671,6 +696,7 @@ async function saveSharedPlanningCatalog(payload = {}) {
       key: 'shared',
       schemaVersion: normalizedCatalog.schemaVersion,
       stakeholderIcons: normalizedCatalog.stakeholderIcons,
+      emailSettings: normalizedCatalog.emailSettings,
       sites: normalizedCatalog.sites
     },
     {
@@ -687,6 +713,7 @@ module.exports = {
   buildDefaultPlanningCatalog,
   getSharedPlanningCatalog,
   normalizeAddress,
+  normalizeEmailSettings,
   normalizeRoomDetails,
   normalizeSiteCatalog,
   normalizeStakeholderIcons,

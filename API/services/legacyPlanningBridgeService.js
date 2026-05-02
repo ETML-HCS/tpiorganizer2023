@@ -517,12 +517,6 @@ async function rebuildWorkflowFromLegacyPlanning({
 
   const processedReferences = new Set()
 
-  console.log('=== DEBUT MIGRATION LEGACY → NOUVEAU SYSTÈME ===')
-  console.log(`Année: ${normalizedYear}`)
-  console.log(`Salles legacy trouvées: ${rooms.length}`)
-  console.log(`TPI legacy trouvés: ${legacyTpis.length}`)
-  console.log(`Mapping refTpi: ${Array.from(legacyTpiByRef.keys()).join(', ')}`)
-
   for (const room of rooms) {
     const roomName = room.name || room.nameRoom || `Salle ${summary.roomCount}`
     const roomConfig = room.configSite || {}
@@ -609,12 +603,6 @@ async function rebuildWorkflowFromLegacyPlanning({
         year: normalizedYear,
         requireResolved: true
       })
-
-      console.log(`📋 TPI ${legacyRef} dans ${roomName}:`)
-      console.log(`   Candidat: "${candidateName}" (personId: ${candidatePersonId})`)
-      console.log(`   Expert1:  "${expert1Name}" (personId: ${expert1PersonId})`)
-      console.log(`   Expert2:  "${expert2Name}" (personId: ${expert2PersonId})`)
-      console.log(`   ChefProj: "${chefProjetName}" (personId: ${chefProjetPersonId})`)
 
       if (!stakeholderValidation.isValidated) {
         console.warn(
@@ -795,17 +783,6 @@ async function rebuildWorkflowFromLegacyPlanning({
       summary.voteCount += voteDocs.length
     }
   }
-
-  console.log('=== FIN MIGRATION ===')
-  console.log(`✅ TPI migrés: ${summary.tpiCount}`)
-  console.log(`✅ Slots créés: ${summary.slotCount}`)
-  console.log(`✅ Votes créés: ${summary.voteCount}`)
-  console.log(`⚠️ TPI ignorés: ${summary.skippedEntries}`)
-  console.log(`⚠️ Sites hors périmètre: ${summary.outOfScopeEntries}`)
-  console.log(`⚠️ Sites externes: ${summary.externalEntries}`)
-  console.log(`⚠️ Sites non configurés: ${summary.unconfiguredSiteEntries}`)
-  console.log(`❌ Références manquantes: ${JSON.stringify(summary.missingReferences)}`)
-  console.log('============================')
 
   return summary
 }

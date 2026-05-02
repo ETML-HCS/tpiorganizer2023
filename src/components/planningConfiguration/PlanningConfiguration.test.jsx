@@ -26,6 +26,12 @@ jest.mock('../tpiControllers/TpiController.jsx', () => ({
 const mockCatalog = {
   key: 'shared',
   schemaVersion: 2,
+  emailSettings: {
+    senderName: 'TPI Organizer',
+    senderEmail: '',
+    replyToEmail: '',
+    defaultDeliveryMode: 'outlook'
+  },
   sites: [
     {
       id: 'site-etml',
@@ -297,6 +303,20 @@ describe('PlanningConfiguration', () => {
       name: /Ouvrir la personnalisation des soutenances/i
     }))
     return (await screen.findByRole('heading', { name: 'Personnalisation des soutenances' })).closest('article')
+  }
+
+  const openEmailCard = async () => {
+    await openCatalogPanel()
+
+    const heading = screen.queryByRole('heading', { name: 'Email' })
+    if (heading) {
+      return heading.closest('article')
+    }
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /Ouvrir la configuration email/i
+    }))
+    return (await screen.findByRole('heading', { name: 'Email' })).closest('article')
   }
 
   test('replie un site en masquant son contenu', async () => {
@@ -712,6 +732,40 @@ describe('PlanningConfiguration', () => {
             planningColor: '#14532D'
           })
         ])
+      })
+    )
+  })
+
+  test('enregistre la configuration email dans le catalogue', async () => {
+    render(<PlanningConfiguration />)
+
+    const emailCard = await openEmailCard()
+    fireEvent.change(within(emailCard).getByLabelText('Nom expéditeur'), {
+      target: { value: 'Commission TPI' }
+    })
+    fireEvent.change(within(emailCard).getByLabelText('Email expéditeur'), {
+      target: { value: 'TPI@EXAMPLE.CH' }
+    })
+    fireEvent.change(within(emailCard).getByLabelText('Réponse à'), {
+      target: { value: 'SUPPORT@EXAMPLE.CH' }
+    })
+    fireEvent.change(within(emailCard).getByLabelText('Mode par défaut'), {
+      target: { value: 'automatic' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+    })
+
+    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        emailSettings: {
+          senderName: 'Commission TPI',
+          senderEmail: 'tpi@example.ch',
+          replyToEmail: 'support@example.ch',
+          defaultDeliveryMode: 'automatic'
+        }
       })
     )
   })

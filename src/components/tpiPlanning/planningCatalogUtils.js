@@ -73,7 +73,7 @@ const normalizeCatalogAliases = (value) =>
     ? value.map((entry) => normalizeCatalogValue(entry)).filter(Boolean)
     : []
 
-export const normalizePlanningCatalogClassEntry = (entry, index = 0, siteCode = '', baseType = '') => {
+const normalizePlanningCatalogClassEntry = (entry, index = 0, siteCode = '', baseType = '') => {
   const source = entry && typeof entry === 'object' && !Array.isArray(entry)
     ? entry
     : { code: entry, label: entry }
@@ -99,7 +99,7 @@ export const normalizePlanningCatalogClassEntry = (entry, index = 0, siteCode = 
   }
 }
 
-export const normalizePlanningCatalogClassEntries = (values, fallback = [], siteCode = '', baseType = '') => {
+const normalizePlanningCatalogClassEntries = (values, fallback = [], siteCode = '', baseType = '') => {
   const rawEntries = Array.isArray(values) && values.length > 0
     ? values
     : Array.isArray(fallback)
@@ -140,7 +140,7 @@ export const normalizePlanningCatalogClassEntries = (values, fallback = [], site
   })
 }
 
-export const normalizePlanningCatalogClassGroup = (value, fallback = {}, siteCode = '') => {
+const normalizePlanningCatalogClassGroup = (value, fallback = {}, siteCode = '') => {
   const source = value && typeof value === 'object' && !Array.isArray(value)
     ? value
     : {}
@@ -186,7 +186,7 @@ export const normalizePlanningCatalogClassGroup = (value, fallback = {}, siteCod
   }
 }
 
-export const normalizePlanningCatalogClassGroups = (values, fallback = [], siteCode = '') => {
+const normalizePlanningCatalogClassGroups = (values, fallback = [], siteCode = '') => {
   const sourceGroups = Array.isArray(values) && values.length > 0
     ? values
     : Array.isArray(fallback)
@@ -227,7 +227,7 @@ export const normalizePlanningCatalogClassGroups = (values, fallback = [], siteC
   })
 }
 
-export const normalizePlanningCatalogSite = (value, fallback = {}) => {
+const normalizePlanningCatalogSite = (value, fallback = {}) => {
   const source = value && typeof value === 'object' && !Array.isArray(value)
     ? value
     : {}

@@ -491,19 +491,33 @@ describe('TpiScheduleButtons - Données', () => {
   })
 
   test('affiche la publication statique après Finalisation dans le workflow', () => {
-    renderButtons()
+    renderButtons({
+      staticPublicationInfo: {
+        available: true,
+        generatedAt: '2026-05-01T10:00:00.000Z',
+        publicUrl: 'https://tpi26.ch/defenses/2026/'
+      }
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
     fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
 
     expect(screen.getByText(/Page publique statique/i)).toBeInTheDocument()
+    expect(screen.getByText(/Dernière génération:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Publication FTP: en attente/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Générer page statique/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Prévisualiser/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Publier sur tpi26\.ch/i })).toBeEnabled()
   })
 
   test('déclenche les actions de publication statique', () => {
-    renderButtons()
+    renderButtons({
+      staticPublicationInfo: {
+        available: true,
+        generatedAt: '2026-05-01T10:00:00.000Z',
+        publicUrl: 'https://tpi26.ch/defenses/2026/'
+      }
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
     fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
@@ -515,6 +529,42 @@ describe('TpiScheduleButtons - Données', () => {
     expect(baseProps.onGenerateStaticPublication).toHaveBeenCalledTimes(1)
     expect(baseProps.onPreviewStaticPublication).toHaveBeenCalledTimes(1)
     expect(baseProps.onPublishStaticPublication).toHaveBeenCalledTimes(1)
+  })
+
+  test('affiche la réussite de publication statique FTP', () => {
+    renderButtons({
+      staticPublicationInfo: {
+        available: true,
+        generatedAt: '2026-05-01T10:00:00.000Z',
+        publishedAt: '2026-05-01T10:05:00.000Z',
+        publicUrl: 'https://tpi26.ch/defenses/2026/'
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
+
+    expect(screen.getByText(/Publication FTP réussie:/i)).toBeInTheDocument()
+    expect(screen.getByText(/URL publique: https:\/\/tpi26\.ch\/defenses\/2026\//i)).toBeInTheDocument()
+  })
+
+  test('affiche l échec de la dernière publication statique FTP', () => {
+    renderButtons({
+      staticPublicationInfo: {
+        available: true,
+        generatedAt: '2026-05-01T10:00:00.000Z',
+        lastPublishStatus: 'error',
+        lastPublishMessage: 'Configuration FTP incomplete.',
+        lastPublishAt: '2026-05-01T10:06:00.000Z',
+        publicUrl: 'https://tpi26.ch/defenses/2026/'
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
+
+    expect(screen.getByText(/Publication FTP échouée/i)).toBeInTheDocument()
+    expect(screen.getByText(/Configuration FTP incomplete\./i)).toBeInTheDocument()
   })
 
   test('déclenche l aperçu des liens de vote en mode debug', () => {

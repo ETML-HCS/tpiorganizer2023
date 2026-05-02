@@ -5,9 +5,6 @@ const express = require('express')
 const cors = require('cors')
 
 const { connectToDatabase } = require('./config/dbConfig')
-// const bodyParser = require('body-parser')
-// const nodemailer = require('nodemailer')
-// const { is } = require('date-fns/locale')
 
 const path = require('path')
 const app = express()
@@ -418,23 +415,6 @@ if (require.main === module) {
     process.exit(1)
   })
 }
-
-// // Fonction utilitaire pour afficher les routes
-// function listRoutes () {
-//   app._router.stack.forEach(middleware => {
-//     if (middleware.route) {
-//       middleware.route contient les informations sur la route
-//       console.log(
-//         `${Object.keys(middleware.route.methods).join(', ')} -> ${
-//           middleware.route.path
-//         }`
-//       )
-//     }
-//   })
-// }
-
-// // Utilisation de la fonction pour lister les routes
-// listRoutes()
 
 module.exports = {
   app,

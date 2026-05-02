@@ -1,16 +1,17 @@
-# TPIorganizer 2023 - Dernière mise à jour le 26/04/2026 | V 26.4.19
+# TPIorganizer 2023 - Version stable VS.260502
 
 TPIorganizer 2023 est une application React conçue pour faciliter l'organisation des défenses de travaux de fin d'études (TPI). Elle offre une gestion flexible des dates, des salles et du workflow de validation des plannings.
 
 ## Screenshot
-![HomeO](/captures/HomeO.png)
-![ListeOfTpis](/captures/ListeOfTpis.png)
-![NewSubscriber](/captures/NewSubscriber.png)
-![NewTpi](/captures/NewTpi.png)
-![RoomsEmpty](/captures/RoomsEmpty.png)
-![RoomsWithData](/captures/RoomsWithData.png)
-![SelectTpiCandidat](/captures/SelectTpiCandidat.png)
-![SoutenanceValidation.png](/captures/SoutenanceValidation.png)
+
+![Connexion](/captures/login.png)
+![Accueil](/captures/accueil.png)
+![Planification](/captures/planification.png)
+![Planning et votes](/captures/planning-votes.png)
+![Gestion TPI](/captures/gestion-tpi.png)
+![Parties prenantes](/captures/parties-prenantes.png)
+![Configuration](/captures/configuration.png)
+![Défenses](/captures/defenses.png)
 
 ## Points forts
 
@@ -25,6 +26,10 @@ TPIorganizer 2023 est une application React conçue pour faciliter l'organisatio
 1. **Installation** : Avoir Node.js, cloner le dépôt, installer les dépendances avec `npm install`.
 2. **Utilisation complète** : Lancer l'app avec `npm run dev`, accéder au frontend via `http://localhost:3000`.
 3. **Frontend seul** : Lancer uniquement Vite avec `npm start`.
+
+## Orientation desktop
+
+La piste Electron portable autonome est cadrée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Ce document remplace les anciens plans dispersés à la racine du dépôt.
 
 ## Développement
 

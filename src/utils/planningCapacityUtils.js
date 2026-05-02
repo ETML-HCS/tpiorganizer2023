@@ -1,7 +1,7 @@
 import { getPlanningClassModeLabel } from "../components/tpiPlanning/planningClassUtils"
 import { resolvePlanningCatalogSite } from "../components/tpiPlanning/planningCatalogUtils"
 
-export const DEFAULT_PLANNING_ROOM_SLOTS = 8
+const DEFAULT_PLANNING_ROOM_SLOTS = 8
 const DEFAULT_PLANNING_TPI_TIME_MINUTES = 60
 const DEFAULT_PLANNING_BREAKLINE_MINUTES = 10
 const DEFAULT_MIN_TPI_PER_ROOM = 3

@@ -469,6 +469,10 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.configuration-card-grid--email {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .configuration-defense-role-list {
   display: grid;
   gap: 6px;

@@ -901,16 +901,20 @@
 }
 
 .tpiCard.has-validation-error {
-  border-color: rgba(220, 38, 38, 0.88);
+  border-color: #dc2626;
+  background:
+    linear-gradient(180deg, rgba(255, 247, 247, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%);
   box-shadow:
-    0 0 0 1px rgba(248, 113, 113, 0.28),
+    inset 0 0 0 2px rgba(220, 38, 38, 0.82),
+    0 0 0 2px rgba(248, 113, 113, 0.24),
     0 10px 22px rgba(127, 29, 29, 0.12);
 }
 
 .tpiCard.has-validation-error:hover {
-  border-color: rgba(220, 38, 38, 0.96);
+  border-color: #b91c1c;
   box-shadow:
-    0 0 0 1px rgba(248, 113, 113, 0.34),
+    inset 0 0 0 2px rgba(185, 28, 28, 0.92),
+    0 0 0 2px rgba(248, 113, 113, 0.3),
     0 12px 26px rgba(127, 29, 29, 0.16);
 }
 

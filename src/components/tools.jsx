@@ -1,5 +1,3 @@
-// import {useEffect} from "react";
-// import { updateMany } from "../models/userModels";
 export const showNotification = (message, type = "info",duration = 3000) => {
   const notification = document.createElement("div");
   notification.innerText = message;
@@ -25,12 +23,5 @@ export const showNotification = (message, type = "info",duration = 3000) => {
     notification.classList.remove("show");
     document.body.removeChild(notification);
   }, duration);
-};
-
-export const updateMarginTopPage = (delta) => {
-  const rootElement = document.querySelector(".container");
-  if (rootElement) {
-    rootElement.style.setProperty("margin-top", `${delta}px`);
-  }
 };
 

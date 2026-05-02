@@ -154,6 +154,29 @@ const stakeholderIconSchema = new mongoose.Schema(
   { _id: false }
 )
 
+const emailSettingsSchema = new mongoose.Schema(
+  {
+    senderName: {
+      type: String,
+      default: 'TPI Organizer'
+    },
+    senderEmail: {
+      type: String,
+      default: ''
+    },
+    replyToEmail: {
+      type: String,
+      default: ''
+    },
+    defaultDeliveryMode: {
+      type: String,
+      enum: ['outlook', 'automatic'],
+      default: 'outlook'
+    }
+  },
+  { _id: false }
+)
+
 const siteCatalogSchema = new mongoose.Schema(
   {
     id: {
@@ -217,6 +240,10 @@ const planningSharedCatalogSchema = new mongoose.Schema({
   },
   stakeholderIcons: {
     type: stakeholderIconSchema,
+    default: () => ({})
+  },
+  emailSettings: {
+    type: emailSettingsSchema,
     default: () => ({})
   },
   sites: {

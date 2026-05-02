@@ -398,7 +398,7 @@ export const createEmptyTpi = () => ({
   boss: { name: "", personId: "", offres: createEmptyOffer() }
 })
 
-export const normalizeOffer = (offer) => ({
+const normalizeOffer = (offer) => ({
   isValidated: Boolean(offer?.isValidated),
   submit: Array.isArray(offer?.submit) ? [...offer.submit] : []
 })
@@ -449,7 +449,7 @@ export const normalizeTpi = (tpi = {}) => {
   }
 }
 
-export const getSiteConfig = (site, sourceConfig = combinedScheduleConfig) => {
+const getSiteConfig = (site, sourceConfig = combinedScheduleConfig) => {
   const siteKey = String(site ?? "").trim().toUpperCase()
   const normalizedSource = sourceConfig && typeof sourceConfig === "object"
     ? sourceConfig
@@ -552,7 +552,7 @@ export const normalizeRoom = (room = {}, index = 0, sourceConfig = combinedSched
  *   { "$oid": "abc" }   -> "abc"
  *   { "$date": "..." }  -> "..."
  */
-export const stripMongoExtendedJson = (value) => {
+const stripMongoExtendedJson = (value) => {
   if (value === null || value === undefined) {
     return value
   }

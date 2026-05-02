@@ -103,5 +103,3 @@ export function buildSyntheticStakeholderEmail({
 
   return `${localPart}@${ORGANIZER_DRAFT_EMAIL_DOMAIN}`
 }
-
-export { ORGANIZER_DRAFT_EMAIL_DOMAIN }

@@ -36,6 +36,15 @@ function parsePositiveInteger(rawValue, fallbackValue) {
   return parsed
 }
 
+function parseOptionalPositiveInteger(rawValue) {
+  if (rawValue === undefined || rawValue === null || rawValue === '' || rawValue === 'active') {
+    return null
+  }
+
+  const parsed = Number.parseInt(String(rawValue), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
 function parseBoolean(rawValue, fallbackValue = false) {
   if (typeof rawValue === 'boolean') {
     return rawValue
@@ -1273,9 +1282,11 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
     const baseUrl = getFrontendBaseUrl(req)
+    const publicationVersion = parseOptionalPositiveInteger(req.body?.publicationVersion)
     const preview = await buildAccessLinkPreview({
       year,
       baseUrl,
+      publicationVersion,
       generateLinks
     })
 

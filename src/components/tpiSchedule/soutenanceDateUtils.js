@@ -177,6 +177,3 @@ export const normalizeSoutenanceDateEntries = (values) => {
     return left.date.localeCompare(right.date)
   })
 }
-
-export const extractSoutenanceDateValues = (values) =>
-  normalizeSoutenanceDateEntries(values).map((entry) => entry.date)
