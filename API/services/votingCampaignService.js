@@ -2,10 +2,18 @@ const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
 const emailService = require('./emailService')
 const magicLinkV2Service = require('./magicLinkV2Service')
+const { getSharedEmailSettingsIfAvailable } = require('./planningCatalogService')
 const { getActivePublicationVersion } = require('./publishedSoutenanceService')
-const { getPlanningConfigIfAvailable } = require('./planningConfigService')
+const {
+  getPlanningConfigIfAvailable,
+  normalizeWorkflowSettings
+} = require('./planningConfigService')
 const schedulingService = require('./schedulingService')
+const staticVotePublicationService = require('./staticVotePublicationService')
 const { filterPlanifiableTpis } = require('./tpiPlanningVisibility')
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000
+const HOUR_IN_MS = 60 * 60 * 1000
 
 function getDisplayName(person) {
   if (!person) {
@@ -224,7 +232,97 @@ async function loadVotingTpisForYear(year) {
       .populate('proposedSlots.slot')
   ])
 
-  return filterPlanifiableTpis(tpis, planningConfig)
+  return {
+    planningConfig,
+    tpis: filterPlanifiableTpis(tpis, planningConfig)
+  }
+}
+
+function buildVoteDeadlineDate(workflowSettings = {}) {
+  const settings = normalizeWorkflowSettings(workflowSettings)
+  return new Date(Date.now() + settings.voteDeadlineDays * DAY_IN_MS)
+}
+
+function compactText(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim()
+}
+
+function normalizeVoteLinkTarget(value) {
+  const normalized = compactText(value).toLowerCase()
+  return normalized === 'static' || normalized === 'publication' ? 'static' : 'app'
+}
+
+async function resolveVoteMagicLinkTarget(year, baseUrl, options = {}) {
+  const configuredTarget = normalizeVoteLinkTarget(
+    options.voteLinkTarget ||
+    process.env.STATIC_VOTE_LINK_TARGET ||
+    process.env.VOTE_LINK_TARGET
+  )
+
+  if (configuredTarget !== 'static') {
+    return {
+      baseUrl,
+      redirectPath: `/planning/${year}`,
+      linkTarget: 'app'
+    }
+  }
+
+  const publicUrl = compactText(
+    options.votePublicUrl ||
+    options.staticVotePublicUrl ||
+    process.env.STATIC_VOTE_PUBLIC_URL
+  )
+  const target = await staticVotePublicationService.getStaticVoteLinkTarget(year, publicUrl)
+
+  return {
+    ...target,
+    linkTarget: 'static'
+  }
+}
+
+function resolveDate(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function isTpiEligibleForAutomaticReminder(tpi, workflowSettings = {}, now = new Date()) {
+  const settings = normalizeWorkflowSettings(workflowSettings)
+
+  if (settings.automaticVoteRemindersEnabled !== true || settings.maxVoteReminders <= 0) {
+    return false
+  }
+
+  const session = tpi?.votingSession || {}
+  const deadline = resolveDate(session.deadline)
+  const referenceDate = resolveDate(now) || new Date()
+
+  if (!deadline || deadline.getTime() <= referenceDate.getTime()) {
+    return false
+  }
+
+  const millisecondsBeforeDeadline = deadline.getTime() - referenceDate.getTime()
+  if (millisecondsBeforeDeadline > settings.voteReminderLeadHours * HOUR_IN_MS) {
+    return false
+  }
+
+  const remindersCount = Number.parseInt(String(session.remindersCount ?? 0), 10)
+  if (Number.isInteger(remindersCount) && remindersCount >= settings.maxVoteReminders) {
+    return false
+  }
+
+  const lastReminderSentAt = resolveDate(session.lastReminderSentAt)
+  if (lastReminderSentAt) {
+    const cooldownEndsAt = lastReminderSentAt.getTime() + settings.voteReminderCooldownHours * HOUR_IN_MS
+    if (cooldownEndsAt > referenceDate.getTime()) {
+      return false
+    }
+  }
+
+  return true
 }
 
 async function ensureVotesForTpi(tpi) {
@@ -279,7 +377,8 @@ async function ensureVotesForTpi(tpi) {
 
 async function startVotesCampaign(year, baseUrl, options = {}) {
   const skipEmails = options?.skipEmails === true
-  const tpis = await loadVotingTpisForYear(year)
+  const { planningConfig, tpis } = await loadVotingTpisForYear(year)
+  const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
   const emailTargetsByPersonId = new Map()
 
   let totalEmails = 0
@@ -296,8 +395,9 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
     if (!tpi.votingSession) {
       tpi.votingSession = {
         startedAt: new Date(),
-        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        deadline: buildVoteDeadlineDate(workflowSettings),
         remindersCount: 0,
+        lastReminderSentAt: null,
         voteSummary: {
           expert1Voted: false,
           expert2Voted: false,
@@ -310,7 +410,7 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
       }
 
       if (!tpi.votingSession.deadline) {
-        tpi.votingSession.deadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        tpi.votingSession.deadline = buildVoteDeadlineDate(workflowSettings)
       }
 
       if (!tpi.votingSession.voteSummary) {
@@ -351,6 +451,7 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
   if (!skipEmails && emailTargetsByPersonId.size > 0) {
     const digestTargets = []
+    const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, options)
 
     for (const target of emailTargetsByPersonId.values()) {
       const link = await magicLinkV2Service.createVoteMagicLink({
@@ -361,7 +462,9 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
           year,
           kind: 'stakeholder_votes'
         },
-        baseUrl
+        accessLinkSettings: planningConfig?.accessLinkSettings,
+        baseUrl: voteLinkTarget.baseUrl,
+        redirectPath: voteLinkTarget.redirectPath
       })
 
       digestTargets.push({
@@ -370,7 +473,8 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
       })
     }
 
-    const mailResults = await emailService.sendVoteDigestRequests(digestTargets)
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
+    const mailResults = await emailService.sendVoteDigestRequests(digestTargets, { emailSettings })
     const resultByEmail = new Map(mailResults.map((result) => [result.email, result]))
     totalEmails = mailResults.length
     successfulEmails = mailResults.filter(result => result.success).length
@@ -392,26 +496,50 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
   }
 }
 
-async function remindPendingVotes(year, baseUrl) {
-  const [planningConfig, rawTpis] = await Promise.all([
-    getPlanningConfigIfAvailable(year),
-    TpiPlanning.find({ year, status: 'voting' })
-      .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
-      .select('reference sujet votingSession candidat expert1 expert2 chefProjet site')
-  ])
-  const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
+async function remindPendingVotes(year, baseUrl, options = {}) {
+  const automatic = options?.automatic === true
+  const planningConfig = await getPlanningConfigIfAvailable(year)
+  const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
+  const now = resolveDate(options?.now) || new Date()
 
-  if (tpis.length === 0) {
+  if (automatic && workflowSettings.automaticVoteRemindersEnabled !== true) {
     return {
       tpiCount: 0,
+      eligibleTpiCount: 0,
       reminderTargets: 0,
       emailsSent: 0,
-      emailsSucceeded: 0
+      emailsSucceeded: 0,
+      emailsFailed: 0,
+      automatic: true,
+      skipped: true,
+      reason: 'automatic_reminders_disabled'
     }
   }
 
-  const tpiById = new Map(tpis.map(tpi => [String(tpi._id), tpi]))
-  const tpiIds = tpis.map(tpi => tpi._id)
+  const rawTpis = await TpiPlanning.find({ year, status: 'voting' })
+    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
+    .select('reference sujet votingSession candidat expert1 expert2 chefProjet site')
+  const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
+  const reminderTpis = automatic
+    ? tpis.filter((tpi) => isTpiEligibleForAutomaticReminder(tpi, workflowSettings, now))
+    : tpis
+
+  if (reminderTpis.length === 0) {
+    return {
+      tpiCount: tpis.length,
+      eligibleTpiCount: 0,
+      reminderTargets: 0,
+      emailsSent: 0,
+      emailsSucceeded: 0,
+      emailsFailed: 0,
+      automatic,
+      skipped: automatic,
+      reason: automatic ? 'no_eligible_tpi' : null
+    }
+  }
+
+  const tpiById = new Map(reminderTpis.map(tpi => [String(tpi._id), tpi]))
+  const tpiIds = reminderTpis.map(tpi => tpi._id)
 
   const pendingVotes = await Vote.find({
     tpiPlanning: { $in: tpiIds },
@@ -449,6 +577,7 @@ async function remindPendingVotes(year, baseUrl) {
   }
 
   const digestTargets = []
+  const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, options)
   for (const target of targetsByPersonId.values()) {
     const link = await magicLinkV2Service.createVoteMagicLink({
       year,
@@ -459,7 +588,9 @@ async function remindPendingVotes(year, baseUrl) {
         kind: 'stakeholder_votes',
         source: 'vote_reminder'
       },
-      baseUrl
+      accessLinkSettings: planningConfig?.accessLinkSettings,
+      baseUrl: voteLinkTarget.baseUrl,
+      redirectPath: voteLinkTarget.redirectPath
     })
 
     digestTargets.push({
@@ -468,7 +599,8 @@ async function remindPendingVotes(year, baseUrl) {
     })
   }
 
-  const mailResults = await emailService.sendVoteDigestRequests(digestTargets, { reminder: true })
+  const emailSettings = await getSharedEmailSettingsIfAvailable()
+  const mailResults = await emailService.sendVoteDigestRequests(digestTargets, { reminder: true, emailSettings })
   const emailsSent = mailResults.length
   const emailsSucceeded = mailResults.filter(result => result.success).length
   const touchedTpiIds = new Set()
@@ -482,16 +614,23 @@ async function remindPendingVotes(year, baseUrl) {
   if (touchedTpiIds.size > 0) {
     await TpiPlanning.updateMany(
       { _id: { $in: Array.from(touchedTpiIds) } },
-      { $inc: { 'votingSession.remindersCount': 1 } }
+      {
+        $inc: { 'votingSession.remindersCount': 1 },
+        $set: { 'votingSession.lastReminderSentAt': now }
+      }
     )
   }
 
   return {
     tpiCount: tpis.length,
+    eligibleTpiCount: reminderTpis.length,
     reminderTargets: digestTargets.length,
     emailsSent,
     emailsSucceeded,
-    emailsFailed: Math.max(emailsSent - emailsSucceeded, 0)
+    emailsFailed: Math.max(emailsSent - emailsSucceeded, 0),
+    automatic,
+    skipped: false,
+    reason: null
   }
 }
 
@@ -612,6 +751,7 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
     ? { version: publicationVersion }
     : await getActivePublicationVersion(year)
   const scopedPublicationVersion = activePublication?.version || null
+  const emailSettings = await getSharedEmailSettingsIfAvailable()
 
   for (const person of recipientsById.values()) {
     const link = await magicLinkV2Service.createSoutenanceMagicLink({
@@ -621,6 +761,7 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
         kind: 'published_soutenances',
         publicationVersion: scopedPublicationVersion
       },
+      accessLinkSettings: planningConfig?.accessLinkSettings,
       baseUrl
     })
 
@@ -629,7 +770,7 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
       year,
       magicLinkUrl: link.url,
       deadline: link.expiresAt.toLocaleDateString('fr-CH')
-    })
+    }, { emailSettings })
 
     emailsSent += 1
     if (result.success) {
@@ -649,6 +790,7 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
 module.exports = {
   startVotesCampaign,
   remindPendingVotes,
+  isTpiEligibleForAutomaticReminder,
   closeVotesCampaign,
   sendSoutenanceLinksForYear
 }

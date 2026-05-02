@@ -3,12 +3,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 
 import PlanningConfiguration from './PlanningConfiguration'
 import {
+  publicationDeploymentConfigService,
   planningCatalogService,
   planningConfigService
 } from '../../services/planningService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
 
 jest.mock('../../services/planningService', () => ({
+  publicationDeploymentConfigService: {
+    get: jest.fn(),
+    save: jest.fn()
+  },
   planningCatalogService: {
     getGlobal: jest.fn(),
     saveGlobal: jest.fn()
@@ -31,6 +36,9 @@ const mockCatalog = {
     senderEmail: '',
     replyToEmail: '',
     defaultDeliveryMode: 'outlook'
+  },
+  publicationSettings: {
+    publicBaseUrl: 'https://tpi26.ch'
   },
   sites: [
     {
@@ -92,9 +100,38 @@ const mockCatalog = {
   ]
 }
 
+const mockPublicationDeploymentConfig = {
+  key: 'static-publication',
+  protocol: 'ftp',
+  host: 'ftp.tpi26.ch',
+  port: 21,
+  username: 'publisher',
+  hasPassword: true,
+  passwordUpdatedAt: '2026-01-15T10:00:00.000Z',
+  remoteDir: '/home/account/domains/tpi26.ch/public_html',
+  staticRemoteDir: 'soutenances-{year}',
+  publicBaseUrl: 'https://tpi26.ch',
+  publicPath: '/soutenances-{year}'
+}
+
 const mockYearConfig = {
   year: 2026,
   schemaVersion: 2,
+  workflowSettings: {
+    voteDeadlineDays: 7,
+    maxVoteProposals: 3,
+    allowSpecialVoteRequest: true,
+    automaticVoteRemindersEnabled: false,
+    voteReminderLeadHours: 48,
+    maxVoteReminders: 1,
+    voteReminderCooldownHours: 24
+  },
+  accessLinkSettings: {
+    voteLinkValidityHours: 168,
+    voteLinkMaxUses: 20,
+    soutenanceLinkValidityHours: 96,
+    soutenanceLinkMaxUses: 60
+  },
   classTypes: [
     {
       id: 'annual-cfc',
@@ -127,6 +164,21 @@ const mockYearConfig = {
 const mockYearConfigWithCustomTypes = {
   year: 2026,
   schemaVersion: 2,
+  workflowSettings: {
+    voteDeadlineDays: 7,
+    maxVoteProposals: 3,
+    allowSpecialVoteRequest: true,
+    automaticVoteRemindersEnabled: false,
+    voteReminderLeadHours: 48,
+    maxVoteReminders: 1,
+    voteReminderCooldownHours: 24
+  },
+  accessLinkSettings: {
+    voteLinkValidityHours: 168,
+    voteLinkMaxUses: 20,
+    soutenanceLinkValidityHours: 96,
+    soutenanceLinkMaxUses: 60
+  },
   classTypes: [
     {
       id: 'annual-cfc',
@@ -181,6 +233,13 @@ const mockYearConfigWithCustomTypes = {
 describe('PlanningConfiguration', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    publicationDeploymentConfigService.get.mockResolvedValue(mockPublicationDeploymentConfig)
+    publicationDeploymentConfigService.save.mockImplementation(async (payload) => ({
+      ...mockPublicationDeploymentConfig,
+      ...payload,
+      hasPassword: Boolean(payload.password) || (payload.clearPassword === true ? false : mockPublicationDeploymentConfig.hasPassword),
+      password: undefined
+    }))
     planningCatalogService.getGlobal.mockResolvedValue(mockCatalog)
     planningCatalogService.saveGlobal.mockImplementation(async (payload) => payload)
     planningConfigService.getByYear.mockResolvedValue(mockYearConfig)
@@ -200,6 +259,34 @@ describe('PlanningConfiguration', () => {
 
   const openYearPanel = async () =>
     ensureOpen(/Ouvrir le bloc année/i, /Réduire le bloc année/i)
+
+  const openWorkflowCard = async () => {
+    await openYearPanel()
+
+    const heading = screen.queryByRole('heading', { name: 'Vote' })
+    if (heading) {
+      return heading.closest('article')
+    }
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /Ouvrir la configuration de vote/i
+    }))
+    return (await screen.findByRole('heading', { name: 'Vote' })).closest('article')
+  }
+
+  const openAccessLinkCard = async () => {
+    await openYearPanel()
+
+    const heading = screen.queryByRole('heading', { name: 'Liens' })
+    if (heading) {
+      return heading.closest('article')
+    }
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /Ouvrir la configuration des liens d'accès/i
+    }))
+    return (await screen.findByRole('heading', { name: 'Liens' })).closest('article')
+  }
 
   const openCatalogPanel = async () =>
     ensureOpen(/Ouvrir le bloc sites/i, /Réduire le bloc sites/i)
@@ -317,6 +404,20 @@ describe('PlanningConfiguration', () => {
       name: /Ouvrir la configuration email/i
     }))
     return (await screen.findByRole('heading', { name: 'Email' })).closest('article')
+  }
+
+  const openPublicationCard = async () => {
+    await openCatalogPanel()
+
+    const heading = screen.queryByRole('heading', { name: 'Publication' })
+    if (heading) {
+      return heading.closest('article')
+    }
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /Ouvrir la configuration publication/i
+    }))
+    return (await screen.findByRole('heading', { name: 'Publication' })).closest('article')
   }
 
   test('replie un site en masquant son contenu', async () => {
@@ -451,10 +552,24 @@ describe('PlanningConfiguration', () => {
     expect(within(typeCard).getByText('T2 · Type 2 · Période non définie')).toBeInTheDocument()
   })
 
-  test("ouvre le bloc année quand tous les types sont ouverts depuis l'en-tête", async () => {
+  test('rappelle le format SPECIAL au survol des dates de défense', async () => {
     planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
 
     render(<PlanningConfiguration />)
+
+    const typeCard = await openClassType('Type 1')
+    const help = within(typeCard).getByLabelText('Format des dates de défense')
+
+    expect(help).toHaveAttribute('data-tooltip', expect.stringContaining('SPECIAL'))
+    expect(help).toHaveAttribute('title', expect.stringContaining('2026-06-12 SPECIAL'))
+  })
+
+  test("ouvre et replie tous les types depuis la section Types", async () => {
+    planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
+
+    render(<PlanningConfiguration />)
+
+    await openYearPanel()
 
     fireEvent.click(await screen.findByRole('button', {
       name: /Ouvrir tous les types de l'année/i
@@ -616,6 +731,111 @@ describe('PlanningConfiguration', () => {
     )
   })
 
+  test("enregistre les règles de vote annuelles", async () => {
+    render(<PlanningConfiguration />)
+
+    const workflowCard = await openWorkflowCard()
+    fireEvent.change(within(workflowCard).getByLabelText('Délai vote (jours)'), {
+      target: { value: '10' }
+    })
+    fireEvent.change(within(workflowCard).getByLabelText('Propositions max'), {
+      target: { value: '4' }
+    })
+    fireEvent.click(within(workflowCard).getByLabelText('Fermée'))
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+    })
+    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+      2026,
+      expect.objectContaining({
+        workflowSettings: {
+          voteDeadlineDays: 10,
+          maxVoteProposals: 4,
+          allowSpecialVoteRequest: false,
+          automaticVoteRemindersEnabled: false,
+          voteReminderLeadHours: 48,
+          maxVoteReminders: 1,
+          voteReminderCooldownHours: 24
+        }
+      })
+    )
+  })
+
+  test("enregistre les rappels automatiques de vote", async () => {
+    render(<PlanningConfiguration />)
+
+    const workflowCard = await openWorkflowCard()
+    const reminderToggle = within(workflowCard).getByRole('radiogroup', {
+      name: 'Rappels automatiques de vote'
+    })
+
+    fireEvent.click(within(reminderToggle).getByLabelText('Active'))
+    fireEvent.change(within(workflowCard).getByLabelText('Avant échéance (h)'), {
+      target: { value: '36' }
+    })
+    fireEvent.change(within(workflowCard).getByLabelText('Rappels max'), {
+      target: { value: '2' }
+    })
+    fireEvent.change(within(workflowCard).getByLabelText('Intervalle (h)'), {
+      target: { value: '12' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+    })
+    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+      2026,
+      expect.objectContaining({
+        workflowSettings: {
+          voteDeadlineDays: 7,
+          maxVoteProposals: 3,
+          allowSpecialVoteRequest: true,
+          automaticVoteRemindersEnabled: true,
+          voteReminderLeadHours: 36,
+          maxVoteReminders: 2,
+          voteReminderCooldownHours: 12
+        }
+      })
+    )
+  })
+
+  test("enregistre les règles annuelles des liens d'accès", async () => {
+    render(<PlanningConfiguration />)
+
+    const accessLinkCard = await openAccessLinkCard()
+    fireEvent.change(within(accessLinkCard).getByLabelText('Lien vote (heures)'), {
+      target: { value: '72' }
+    })
+    fireEvent.change(within(accessLinkCard).getByLabelText('Usages vote'), {
+      target: { value: '12' }
+    })
+    fireEvent.change(within(accessLinkCard).getByLabelText('Lien défense (heures)'), {
+      target: { value: '240' }
+    })
+    fireEvent.change(within(accessLinkCard).getByLabelText('Usages défense'), {
+      target: { value: '90' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+    })
+    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+      2026,
+      expect.objectContaining({
+        accessLinkSettings: {
+          voteLinkValidityHours: 72,
+          voteLinkMaxUses: 12,
+          soutenanceLinkValidityHours: 240,
+          soutenanceLinkMaxUses: 90
+        }
+      })
+    )
+  })
+
   test("enregistre la limite de TPI à la suite du site", async () => {
     render(<PlanningConfiguration />)
 
@@ -768,6 +988,81 @@ describe('PlanningConfiguration', () => {
         }
       })
     )
+  })
+
+  test('enregistre le domaine de publication dans la configuration deploiement', async () => {
+    render(<PlanningConfiguration />)
+
+    const publicationCard = await openPublicationCard()
+    fireEvent.change(within(publicationCard).getByLabelText('URL publique'), {
+      target: { value: 'publication.example.ch/' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(publicationDeploymentConfigService.save).toHaveBeenCalled()
+      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+    })
+
+    expect(publicationDeploymentConfigService.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        publicBaseUrl: 'https://publication.example.ch'
+      })
+    )
+
+    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        publicationSettings: {
+          publicBaseUrl: 'https://publication.example.ch'
+        }
+      })
+    )
+  })
+
+  test('enregistre les identifiants publication sans les mettre dans le catalogue', async () => {
+    render(<PlanningConfiguration />)
+
+    const publicationCard = await openPublicationCard()
+    fireEvent.change(within(publicationCard).getByLabelText('Protocole'), {
+      target: { value: 'sftp' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Host'), {
+      target: { value: 'sftp.example.ch' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Port'), {
+      target: { value: '2222' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Utilisateur'), {
+      target: { value: 'deploy' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Mot de passe'), {
+      target: { value: 'secret-value' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Dossier distant'), {
+      target: { value: '/var/www/tpi26.ch' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Sous-dossier'), {
+      target: { value: 'planning-{year}' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(publicationDeploymentConfigService.save).toHaveBeenCalled()
+    })
+
+    expect(publicationDeploymentConfigService.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        protocol: 'sftp',
+        host: 'sftp.example.ch',
+        port: 2222,
+        username: 'deploy',
+        password: 'secret-value',
+        clearPassword: false,
+        remoteDir: '/var/www/tpi26.ch',
+        staticRemoteDir: 'planning-{year}'
+      })
+    )
+    expect(planningCatalogService.saveGlobal).not.toHaveBeenCalled()
   })
 
   test('enregistre la couleur TPI du site dans le catalogue', async () => {

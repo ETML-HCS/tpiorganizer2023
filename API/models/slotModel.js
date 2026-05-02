@@ -110,9 +110,8 @@ slotSchema.methods.hasConflictWith = function(personId) {
 }
 
 // Middleware pre-save
-slotSchema.pre('save', function(next) {
+slotSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 // Méthode statique pour générer les créneaux d'une journée

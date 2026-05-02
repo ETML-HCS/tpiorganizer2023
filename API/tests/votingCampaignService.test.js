@@ -25,6 +25,7 @@ function loadVotingCampaignServiceWithPatches({
   const planningVisibilityService = require('../services/tpiPlanningVisibility')
 
   const restorePlanningConfig = patchMethod(planningConfigService, 'getPlanningConfig', getPlanningConfig)
+  const restorePlanningConfigIfAvailable = patchMethod(planningConfigService, 'getPlanningConfigIfAvailable', getPlanningConfig)
   const restoreVisibility = patchMethod(planningVisibilityService, 'filterPlanifiableTpis', filterPlanifiableTpis)
 
   delete require.cache[servicePath]
@@ -33,6 +34,7 @@ function loadVotingCampaignServiceWithPatches({
     service: require('../services/votingCampaignService'),
     restore() {
       restoreVisibility()
+      restorePlanningConfigIfAvailable()
       restorePlanningConfig()
       delete require.cache[servicePath]
     }
@@ -109,6 +111,7 @@ test('sendSoutenanceLinksForYear skips recipients with sendEmails disabled', asy
 })
 
 test('startVotesCampaign opens voting without sending emails when skipEmails is enabled', async () => {
+  const fixedNow = Date.parse('2026-04-01T00:00:00.000Z')
   const savedTpis = []
   const voteUpdates = []
   const sentVoteRequests = []
@@ -167,9 +170,16 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
     }
   }
 
-  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches()
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches({
+    getPlanningConfig: async () => ({
+      workflowSettings: {
+        voteDeadlineDays: 10
+      }
+    })
+  })
   const restore = [
     restoreService,
+    patchMethod(Date, 'now', () => fixedNow),
     patchMethod(TpiPlanning, 'find', () => query),
     patchMethod(Vote, 'findOneAndUpdate', async (filter) => {
       voteUpdates.push(filter)
@@ -204,6 +214,7 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
     assert.equal(savedTpis.length, 1)
     assert.equal(savedTpis[0].status, 'voting')
     assert.equal(Boolean(savedTpis[0].votingSession?.startedAt), true)
+    assert.equal(savedTpis[0].votingSession.deadline.toISOString(), '2026-04-11T00:00:00.000Z')
     assert.equal(voteUpdates.length, 3)
     assert.equal(sentVoteRequests.length, 0)
     assert.equal(createdVoteLinks.length, 0)
@@ -373,6 +384,193 @@ test('startVotesCampaign sends one vote link per stakeholder for all their TPI',
     )
     assert.equal(result.details[0].emailsSent, 3)
     assert.equal(result.details[1].emailsSent, 3)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('remindPendingVotes skips automatic reminders when annual setting is disabled', async () => {
+  let tpiQueryCalled = false
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches({
+    getPlanningConfig: async () => ({
+      workflowSettings: {
+        automaticVoteRemindersEnabled: false
+      }
+    })
+  })
+  const restore = [
+    restoreService,
+    patchMethod(TpiPlanning, 'find', () => {
+      tpiQueryCalled = true
+      return {
+        populate() {
+          return this
+        },
+        select: async () => []
+      }
+    })
+  ]
+
+  try {
+    const result = await service.remindPendingVotes(2026, 'https://example.test', {
+      automatic: true,
+      now: new Date('2026-04-02T00:00:00.000Z')
+    })
+
+    assert.equal(result.automatic, true)
+    assert.equal(result.skipped, true)
+    assert.equal(result.reason, 'automatic_reminders_disabled')
+    assert.equal(result.emailsSent, 0)
+    assert.equal(tpiQueryCalled, false)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('remindPendingVotes sends automatic reminders only inside configured window', async () => {
+  const sentDigestTargets = []
+  const createdVoteLinks = []
+  const updates = []
+  const now = new Date('2026-04-02T00:00:00.000Z')
+  const voter = {
+    _id: 'person-alice',
+    firstName: 'Alice',
+    lastName: 'Expert',
+    email: 'alice@example.com',
+    sendEmails: true
+  }
+
+  function makeTpi(id, reference, votingSession) {
+    return {
+      _id: id,
+      reference,
+      sujet: `Sujet ${reference}`,
+      site: 'ETML',
+      candidat: {
+        _id: `candidate-${id}`,
+        firstName: `Candidat ${id}`,
+        lastName: 'Test'
+      },
+      expert1: voter,
+      expert2: voter,
+      chefProjet: voter,
+      votingSession
+    }
+  }
+
+  const dueTpi = makeTpi('planning-due', 'TPI-2026-001', {
+    deadline: new Date('2026-04-03T12:00:00.000Z'),
+    remindersCount: 0,
+    lastReminderSentAt: null
+  })
+  const futureTpi = makeTpi('planning-future', 'TPI-2026-002', {
+    deadline: new Date('2026-04-05T12:00:00.000Z'),
+    remindersCount: 0,
+    lastReminderSentAt: null
+  })
+  const maxedTpi = makeTpi('planning-maxed', 'TPI-2026-003', {
+    deadline: new Date('2026-04-03T12:00:00.000Z'),
+    remindersCount: 1,
+    lastReminderSentAt: null
+  })
+  const cooldownTpi = makeTpi('planning-cooldown', 'TPI-2026-004', {
+    deadline: new Date('2026-04-03T12:00:00.000Z'),
+    remindersCount: 0,
+    lastReminderSentAt: new Date('2026-04-01T18:00:00.000Z')
+  })
+  const tpis = [dueTpi, futureTpi, maxedTpi, cooldownTpi]
+  const pendingVotes = [
+    {
+      tpiPlanning: dueTpi._id,
+      voter,
+      voterRole: 'expert1',
+      slot: {
+        _id: 'slot-due',
+        date: new Date('2026-06-10T08:00:00.000Z'),
+        period: 'AM',
+        startTime: '08:00',
+        endTime: '08:45',
+        room: { name: 'A101' }
+      }
+    }
+  ]
+
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches({
+    getPlanningConfig: async () => ({
+      workflowSettings: {
+        automaticVoteRemindersEnabled: true,
+        voteReminderLeadHours: 48,
+        maxVoteReminders: 1,
+        voteReminderCooldownHours: 24
+      }
+    })
+  })
+  const restore = [
+    restoreService,
+    patchMethod(TpiPlanning, 'find', () => ({
+      populate() {
+        return this
+      },
+      select: async () => tpis
+    })),
+    patchMethod(Vote, 'find', (query) => {
+      assert.deepEqual(query.tpiPlanning.$in, [dueTpi._id])
+      return {
+        populate() {
+          return this
+        },
+        select: async () => pendingVotes
+      }
+    }),
+    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (params) => {
+      createdVoteLinks.push(params)
+      return {
+        url: `https://example.test/planning/${params.year}?ml=${params.person._id}`,
+        expiresAt: new Date('2026-04-09T00:00:00.000Z')
+      }
+    }),
+    patchMethod(emailService, 'sendVoteDigestRequests', async (targets, options = {}) => {
+      assert.equal(options.reminder, true)
+      sentDigestTargets.push(...targets)
+      return targets.map((target) => ({
+        email: target.email,
+        success: true
+      }))
+    }),
+    patchMethod(TpiPlanning, 'updateMany', async (filter, update) => {
+      updates.push({ filter, update })
+      return { modifiedCount: 1 }
+    })
+  ]
+
+  try {
+    const result = await service.remindPendingVotes(2026, 'https://example.test', {
+      automatic: true,
+      now
+    })
+
+    assert.equal(result.automatic, true)
+    assert.equal(result.skipped, false)
+    assert.equal(result.tpiCount, 4)
+    assert.equal(result.eligibleTpiCount, 1)
+    assert.equal(result.reminderTargets, 1)
+    assert.equal(result.emailsSent, 1)
+    assert.equal(result.emailsSucceeded, 1)
+    assert.equal(createdVoteLinks.length, 1)
+    assert.equal(sentDigestTargets.length, 1)
+    assert.deepEqual(
+      sentDigestTargets[0].tpis.map((tpi) => tpi.reference),
+      ['TPI-2026-001']
+    )
+    assert.equal(updates.length, 1)
+    assert.deepEqual(updates[0].filter._id.$in, [dueTpi._id])
+    assert.deepEqual(updates[0].update.$set, {
+      'votingSession.lastReminderSentAt': now
+    })
   } finally {
     while (restore.length > 0) {
       restore.pop()()

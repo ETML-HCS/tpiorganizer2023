@@ -359,7 +359,9 @@ test('Auth bypass flags should NOT be active in production mode', async () => {
   const { app, restoreEnv } = loadTestApp({
     NODE_ENV: 'production',
     SKIP_APP_AUTH: 'false',
-    REACT_APP_DEBUG: 'false'
+    REACT_APP_DEBUG: 'false',
+    AUTH_USER_PLAIN: '',
+    AUTH_PASS_PLAIN: ''
   })
 
   // Vérifier que le bypass n'est pas actif
@@ -416,6 +418,10 @@ test('Invalid TPI ID should return proper error', async () => {
 test('Email service should be properly configured', async () => {
   const { app, restoreEnv } = loadTestApp({
     NODE_ENV: 'production',
+    SKIP_APP_AUTH: 'false',
+    REACT_APP_DEBUG: 'false',
+    AUTH_USER_PLAIN: '',
+    AUTH_PASS_PLAIN: '',
     SMTP_HOST: 'smtp.example.com',
     SMTP_PORT: '465',
     SMTP_USER: 'noreply@example.com',
@@ -436,6 +442,10 @@ test('Email service should be properly configured', async () => {
 test('Database connection should use secure config', async () => {
   const { app, restoreEnv } = loadTestApp({
     NODE_ENV: 'production',
+    SKIP_APP_AUTH: 'false',
+    REACT_APP_DEBUG: 'false',
+    AUTH_USER_PLAIN: '',
+    AUTH_PASS_PLAIN: '',
     DB_URI: 'mongodb+srv://user:pass@cluster.mongodb.net/dbname'
   })
 

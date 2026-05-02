@@ -6,6 +6,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
+const emailService = require('../services/emailService')
+
 // Mock du service nodemailer pour testing
 const mockTransporter = {
   sendMail: async (mailOptions) => {
@@ -160,6 +162,131 @@ test('Email addresses should be sanitized against injection', async () => {
     null,
     'Email with comma (multiple recipients injection) should be rejected'
   )
+})
+
+test('Email service should build mail options from configured sender settings', () => {
+  const mailOptions = emailService.buildMailOptions({
+    to: 'expert@example.com',
+    emailContent: {
+      subject: 'Test',
+      text: 'Texte',
+      html: '<p>Texte</p>'
+    },
+    emailSettings: {
+      senderName: 'Secretariat TPI',
+      senderEmail: 'SECRETARIAT@example.com',
+      replyToEmail: 'tpi.admin@example.com'
+    }
+  })
+
+  assert.equal(mailOptions.from, '"Secretariat TPI" <secretariat@example.com>')
+  assert.equal(mailOptions.replyTo, 'tpi.admin@example.com')
+  assert.equal(mailOptions.to, 'expert@example.com')
+})
+
+test('Email voteRequest template should use configured link validity label', () => {
+  const email = emailService.emailTemplates.voteRequest({
+    recipientName: 'Jean Expert',
+    candidateName: 'Alice Student',
+    tpiReference: 'TPI-2026-001',
+    tpiSubject: 'Machine Learning',
+    role: 'Expert',
+    slots: [],
+    deadline: '12.06.2026',
+    magicLinkUrl: 'http://localhost:3000/vote/abc123',
+    linkValidityLabel: '7 jours'
+  })
+
+  assert.match(email.html, /Ce lien est valide pendant 7 jours/)
+  assert.match(email.text, /Ce lien est valide pendant 7 jours/)
+  assert.equal(emailService.formatLinkValidityLabel(168), '7 jours')
+  assert.equal(emailService.formatLinkValidityLabel(25), '25 heures')
+})
+
+test('Email templates should reflect configured brand and reply contact', () => {
+  const templateData = emailService.buildTemplateData({
+    recipientName: 'Jean Expert',
+    candidateName: 'Alice Student',
+    tpiReference: 'TPI-2026-001',
+    tpiSubject: 'Machine Learning',
+    role: 'Expert',
+    slots: [],
+    deadline: '12.06.2026',
+    magicLinkUrl: 'http://localhost:3000/vote/abc123'
+  }, {
+    emailSettings: {
+      senderName: 'Commission TPI',
+      senderEmail: 'noreply@example.ch',
+      replyToEmail: 'support@example.ch'
+    },
+    expiresInHours: 168
+  })
+  const email = emailService.emailTemplates.voteRequest(templateData)
+
+  assert.equal(templateData.brandName, 'Commission TPI')
+  assert.equal(templateData.contactEmail, 'support@example.ch')
+  assert.match(email.subject, /^\[Commission TPI\]/)
+  assert.match(email.html, /ETML \/ CFPV - Commission TPI/)
+  assert.match(email.html, /support@example\.ch/)
+  assert.doesNotMatch(email.html, /ne pas y répondre/)
+})
+
+test('Email reminder digest should reflect configured brand', () => {
+  const templateData = emailService.buildTemplateData({
+    recipientName: 'Jean Expert',
+    year: 2026,
+    tpiCount: 1,
+    tpis: [
+      {
+        reference: 'TPI-2026-001',
+        candidateName: 'Alice Student',
+        roleLabel: 'Expert'
+      }
+    ],
+    deadline: '12.06.2026',
+    magicLinkUrl: 'http://localhost:3000/vote/abc123'
+  }, {
+    emailSettings: {
+      senderName: 'Commission TPI',
+      senderEmail: 'noreply@example.ch',
+      replyToEmail: 'support@example.ch'
+    }
+  })
+  const email = emailService.emailTemplates.voteReminderDigest(templateData)
+
+  assert.match(email.subject, /^\[Commission TPI\]/)
+  assert.match(email.html, /Commission TPI - Votes en attente/)
+  assert.match(email.text, /Commission TPI - Rappel votes/)
+})
+
+test('Email service should ignore unsafe configured header addresses', () => {
+  const previousSmtpFrom = process.env.SMTP_FROM
+  process.env.SMTP_FROM = '"Env Sender" <env@example.com>'
+
+  try {
+    const mailOptions = emailService.buildMailOptions({
+      to: 'expert@example.com',
+      emailContent: {
+        subject: 'Test',
+        text: 'Texte',
+        html: '<p>Texte</p>'
+      },
+      emailSettings: {
+        senderName: 'Secretariat\r\nBcc: attacker@example.com',
+        senderEmail: 'sender@example.com\nBcc: attacker@example.com',
+        replyToEmail: 'reply@example.com, attacker@example.com'
+      }
+    })
+
+    assert.equal(mailOptions.from, '"Env Sender" <env@example.com>')
+    assert.equal(Object.prototype.hasOwnProperty.call(mailOptions, 'replyTo'), false)
+  } finally {
+    if (previousSmtpFrom === undefined) {
+      delete process.env.SMTP_FROM
+    } else {
+      process.env.SMTP_FROM = previousSmtpFrom
+    }
+  }
 })
 
 /**

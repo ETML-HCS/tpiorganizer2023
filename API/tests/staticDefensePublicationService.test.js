@@ -13,9 +13,15 @@ const {
 } = require('../services/staticDefensePublicationService')
 
 const STATIC_PUBLICATION_ENV_KEYS = [
+  'FTP_HOST',
+  'FTP_PASSWORD',
+  'FTP_PORT',
+  'FTP_PROTOCOL',
   'FTP_REMOTE_DIR',
   'FTP_STATIC_REMOTE_DIR',
   'FTP_STATIC_PUBLIC_PATH',
+  'FTP_USER',
+  'PUBLICATION_FTP_PROTOCOL',
   'PUBLIC_SITE_BASE_URL',
   'STATIC_PUBLIC_BASE_URL',
   'STATIC_PUBLIC_PATH',

@@ -1,90 +1,127 @@
 # Electron portable autonome
 
-## Decision
+## Décision
 
-Le choix retenu pour l'evolution desktop est une application Electron portable et autonome.
+La piste desktop retenue reste une application Electron portable et autonome pour Windows.
 
-L'objectif n'est pas de le construire immediatement, mais de preparer le terrain pour pouvoir y aller proprement plus tard, sans melanger cette direction avec les travaux web actuels.
+Le projet ne contient pas encore Electron. Les derniers nettoyages ont au contraire gardé l'application centrée sur le web, avec React/Vite côté frontend et Node/Express côté API. Ce document sert de référence unique pour préparer une future version desktop sans mélanger cette direction avec les travaux web en cours.
 
-## Cible
+## État actuel après les dernières modifications
 
-L'application finale devra pouvoir etre lancee comme un executable Windows portable, sans installation serveur manuelle.
+Le socle actuel est :
+
+- frontend React 19 construit avec Vite 8 ;
+- backend Node/Express 5 dans `API/serverAPI.js` ;
+- persistance MongoDB via Mongoose 9 ;
+- API exportée par `app` et `startServer()`, ce qui reste favorable à un lancement depuis le process principal Electron ;
+- configuration frontend centralisée dans `src/config/appConfig.js` et les services `src/services` ;
+- tests frontend lancés par Jest/Babel sans `react-scripts` ;
+- publication statique générée sous `static-publication` ou sous un dossier configurable.
+
+Les dernières évolutions ajoutent aussi :
+
+- `workflowSettings` et `accessLinkSettings` dans la configuration annuelle ;
+- `emailSettings` et `publicationSettings` dans le catalogue partagé ;
+- `PublicationDeploymentConfig` pour la configuration de publication, avec mot de passe chiffré côté backend ;
+- publication statique des soutenances ;
+- publication statique des votes avec `index.php`, `sync.php`, `.htaccess` et synchronisation JSONL ;
+- synchronisation automatique optionnelle des votes statiques au démarrage de l'API.
+
+## Cible Electron
+
+L'application finale devra pouvoir être lancée comme un exécutable Windows portable, sans installation serveur manuelle.
 
 La cible fonctionnelle est :
 
-- une interface React embarquee dans Electron ;
-- une API locale lancee automatiquement par l'application ;
-- une base de donnees locale ou embarquee ;
-- des donnees stockees dans un dossier utilisateur ou un dossier portable clairement defini ;
-- une configuration minimale pour les usages hors ligne ;
-- une possibilite ulterieure d'import/export ou de synchronisation avec une base distante si besoin.
+- embarquer le build React dans une fenêtre Electron ;
+- lancer l'API Express locale automatiquement ;
+- utiliser une base de données locale ou embarquée ;
+- stocker les données dans un dossier utilisateur ou portable clairement défini ;
+- conserver une configuration minimale pour les usages hors ligne ;
+- permettre un import/export complet pour migration, sauvegarde ou synchronisation ;
+- conserver un chemin possible vers un mode hybride avec une base distante.
 
-## Etat actuel
+## Points favorables
 
-Le projet est aujourd'hui structure ainsi :
+- `startServer()` isole déjà le démarrage API et peut être appelé depuis Electron.
+- Les appels frontend passent majoritairement par des services, ce qui limite le couplage direct.
+- Les secrets restent côté backend et ne doivent pas être injectés dans le bundle frontend.
+- Les publications statiques utilisent `path.resolve()` et une racine configurable, ce qui prépare mieux les chemins desktop.
+- Les paramètres métier sont maintenant stockés dans des collections identifiables plutôt que dispersés dans le code.
 
-- frontend React construit avec Vite ;
-- backend Node/Express dans `API/serverAPI.js` ;
-- persistance MongoDB via Mongoose ;
-- configuration API centralisee cote frontend dans `src/config/appConfig.js` ;
-- demarrage backend deja expose par `startServer()`, ce qui facilitera l'integration Electron.
+## Points bloquants
 
-Le point bloquant pour un vrai mode autonome est MongoDB. Tant que l'application depend d'un MongoDB externe ou d'Atlas, elle peut etre portable mais pas totalement autonome.
+Le blocage principal reste MongoDB. Tant que l'application dépend d'un MongoDB externe ou d'Atlas, elle peut être empaquetée en desktop, mais pas devenir totalement autonome.
 
-## Strategie recommandee
+Autres points à traiter avant un vrai portable autonome :
 
-La strategie la plus saine est de proceder en deux temps.
+- définir une racine de données desktop stable ;
+- choisir entre dossier portable et profil utilisateur Windows ;
+- remplacer ou encapsuler la persistance Mongoose si une base embarquée est choisie ;
+- éviter que la publication statique PHP devienne une dépendance du mode desktop ;
+- gérer les secrets de publication et SMTP sans les exposer au renderer Electron ;
+- décider si l'envoi email doit fonctionner hors ligne, être désactivé, ou rester lié à SMTP.
 
-### Phase 1 - Preparations sans migration
+## Stratégie recommandée
+
+### Phase 1 - Stabilisation web
 
 - Garder l'application web fonctionnelle.
-- Ne pas introduire Electron tant que les flux metier principaux ne sont pas stabilises.
-- Eviter d'ajouter de nouvelles dependances directes a MongoDB dans le frontend.
-- Centraliser autant que possible les appels API dans les services existants.
-- Garder les operations de donnees derriere des services backend, pas dans les routes.
-- Documenter toute nouvelle collection ou structure de donnees.
+- Ne pas ajouter Electron tant que les flux planning, votes, liens et publication ne sont pas stabilisés.
+- Continuer à garder MongoDB derrière le backend.
+- Documenter toute nouvelle collection ou structure de données.
+- Conserver les exports/imports robustes pour préparer une migration de stockage.
 
-### Phase 2 - Prototype Electron connecte
+### Phase 2 - Prototype Electron connecté
 
 - Ajouter Electron uniquement quand le besoin devient concret.
-- Emballer le build React dans une fenetre Electron.
-- Lancer l'API Express locale depuis le process principal Electron.
+- Charger le build React dans une fenêtre Electron.
+- Lancer `startServer()` depuis le process principal.
 - Pointer le frontend vers l'API locale Electron.
-- Garder MongoDB externe au depart pour limiter le risque.
+- Garder MongoDB externe au départ pour limiter le risque.
+- Valider les chemins Windows, les droits fichier, le démarrage et l'arrêt propre de l'API.
 
-Cette phase sert a valider l'emballage desktop, le demarrage, les chemins de fichiers, les droits Windows et la distribution portable.
-
-### Phase 3 - Autonomie des donnees
+### Phase 3 - Autonomie des données
 
 Deux options restent ouvertes :
 
 - embarquer un MongoDB local portable ;
-- migrer vers une base embarquee, probablement SQLite.
+- migrer vers une base embarquée, probablement SQLite.
 
-SQLite est l'option la plus propre pour une vraie application desktop portable, mais elle demandera une couche de persistance differente de Mongoose.
+SQLite reste l'option la plus propre pour une vraie application desktop portable, mais elle demande une couche de persistance différente de Mongoose. MongoDB portable réduit la migration métier, mais complique la distribution, le démarrage, les chemins de données et la maintenance.
 
-MongoDB portable reduit la migration metier, mais complique la distribution, le demarrage, les chemins de donnees et la maintenance.
-
-## Regles de preparation a respecter
+## Règles de préparation
 
 - Ne pas appeler directement MongoDB depuis le frontend.
-- Ne pas multiplier les chemins d'acces API hors de `src/config/appConfig.js` et des services existants.
-- Ne pas disperser la logique metier dans les composants React.
-- Garder les exports/imports de donnees robustes, car ils seront utiles pour migrer vers un stockage autonome.
-- Eviter les chemins absolus dans le backend.
-- Utiliser `path.resolve()` avec une racine configurable pour les fichiers locaux.
-- Garder les secrets et les variables sensibles hors du bundle frontend.
+- Ne pas multiplier les chemins d'accès API hors de `src/config/appConfig.js` et des services existants.
+- Garder la logique métier dans les services backend plutôt que dans les composants React.
+- Ne pas exposer les secrets SMTP, JWT ou FTP dans le renderer Electron.
+- Utiliser une racine configurable pour tous les fichiers locaux.
+- Garder les publications statiques et les exports indépendants du chemin absolu du projet.
+- Prévoir un export complet JSON/CSV avant toute migration de base.
 
-## Questions a trancher plus tard
+## Impact des publications statiques
 
-- Les donnees doivent-elles rester dans le meme dossier que l'executable portable ou dans le profil utilisateur Windows ?
-- L'application doit-elle fonctionner entierement hors ligne, y compris l'envoi d'emails ?
-- Faut-il conserver une compatibilite avec MongoDB Atlas pour un mode hybride ?
-- Faut-il prevoir un export complet lisible par un humain, par exemple JSON ou CSV ?
-- Le mode portable doit-il etre mono-utilisateur ou partager une base entre plusieurs postes ?
+La publication statique actuelle est utile pour le web, mais elle ne doit pas devenir le coeur du mode Electron.
+
+Pour Electron :
+
+- la publication des soutenances peut rester un export HTML/PHP optionnel ;
+- le mini-site de vote statique reste utile pour un hébergement public distant ;
+- la synchronisation JSONL doit être considérée comme un pont web, pas comme la persistance desktop principale ;
+- un mode desktop hors ligne devrait écrire directement dans la base locale via l'API locale.
+
+## Questions à trancher plus tard
+
+- Les données doivent-elles rester dans le même dossier que l'exécutable ou dans le profil utilisateur Windows ?
+- L'application doit-elle fonctionner entièrement hors ligne, y compris l'envoi d'emails ?
+- Faut-il conserver une compatibilité MongoDB Atlas pour un mode hybride ?
+- Quel format d'export complet doit devenir la référence : JSON, CSV, ou les deux ?
+- Le mode portable doit-il être mono-utilisateur ou partager une base entre plusieurs postes ?
+- Les publications statiques doivent-elles être disponibles depuis le desktop, ou réservées au mode web/admin ?
 
 ## Prochaine action utile
 
-Pour l'instant, ne pas lancer la migration Electron.
+Ne pas lancer la migration Electron maintenant.
 
-La prochaine action raisonnable est de continuer a stabiliser le backend et les flux de planification tout en gardant ce document comme reference unique pour la future evolution desktop autonome.
+La prochaine action raisonnable est de stabiliser les flux web ajoutés récemment, surtout publication statique des votes, synchronisation, configuration de publication et rappels de vote. Ensuite seulement, créer un petit prototype Electron connecté à MongoDB externe pour valider le packaging Windows sans toucher encore à la persistance.

@@ -108,6 +108,20 @@
   color: #991b1b;
 }
 
+.token-generator-page .token-generator-alert-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(255, 251, 235, 0.98);
+  color: #92400e;
+}
+
+.token-generator-page .token-generator-alert-action span {
+  min-width: 0;
+}
+
 .token-generator-page .token-generator-success {
   border: 1px solid rgba(5, 150, 105, 0.2);
   background: rgba(236, 253, 245, 0.96);
@@ -534,6 +548,11 @@
   .token-access-link-actions {
     flex-wrap: wrap;
   }
+
+  .token-generator-page .token-generator-alert-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 /* Final module harmonization */
@@ -564,6 +583,12 @@
   border-radius: var(--app-radius-card, 8px);
   background: var(--app-surface, #ffffff);
   box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.token-generator-page .token-generator-alert-action {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(255, 251, 235, 0.98);
+  color: #92400e;
 }
 
 .token-generator-page .token-generator-results-shell {

@@ -22,6 +22,7 @@ import {
   PinIcon,
   RefreshIcon,
   SearchIcon,
+  SendIcon,
   VoteIcon,
   WrenchIcon
 } from '../shared/InlineIcons'
@@ -55,7 +56,10 @@ const WORKFLOW_ACTION_LABELS = {
   remindVotes: 'Relancer votes',
   closeVotes: 'Clore votes',
   publish: 'Publier definitif',
-  sendLinks: 'Envoyer liens défense'
+  sendLinks: 'Envoyer liens défense',
+  staticVoteGenerate: 'Generer mini-site vote',
+  staticVotePublish: 'Publier mini-site vote',
+  staticVoteSync: 'Synchroniser votes statiques'
 }
 
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== 'test'
@@ -665,6 +669,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [conflicts, setConflicts] = useState([])
   const [workflow, setWorkflow] = useState(null)
   const [activeSnapshot, setActiveSnapshot] = useState(null)
+  const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const [magicLinkViewer, setMagicLinkViewer] = useState(null)
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
   const [planningClassTypes, setPlanningClassTypes] = useState([])
@@ -714,6 +719,16 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ? workflowPlanningService.getYearState(year)
         : Promise.resolve(null)
 
+      const staticVotePublicationRequest = isAdmin
+        ? Promise.resolve(workflowPlanningService.getStaticVotePublicationStatus(year))
+          .catch(err => {
+            if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
+              console.warn('Statut publication vote statique indisponible:', err)
+            }
+            return null
+          })
+        : Promise.resolve(null)
+
       const planningConfigRequest = Promise.resolve(planningConfigService.getByYear(year)).catch(err => {
         if (err?.status === 404) {
           return null
@@ -740,7 +755,17 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ? Promise.resolve([])
         : voteService.getPending()
 
-      const [planningConfigResponse, planningCatalogResponse, tpisResponse, calendarResponse, votesResponse, workflowResponse, snapshotResponse, legacyTpisResponse] = await Promise.all([
+      const [
+        planningConfigResponse,
+        planningCatalogResponse,
+        tpisResponse,
+        calendarResponse,
+        votesResponse,
+        workflowResponse,
+        snapshotResponse,
+        legacyTpisResponse,
+        staticVotePublicationResponse
+      ] = await Promise.all([
         planningConfigRequest,
         planningCatalogRequest,
         tpiPlanningService.getByYear(year),
@@ -748,7 +773,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         votesRequest,
         workflowRequest,
         snapshotRequest,
-        legacyTpisRequest
+        legacyTpisRequest,
+        staticVotePublicationRequest
       ])
 
       const safeTpisResponse = normalizeListResponse(tpisResponse)
@@ -766,6 +792,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       setPendingVotes(safeVotesResponse)
       setWorkflow(workflowResponse)
       setActiveSnapshot(snapshotResponse)
+      setStaticVotePublicationInfo(staticVotePublicationResponse)
       
       // Identifier les conflits
       const tpisWithConflicts = safeTpisResponse.filter(tpi =>
@@ -1858,6 +1885,43 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     })
   }, [year, executeWorkflowAction])
 
+  const handleGenerateStaticVotePublication = useCallback(async () => {
+    await executeWorkflowAction({
+      actionKey: 'staticVoteGenerate',
+      run: () => workflowPlanningService.generateStaticVotePublication(year),
+      successBuilder: (result) =>
+        `Mini-site vote genere: ${result?.groupCount || 0} vote(s), ${result?.accessLinkCount || 0} lien(s).`,
+      errorFallback: 'Erreur lors de la generation du mini-site vote.',
+      onSuccess: (result) => setStaticVotePublicationInfo(result || null)
+    })
+  }, [year, executeWorkflowAction])
+
+  const handlePublishStaticVotePublication = useCallback(async () => {
+    await executeWorkflowAction({
+      actionKey: 'staticVotePublish',
+      confirmMessage: 'Confirmer la publication FTP du mini-site vote ?',
+      run: () => workflowPlanningService.publishStaticVotePublication(year),
+      successBuilder: (result) => `Mini-site vote publie: ${result?.publicUrl || 'URL publique disponible'}.`,
+      errorFallback: 'Erreur lors de la publication FTP du mini-site vote.',
+      onSuccess: (result) => setStaticVotePublicationInfo(prev => ({
+        ...(prev || {}),
+        ...(result || {}),
+        available: true
+      }))
+    })
+  }, [year, executeWorkflowAction])
+
+  const handleSyncStaticVotePublication = useCallback(async () => {
+    await executeWorkflowAction({
+      actionKey: 'staticVoteSync',
+      run: () => workflowPlanningService.syncStaticVotePublication(year),
+      successBuilder: (result) =>
+        `Votes statiques synchronises: ${result?.importedCount || 0}/${result?.receivedCount || 0} importe(s), ${result?.failedCount || 0} erreur(s).`,
+      errorFallback: 'Erreur lors de la synchronisation des votes statiques.',
+      reloadAfterSuccess: true
+    })
+  }, [year, executeWorkflowAction])
+
   const handleOpenPublishedView = useCallback(() => {
     const normalizedYear = Number.parseInt(year, 10)
     const targetYear = YEARS_CONFIG.isSupportedYear(normalizedYear)
@@ -2602,6 +2666,44 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       Aperçu des liens vote
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="workflow-btn secondary"
+                    onClick={handleGenerateStaticVotePublication}
+                    disabled={workflowActionLoading || voteWorkflowStats.totalTpis === 0}
+                    title="Générer localement la publication PHP de vote."
+                  >
+                    <VoteIcon className="button-icon" />
+                    {isActionRunning('staticVoteGenerate') ? 'Génération...' : 'Générer vote web'}
+                  </button>
+                  <button
+                    type="button"
+                    className="workflow-btn open"
+                    onClick={handlePublishStaticVotePublication}
+                    disabled={workflowActionLoading || !staticVotePublicationInfo?.available}
+                    title={
+                      staticVotePublicationInfo?.available
+                        ? 'Publier le dossier vote généré par FTP.'
+                        : 'Générer le mini-site vote avant de publier.'
+                    }
+                  >
+                    <SendIcon className="button-icon" />
+                    {isActionRunning('staticVotePublish') ? 'Publication...' : 'Publier vote web'}
+                  </button>
+                  <button
+                    type="button"
+                    className="workflow-btn neutral"
+                    onClick={handleSyncStaticVotePublication}
+                    disabled={workflowActionLoading || !staticVotePublicationInfo?.syncSecretConfigured}
+                    title={
+                      staticVotePublicationInfo?.syncSecretConfigured
+                        ? 'Importer les réponses stockées sur le mini-site vote.'
+                        : 'Configurer STATIC_VOTE_SYNC_SECRET avant de synchroniser.'
+                    }
+                  >
+                    <RefreshIcon className="button-icon" />
+                    {isActionRunning('staticVoteSync') ? 'Sync...' : 'Sync vote web'}
+                  </button>
                   <button
                     type="button"
                     className="workflow-btn primary"

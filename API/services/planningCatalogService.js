@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto')
+const mongoose = require('mongoose')
 const { ensureDatabaseConnection } = require('../config/dbConfig')
 const PlanningSharedCatalog = require('../models/planningSharedCatalogModel')
 
@@ -33,6 +34,9 @@ const DEFAULT_EMAIL_SETTINGS = {
   senderEmail: '',
   replyToEmail: '',
   defaultDeliveryMode: 'outlook'
+}
+const DEFAULT_PUBLICATION_SETTINGS = {
+  publicBaseUrl: 'https://tpi26.ch'
 }
 const EMAIL_DELIVERY_MODES = new Set(['outlook', 'automatic'])
 const CANDIDATE_STAKEHOLDER_ICON_VALUES = new Set([
@@ -160,6 +164,43 @@ function normalizeEmailSettings(value = {}, fallback = DEFAULT_EMAIL_SETTINGS) {
     defaultDeliveryMode: EMAIL_DELIVERY_MODES.has(defaultDeliveryMode)
       ? defaultDeliveryMode
       : DEFAULT_EMAIL_SETTINGS.defaultDeliveryMode
+  }
+}
+
+function normalizePublicBaseUrl(value, fallback = DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl) {
+  const rawValue = compactText(value)
+  const rawFallback = compactText(fallback) || DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl
+  const candidate = rawValue || rawFallback
+
+  if (!candidate) {
+    return ''
+  }
+
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(candidate)
+    ? candidate
+    : `https://${candidate}`
+
+  try {
+    const url = new URL(withProtocol)
+    url.hash = ''
+    url.search = ''
+    return url.toString().replace(/\/+$/, '')
+  } catch (error) {
+    return rawFallback
+  }
+}
+
+function normalizePublicationSettings(value = {}, fallback = DEFAULT_PUBLICATION_SETTINGS) {
+  const source = value && typeof value === 'object' ? value : {}
+  const fallbackSource = fallback && typeof fallback === 'object'
+    ? fallback
+    : DEFAULT_PUBLICATION_SETTINGS
+
+  return {
+    publicBaseUrl: normalizePublicBaseUrl(
+      source.publicBaseUrl || source.staticPublicBaseUrl || source.publicSiteBaseUrl || source.domain,
+      fallbackSource.publicBaseUrl
+    )
   }
 }
 
@@ -592,6 +633,7 @@ function buildDefaultPlanningCatalog() {
     schemaVersion: DEFAULT_SCHEMA_VERSION,
     stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
     emailSettings: { ...DEFAULT_EMAIL_SETTINGS },
+    publicationSettings: { ...DEFAULT_PUBLICATION_SETTINGS },
     sites: []
   }
 }
@@ -645,6 +687,7 @@ function normalizeStoredCatalog(document, fallbackCatalog = buildDefaultPlanning
         : DEFAULT_SCHEMA_VERSION,
     stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons, fallback.stakeholderIcons),
     emailSettings: normalizeEmailSettings(source.emailSettings, fallback.emailSettings),
+    publicationSettings: normalizePublicationSettings(source.publicationSettings, fallback.publicationSettings),
     sites: sortSitesByInputOrder(normalizedInOrder)
   }
 }
@@ -669,6 +712,7 @@ async function getSharedPlanningCatalog() {
         schemaVersion: DEFAULT_SCHEMA_VERSION,
         stakeholderIcons: { ...DEFAULT_STAKEHOLDER_ICONS },
         emailSettings: { ...DEFAULT_EMAIL_SETTINGS },
+        publicationSettings: { ...DEFAULT_PUBLICATION_SETTINGS },
         sites: []
       }
     },
@@ -680,6 +724,38 @@ async function getSharedPlanningCatalog() {
   )
 
   return normalizeStoredCatalog(inserted?.toObject ? inserted.toObject() : inserted, fallback)
+}
+
+async function getSharedEmailSettingsIfAvailable() {
+  if (mongoose.connection.readyState !== 1) {
+    return null
+  }
+
+  try {
+    const catalog = await getSharedPlanningCatalog()
+    return catalog?.emailSettings || null
+  } catch (error) {
+    if (error?.code !== 'DATABASE_UNAVAILABLE' && error?.statusCode !== 503) {
+      console.warn('Configuration email indisponible:', error.message)
+    }
+    return null
+  }
+}
+
+async function getSharedPublicationSettingsIfAvailable() {
+  if (mongoose.connection.readyState !== 1) {
+    return null
+  }
+
+  try {
+    const catalog = await getSharedPlanningCatalog()
+    return catalog?.publicationSettings || null
+  } catch (error) {
+    if (error?.code !== 'DATABASE_UNAVAILABLE' && error?.statusCode !== 503) {
+      console.warn('Configuration publication indisponible:', error.message)
+    }
+    return null
+  }
 }
 
 async function saveSharedPlanningCatalog(payload = {}) {
@@ -697,6 +773,7 @@ async function saveSharedPlanningCatalog(payload = {}) {
       schemaVersion: normalizedCatalog.schemaVersion,
       stakeholderIcons: normalizedCatalog.stakeholderIcons,
       emailSettings: normalizedCatalog.emailSettings,
+      publicationSettings: normalizedCatalog.publicationSettings,
       sites: normalizedCatalog.sites
     },
     {
@@ -711,9 +788,13 @@ async function saveSharedPlanningCatalog(payload = {}) {
 
 module.exports = {
   buildDefaultPlanningCatalog,
+  getSharedEmailSettingsIfAvailable,
+  getSharedPublicationSettingsIfAvailable,
   getSharedPlanningCatalog,
   normalizeAddress,
   normalizeEmailSettings,
+  normalizePublicationSettings,
+  normalizePublicBaseUrl,
   normalizeRoomDetails,
   normalizeSiteCatalog,
   normalizeStakeholderIcons,

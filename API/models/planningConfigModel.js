@@ -138,6 +138,62 @@ const planningSiteScheduleSchema = new mongoose.Schema(
   { _id: false }
 )
 
+const planningWorkflowSettingsSchema = new mongoose.Schema(
+  {
+    voteDeadlineDays: {
+      type: Number,
+      default: 7
+    },
+    maxVoteProposals: {
+      type: Number,
+      default: 3
+    },
+    allowSpecialVoteRequest: {
+      type: Boolean,
+      default: true
+    },
+    automaticVoteRemindersEnabled: {
+      type: Boolean,
+      default: false
+    },
+    voteReminderLeadHours: {
+      type: Number,
+      default: 48
+    },
+    maxVoteReminders: {
+      type: Number,
+      default: 1
+    },
+    voteReminderCooldownHours: {
+      type: Number,
+      default: 24
+    }
+  },
+  { _id: false }
+)
+
+const planningAccessLinkSettingsSchema = new mongoose.Schema(
+  {
+    voteLinkValidityHours: {
+      type: Number,
+      default: 24 * 7
+    },
+    voteLinkMaxUses: {
+      type: Number,
+      default: 20
+    },
+    soutenanceLinkValidityHours: {
+      type: Number,
+      default: 24 * 4
+    },
+    soutenanceLinkMaxUses: {
+      type: Number,
+      default: 60
+    }
+  },
+  { _id: false }
+)
+
 const planningConfigSchema = new mongoose.Schema({
   year: {
     type: Number,
@@ -161,6 +217,14 @@ const planningConfigSchema = new mongoose.Schema({
     type: [planningSiteScheduleSchema],
     default: []
   },
+  workflowSettings: {
+    type: planningWorkflowSettingsSchema,
+    default: () => ({})
+  },
+  accessLinkSettings: {
+    type: planningAccessLinkSettingsSchema,
+    default: () => ({})
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -171,9 +235,8 @@ const planningConfigSchema = new mongoose.Schema({
   }
 })
 
-planningConfigSchema.pre('save', function(next) {
+planningConfigSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const PlanningConfig = mongoose.models.PlanningConfig || mongoose.model(

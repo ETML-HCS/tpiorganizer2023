@@ -12,7 +12,7 @@ for (const fileName of preferredEnvFiles) {
   const filePath = path.join(rootDir, fileName)
 
   if (fs.existsSync(filePath)) {
-    dotenv.config({ path: filePath, override: false })
+    dotenv.config({ path: filePath, override: false, quiet: true })
   }
 }
 

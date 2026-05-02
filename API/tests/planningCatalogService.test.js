@@ -18,6 +18,9 @@ test('buildDefaultPlanningCatalog retourne un catalogue partage vide et reutilis
     replyToEmail: '',
     defaultDeliveryMode: 'outlook'
   })
+  assert.deepEqual(catalog.publicationSettings, {
+    publicBaseUrl: 'https://tpi26.ch'
+  })
 })
 
 test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les classes par site', () => {
@@ -28,6 +31,9 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
       senderEmail: ' TPI@EXAMPLE.CH ',
       replyToEmail: ' SUPPORT@EXAMPLE.CH ',
       defaultDeliveryMode: 'automatic'
+    },
+    publicationSettings: {
+      publicBaseUrl: ' publication.example.ch/ '
     },
     stakeholderIcons: {
       candidate: 'candidate-violet',
@@ -98,6 +104,9 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
     senderEmail: 'tpi@example.ch',
     replyToEmail: 'support@example.ch',
     defaultDeliveryMode: 'automatic'
+  })
+  assert.deepEqual(catalog.publicationSettings, {
+    publicBaseUrl: 'https://publication.example.ch'
   })
   assert.deepEqual(etml.rooms, ['N101', 'N102'])
   assert.equal(etml.roomDetails.length, 2)

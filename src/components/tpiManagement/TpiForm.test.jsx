@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 
 import TpiForm from './TpiForm.jsx'
 import { personService } from '../../services/planningService'
@@ -16,7 +16,7 @@ describe('TpiForm', () => {
     personService.getAll.mockResolvedValue([])
   })
 
-  it('propose les salles et dates de défense via les listes de configuration, y compris SPECIAL', () => {
+  it('propose les salles et dates de défense via les listes de configuration, y compris SPECIAL', async () => {
     render(
       <TpiForm
         onSave={jest.fn()}
@@ -57,6 +57,10 @@ describe('TpiForm', () => {
       />
     )
 
+    await waitFor(() => {
+      expect(personService.getAll).toHaveBeenCalledTimes(1)
+    })
+
     const roomSelect = screen.getByRole('combobox', { name: /salle/i })
     const soutenanceSelect = screen.getByRole('combobox', { name: /défense/i })
 
@@ -67,7 +71,7 @@ describe('TpiForm', () => {
     ).toBeInTheDocument()
   })
 
-  it('conserve la valeur courante quand elle est hors configuration', () => {
+  it('conserve la valeur courante quand elle est hors configuration', async () => {
     render(
       <TpiForm
         onSave={jest.fn()}
@@ -105,6 +109,10 @@ describe('TpiForm', () => {
         ]}
       />
     )
+
+    await waitFor(() => {
+      expect(personService.getAll).toHaveBeenCalledTimes(1)
+    })
 
     const roomSelect = screen.getByRole('combobox', { name: /salle/i })
     const soutenanceSelect = screen.getByRole('combobox', { name: /défense/i })

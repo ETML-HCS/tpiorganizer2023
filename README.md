@@ -1,8 +1,8 @@
 # TPIorganizer 2023 - Version stable VS.260502
 
-TPIorganizer 2023 est une application React conçue pour faciliter l'organisation des défenses de travaux de fin d'études (TPI). Elle offre une gestion flexible des dates, des salles et du workflow de validation des plannings.
+TPIorganizer 2023 est une application React + Node/Express pour organiser les défenses TPI : configuration annuelle, gestion des parties prenantes, planification, workflow de validation, votes, liens d'accès et publication publique.
 
-## Screenshot
+## Screenshots
 
 ![Connexion](/captures/login.png)
 ![Accueil](/captures/accueil.png)
@@ -13,66 +13,71 @@ TPIorganizer 2023 est une application React conçue pour faciliter l'organisatio
 ![Configuration](/captures/configuration.png)
 ![Défenses](/captures/defenses.png)
 
-## Points forts
+## Fonctionnalités principales
 
-- **Filtrage et affichage** : Vision claire des défenses par date et salle.
-- **Gestion des créneaux** : Création et édition aisées des créneaux de défense.
-- **Export/import CSV** : Transfert simple des données de défenses.
-- **Navigation intuitive** : Système de routes pour une expérience utilisateur fluide.
-- **Drag & drop** : Placement facile des TPI dans l'agenda.
+- Configuration annuelle des types de classes, dates de défense, sites, salles, horaires, couleurs et icônes de parties prenantes.
+- Paramètres de workflow par année : délai de vote, nombre maximal de propositions, demandes spéciales, rappels automatiques, validité et nombre d'utilisations des liens.
+- Campagnes de vote par magic links, avec liens vers l'application ou vers le mini-site statique de vote.
+- Génération et prévisualisation des liens d'accès admin pour les votes et les soutenances publiées, avec récupération des liens encore valides.
+- Publication statique des soutenances et publication statique des votes, avec génération locale, aperçu, publication FTP et synchronisation des réponses de vote.
+- Configuration centralisée de l'email, de l'expéditeur, du reply-to et de l'URL publique de publication.
+- Exports/imports, snapshots de planning, gel de planning et vérifications avant publication.
+
+## Stack actuelle
+
+- Frontend : React 19, Vite 8, React Router 7.
+- Backend : Node.js, Express 5, MongoDB/Mongoose 9.
+- Tests frontend : Jest 30, jsdom, Babel, Testing Library.
+- Tests API : `node --test` sur les tests `API/tests`.
+- Publication : génération HTML/PHP locale dans `static-publication`, puis FTP pour la mise en ligne.
 
 ## Démarrage rapide
 
-1. **Installation** : Avoir Node.js, cloner le dépôt, installer les dépendances avec `npm install`.
-2. **Utilisation complète** : Lancer l'app avec `npm run dev`, accéder au frontend via `http://localhost:3000`.
-3. **Frontend seul** : Lancer uniquement Vite avec `npm start`.
+1. Installer Node.js et les dépendances avec `npm install`.
+2. Copier `.env.example` vers `.env`, puis renseigner au minimum l'authentification, `JWT_SECRET` et `DB_URI`.
+3. Lancer frontend + API avec `npm run dev`.
+4. Ouvrir le frontend sur `http://localhost:3000`.
+
+Scripts utiles :
+
+- `npm run dev` : API locale en watch + frontend Vite.
+- `npm run backend` : API seule sur `http://localhost:5001`.
+- `npm start` : frontend seul.
+- `npm run build` : build de production Vite.
+- `npm test` : tests frontend Jest.
+- `npm run test:api` : tests API Node.
+- `npm run check-env-prod` : contrôle des variables sensibles avant production.
+
+## Configuration importante
+
+- `DB_URI` configure MongoDB.
+- `JWT_SECRET` est requis pour les sessions et magic links.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` et `SMTP_FROM` pilotent l'envoi automatique.
+- `STATIC_PUBLIC_BASE_URL`, `STATIC_PUBLIC_PATH`, `FTP_HOST`, `FTP_PORT`, `FTP_USER`, `FTP_PASSWORD`, `FTP_REMOTE_DIR` et `FTP_STATIC_REMOTE_DIR` restent disponibles comme fallback de publication.
+- La configuration de publication peut aussi être enregistrée depuis l'interface. Le mot de passe est stocké chiffré côté MongoDB via `PublicationDeploymentConfig`.
+- `STATIC_VOTE_SYNC_SECRET` est requis pour synchroniser les votes saisis sur le mini-site statique.
+- `STATIC_VOTE_AUTO_SYNC=true` active la synchronisation automatique au démarrage de l'API pour les années configurées via `STATIC_VOTE_AUTO_SYNC_YEARS`.
+
+## Publication statique
+
+La publication des soutenances génère une page publique autonome pour les défenses validées. Le workflow génère les fichiers localement, permet l'aperçu, puis publie le dossier par FTP.
+
+La publication des votes génère un mini-site statique protégé par liens personnels. Les réponses sont enregistrées côté hébergement dans un flux JSONL, puis synchronisées dans MongoDB via l'API. Les liens de vote peuvent cibler l'application ou ce mini-site selon l'option choisie dans la génération de liens.
+
+La configuration publique et FTP est centralisée dans l'écran de configuration planning. Le protocole FTP est opérationnel pour la publication automatique actuelle ; FTPS/SFTP/SSH sont cadrés dans la configuration mais ne sont pas encore publiés automatiquement.
 
 ## Orientation desktop
 
-La piste Electron portable autonome est cadrée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Ce document remplace les anciens plans dispersés à la racine du dépôt.
+La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : le projet reste web-first, avec un backend exportant `startServer()` pour faciliter une intégration desktop future.
 
-## Développement
+## Maintenance récente
 
-- Pour démarrer le backend + frontend en mode développement : `npm run dev`
-- Frontend accessible sur : `http://localhost:3000`
-- API locale exposée sur : `http://localhost:5001`
-- Pour démarrer uniquement l'API locale : `npm run backend`
-- Vérifier le code avec : `npx eslint src --ext .js,.jsx`
-
-## Notes de maintenance
-
-- Corrections récentes sur le planning : gestion des états de vote et variables manquantes dans `PlanningDashboard`.
-- Ajustements tests unitaires pour éviter l'accès direct aux nœuds DOM et utiliser les sélecteurs `@testing-library`.
-- Le projet utilise Vite pour le développement local et React 18.
-
-## Problèmes connus
-
-- `PlanningDashboard` peut planter si des données de planning sont manquantes pour une année non configurée.
-- HMR Vite peut parfois signaler une erreur de websocket sur certains environnements Windows sans impact fonctionnel sur l'app.
-- Certains tests existants utilisent encore des accès DOM directs ou `container.querySelector`.
-
-## Tests
-
-- Exécuter les tests unitaires avec : `npm test`
-- Les tests de composants sont centrés sur `@testing-library/react`.
-
-## Contributions
-
-Les améliorations et corrections via pull requests sont encouragées. Veillez à respecter les bonnes pratiques de développement.
+- Mise à jour majeure des dépendances : React 19, React Router 7, Express 5, Mongoose 9, Nodemailer 8, Jest/Babel.
+- Remplacement du flux de tests frontend `react-scripts test` par Jest direct.
+- Ajout des paramètres de workflow, d'accès, d'email et de publication dans les modèles de configuration.
+- Ajout de la publication statique des votes et de la synchronisation distante.
+- Nettoyage d'anciens artefacts, scripts et dépendances obsolètes.
 
 ## Licence
 
-Sous licence MIT, détails dans le fichier LICENSE.
-
-## Évolution récente
-
-- **Juillet** : Améliorations de l'interface, intégration MongoDB, gestion des données améliorée.
-- **Novembre** : Sécurisation des variables d'environnement, passage à MongoDB Atlas pour une meilleure scalabilité.
-
-## À venir
-
-- **Notifications par mail** : Mise en place d'une fonctionnalité d'envoi de mails pour une meilleure communication.
-- **Sauvegarde cloud** : Intégration d'une base de données NoSQL cloud pour une accessibilité et sécurité accrues.
-- **Publication de planning** : Création d'un bouton "Publier" pour partager facilement le planning des défenses.
-
-L'engagement envers l'amélioration continue de TPIorganizer 2023 reste fort, avec un accent sur la fourniture d'outils pratiques et efficaces pour la gestion des défenses TPI.
+Sous licence MIT, détails dans le fichier `LICENSE`.

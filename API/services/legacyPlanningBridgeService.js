@@ -7,7 +7,10 @@ const Vote = require('../models/voteModel')
 const TpiModelsYear = require('../models/tpiModels')
 const { createTpiRoomModel } = require('../models/tpiRoomsModels')
 const { findOrCreatePerson } = require('./csvImportService')
-const { getPlanningConfig } = require('./planningConfigService')
+const {
+  getPlanningConfig,
+  normalizeWorkflowSettings
+} = require('./planningConfigService')
 const { isExternalPlanningSite, isPlanifiableTpi } = require('./tpiPlanningVisibility')
 const { personHasRole } = require('./personRegistryService')
 const {
@@ -15,7 +18,7 @@ const {
   validateLegacyTpiStakeholders
 } = require('./tpiStakeholderService')
 
-const DEFAULT_VOTING_DEADLINE_DAYS = 7
+const DAY_IN_MS = 24 * 60 * 60 * 1000
 
 function toPlainObject(value) {
   if (!value) {
@@ -501,7 +504,8 @@ async function rebuildWorkflowFromLegacyPlanning({
 
   const createdById = toObjectIdOrNull(createdBy?.id || createdBy?._id || createdBy)
   const now = new Date()
-  const deadline = new Date(now.getTime() + DEFAULT_VOTING_DEADLINE_DAYS * 24 * 60 * 60 * 1000)
+  const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
+  const deadline = new Date(now.getTime() + workflowSettings.voteDeadlineDays * DAY_IN_MS)
   const summary = {
     year: normalizedYear,
     roomCount: rooms.length,

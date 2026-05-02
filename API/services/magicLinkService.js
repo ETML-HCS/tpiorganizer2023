@@ -11,12 +11,24 @@ const { verifyAppSessionToken } = require('../middleware/appAuth')
 // Durée de validité du magic link (24 heures par défaut)
 const MAGIC_LINK_EXPIRY_HOURS = 24
 
+function normalizeExpiryHours(value, fallback = MAGIC_LINK_EXPIRY_HOURS) {
+  const parsed = Number.parseInt(String(value), 10)
+  const fallbackValue = Number.parseInt(String(fallback), 10)
+  const safeFallback = Number.isInteger(fallbackValue) && fallbackValue > 0
+    ? fallbackValue
+    : MAGIC_LINK_EXPIRY_HOURS
+
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : safeFallback
+}
+
 /**
  * Génère un magic link pour une personne
  * @param {String} email - Email de la personne
  * @returns {Object} Token et URL du magic link
  */
-async function generateMagicLink(email, baseUrl) {
+async function generateMagicLink(email, baseUrl, options = {}) {
   const person = await Person.findOne({ email: email.toLowerCase() })
   
   if (!person) {
@@ -28,7 +40,8 @@ async function generateMagicLink(email, baseUrl) {
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
   
   // Définir l'expiration
-  const expires = new Date(Date.now() + MAGIC_LINK_EXPIRY_HOURS * 60 * 60 * 1000)
+  const expiryHours = normalizeExpiryHours(options.expiresInHours)
+  const expires = new Date(Date.now() + expiryHours * 60 * 60 * 1000)
   
   // Sauvegarder le token hashé
   person.magicLinkToken = hashedToken
@@ -42,6 +55,7 @@ async function generateMagicLink(email, baseUrl) {
     token,
     url: magicLinkUrl,
     expiresAt: expires,
+    expiresInHours: expiryHours,
     personId: person._id,
     personName: person.fullName
   }
@@ -200,5 +214,6 @@ module.exports = {
   verifySessionToken,
   authMiddleware,
   requireRole,
+  normalizeExpiryHours,
   MAGIC_LINK_EXPIRY_HOURS
 }

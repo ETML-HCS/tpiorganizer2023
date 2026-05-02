@@ -4,6 +4,10 @@ const path = require('path')
 const { rootDir } = require('../config/loadEnv')
 const { listPublishedSoutenances } = require('./publishedSoutenanceService')
 const { MagicLink } = require('../models/magicLinkModel')
+const { getSharedPublicationSettingsIfAvailable } = require('./planningCatalogService')
+const {
+  getPublicationDeploymentConfigIfAvailable
+} = require('./publicationDeploymentConfigService')
 
 const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
@@ -311,9 +315,11 @@ function derivePublicPathFromRemoteDir(remoteDir, year) {
   return normalizedRemoteDir
 }
 
-function normalizeStaticPublicPath(year) {
+function normalizeStaticPublicPath(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
+  const configuredDeploymentPath = compactText(deploymentConfig?.publicPath)
   const configuredPublicPath = compactText(
+    configuredDeploymentPath ||
     process.env.STATIC_PUBLIC_PATH ||
     process.env.STATIC_PUBLICATION_PUBLIC_PATH ||
     process.env.FTP_STATIC_PUBLIC_PATH
@@ -323,8 +329,8 @@ function normalizeStaticPublicPath(year) {
     return normalizeSlashPath(withPublicationYear(configuredPublicPath, normalizedYear))
   }
 
-  const configuredStaticRemoteDir = compactText(process.env.FTP_STATIC_REMOTE_DIR)
-  const configuredRemoteBaseDir = compactText(process.env.FTP_REMOTE_DIR)
+  const configuredStaticRemoteDir = compactText(deploymentConfig?.staticRemoteDir || process.env.FTP_STATIC_REMOTE_DIR)
+  const configuredRemoteBaseDir = compactText(deploymentConfig?.remoteDir || process.env.FTP_REMOTE_DIR)
 
   if (configuredStaticRemoteDir && !configuredRemoteBaseDir) {
     return derivePublicPathFromRemoteDir(configuredStaticRemoteDir, normalizedYear)
@@ -333,10 +339,10 @@ function normalizeStaticPublicPath(year) {
   return getDefaultStaticPublicPath(normalizedYear)
 }
 
-function normalizeRemoteDir(year) {
+function normalizeRemoteDir(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
-  const remoteBaseDir = compactText(process.env.FTP_REMOTE_DIR)
-  const staticRemoteDir = compactText(process.env.FTP_STATIC_REMOTE_DIR)
+  const remoteBaseDir = compactText(deploymentConfig?.remoteDir || process.env.FTP_REMOTE_DIR)
+  const staticRemoteDir = compactText(deploymentConfig?.staticRemoteDir || process.env.FTP_STATIC_REMOTE_DIR)
   const defaultStaticDir = `${DEFAULT_STATIC_PUBLIC_PATH_PREFIX}-${normalizedYear}`
 
   if (staticRemoteDir) {
@@ -365,13 +371,61 @@ function getRemoteDirCandidates(remoteDir) {
   return Array.from(new Set(candidates))
 }
 
-function getPublicUrl(year) {
-  const baseUrl = compactText(
+function normalizePublicBaseUrl(value, fallback = DEFAULT_PUBLIC_BASE_URL) {
+  const rawValue = compactText(value)
+  const rawFallback = compactText(fallback) || DEFAULT_PUBLIC_BASE_URL
+  const candidate = rawValue || rawFallback
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(candidate)
+    ? candidate
+    : `https://${candidate}`
+
+  try {
+    const url = new URL(withProtocol)
+    url.hash = ''
+    url.search = ''
+    return url.toString().replace(/\/+$/, '')
+  } catch (error) {
+    return rawFallback.replace(/\/+$/, '')
+  }
+}
+
+async function getConfiguredPublicBaseUrl(deploymentConfig = null) {
+  const configuredDeploymentUrl = compactText(deploymentConfig?.publicBaseUrl)
+  const publicationSettings = await getSharedPublicationSettingsIfAvailable()
+  const configuredCatalogUrl = compactText(publicationSettings?.publicBaseUrl)
+  const configuredEnvUrl = compactText(
     process.env.STATIC_PUBLIC_BASE_URL ||
-    process.env.PUBLIC_SITE_BASE_URL ||
+    process.env.PUBLIC_SITE_BASE_URL
+  )
+  const normalizedDefaultUrl = normalizePublicBaseUrl(DEFAULT_PUBLIC_BASE_URL)
+  const normalizedDeploymentUrl = configuredDeploymentUrl
+    ? normalizePublicBaseUrl(configuredDeploymentUrl)
+    : ''
+  const normalizedCatalogUrl = configuredCatalogUrl
+    ? normalizePublicBaseUrl(configuredCatalogUrl)
+    : ''
+
+  if (normalizedDeploymentUrl && normalizedDeploymentUrl !== normalizedDefaultUrl) {
+    return normalizedDeploymentUrl
+  }
+
+  if (normalizedCatalogUrl && normalizedCatalogUrl !== normalizedDefaultUrl) {
+    return normalizedCatalogUrl
+  }
+
+  return normalizePublicBaseUrl(
+    configuredEnvUrl ||
+    normalizedDeploymentUrl ||
+    normalizedCatalogUrl ||
     DEFAULT_PUBLIC_BASE_URL
+  )
+}
+
+async function getPublicUrl(year, deploymentConfig = null) {
+  const baseUrl = compactText(
+    await getConfiguredPublicBaseUrl(deploymentConfig)
   ).replace(/\/+$/, '')
-  const publicPath = normalizeStaticPublicPath(year)
+  const publicPath = normalizeStaticPublicPath(year, deploymentConfig)
 
   return `${baseUrl}${publicPath === '/' ? '/' : `${publicPath}/`}`
 }
@@ -1558,8 +1612,9 @@ async function writeStaticPublicationAccessFiles({ year, html }) {
   }
 }
 
-async function getStaticPublicationStatus(year) {
+async function getStaticPublicationStatus(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
+  const resolvedDeploymentConfig = deploymentConfig || await getPublicationDeploymentConfigIfAvailable()
   const manifestPath = getManifestPath(normalizedYear)
   const indexPath = getIndexPath(normalizedYear)
 
@@ -1572,6 +1627,8 @@ async function getStaticPublicationStatus(year) {
 
   const available = fs.existsSync(indexPath)
 
+  const publicUrl = await getPublicUrl(normalizedYear, resolvedDeploymentConfig)
+
   return {
     ...(manifest || {}),
     available,
@@ -1582,13 +1639,14 @@ async function getStaticPublicationStatus(year) {
     deniedIndexPath: getDeniedIndexPath(normalizedYear),
     manifestPath,
     previewPath: available ? getPreviewPath(normalizedYear) : null,
-    publicUrl: getPublicUrl(normalizedYear),
-    remoteDir: normalizeRemoteDir(normalizedYear)
+    publicUrl,
+    remoteDir: normalizeRemoteDir(normalizedYear, resolvedDeploymentConfig)
   }
 }
 
 async function generateStaticDefensesSite(year) {
   const normalizedYear = parseYear(year)
+  const deploymentConfig = await getPublicationDeploymentConfigIfAvailable()
   const generatedAt = new Date().toISOString()
   const rooms = await listPublishedSoutenances(normalizedYear)
   const rows = flattenPublishedRooms(rooms)
@@ -1603,14 +1661,15 @@ async function generateStaticDefensesSite(year) {
     rooms,
     rows
   })
+  const publicUrl = await getPublicUrl(normalizedYear, deploymentConfig)
   const manifest = {
     year: normalizedYear,
     generatedAt,
     roomCount: Array.isArray(rooms) ? rooms.length : 0,
     defenseCount: rows.length,
     previewPath: getPreviewPath(normalizedYear),
-    publicUrl: getPublicUrl(normalizedYear),
-    remoteDir: normalizeRemoteDir(normalizedYear)
+    publicUrl,
+    remoteDir: normalizeRemoteDir(normalizedYear, deploymentConfig)
   }
 
   await fs.promises.mkdir(outputDir, { recursive: true })
@@ -1885,11 +1944,24 @@ class SimpleFtpClient {
   }
 }
 
-function getFtpConfig() {
-  const host = compactText(process.env.FTP_HOST)
-  const user = compactText(process.env.FTP_USER)
-  const password = compactText(process.env.FTP_PASSWORD)
-  const port = parsePositiveInteger(process.env.FTP_PORT, 21)
+function getFtpConfig(deploymentConfig = null) {
+  const protocol = compactText(
+    deploymentConfig?.protocol ||
+    process.env.PUBLICATION_FTP_PROTOCOL ||
+    process.env.FTP_PROTOCOL ||
+    'ftp'
+  ).toLowerCase()
+  const host = compactText(deploymentConfig?.host || process.env.FTP_HOST)
+  const user = compactText(deploymentConfig?.username || deploymentConfig?.user || process.env.FTP_USER)
+  const password = compactText(deploymentConfig?.password || process.env.FTP_PASSWORD)
+  const defaultPort = ['sftp', 'ssh'].includes(protocol) ? 22 : 21
+  const port = parsePositiveInteger(deploymentConfig?.port || process.env.FTP_PORT, defaultPort)
+
+  if (protocol !== 'ftp') {
+    const error = new Error(`Protocole ${protocol.toUpperCase()} non pris en charge par la publication automatique actuelle.`)
+    error.statusCode = 501
+    throw error
+  }
 
   if (!host || !user || !password) {
     const error = new Error('Configuration FTP incomplete.')
@@ -1898,6 +1970,7 @@ function getFtpConfig() {
   }
 
   return {
+    protocol,
     host,
     user,
     password,
@@ -1907,7 +1980,8 @@ function getFtpConfig() {
 
 async function publishStaticDefensesSite(year) {
   const normalizedYear = parseYear(year)
-  const status = await getStaticPublicationStatus(normalizedYear)
+  const deploymentConfig = await getPublicationDeploymentConfigIfAvailable({ includeSecret: true })
+  const status = await getStaticPublicationStatus(normalizedYear, deploymentConfig)
 
   if (!status.available) {
     const error = new Error('Genere la page statique avant la publication FTP.')
@@ -1920,8 +1994,9 @@ async function publishStaticDefensesSite(year) {
     year: normalizedYear,
     html
   })
-  const remoteDir = normalizeRemoteDir(normalizedYear)
+  const remoteDir = normalizeRemoteDir(normalizedYear, deploymentConfig)
   const publishedAt = new Date().toISOString()
+  const publicUrl = await getPublicUrl(normalizedYear, deploymentConfig)
   const manifest = {
     year: normalizedYear,
     generatedAt: status.generatedAt || null,
@@ -1930,11 +2005,11 @@ async function publishStaticDefensesSite(year) {
     defenseCount: status.defenseCount || 0,
     accessLinkCount: accessFiles.accessLinkCount,
     previewPath: getPreviewPath(normalizedYear),
-    publicUrl: getPublicUrl(normalizedYear),
+    publicUrl,
     remoteDir
   }
 
-  const ftpClient = new SimpleFtpClient(getFtpConfig())
+  const ftpClient = new SimpleFtpClient(getFtpConfig(deploymentConfig))
 
   try {
     await ftpClient.connect()
@@ -1955,12 +2030,16 @@ async function publishStaticDefensesSite(year) {
 }
 
 module.exports = {
+  SimpleFtpClient,
   buildStaticAccessDeniedHtml,
   buildStaticDefenseHtml,
   buildStaticDefensePhp,
   flattenPublishedRooms,
   generateStaticDefensesSite,
+  getFtpConfig,
   getIndexPath,
   getStaticPublicationStatus,
+  joinSlashPaths,
+  normalizeSlashPath,
   publishStaticDefensesSite
 }

@@ -84,6 +84,19 @@ function buildApiAbsoluteUrl(path) {
   }
 }
 
+function formatPublicationConfirmTarget(url) {
+  const rawUrl = typeof url === "string" ? url.trim() : ""
+  if (!rawUrl) {
+    return "le site publication"
+  }
+
+  try {
+    return new URL(rawUrl).host || rawUrl
+  } catch (error) {
+    return rawUrl.replace(/^https?:\/\//i, "").replace(/\/+$/, "") || "le site publication"
+  }
+}
+
 function updateTpiDatas(room, sourceConfig = combinedScheduleConfig) {
   const normalizedRoom = normalizeRoom(room, 0, sourceConfig)
 
@@ -1659,9 +1672,11 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }
 
   const handlePublishStaticPublication = async () => {
+    const publicationTargetLabel = formatPublicationConfirmTarget(staticPublicationInfo?.publicUrl)
+
     await executeWorkflowAction({
       actionKey: "staticPublish",
-      confirmMessage: "Publier la page statique générée sur tpi26.ch par FTP ?",
+      confirmMessage: `Publier la page statique générée sur ${publicationTargetLabel} par FTP ?`,
       run: () => workflowPlanningService.publishStaticPublication(selectedYear),
       successMessage: (result) =>
         `Publication FTP réussie: ${result?.defenseCount || 0} défense(s) en ligne${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,

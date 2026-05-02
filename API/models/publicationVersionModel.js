@@ -45,9 +45,8 @@ const publicationVersionSchema = new mongoose.Schema({
 publicationVersionSchema.index({ year: 1, version: -1 }, { unique: true })
 publicationVersionSchema.index({ year: 1, isActive: 1, publishedAt: -1 })
 
-publicationVersionSchema.pre('save', function(next) {
+publicationVersionSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const PublicationVersion = mongoose.models.PublicationVersion || mongoose.model(

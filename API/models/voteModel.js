@@ -121,12 +121,11 @@ voteSchema.statics.findUnanimousSlot = async function(tpiPlanningId) {
 }
 
 // Middleware pre-save
-voteSchema.pre('save', function(next) {
+voteSchema.pre('save', function() {
   this.updatedAt = new Date()
   if (this.decision !== 'pending' && !this.votedAt) {
     this.votedAt = new Date()
   }
-  next()
 })
 
 const Vote = mongoose.model('Vote', voteSchema, 'votes')

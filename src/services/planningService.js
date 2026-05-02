@@ -24,6 +24,14 @@ function buildStartVotesBody(legacyRooms = null, options = {}) {
     body.skipEmails = true
   }
 
+  if (options.voteLinkTarget) {
+    body.voteLinkTarget = options.voteLinkTarget
+  }
+
+  if (options.votePublicUrl) {
+    body.votePublicUrl = options.votePublicUrl
+  }
+
   return body
 }
 
@@ -323,6 +331,16 @@ export const planningCatalogService = {
   }
 }
 
+export const publicationDeploymentConfigService = {
+  get: async () => {
+    return await apiService.get(`${WORKFLOW_BASE_URL}/static-publication/config`)
+  },
+
+  save: async (config) => {
+    return await apiService.put(`${WORKFLOW_BASE_URL}/static-publication/config`, config)
+  }
+}
+
 /**
  * Service de planification et drag & drop
  */
@@ -442,6 +460,22 @@ export const workflowPlanningService = {
       body.publicationVersion = options.publicationVersion
     }
 
+    if (options.soutenanceLinkTarget) {
+      body.soutenanceLinkTarget = options.soutenanceLinkTarget
+    }
+
+    if (options.soutenancePublicUrl) {
+      body.soutenancePublicUrl = options.soutenancePublicUrl
+    }
+
+    if (options.voteLinkTarget) {
+      body.voteLinkTarget = options.voteLinkTarget
+    }
+
+    if (options.votePublicUrl) {
+      body.votePublicUrl = options.votePublicUrl
+    }
+
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/preview`, body)
   },
 
@@ -456,11 +490,34 @@ export const workflowPlanningService = {
       body.publicationVersion = options.publicationVersion
     }
 
+    if (options.soutenanceLinkTarget) {
+      body.soutenanceLinkTarget = options.soutenanceLinkTarget
+    }
+
+    if (options.soutenancePublicUrl) {
+      body.soutenancePublicUrl = options.soutenancePublicUrl
+    }
+
+    if (options.voteLinkTarget) {
+      body.voteLinkTarget = options.voteLinkTarget
+    }
+
+    if (options.votePublicUrl) {
+      body.votePublicUrl = options.votePublicUrl
+    }
+
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/generate`, body)
   },
 
-  remindVotes: async (year) => {
-    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/remind`, {})
+  remindVotes: async (year, options = {}) => {
+    const body = options.automatic === true ? { automatic: true } : {}
+    if (options.voteLinkTarget) {
+      body.voteLinkTarget = options.voteLinkTarget
+    }
+    if (options.votePublicUrl) {
+      body.votePublicUrl = options.votePublicUrl
+    }
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/remind`, body)
   },
 
   closeVotes: async (year) => {
@@ -495,6 +552,36 @@ export const workflowPlanningService = {
     )
   },
 
+  getStaticVotePublicationStatus: async (year) => {
+    return await apiService.get(`${WORKFLOW_BASE_URL}/${year}/static-votes/status`)
+  },
+
+  generateStaticVotePublication: async (year) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/static-votes/generate`,
+      {},
+      STATIC_PUBLICATION_TIMEOUT
+    )
+  },
+
+  publishStaticVotePublication: async (year) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/static-votes/publish`,
+      {},
+      STATIC_PUBLICATION_TIMEOUT
+    )
+  },
+
+  syncStaticVotePublication: async (year, options = {}) => {
+    const body = {}
+
+    if (typeof options.remoteUrl === 'string' && options.remoteUrl.trim()) {
+      body.remoteUrl = options.remoteUrl.trim()
+    }
+
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/static-votes/sync`, body)
+  },
+
   resetYear: async (year) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/reset`, {
       confirmation: `RECOMMENCER ${year}`
@@ -523,7 +610,8 @@ const planningService = {
   votes: voteService,
   scheduling: schedulingService,
   workflow: workflowPlanningService,
-  planningCatalog: planningCatalogService
+  planningCatalog: planningCatalogService,
+  publicationDeploymentConfig: publicationDeploymentConfigService
 }
 
 export default planningService

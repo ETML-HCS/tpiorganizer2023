@@ -10,6 +10,10 @@ const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
 const { getRoomCompatibilityReport } = require('./roomClassCompatibilityService')
 const {
+  getPlanningConfigIfAvailable,
+  normalizeWorkflowSettings
+} = require('./planningConfigService')
+const {
   buildOccupiedStepKeys,
   buildTimelineIndex,
   getMaxConsecutiveTpiLimit,
@@ -21,6 +25,24 @@ const {
 
 // Constantes
 const VOTING_DEADLINE_DAYS = 7
+const DAY_IN_MS = 24 * 60 * 60 * 1000
+
+async function getWorkflowSettingsForYear(year) {
+  try {
+    const planningConfig = await getPlanningConfigIfAvailable(year)
+    return normalizeWorkflowSettings(planningConfig?.workflowSettings)
+  } catch (error) {
+    if (error?.code !== 'DATABASE_UNAVAILABLE' && error?.statusCode !== 503) {
+      console.warn('Configuration workflow indisponible pour le délai de vote:', error.message)
+    }
+    return normalizeWorkflowSettings()
+  }
+}
+
+async function buildVotingDeadlineDate(year) {
+  const workflowSettings = await getWorkflowSettingsForYear(year)
+  return new Date(Date.now() + workflowSettings.voteDeadlineDays * DAY_IN_MS)
+}
 
 function getPersonDisplayName(person) {
   if (!person) {
@@ -334,13 +356,14 @@ async function proposeSlotsAndInitiateVoting(tpiPlanningId, maxSlots = 4) {
   
   // 2. Sélectionner les meilleurs créneaux (1 date fixée + jusqu'à 3 alternatives)
   const selectedSlots = availableSlots.slice(0, maxSlots)
+  const votingDeadline = await buildVotingDeadlineDate(tpi.year)
   
   // 3. Mettre à jour le TPI avec les créneaux proposés
   tpi.proposedSlots = selectedSlots
   tpi.status = 'voting'
   tpi.votingSession = {
     startedAt: new Date(),
-    deadline: new Date(Date.now() + VOTING_DEADLINE_DAYS * 24 * 60 * 60 * 1000),
+    deadline: votingDeadline,
     remindersCount: 0,
     voteSummary: {
       expert1Voted: false,

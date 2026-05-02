@@ -297,13 +297,16 @@ beforeEach(() => {
     })
 
     const lastListProps = mockTpiList.mock.calls[mockTpiList.mock.calls.length - 1]?.[0]
-    const result = await lastListProps.onBulkSave([
-      {
-        _id: '507f1f77bcf86cd799439011',
-        refTpi: '19',
-        classe: 'MID4B'
-      }
-    ])
+    let result
+    await act(async () => {
+      result = await lastListProps.onBulkSave([
+        {
+          _id: '507f1f77bcf86cd799439011',
+          refTpi: '19',
+          classe: 'MID4B'
+        }
+      ])
+    })
 
     expect(updateTpiModel).toHaveBeenCalledWith(
       '507f1f77bcf86cd799439011',

@@ -25,6 +25,21 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
     ['CFC', 'FPA', 'MATU']
   )
   assert.deepEqual(config.soutenanceDates, [])
+  assert.deepEqual(config.workflowSettings, {
+    voteDeadlineDays: 7,
+    maxVoteProposals: 3,
+    allowSpecialVoteRequest: true,
+    automaticVoteRemindersEnabled: false,
+    voteReminderLeadHours: 48,
+    maxVoteReminders: 1,
+    voteReminderCooldownHours: 24
+  })
+  assert.deepEqual(config.accessLinkSettings, {
+    voteLinkValidityHours: 168,
+    voteLinkMaxUses: 20,
+    soutenanceLinkValidityHours: 96,
+    soutenanceLinkMaxUses: 60
+  })
   assert.equal(config.siteConfigs.length, 1)
   assert.equal(config.siteConfigs[0].siteId, 'site-etml')
   assert.equal(config.siteConfigs[0].siteCode, 'ETML')
@@ -46,6 +61,21 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
     {
       year: 2026,
       schemaVersion: 4,
+      workflowSettings: {
+        voteDeadlineDays: 10,
+        maxVoteProposals: 4,
+        allowSpecialVoteRequest: false,
+        automaticVoteRemindersEnabled: true,
+        voteReminderLeadHours: 36,
+        maxVoteReminders: 2,
+        voteReminderCooldownHours: 12
+      },
+      accessLinkSettings: {
+        voteLinkValidityHours: 72,
+        voteLinkMaxUses: 12,
+        soutenanceLinkValidityHours: 240,
+        soutenanceLinkMaxUses: 90
+      },
       classTypes: [
         {
           code: 'MATU',
@@ -96,6 +126,21 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
 
   assert.equal(config.year, 2026)
   assert.equal(config.schemaVersion, 4)
+  assert.deepEqual(config.workflowSettings, {
+    voteDeadlineDays: 10,
+    maxVoteProposals: 4,
+    allowSpecialVoteRequest: false,
+    automaticVoteRemindersEnabled: true,
+    voteReminderLeadHours: 36,
+    maxVoteReminders: 2,
+    voteReminderCooldownHours: 12
+  })
+  assert.deepEqual(config.accessLinkSettings, {
+    voteLinkValidityHours: 72,
+    voteLinkMaxUses: 12,
+    soutenanceLinkValidityHours: 240,
+    soutenanceLinkMaxUses: 90
+  })
   assert.deepEqual(
     config.classTypes.map((classType) => classType.code),
     ['CFC', 'FPA', 'MATU']

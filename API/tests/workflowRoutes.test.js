@@ -374,6 +374,90 @@ test('POST /api/workflow/:year/access-links/generate enforces admin role', async
   }
 })
 
+test('POST /api/workflow/:year/access-links/generate rejects publication target without public URL', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published' }))
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/generate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ soutenanceLinkTarget: 'publication' })
+    })
+
+    assert.equal(response.status, 400)
+    const body = await response.json()
+    assert.equal(body.error, 'URL publique de publication invalide ou absente.')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('GET /api/workflow/static-publication/config requires authentication', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/static-publication/config`)
+
+    assert.equal(response.status, 401)
+  } finally {
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('PUT /api/workflow/static-publication/config enforces admin role', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['expert1'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/static-publication/config`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ host: 'ftp.example.ch' })
+    })
+
+    assert.equal(response.status, 403)
+    const body = await response.json()
+    assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
+  } finally {
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/votes/dev-email requires authentication', async () => {
   const jwtSecret = 'test-jwt-secret'
   const { app, restoreEnv } = loadTestApp({
@@ -981,6 +1065,88 @@ test('POST /api/workflow/:year/transition validates targetState', async () => {
     const body = await response.json()
     assert.equal(body.error, 'Etat workflow invalide.')
   } finally {
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/static-votes/generate requires authentication', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/static-votes/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+
+    assert.equal(response.status, 401)
+  } finally {
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/static-votes/sync calls the static vote sync service', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'], { email: 'planner@example.com' })
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret,
+    STATIC_VOTE_SYNC_SECRET: 'sync-secret'
+  })
+
+  const staticVotePublicationService = require('../services/staticVotePublicationService')
+  const workflowService = require('../services/workflowService')
+
+  let receivedPayload = null
+  const restore = [
+    patchMethod(staticVotePublicationService, 'syncStaticVoteResponses', async (payload) => {
+      receivedPayload = payload
+      return {
+        success: true,
+        year: payload.year,
+        sourceUrl: payload.remoteUrl,
+        receivedCount: 1,
+        importedCount: 1,
+        skippedCount: 0,
+        failedCount: 0,
+        results: []
+      }
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/static-votes/sync`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        remoteUrl: 'https://tpi26.ch/votes-2026/sync.php'
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.importedCount, 1)
+    assert.equal(receivedPayload.year, 2026)
+    assert.equal(receivedPayload.remoteUrl, 'https://tpi26.ch/votes-2026/sync.php')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
     await closeServer(server)
     restoreEnv()
   }

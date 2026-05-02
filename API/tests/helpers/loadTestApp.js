@@ -48,6 +48,7 @@ function loadTestApp(env = {}) {
     path.resolve(__dirname, '../../models/planningSharedCatalogModel.js'),
     path.resolve(__dirname, '../../models/magicLinkModel.js'),
     path.resolve(__dirname, '../../services/publishedSoutenanceService.js'),
+    path.resolve(__dirname, '../../services/staticVotePublicationService.js'),
     path.resolve(__dirname, '../../routes/workflowRoutes.js'),
     path.resolve(__dirname, '../../routes/planningRoutes.js'),
     path.resolve(__dirname, '../../routes/importRoutes.js'),
@@ -56,7 +57,15 @@ function loadTestApp(env = {}) {
 
   modulesToClear.forEach(clearModule)
 
-  const serverModule = require('../../serverAPI')
+  let serverModule
+
+  try {
+    serverModule = require('../../serverAPI')
+  } catch (error) {
+    applyEnv(originalEnv)
+    modulesToClear.forEach(clearModule)
+    throw error
+  }
 
   return {
     app: serverModule.app,

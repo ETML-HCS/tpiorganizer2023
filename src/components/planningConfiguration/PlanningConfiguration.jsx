@@ -11,6 +11,7 @@ import {
 } from "../../config/soutenanceAppearance"
 import { readStorageValue, writeStorageValue } from "../../utils/storage"
 import {
+  publicationDeploymentConfigService,
   planningCatalogService,
   planningConfigService
 } from "../../services/planningService"
@@ -28,8 +29,10 @@ import {
   ClipboardIcon,
   ConfigurationIcon,
   ExpertIcon,
+  KeyIcon,
   MailIcon,
   PlusIcon,
+  QuestionIcon,
   RefreshIcon,
   RoomIcon,
   SaveIcon,
@@ -46,6 +49,23 @@ const DEFAULT_SITE_SCHEDULE = {
   maxConsecutiveTpi: 4,
   minTpiPerRoom: 3,
   manualRoomTarget: ""
+}
+
+const DEFAULT_WORKFLOW_SETTINGS = {
+  voteDeadlineDays: 7,
+  maxVoteProposals: 3,
+  allowSpecialVoteRequest: true,
+  automaticVoteRemindersEnabled: false,
+  voteReminderLeadHours: 48,
+  maxVoteReminders: 1,
+  voteReminderCooldownHours: 24
+}
+
+const DEFAULT_ACCESS_LINK_SETTINGS = {
+  voteLinkValidityHours: 24 * 7,
+  voteLinkMaxUses: 20,
+  soutenanceLinkValidityHours: 24 * 4,
+  soutenanceLinkMaxUses: 60
 }
 
 const DEFAULT_ANNUAL_CLASS_TYPES = [
@@ -83,12 +103,45 @@ const DEFAULT_EMAIL_SETTINGS = {
   defaultDeliveryMode: "outlook"
 }
 
+const DEFAULT_PUBLICATION_SETTINGS = {
+  publicBaseUrl: "https://tpi26.ch"
+}
+
+const DEFAULT_PUBLICATION_DEPLOYMENT_SETTINGS = {
+  protocol: "ftp",
+  host: "",
+  port: 21,
+  username: "",
+  password: "",
+  clearPassword: false,
+  hasPassword: false,
+  remoteDir: "",
+  staticRemoteDir: "",
+  publicBaseUrl: DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl,
+  publicPath: ""
+}
+
+const PUBLICATION_PROTOCOL_OPTIONS = [
+  { value: "ftp", label: "FTP" },
+  { value: "ftps", label: "FTPS" },
+  { value: "sftp", label: "SFTP" },
+  { value: "ssh", label: "SSH" }
+]
+
+const PUBLICATION_PROTOCOL_VALUES = new Set(PUBLICATION_PROTOCOL_OPTIONS.map((option) => option.value))
+
 const EMAIL_DELIVERY_MODE_OPTIONS = [
   { value: "outlook", label: "Outlook manuel" },
   { value: "automatic", label: "Envoi automatique" }
 ]
 
 const EMAIL_DELIVERY_MODE_VALUES = new Set(EMAIL_DELIVERY_MODE_OPTIONS.map((option) => option.value))
+
+const SOUTENANCE_DATES_HELP_TEXT = [
+  "Une date par ligne.",
+  "Ajoutez SPECIAL après la date pour la marquer comme spéciale.",
+  "Exemple: 2026-06-12 SPECIAL"
+].join("\n")
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -107,6 +160,100 @@ const normalizePositiveInteger = (value, fallback) => {
   return Number.isInteger(numeric) && numeric > 0
     ? numeric
     : fallbackValue
+}
+
+const normalizeBoundedInteger = (value, fallback, min, max) => {
+  const numeric = Number.parseInt(String(value), 10)
+  const fallbackValue = Number.parseInt(String(fallback), 10)
+  const safeFallback = Number.isInteger(fallbackValue)
+    ? Math.max(min, Math.min(max, fallbackValue))
+    : min
+
+  if (!Number.isInteger(numeric)) {
+    return safeFallback
+  }
+
+  return Math.max(min, Math.min(max, numeric))
+}
+
+const normalizeWorkflowSettings = (value = {}, fallback = DEFAULT_WORKFLOW_SETTINGS) => {
+  const source = value && typeof value === "object" ? value : {}
+  const fallbackSource = fallback && typeof fallback === "object"
+    ? fallback
+    : DEFAULT_WORKFLOW_SETTINGS
+
+  return {
+    voteDeadlineDays: normalizeBoundedInteger(
+      source.voteDeadlineDays ?? source.votingDeadlineDays ?? source.voteDeadline,
+      fallbackSource.voteDeadlineDays ?? DEFAULT_WORKFLOW_SETTINGS.voteDeadlineDays,
+      1,
+      60
+    ),
+    maxVoteProposals: normalizeBoundedInteger(
+      source.maxVoteProposals ?? source.maxProposalsPerVote ?? source.maxAlternativeSlots,
+      fallbackSource.maxVoteProposals ?? DEFAULT_WORKFLOW_SETTINGS.maxVoteProposals,
+      1,
+      10
+    ),
+    allowSpecialVoteRequest: typeof (source.allowSpecialVoteRequest ?? source.allowSpecialRequest) === "boolean"
+      ? (source.allowSpecialVoteRequest ?? source.allowSpecialRequest)
+      : fallbackSource.allowSpecialVoteRequest !== false,
+    automaticVoteRemindersEnabled: typeof (source.automaticVoteRemindersEnabled ?? source.autoVoteRemindersEnabled ?? source.automaticRemindersEnabled) === "boolean"
+      ? (source.automaticVoteRemindersEnabled ?? source.autoVoteRemindersEnabled ?? source.automaticRemindersEnabled)
+      : fallbackSource.automaticVoteRemindersEnabled === true,
+    voteReminderLeadHours: normalizeBoundedInteger(
+      source.voteReminderLeadHours ?? source.reminderLeadHours ?? source.voteReminderBeforeDeadlineHours,
+      fallbackSource.voteReminderLeadHours ?? DEFAULT_WORKFLOW_SETTINGS.voteReminderLeadHours,
+      1,
+      24 * 30
+    ),
+    maxVoteReminders: normalizeBoundedInteger(
+      source.maxVoteReminders ?? source.maxRemindersPerVote ?? source.voteReminderMaxCount,
+      fallbackSource.maxVoteReminders ?? DEFAULT_WORKFLOW_SETTINGS.maxVoteReminders,
+      0,
+      10
+    ),
+    voteReminderCooldownHours: normalizeBoundedInteger(
+      source.voteReminderCooldownHours ?? source.reminderCooldownHours ?? source.voteReminderIntervalHours,
+      fallbackSource.voteReminderCooldownHours ?? DEFAULT_WORKFLOW_SETTINGS.voteReminderCooldownHours,
+      1,
+      24 * 30
+    )
+  }
+}
+
+const normalizeAccessLinkSettings = (value = {}, fallback = DEFAULT_ACCESS_LINK_SETTINGS) => {
+  const source = value && typeof value === "object" ? value : {}
+  const fallbackSource = fallback && typeof fallback === "object"
+    ? fallback
+    : DEFAULT_ACCESS_LINK_SETTINGS
+
+  return {
+    voteLinkValidityHours: normalizeBoundedInteger(
+      source.voteLinkValidityHours ?? source.voteValidityHours ?? source.voteExpiryHours,
+      fallbackSource.voteLinkValidityHours ?? DEFAULT_ACCESS_LINK_SETTINGS.voteLinkValidityHours,
+      1,
+      24 * 365
+    ),
+    voteLinkMaxUses: normalizeBoundedInteger(
+      source.voteLinkMaxUses ?? source.voteMaxUses,
+      fallbackSource.voteLinkMaxUses ?? DEFAULT_ACCESS_LINK_SETTINGS.voteLinkMaxUses,
+      1,
+      1000
+    ),
+    soutenanceLinkValidityHours: normalizeBoundedInteger(
+      source.soutenanceLinkValidityHours ?? source.soutenanceValidityHours ?? source.soutenanceExpiryHours,
+      fallbackSource.soutenanceLinkValidityHours ?? DEFAULT_ACCESS_LINK_SETTINGS.soutenanceLinkValidityHours,
+      1,
+      24 * 365
+    ),
+    soutenanceLinkMaxUses: normalizeBoundedInteger(
+      source.soutenanceLinkMaxUses ?? source.soutenanceMaxUses,
+      fallbackSource.soutenanceLinkMaxUses ?? DEFAULT_ACCESS_LINK_SETTINGS.soutenanceLinkMaxUses,
+      1,
+      1000
+    )
+  }
 }
 
 const normalizePlanningColor = (value) => {
@@ -783,6 +930,8 @@ const normalizeYearDraft = (payload, year, catalogSites = []) => {
   return {
     year: numericYear,
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
+    workflowSettings: normalizeWorkflowSettings(source.workflowSettings),
+    accessLinkSettings: normalizeAccessLinkSettings(source.accessLinkSettings),
     classTypes: normalizeClassTypes(source.classTypes),
     siteConfigs: syncSiteConfigsToCatalog(source.siteConfigs || source.sites || [], catalogSites)
   }
@@ -802,6 +951,69 @@ const normalizeEmailSettings = (value = {}) => {
   }
 }
 
+const normalizePublicBaseUrl = (value, fallback = DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl) => {
+  const rawValue = compactText(value)
+  const rawFallback = compactText(fallback) || DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl
+  const candidate = rawValue || rawFallback
+
+  if (!candidate) {
+    return ""
+  }
+
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(candidate)
+    ? candidate
+    : `https://${candidate}`
+
+  try {
+    const url = new URL(withProtocol)
+    url.hash = ""
+    url.search = ""
+    return url.toString().replace(/\/+$/, "")
+  } catch (error) {
+    return rawFallback
+  }
+}
+
+const normalizePublicationSettings = (value = {}) => {
+  const source = value && typeof value === "object" ? value : {}
+
+  return {
+    publicBaseUrl: normalizePublicBaseUrl(
+      source.publicBaseUrl || source.staticPublicBaseUrl || source.publicSiteBaseUrl || source.domain
+    )
+  }
+}
+
+const normalizeDeploymentProtocol = (value, fallback = DEFAULT_PUBLICATION_DEPLOYMENT_SETTINGS.protocol) => {
+  const normalized = compactText(value || fallback).toLowerCase()
+  return PUBLICATION_PROTOCOL_VALUES.has(normalized)
+    ? normalized
+    : DEFAULT_PUBLICATION_DEPLOYMENT_SETTINGS.protocol
+}
+
+const getDefaultDeploymentPort = (protocol) =>
+  ["sftp", "ssh"].includes(protocol) ? 22 : 21
+
+const normalizePublicationDeploymentSettings = (value = {}) => {
+  const source = value && typeof value === "object" ? value : {}
+  const protocol = normalizeDeploymentProtocol(source.protocol)
+
+  return {
+    protocol,
+    host: compactText(source.host),
+    port: normalizeBoundedInteger(source.port, getDefaultDeploymentPort(protocol), 1, 65535),
+    username: compactText(source.username || source.user),
+    password: compactText(source.password),
+    clearPassword: source.clearPassword === true,
+    hasPassword: source.hasPassword === true,
+    passwordUpdatedAt: compactText(source.passwordUpdatedAt),
+    remoteDir: compactText(source.remoteDir),
+    staticRemoteDir: compactText(source.staticRemoteDir || source.staticDir),
+    publicBaseUrl: normalizePublicBaseUrl(source.publicBaseUrl),
+    publicPath: compactText(source.publicPath || source.staticPublicPath)
+  }
+}
+
 const normalizeCatalogDraft = (payload) => {
   const source = payload && typeof payload === "object" ? payload : {}
 
@@ -810,6 +1022,7 @@ const normalizeCatalogDraft = (payload) => {
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
     stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons),
     emailSettings: normalizeEmailSettings(source.emailSettings),
+    publicationSettings: normalizePublicationSettings(source.publicationSettings),
     sites: normalizeCatalogSites(source.sites || [])
   }
 }
@@ -874,6 +1087,8 @@ const buildYearPayload = (draft, year, catalogSites = []) => {
   return {
     year: Number.isInteger(Number(year)) ? Number(year) : source.year,
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
+    workflowSettings: normalizeWorkflowSettings(source.workflowSettings),
+    accessLinkSettings: normalizeAccessLinkSettings(source.accessLinkSettings),
     classTypes,
     soutenanceDates: normalizeSoutenanceDateEntries(
       classTypes.flatMap((classType) => classType.soutenanceDates)
@@ -890,6 +1105,7 @@ const buildCatalogPayload = (draft) => {
     schemaVersion: Number.isFinite(Number(source.schemaVersion)) ? Number(source.schemaVersion) : 2,
     stakeholderIcons: normalizeStakeholderIcons(source.stakeholderIcons),
     emailSettings: normalizeEmailSettings(source.emailSettings),
+    publicationSettings: normalizePublicationSettings(source.publicationSettings),
     sites: normalizeCatalogSites(source.sites || []).map((site) => {
       const roomDetails = normalizeRoomDetails(site.roomDetails, compactText(site.id))
       const classGroups = Array.isArray(site.classGroups)
@@ -921,6 +1137,27 @@ const buildCatalogPayload = (draft) => {
       }
     })
   }
+}
+
+const buildPublicationDeploymentPayload = (draft) => {
+  const normalized = normalizePublicationDeploymentSettings(draft)
+  const payload = {
+    protocol: normalized.protocol,
+    host: normalized.host,
+    port: normalized.port,
+    username: normalized.username,
+    clearPassword: normalized.clearPassword === true,
+    remoteDir: normalized.remoteDir,
+    staticRemoteDir: normalized.staticRemoteDir,
+    publicBaseUrl: normalized.publicBaseUrl,
+    publicPath: normalized.publicPath
+  }
+
+  if (normalized.password) {
+    payload.password = normalized.password
+  }
+
+  return payload
 }
 
 const createBlankClassType = (index = 1) => ({
@@ -1377,6 +1614,7 @@ const ClassTypeCard = ({
               {classType?.prefix || classType?.code || "?"}
             </span>
             <h4>{classType?.label || classType?.code || "Type"}</h4>
+            <p className='configuration-card-note configuration-class-card-summary'>{summaryLine}</p>
           </div>
           <div className='configuration-card-head-actions configuration-site-class-group-head-actions'>
             {locked ? <span className='page-tools-chip'>Base</span> : null}
@@ -1417,85 +1655,449 @@ const ClassTypeCard = ({
       )}
 
       <div id={bodyId} className='configuration-card-body' hidden={!isExpanded}>
-        <div className='configuration-card-grid configuration-card-grid--class-type'>
-          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--code'>
-            <span className='page-tools-field-label'>Code</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={classType?.code || ""}
-              onChange={(event) => onChange("code", event.target.value)}
-              disabled={disabled || locked}
-            />
-          </label>
+        <div className='configuration-class-type-body-layout'>
+          <div className='configuration-card-grid configuration-card-grid--class-type'>
+            <label className='page-tools-field configuration-class-type-field configuration-class-type-field--code'>
+              <span className='page-tools-field-label'>Code</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={classType?.code || ""}
+                onChange={(event) => onChange("code", event.target.value)}
+                disabled={disabled || locked}
+              />
+            </label>
 
-          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--prefix'>
-            <span className='page-tools-field-label'>Préfixe</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={classType?.prefix || ""}
-              onChange={(event) => onChange("prefix", event.target.value)}
-              disabled={disabled || locked}
-            />
-          </label>
+            <label className='page-tools-field configuration-class-type-field configuration-class-type-field--prefix'>
+              <span className='page-tools-field-label'>Préfixe</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={classType?.prefix || ""}
+                onChange={(event) => onChange("prefix", event.target.value)}
+                disabled={disabled || locked}
+              />
+            </label>
 
-          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--label'>
-            <span className='page-tools-field-label'>Libellé</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={classType?.label || ""}
-              onChange={(event) => onChange("label", event.target.value)}
-              disabled={disabled || locked}
-            />
-          </label>
+            <label className='page-tools-field configuration-class-type-field configuration-class-type-field--label'>
+              <span className='page-tools-field-label'>Libellé</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={classType?.label || ""}
+                onChange={(event) => onChange("label", event.target.value)}
+                disabled={disabled || locked}
+              />
+            </label>
 
-          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--date'>
-            <span className='page-tools-field-label'>Début</span>
-            <input
-              className='page-tools-field-control'
-              type='date'
-              value={classType?.startDate || ""}
-              onChange={(event) => onChange("startDate", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
+            <label className='page-tools-field configuration-class-type-field configuration-class-type-field--date'>
+              <span className='page-tools-field-label'>Début</span>
+              <input
+                className='page-tools-field-control'
+                type='date'
+                value={classType?.startDate || ""}
+                onChange={(event) => onChange("startDate", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
 
-          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--date'>
-            <span className='page-tools-field-label'>Fin</span>
-            <input
-              className='page-tools-field-control'
-              type='date'
-              value={classType?.endDate || ""}
-              onChange={(event) => onChange("endDate", event.target.value)}
-              disabled={disabled}
-            />
-          </label>
+            <label className='page-tools-field configuration-class-type-field configuration-class-type-field--date'>
+              <span className='page-tools-field-label'>Fin</span>
+              <input
+                className='page-tools-field-control'
+                type='date'
+                value={classType?.endDate || ""}
+                onChange={(event) => onChange("endDate", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
 
-          <label className='page-tools-field configuration-class-type-field configuration-class-type-field--notes'>
-            <span className='page-tools-field-label'>Notes</span>
-            <input
-              className='page-tools-field-control'
-              type='text'
-              value={classType?.notes || ""}
-              onChange={(event) => onChange("notes", event.target.value)}
+            <label className='page-tools-field configuration-class-type-field configuration-class-type-field--notes'>
+              <span className='page-tools-field-label'>Notes</span>
+              <input
+                className='page-tools-field-control'
+                type='text'
+                value={classType?.notes || ""}
+                onChange={(event) => onChange("notes", event.target.value)}
+                disabled={disabled}
+              />
+            </label>
+          </div>
+
+          <label className='page-tools-field configuration-class-type-soutenance'>
+            <span className='page-tools-field-label configuration-label-with-help'>
+              <span>Défense</span>
+              <span
+                className='configuration-hover-help'
+                data-tooltip={SOUTENANCE_DATES_HELP_TEXT}
+                title={SOUTENANCE_DATES_HELP_TEXT}
+                aria-label='Format des dates de défense'
+                tabIndex={0}
+              >
+                <QuestionIcon className='configuration-hover-help-icon' />
+              </span>
+            </span>
+            <textarea
+              className='page-tools-field-control configuration-textarea'
+              rows='3'
+              value={classType?.soutenanceDatesText || ""}
+              onChange={(event) => onChange("soutenanceDatesText", event.target.value)}
+              placeholder='2026-06-01 SPECIAL'
               disabled={disabled}
             />
           </label>
         </div>
+      </div>
+    </article>
+  )
+}
 
-        <label className='page-tools-field configuration-class-type-soutenance'>
-          <span className='page-tools-field-label'>Défense</span>
-          <textarea
-            className='page-tools-field-control configuration-textarea'
-            rows='3'
-            value={classType?.soutenanceDatesText || ""}
-            onChange={(event) => onChange("soutenanceDatesText", event.target.value)}
-            placeholder='2026-06-01 SPECIAL'
-            disabled={disabled}
+const formatDurationHours = (hours) => {
+  const normalizedHours = normalizeBoundedInteger(hours, 24, 1, 24 * 365)
+
+  if (normalizedHours % 24 === 0) {
+    const days = normalizedHours / 24
+    return `${days} jour${days > 1 ? "s" : ""}`
+  }
+
+  return `${normalizedHours} heure${normalizedHours > 1 ? "s" : ""}`
+}
+
+const WorkflowSettingsCard = ({ settings, onChange, disabled = false }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const normalizedSettings = normalizeWorkflowSettings(settings)
+  const bodyId = "configuration-workflow-settings-body"
+  const summaryLine = [
+    `${normalizedSettings.voteDeadlineDays} jour${normalizedSettings.voteDeadlineDays > 1 ? "s" : ""} de vote`,
+    `${normalizedSettings.maxVoteProposals} proposition${normalizedSettings.maxVoteProposals > 1 ? "s" : ""} max`,
+    normalizedSettings.allowSpecialVoteRequest ? "Demande spéciale active" : "Demande spéciale fermée",
+    normalizedSettings.automaticVoteRemindersEnabled
+      ? `Rappel auto ${formatDurationHours(normalizedSettings.voteReminderLeadHours)} avant`
+      : "Rappels manuels"
+  ].join(" · ")
+
+  return (
+    <article className={`configuration-card configuration-workflow-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <ClipboardIcon className='configuration-card-icon' />
+            </span>
+            <h4>Vote</h4>
+            <p className='configuration-card-note'>{summaryLine}</p>
+          </div>
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject='la configuration de vote'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>Vote · {summaryLine}</p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject='la configuration de vote'
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
           />
-        </label>
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-body' hidden={!isExpanded}>
+        <div className='configuration-settings-subsection'>
+          <div className='configuration-subsection-head'>
+            <span className='configuration-subsection-title'>Campagne</span>
+          </div>
+          <div className='configuration-card-grid configuration-card-grid--workflow-main'>
+            <label className='page-tools-field'>
+              <span
+                className='page-tools-field-label'
+                title='Nombre de jours ajouté à la date de démarrage de campagne pour calculer la date limite de vote.'
+              >
+                Délai vote (jours)
+              </span>
+              <input
+                className='page-tools-field-control'
+                type='number'
+                min='1'
+                max='60'
+                step='1'
+                value={normalizedSettings.voteDeadlineDays}
+                onChange={(event) => onChange("voteDeadlineDays", Number.parseInt(event.target.value, 10))}
+                disabled={disabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span
+                className='page-tools-field-label'
+                title='Nombre maximal de demi-journées alternatives qu un votant peut proposer pour un TPI.'
+              >
+                Propositions max
+              </span>
+              <input
+                className='page-tools-field-control'
+                type='number'
+                min='1'
+                max='10'
+                step='1'
+                value={normalizedSettings.maxVoteProposals}
+                onChange={(event) => onChange("maxVoteProposals", Number.parseInt(event.target.value, 10))}
+                disabled={disabled}
+              />
+            </label>
+
+            <div className='page-tools-field configuration-workflow-toggle-field'>
+              <span
+                className='page-tools-field-label'
+                title='Autorise les votants à transmettre une date et une raison hors des créneaux proposés.'
+              >
+                Demande spéciale
+              </span>
+              <BinaryToggle
+                value={normalizedSettings.allowSpecialVoteRequest}
+                onChange={(nextValue) => onChange("allowSpecialVoteRequest", nextValue)}
+                name='workflow-special-vote-request'
+                trueLabel='Active'
+                falseLabel='Fermée'
+                ariaLabel='Demande spéciale de vote'
+                disabled={disabled}
+                compact
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className={`configuration-settings-subsection configuration-settings-subsection--reminders${normalizedSettings.automaticVoteRemindersEnabled ? " is-active" : " is-muted"}`}>
+          <div className='configuration-subsection-head'>
+            <span className='configuration-subsection-title'>Rappels</span>
+            <span className='page-tools-chip'>
+              {normalizedSettings.automaticVoteRemindersEnabled ? "Auto" : "Manuel"}
+            </span>
+          </div>
+          <div className='configuration-card-grid configuration-card-grid--workflow-reminders'>
+            <div className='page-tools-field configuration-workflow-toggle-field'>
+              <span
+                className='page-tools-field-label'
+                title='Autorise les relances automatiques des votants qui n ont pas répondu avant la date limite.'
+              >
+                Rappels auto
+              </span>
+              <BinaryToggle
+                value={normalizedSettings.automaticVoteRemindersEnabled}
+                onChange={(nextValue) => onChange("automaticVoteRemindersEnabled", nextValue)}
+                name='workflow-automatic-vote-reminders'
+                trueLabel='Active'
+                falseLabel='Fermés'
+                ariaLabel='Rappels automatiques de vote'
+                disabled={disabled}
+                compact
+              />
+            </div>
+
+            <label className='page-tools-field'>
+              <span
+                className='page-tools-field-label'
+                title='Nombre d heures avant la date limite à partir duquel un rappel automatique peut être envoyé.'
+              >
+                Avant échéance (h)
+              </span>
+              <input
+                className='page-tools-field-control'
+                type='number'
+                min='1'
+                max={24 * 30}
+                step='1'
+                value={normalizedSettings.voteReminderLeadHours}
+                onChange={(event) => onChange("voteReminderLeadHours", Number.parseInt(event.target.value, 10))}
+                disabled={disabled || !normalizedSettings.automaticVoteRemindersEnabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span
+                className='page-tools-field-label'
+                title='Nombre maximal de rappels automatiques envoyés pour un TPI encore en vote.'
+              >
+                Rappels max
+              </span>
+              <input
+                className='page-tools-field-control'
+                type='number'
+                min='0'
+                max='10'
+                step='1'
+                value={normalizedSettings.maxVoteReminders}
+                onChange={(event) => onChange("maxVoteReminders", Number.parseInt(event.target.value, 10))}
+                disabled={disabled || !normalizedSettings.automaticVoteRemindersEnabled}
+              />
+            </label>
+
+            <label className='page-tools-field'>
+              <span
+                className='page-tools-field-label'
+                title='Intervalle minimal entre deux rappels automatiques pour un même TPI.'
+              >
+                Intervalle (h)
+              </span>
+              <input
+                className='page-tools-field-control'
+                type='number'
+                min='1'
+                max={24 * 30}
+                step='1'
+                value={normalizedSettings.voteReminderCooldownHours}
+                onChange={(event) => onChange("voteReminderCooldownHours", Number.parseInt(event.target.value, 10))}
+                disabled={disabled || !normalizedSettings.automaticVoteRemindersEnabled}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+const formatAccessLinkHours = (hours) => {
+  return formatDurationHours(hours)
+}
+
+const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const normalizedSettings = normalizeAccessLinkSettings(settings)
+  const bodyId = "configuration-access-link-settings-body"
+  const summaryLine = [
+    `Vote ${formatAccessLinkHours(normalizedSettings.voteLinkValidityHours)}`,
+    `${normalizedSettings.voteLinkMaxUses} accès vote`,
+    `Défense ${formatAccessLinkHours(normalizedSettings.soutenanceLinkValidityHours)}`,
+    `${normalizedSettings.soutenanceLinkMaxUses} accès défense`
+  ].join(" · ")
+
+  return (
+    <article className={`configuration-card configuration-access-link-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <KeyIcon className='configuration-card-icon' />
+            </span>
+            <h4>Liens</h4>
+            <p className='configuration-card-note'>{summaryLine}</p>
+          </div>
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject="la configuration des liens d'accès"
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>Liens · {summaryLine}</p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject="la configuration des liens d'accès"
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-body' hidden={!isExpanded}>
+        <div className='configuration-access-link-groups'>
+          <div className='configuration-settings-subsection configuration-access-link-group'>
+            <div className='configuration-subsection-head'>
+              <span className='configuration-subsection-title'>Vote</span>
+            </div>
+            <div className='configuration-card-grid configuration-card-grid--access-link-group'>
+              <label className='page-tools-field'>
+                <span className='page-tools-field-label' title='Durée de validité des liens de vote générés automatiquement.'>
+                  Lien vote (heures)
+                </span>
+                <input
+                  className='page-tools-field-control'
+                  type='number'
+                  min='1'
+                  max={24 * 365}
+                  step='1'
+                  value={normalizedSettings.voteLinkValidityHours}
+                  onChange={(event) => onChange("voteLinkValidityHours", Number.parseInt(event.target.value, 10))}
+                  disabled={disabled}
+                />
+              </label>
+
+              <label className='page-tools-field'>
+                <span className='page-tools-field-label' title='Nombre maximal d ouvertures autorisées pour un lien de vote.'>
+                  Usages vote
+                </span>
+                <input
+                  className='page-tools-field-control'
+                  type='number'
+                  min='1'
+                  max='1000'
+                  step='1'
+                  value={normalizedSettings.voteLinkMaxUses}
+                  onChange={(event) => onChange("voteLinkMaxUses", Number.parseInt(event.target.value, 10))}
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className='configuration-settings-subsection configuration-access-link-group'>
+            <div className='configuration-subsection-head'>
+              <span className='configuration-subsection-title'>Défenses</span>
+            </div>
+            <div className='configuration-card-grid configuration-card-grid--access-link-group'>
+              <label className='page-tools-field'>
+                <span className='page-tools-field-label' title='Durée de validité des liens vers la vue publiée des défenses.'>
+                  Lien défense (heures)
+                </span>
+                <input
+                  className='page-tools-field-control'
+                  type='number'
+                  min='1'
+                  max={24 * 365}
+                  step='1'
+                  value={normalizedSettings.soutenanceLinkValidityHours}
+                  onChange={(event) => onChange("soutenanceLinkValidityHours", Number.parseInt(event.target.value, 10))}
+                  disabled={disabled}
+                />
+              </label>
+
+              <label className='page-tools-field'>
+                <span className='page-tools-field-label' title='Nombre maximal d ouvertures autorisées pour un lien de défense.'>
+                  Usages défense
+                </span>
+                <input
+                  className='page-tools-field-control'
+                  type='number'
+                  min='1'
+                  max='1000'
+                  step='1'
+                  value={normalizedSettings.soutenanceLinkMaxUses}
+                  onChange={(event) => onChange("soutenanceLinkMaxUses", Number.parseInt(event.target.value, 10))}
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </article>
   )
@@ -2306,6 +2908,205 @@ const EmailSettingsCard = ({
 
         <p className='configuration-field-hint'>
           L'envoi automatique reste désactivé dans Accès-liens pour le moment.
+        </p>
+      </div>
+    </article>
+  )
+}
+
+const PublicationSettingsCard = ({
+  settings,
+  onChange,
+  disabled = false
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const normalizedSettings = normalizePublicationDeploymentSettings(settings)
+  const bodyId = "configuration-publication-settings-body"
+  const publicUrlLine = normalizedSettings.publicBaseUrl || "URL non définie"
+  const passwordLabel = normalizedSettings.hasPassword
+    ? "Mot de passe enregistré"
+    : "Mot de passe absent"
+  const protocolLabel = PUBLICATION_PROTOCOL_OPTIONS.find((option) => option.value === normalizedSettings.protocol)?.label || "FTP"
+
+  return (
+    <article className={`configuration-card configuration-publication-card${isExpanded ? "" : " is-collapsed"}`}>
+      {isExpanded ? (
+        <div className='configuration-card-head'>
+          <div className='configuration-card-head-copy'>
+            <span className='configuration-card-kicker'>
+              <KeyIcon className='configuration-card-icon' />
+            </span>
+            <h4>Publication</h4>
+            <p className='configuration-section-note'>
+              Domaine public utilisé pour la page statique et les liens de soutenance publiés.
+            </p>
+          </div>
+          <div className='configuration-card-head-actions'>
+            <SectionToggleButton
+              isOpen={isExpanded}
+              onClick={() => setIsExpanded((current) => !current)}
+              controlsId={bodyId}
+              subject='la configuration publication'
+              iconOnly={true}
+              className='configuration-collapse-toggle--icon-only'
+            />
+          </div>
+        </div>
+      ) : (
+        <div className='configuration-collapsed-row'>
+          <p className='configuration-collapsed-line'>Publication · {publicUrlLine}</p>
+          <p className='configuration-collapsed-line configuration-collapsed-line--muted'>
+            {protocolLabel} · {normalizedSettings.host || "host non défini"} · {normalizedSettings.username || "user non défini"} · {passwordLabel}
+          </p>
+          <SectionToggleButton
+            isOpen={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            controlsId={bodyId}
+            subject='la configuration publication'
+            iconOnly={true}
+            className='configuration-collapse-toggle--icon-only'
+          />
+        </div>
+      )}
+
+      <div id={bodyId} className='configuration-card-body configuration-publication-card-body' hidden={!isExpanded}>
+        <div className='configuration-card-grid configuration-card-grid--publication'>
+          <label className='page-tools-field' htmlFor='configuration-publication-protocol'>
+            <span className='page-tools-field-label'>Protocole</span>
+            <select
+              id='configuration-publication-protocol'
+              className='page-tools-field-control'
+              value={normalizedSettings.protocol}
+              onChange={(event) => onChange("protocol", event.target.value)}
+              disabled={disabled}
+            >
+              {PUBLICATION_PROTOCOL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-host'>
+            <span className='page-tools-field-label'>Host</span>
+            <input
+              id='configuration-publication-host'
+              className='page-tools-field-control'
+              value={normalizedSettings.host}
+              onChange={(event) => onChange("host", event.target.value)}
+              placeholder='ftp.example.ch'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-port'>
+            <span className='page-tools-field-label'>Port</span>
+            <input
+              id='configuration-publication-port'
+              type='number'
+              min='1'
+              max='65535'
+              step='1'
+              className='page-tools-field-control'
+              value={normalizedSettings.port}
+              onChange={(event) => onChange("port", Number.parseInt(event.target.value, 10))}
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-username'>
+            <span className='page-tools-field-label'>Utilisateur</span>
+            <input
+              id='configuration-publication-username'
+              className='page-tools-field-control'
+              value={normalizedSettings.username}
+              onChange={(event) => onChange("username", event.target.value)}
+              autoComplete='username'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-password'>
+            <span className='page-tools-field-label'>Mot de passe</span>
+            <input
+              id='configuration-publication-password'
+              type='password'
+              className='page-tools-field-control'
+              value={normalizedSettings.password}
+              onChange={(event) => onChange("password", event.target.value)}
+              placeholder={normalizedSettings.hasPassword ? "Conserver le mot de passe enregistré" : ""}
+              autoComplete='new-password'
+              disabled={disabled || normalizedSettings.clearPassword}
+            />
+          </label>
+
+          <label className='page-tools-field configuration-publication-clear-password' htmlFor='configuration-publication-clear-password'>
+            <span className='page-tools-field-label'>Secret</span>
+            <span className='configuration-checkbox-row'>
+              <input
+                id='configuration-publication-clear-password'
+                type='checkbox'
+                checked={normalizedSettings.clearPassword}
+                onChange={(event) => onChange("clearPassword", event.target.checked)}
+                disabled={disabled || !normalizedSettings.hasPassword}
+              />
+              <span>Effacer</span>
+            </span>
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-public-base-url'>
+            <span className='page-tools-field-label'>URL publique</span>
+            <input
+              id='configuration-publication-public-base-url'
+              type='url'
+              className='page-tools-field-control'
+              value={normalizedSettings.publicBaseUrl}
+              onChange={(event) => onChange("publicBaseUrl", event.target.value)}
+              placeholder='https://tpi26.ch'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-public-path'>
+            <span className='page-tools-field-label'>Chemin public</span>
+            <input
+              id='configuration-publication-public-path'
+              className='page-tools-field-control'
+              value={normalizedSettings.publicPath}
+              onChange={(event) => onChange("publicPath", event.target.value)}
+              placeholder='/soutenances-{year}'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-remote-dir'>
+            <span className='page-tools-field-label'>Dossier distant</span>
+            <input
+              id='configuration-publication-remote-dir'
+              className='page-tools-field-control'
+              value={normalizedSettings.remoteDir}
+              onChange={(event) => onChange("remoteDir", event.target.value)}
+              placeholder='/home/account/domains/example.ch/public_html'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-publication-static-remote-dir'>
+            <span className='page-tools-field-label'>Sous-dossier</span>
+            <input
+              id='configuration-publication-static-remote-dir'
+              className='page-tools-field-control'
+              value={normalizedSettings.staticRemoteDir}
+              onChange={(event) => onChange("staticRemoteDir", event.target.value)}
+              placeholder='soutenances-{year}'
+              disabled={disabled}
+            />
+          </label>
+        </div>
+
+        <p className='configuration-field-hint'>
+          La publication automatique utilise FTP. FTPS/SFTP/SSH peuvent être saisis pour préparer la configuration, mais ne sont pas publiés automatiquement par ce client.
         </p>
       </div>
     </article>
@@ -3211,19 +4012,25 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   const [selectedYear, setSelectedYear] = useState(initialYear)
   const [yearDraft, setYearDraft] = useState(() => normalizeYearDraft({}, initialYear, []))
   const [catalogDraft, setCatalogDraft] = useState(() => normalizeCatalogDraft({}))
+  const [publicationDeploymentDraft, setPublicationDeploymentDraft] = useState(() =>
+    normalizePublicationDeploymentSettings({})
+  )
   const [collapsedClassTypeIds, setCollapsedClassTypeIds] = useState([])
   const [collapsedSiteIds, setCollapsedSiteIds] = useState([])
   const [isYearPanelExpanded, setIsYearPanelExpanded] = useState(false)
   const [isCatalogPanelExpanded, setIsCatalogPanelExpanded] = useState(false)
   const [isYearReady, setIsYearReady] = useState(false)
   const [isCatalogReady, setIsCatalogReady] = useState(false)
+  const [isPublicationDeploymentReady, setIsPublicationDeploymentReady] = useState(false)
   const [isPlanningReady, setIsPlanningReady] = useState(false)
   const [isYearSaving, setIsYearSaving] = useState(false)
   const [isCatalogSaving, setIsCatalogSaving] = useState(false)
+  const [isPublicationDeploymentSaving, setIsPublicationDeploymentSaving] = useState(false)
   const [legacyTpis, setLegacyTpis] = useState([])
   const [legacyTpiError, setLegacyTpiError] = useState("")
   const yearBaselineRef = useRef("")
   const catalogBaselineRef = useRef("")
+  const publicationDeploymentBaselineRef = useRef("")
 
   const yearOptions = useMemo(
     () => YEARS_CONFIG.getAvailableYears().slice().sort((left, right) => right - left),
@@ -3237,6 +4044,10 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   const currentCatalogPayload = useMemo(
     () => buildCatalogPayload(catalogDraft),
     [catalogDraft]
+  )
+  const currentPublicationDeploymentPayload = useMemo(
+    () => buildPublicationDeploymentPayload(publicationDeploymentDraft),
+    [publicationDeploymentDraft]
   )
   const planifiableLegacyTpis = useMemo(
     () =>
@@ -3265,7 +4076,12 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
     () => JSON.stringify(currentCatalogPayload) !== catalogBaselineRef.current,
     [currentCatalogPayload]
   )
-  const isAnyDirty = isYearDirty || isCatalogDirty
+  const isPublicationDeploymentDirty = useMemo(
+    () => JSON.stringify(currentPublicationDeploymentPayload) !== publicationDeploymentBaselineRef.current,
+    [currentPublicationDeploymentPayload]
+  )
+  const isAnyDirty = isYearDirty || isCatalogDirty || isPublicationDeploymentDirty
+  const isAnySaving = isYearSaving || isCatalogSaving || isPublicationDeploymentSaving
 
   const siteScheduleById = useMemo(() => {
     const map = new Map()
@@ -3295,6 +4111,7 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
 
     const bootstrap = async () => {
       setIsCatalogReady(false)
+      setIsPublicationDeploymentReady(false)
       setIsYearReady(false)
       setIsPlanningReady(false)
       setLegacyTpis([])
@@ -3316,6 +4133,26 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
       setCatalogDraft(loadedCatalog)
       setCollapsedSiteIds(getSiteCollapseIds(loadedCatalog.sites))
       catalogBaselineRef.current = JSON.stringify(buildCatalogPayload(loadedCatalog))
+      let loadedPublicationDeployment = normalizePublicationDeploymentSettings({
+        publicBaseUrl: loadedCatalog?.publicationSettings?.publicBaseUrl
+      })
+      try {
+        const deploymentConfig = await publicationDeploymentConfigService.get()
+        loadedPublicationDeployment = normalizePublicationDeploymentSettings(deploymentConfig)
+      } catch (error) {
+        console.error("Erreur lors du chargement de la configuration publication :", error)
+        toast.error("Impossible de charger la configuration publication.")
+      }
+
+      if (isCancelled) {
+        return
+      }
+
+      setPublicationDeploymentDraft(loadedPublicationDeployment)
+      publicationDeploymentBaselineRef.current = JSON.stringify(
+        buildPublicationDeploymentPayload(loadedPublicationDeployment)
+      )
+      setIsPublicationDeploymentReady(true)
 
       try {
         const [config, tpis] = await Promise.all([
@@ -3402,6 +4239,17 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
     return normalized
   }, [])
 
+  const persistPublicationDeploymentDraft = useCallback(async (draft) => {
+    const payload = buildPublicationDeploymentPayload(draft)
+    const saved = await publicationDeploymentConfigService.save(payload)
+    const normalized = normalizePublicationDeploymentSettings(saved || payload)
+    setPublicationDeploymentDraft(normalized)
+    publicationDeploymentBaselineRef.current = JSON.stringify(
+      buildPublicationDeploymentPayload(normalized)
+    )
+    return normalized
+  }, [])
+
   const persistYearDraft = useCallback(
     async (draft, catalogSites) => {
       const payload = buildYearPayload(draft, selectedYear, catalogSites)
@@ -3417,19 +4265,47 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   )
 
   const handleSaveAll = useCallback(async () => {
-    if (!isYearReady || !isCatalogReady || isYearSaving || isCatalogSaving || !isAnyDirty) {
+    if (
+      !isYearReady ||
+      !isCatalogReady ||
+      !isPublicationDeploymentReady ||
+      isAnySaving ||
+      !isAnyDirty
+    ) {
       return false
     }
 
     let hasSavedCatalog = false
+    let hasSavedDeployment = false
+    let hasSavedYear = false
     setIsCatalogSaving(isCatalogDirty)
+    setIsPublicationDeploymentSaving(isPublicationDeploymentDirty)
     setIsYearSaving(isYearDirty)
 
     try {
-      const nextCatalog = isCatalogDirty
-        ? await persistCatalogDraft(catalogDraft)
-        : catalogDraft
-      hasSavedCatalog = isCatalogDirty
+      let nextCatalog = catalogDraft
+
+      if (isPublicationDeploymentDirty) {
+        const savedDeployment = await persistPublicationDeploymentDraft(publicationDeploymentDraft)
+        hasSavedDeployment = true
+        nextCatalog = normalizeCatalogDraft({
+          ...nextCatalog,
+          publicationSettings: normalizePublicationSettings({
+            ...(nextCatalog.publicationSettings || {}),
+            publicBaseUrl: savedDeployment.publicBaseUrl
+          })
+        })
+        setCatalogDraft(nextCatalog)
+      }
+
+      const shouldSaveCatalog =
+        JSON.stringify(buildCatalogPayload(nextCatalog)) !== catalogBaselineRef.current
+
+      if (shouldSaveCatalog) {
+        setIsCatalogSaving(true)
+        nextCatalog = await persistCatalogDraft(nextCatalog)
+        hasSavedCatalog = true
+      }
 
       if (isYearDirty) {
         await persistYearDraft(
@@ -3439,38 +4315,46 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
           },
           nextCatalog.sites
         )
+        hasSavedYear = true
       }
 
-      toast.success(
-        isCatalogDirty && isYearDirty
-          ? "Catalogue et configuration enregistrés."
-          : isCatalogDirty
-            ? "Catalogue enregistré."
-          : `Configuration ${selectedYear} enregistrée.`
-      )
+      if ([hasSavedDeployment, hasSavedCatalog, hasSavedYear].filter(Boolean).length > 1) {
+        toast.success("Configuration enregistrée.")
+      } else if (hasSavedDeployment) {
+        toast.success("Configuration publication enregistrée.")
+      } else if (hasSavedCatalog) {
+        toast.success("Catalogue enregistré.")
+      } else {
+        toast.success(`Configuration ${selectedYear} enregistrée.`)
+      }
       return true
     } catch (error) {
       console.error(`Erreur lors de l'enregistrement de la configuration ${selectedYear} :`, error)
       toast.error(
-        hasSavedCatalog
-          ? "Catalogue enregistré, mais impossible d'enregistrer la configuration."
+        hasSavedCatalog || hasSavedDeployment
+          ? "Une partie des modifications a été enregistrée, mais l'enregistrement complet a échoué."
           : "Impossible d'enregistrer les modifications."
       )
       return false
     } finally {
       setIsCatalogSaving(false)
+      setIsPublicationDeploymentSaving(false)
       setIsYearSaving(false)
     }
   }, [
     catalogDraft,
     isAnyDirty,
-    isCatalogDirty,
+    isAnySaving,
     isCatalogReady,
-    isCatalogSaving,
+    isCatalogDirty,
+    isPublicationDeploymentDirty,
+    isPublicationDeploymentReady,
     isYearReady,
-    isYearSaving,
+    isYearDirty,
+    persistPublicationDeploymentDraft,
     persistCatalogDraft,
     persistYearDraft,
+    publicationDeploymentDraft,
     selectedYear,
     yearDraft
   ])
@@ -3528,6 +4412,26 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
       classTypes: (current.classTypes || []).map((classType) =>
         classType.id === classTypeId ? { ...classType, [field]: value } : classType
       )
+    }))
+  }, [])
+
+  const updateWorkflowSettingsField = useCallback((field, value) => {
+    setYearDraft((current) => ({
+      ...current,
+      workflowSettings: normalizeWorkflowSettings({
+        ...(current.workflowSettings || {}),
+        [field]: value
+      })
+    }))
+  }, [])
+
+  const updateAccessLinkSettingsField = useCallback((field, value) => {
+    setYearDraft((current) => ({
+      ...current,
+      accessLinkSettings: normalizeAccessLinkSettings({
+        ...(current.accessLinkSettings || {}),
+        [field]: value
+      })
     }))
   }, [])
 
@@ -3638,6 +4542,44 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
         [field]: value
       })
     }))
+  }, [])
+
+  const updatePublicationDeploymentSettingsField = useCallback((field, value) => {
+    setPublicationDeploymentDraft((current) => {
+      const currentNormalized = normalizePublicationDeploymentSettings(current)
+      const nextSource = {
+        ...currentNormalized,
+        [field]: value
+      }
+
+      if (field === "protocol") {
+        const nextProtocol = normalizeDeploymentProtocol(value)
+        const currentDefaultPort = getDefaultDeploymentPort(currentNormalized.protocol)
+        if (Number(currentNormalized.port) === currentDefaultPort) {
+          nextSource.port = getDefaultDeploymentPort(nextProtocol)
+        }
+      }
+
+      if (field === "password") {
+        nextSource.clearPassword = false
+      }
+
+      if (field === "clearPassword" && value === true) {
+        nextSource.password = ""
+      }
+
+      return normalizePublicationDeploymentSettings(nextSource)
+    })
+
+    if (field === "publicBaseUrl") {
+      setCatalogDraft((current) => ({
+        ...current,
+        publicationSettings: normalizePublicationSettings({
+          ...(current.publicationSettings || {}),
+          publicBaseUrl: value
+        })
+      }))
+    }
   }, [])
 
   const updateSiteAddressField = useCallback((siteId, field, value) => {
@@ -3926,13 +4868,17 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
     )
     const activeSiteCount = (Array.isArray(yearDraft?.siteConfigs) ? yearDraft.siteConfigs : [])
       .filter((siteConfig) => siteConfig?.active !== false).length
+    const workflowSettings = normalizeWorkflowSettings(yearDraft?.workflowSettings)
+    const accessLinkSettings = normalizeAccessLinkSettings(yearDraft?.accessLinkSettings)
 
     return [
       formatCountLabel(classTypes.length, "type"),
       formatCountLabel(defenseDateCount, "date"),
-      `${activeSiteCount} site${activeSiteCount > 1 ? "s" : ""} actif${activeSiteCount > 1 ? "s" : ""}`
+      `${activeSiteCount} site${activeSiteCount > 1 ? "s" : ""} actif${activeSiteCount > 1 ? "s" : ""}`,
+      `${workflowSettings.maxVoteProposals} prop. vote`,
+      `${formatAccessLinkHours(accessLinkSettings.soutenanceLinkValidityHours)} liens`
     ].join(" · ")
-  }, [isYearReady, yearDraft?.classTypes, yearDraft?.siteConfigs])
+  }, [isYearReady, yearDraft?.accessLinkSettings, yearDraft?.classTypes, yearDraft?.siteConfigs, yearDraft?.workflowSettings])
   const catalogPanelSummary = useMemo(() => {
     if (!isCatalogReady) {
       return "Chargement..."
@@ -3988,7 +4934,7 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
           className='page-tools-field-control'
           value={selectedYear}
           onChange={handleYearChange}
-          disabled={!isYearReady || isYearSaving}
+          disabled={!isYearReady || isAnySaving}
           aria-label='Année'
         >
           {yearOptions.map((year) => (
@@ -4005,12 +4951,12 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
         onClick={() => {
           void handleSaveAll()
         }}
-        disabled={!isYearReady || !isCatalogReady || isYearSaving || isCatalogSaving || !isAnyDirty}
-        aria-label={isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
-        title={isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
+        disabled={!isYearReady || !isCatalogReady || !isPublicationDeploymentReady || isAnySaving || !isAnyDirty}
+        aria-label={isAnySaving ? "Enregistrement..." : "Enregistrer"}
+        title={isAnySaving ? "Enregistrement..." : "Enregistrer"}
       >
         <IconButtonContent
-          label={isYearSaving || isCatalogSaving ? "Enregistrement..." : "Enregistrer"}
+          label={isAnySaving ? "Enregistrement..." : "Enregistrer"}
           icon={SaveIcon}
         />
       </button>
@@ -4051,26 +4997,6 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
               <p className='configuration-section-note'>{yearPanelSummary}</p>
             </div>
             <div className='configuration-card-head-actions'>
-              <button
-                type='button'
-                className='page-tools-action-btn ghost icon-button'
-                onClick={addClassType}
-                disabled={!isYearReady}
-                aria-label='Ajouter'
-                title='Ajouter'
-              >
-                <IconButtonContent label='Ajouter' icon={PlusIcon} />
-              </button>
-              <SectionToggleButton
-                isOpen={!areAllYearClassTypesCollapsed}
-                onClick={toggleAllYearClassTypes}
-                subject="tous les types de l'année"
-                iconOnly={true}
-                className='configuration-collapse-toggle--icon-only'
-                openLabel='Ouvrir'
-                closeLabel='Réduire'
-                disabled={yearClassTypeIds.length === 0}
-              />
               <SectionToggleButton
                 isOpen={isYearPanelExpanded}
                 onClick={() => setIsYearPanelExpanded((current) => !current)}
@@ -4083,25 +5009,41 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
           </div>
 
           <div id='configuration-year-panel-body' className='configuration-panel-body' hidden={!isYearPanelExpanded}>
-            <div className='configuration-class-list'>
-              {Array.isArray(yearDraft?.classTypes) && yearDraft.classTypes.length > 0 ? (
-                yearDraft.classTypes.map((classType) => (
-                  <ClassTypeCard
-                    key={classType.id}
-                    classType={classType}
-                    isExpanded={!collapsedClassTypeIds.includes(classType.id)}
-                    onToggle={() => toggleClassTypeExpanded(classType.id)}
-                    onChange={(field, value) => updateClassTypeField(classType.id, field, value)}
-                    onRemove={() => removeClassType(classType.id)}
-                    disabled={!isYearReady}
+            <div className='configuration-year-settings-grid'>
+              <WorkflowSettingsCard
+                settings={yearDraft?.workflowSettings}
+                onChange={updateWorkflowSettingsField}
+                disabled={!isYearReady}
+              />
+              <AccessLinkSettingsCard
+                settings={yearDraft?.accessLinkSettings}
+                onChange={updateAccessLinkSettingsField}
+                disabled={!isYearReady}
+              />
+            </div>
+
+            <section className='configuration-year-type-section'>
+              <div className='configuration-year-subhead'>
+                <div className='configuration-year-subhead-copy'>
+                  <h4>Types</h4>
+                  <p className='configuration-section-note'>
+                    {formatCountLabel(Array.isArray(yearDraft?.classTypes) ? yearDraft.classTypes.length : 0, "type")}
+                  </p>
+                </div>
+                <div className='configuration-card-head-actions'>
+                  <SectionToggleButton
+                    isOpen={!areAllYearClassTypesCollapsed}
+                    onClick={toggleAllYearClassTypes}
+                    subject="tous les types de l'année"
+                    iconOnly={true}
+                    className='configuration-collapse-toggle--icon-only'
+                    openLabel='Ouvrir'
+                    closeLabel='Réduire'
+                    disabled={yearClassTypeIds.length === 0}
                   />
-                ))
-              ) : (
-                <div className='configuration-empty-state'>
-                  <p>Aucun type.</p>
                   <button
                     type='button'
-                    className='page-tools-action-btn primary icon-button'
+                    className='page-tools-action-btn ghost icon-button'
                     onClick={addClassType}
                     disabled={!isYearReady}
                     aria-label='Ajouter'
@@ -4110,8 +5052,38 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
                     <IconButtonContent label='Ajouter' icon={PlusIcon} />
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+
+              <div className='configuration-class-list'>
+                {Array.isArray(yearDraft?.classTypes) && yearDraft.classTypes.length > 0 ? (
+                  yearDraft.classTypes.map((classType) => (
+                    <ClassTypeCard
+                      key={classType.id}
+                      classType={classType}
+                      isExpanded={!collapsedClassTypeIds.includes(classType.id)}
+                      onToggle={() => toggleClassTypeExpanded(classType.id)}
+                      onChange={(field, value) => updateClassTypeField(classType.id, field, value)}
+                      onRemove={() => removeClassType(classType.id)}
+                      disabled={!isYearReady}
+                    />
+                  ))
+                ) : (
+                  <div className='configuration-empty-state'>
+                    <p>Aucun type.</p>
+                    <button
+                      type='button'
+                      className='page-tools-action-btn primary icon-button'
+                      onClick={addClassType}
+                      disabled={!isYearReady}
+                      aria-label='Ajouter'
+                      title='Ajouter'
+                    >
+                      <IconButtonContent label='Ajouter' icon={PlusIcon} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </section>
 
@@ -4164,6 +5136,12 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
                 settings={catalogDraft?.emailSettings}
                 onChange={updateEmailSettingsField}
                 disabled={!isCatalogReady}
+              />
+
+              <PublicationSettingsCard
+                settings={publicationDeploymentDraft}
+                onChange={updatePublicationDeploymentSettingsField}
+                disabled={!isPublicationDeploymentReady}
               />
 
               <DefenseRoomsAppearanceCard

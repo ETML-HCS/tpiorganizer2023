@@ -128,8 +128,6 @@ const personSchema = new Schema({
 })
 
 // Index pour recherche rapide
-personSchema.index({ email: 1 })
-personSchema.index({ shortId: 1 }, { unique: true, sparse: true })
 personSchema.index({ roles: 1 })
 personSchema.index({ site: 1 })
 personSchema.index({ 'stats.consecutiveTpi': 1 })
@@ -184,9 +182,8 @@ personSchema.methods.canTakeConsecutiveTpi = function() {
 }
 
 // Middleware pre-save pour mettre à jour updatedAt
-personSchema.pre('save', function(next) {
+personSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const Person = mongoose.model('Person', personSchema, 'persons')

@@ -10,7 +10,49 @@ const {
 const { buildDefensePublicPath } = require('../utils/publicRoutes')
 
 const ADMIN_ACCESS_LINK_SOURCE = 'admin_access_generated'
+const ADMIN_PUBLICATION_ACCESS_LINK_SOURCE = 'admin_publication_access_generated'
+const ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE = 'admin_static_vote_access_generated'
 const ADMIN_ACCESS_REVOKE_SOURCES = ['admin_access_preview', ADMIN_ACCESS_LINK_SOURCE]
+const ADMIN_PUBLICATION_ACCESS_REVOKE_SOURCES = [
+  'admin_publication_access_preview',
+  ADMIN_PUBLICATION_ACCESS_LINK_SOURCE
+]
+const ADMIN_STATIC_VOTE_ACCESS_REVOKE_SOURCES = [
+  'admin_static_vote_access_preview',
+  ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE
+]
+
+function normalizeVoteLinkTarget(value) {
+  return value === 'static' || value === 'publication' ? 'static' : 'app'
+}
+
+function getVoteAccessLinkSource(target) {
+  return normalizeVoteLinkTarget(target) === 'static'
+    ? ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE
+    : ADMIN_ACCESS_LINK_SOURCE
+}
+
+function getVoteAccessRevokeSources(target) {
+  return normalizeVoteLinkTarget(target) === 'static'
+    ? ADMIN_STATIC_VOTE_ACCESS_REVOKE_SOURCES
+    : ADMIN_ACCESS_REVOKE_SOURCES
+}
+
+function normalizeSoutenanceLinkTarget(value) {
+  return value === 'publication' ? 'publication' : 'app'
+}
+
+function getSoutenanceAccessLinkSource(target) {
+  return normalizeSoutenanceLinkTarget(target) === 'publication'
+    ? ADMIN_PUBLICATION_ACCESS_LINK_SOURCE
+    : ADMIN_ACCESS_LINK_SOURCE
+}
+
+function getSoutenanceAccessRevokeSources(target) {
+  return normalizeSoutenanceLinkTarget(target) === 'publication'
+    ? ADMIN_PUBLICATION_ACCESS_REVOKE_SOURCES
+    : ADMIN_ACCESS_REVOKE_SOURCES
+}
 
 function parsePublicationVersion(value) {
   if (value === null || value === undefined || value === '' || value === 'active') {
@@ -149,11 +191,55 @@ function normalizePublicationVersions(versions = []) {
           : null,
         confirmedTpiCount: Number.isFinite(Number(entry?.source?.confirmedTpiCount))
           ? Number(entry.source.confirmedTpiCount)
-          : null
+          : null,
+        generatedLinkCount: 0,
+        recoverableGeneratedLinkCount: 0,
+        generatedLinkEarliestExpiry: null,
+        generatedLinkLatestExpiry: null
       }
     })
     .filter((entry) => Number.isInteger(entry.version) && entry.version > 0)
     .sort((left, right) => right.version - left.version)
+}
+
+function buildPublicationLinkStatsMap(stats = []) {
+  const map = new Map()
+
+  for (const entry of Array.isArray(stats) ? stats : []) {
+    const version = Number.parseInt(entry?.publicationVersion, 10)
+    if (!Number.isInteger(version) || version <= 0) {
+      continue
+    }
+
+    map.set(version, {
+      generatedLinkCount: Number(entry?.generatedLinkCount || 0),
+      recoverableGeneratedLinkCount: Number(entry?.recoverableGeneratedLinkCount || 0),
+      generatedLinkEarliestExpiry: entry?.earliestExpiry || null,
+      generatedLinkLatestExpiry: entry?.latestExpiry || null
+    })
+  }
+
+  return map
+}
+
+async function getSoutenancePublicationLinkStats(year, magicLinks, sources = [ADMIN_ACCESS_LINK_SOURCE]) {
+  if (typeof magicLinks?.listSoutenancePublicationAccessLinkStats !== 'function') {
+    return new Map()
+  }
+
+  const stats = await magicLinks.listSoutenancePublicationAccessLinkStats({
+    year,
+    sources
+  })
+
+  return buildPublicationLinkStatsMap(stats)
+}
+
+function applyPublicationLinkStats(versions = [], statsByVersion = new Map()) {
+  return versions.map((entry) => ({
+    ...entry,
+    ...(statsByVersion.get(entry.version) || {})
+  }))
 }
 
 function buildPendingLink({ redirectPath }) {
@@ -166,7 +252,15 @@ function buildPendingLink({ redirectPath }) {
   }
 }
 
-async function findReusableAdminAccessLink({ magicLinks, year, type, person, scope = {}, baseUrl }) {
+async function findReusableAdminAccessLink({
+  magicLinks,
+  year,
+  type,
+  person,
+  scope = {},
+  baseUrl,
+  sources = [ADMIN_ACCESS_LINK_SOURCE]
+}) {
   if (typeof magicLinks.findReusableMagicLink !== 'function') {
     return null
   }
@@ -176,12 +270,20 @@ async function findReusableAdminAccessLink({ magicLinks, year, type, person, sco
     type,
     person,
     scope,
-    sources: [ADMIN_ACCESS_LINK_SOURCE],
+    sources,
     baseUrl
   })
 }
 
-async function revokeAdminAccessLinks({ magicLinks, year, type, person, scope = {}, excludeLinkIds = [] }) {
+async function revokeAdminAccessLinks({
+  magicLinks,
+  year,
+  type,
+  person,
+  scope = {},
+  excludeLinkIds = [],
+  sources = ADMIN_ACCESS_REVOKE_SOURCES
+}) {
   if (typeof magicLinks.revokeActiveMagicLinks !== 'function') {
     throw new Error('Revocation des anciens magic links indisponible.')
   }
@@ -191,17 +293,49 @@ async function revokeAdminAccessLinks({ magicLinks, year, type, person, scope = 
     type,
     person,
     scope,
-    sources: ADMIN_ACCESS_REVOKE_SOURCES,
+    sources,
     excludeIds: excludeLinkIds
   })
 }
 
-async function buildVoteAccessLink({ year, baseUrl, person, generateLinks, magicLinks }) {
-  const redirectPath = `/planning/${year}`
+async function revokeSoutenanceAdminAccessLinks({
+  magicLinks,
+  year,
+  person,
+  scope = {},
+  excludeLinkIds = [],
+  target = 'app'
+}) {
+  if (typeof magicLinks.revokeActiveMagicLinks !== 'function') {
+    throw new Error('Revocation des anciens magic links indisponible.')
+  }
+
+  return await magicLinks.revokeActiveMagicLinks({
+    year,
+    type: 'soutenance',
+    person,
+    scope,
+    sources: getSoutenanceAccessRevokeSources(target),
+    excludeIds: excludeLinkIds
+  })
+}
+
+async function buildVoteAccessLink({
+  year,
+  baseUrl,
+  redirectPath = null,
+  person,
+  generateLinks,
+  magicLinks,
+  target = 'app'
+}) {
+  const resolvedRedirectPath = redirectPath || `/planning/${year}`
+  const normalizedTarget = normalizeVoteLinkTarget(target)
+  const source = getVoteAccessLinkSource(normalizedTarget)
   const scope = {
     year,
     kind: 'stakeholder_votes',
-    source: ADMIN_ACCESS_LINK_SOURCE
+    source
   }
 
   if (!generateLinks) {
@@ -214,10 +348,11 @@ async function buildVoteAccessLink({ year, baseUrl, person, generateLinks, magic
         year,
         kind: 'stakeholder_votes'
       },
-      baseUrl
+      baseUrl,
+      sources: getVoteAccessRevokeSources(normalizedTarget)
     })
 
-    return existingLink || buildPendingLink({ redirectPath })
+    return existingLink || buildPendingLink({ redirectPath: resolvedRedirectPath })
   }
 
   const link = await magicLinks.createVoteMagicLink({
@@ -226,7 +361,7 @@ async function buildVoteAccessLink({ year, baseUrl, person, generateLinks, magic
     role: null,
     scope,
     baseUrl,
-    redirectPath,
+    redirectPath: resolvedRedirectPath,
     persistToken: true
   })
 
@@ -235,7 +370,12 @@ async function buildVoteAccessLink({ year, baseUrl, person, generateLinks, magic
     year,
     type: 'vote',
     person,
-    excludeLinkIds: link?.id ? [link.id] : []
+    scope: {
+      year,
+      kind: 'stakeholder_votes'
+    },
+    excludeLinkIds: link?.id ? [link.id] : [],
+    sources: getVoteAccessRevokeSources(normalizedTarget)
   })
 
   return {
@@ -247,17 +387,20 @@ async function buildVoteAccessLink({ year, baseUrl, person, generateLinks, magic
 async function buildSoutenanceAccessLink({
   year,
   baseUrl,
+  redirectPath = null,
   person,
   publicationVersion,
   generateLinks,
-  magicLinks
+  magicLinks,
+  target = 'app'
 }) {
-  const redirectPath = buildDefensePublicPath(year)
+  const resolvedRedirectPath = redirectPath || buildDefensePublicPath(year)
   const scopedPublicationVersion = publicationVersion || null
+  const source = getSoutenanceAccessLinkSource(target)
   const sourceScope = {
     kind: 'published_soutenances',
     publicationVersion: scopedPublicationVersion,
-    source: ADMIN_ACCESS_LINK_SOURCE
+    source
   }
 
   if (!generateLinks) {
@@ -269,10 +412,11 @@ async function buildSoutenanceAccessLink({
       scope: {
         publicationVersion: scopedPublicationVersion
       },
-      baseUrl
+      baseUrl,
+      sources: [source]
     })
 
-    return existingLink || buildPendingLink({ redirectPath })
+    return existingLink || buildPendingLink({ redirectPath: resolvedRedirectPath })
   }
 
   const link = await magicLinks.createSoutenanceMagicLink({
@@ -280,19 +424,19 @@ async function buildSoutenanceAccessLink({
     person,
     scope: sourceScope,
     baseUrl,
-    redirectPath,
+    redirectPath: resolvedRedirectPath,
     persistToken: true
   })
 
-  await revokeAdminAccessLinks({
+  await revokeSoutenanceAdminAccessLinks({
     magicLinks,
     year,
-    type: 'soutenance',
     person,
     scope: {
       publicationVersion: scopedPublicationVersion
     },
-    excludeLinkIds: link?.id ? [link.id] : []
+    excludeLinkIds: link?.id ? [link.id] : [],
+    target
   })
 
   return {
@@ -306,8 +450,12 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     TpiPlanningModel,
     VoteModel,
     magicLinks,
-    generateLinks
+    generateLinks,
+    voteBaseUrl,
+    voteRedirectPath,
+    voteLinkTarget
   } = dependencies
+  const normalizedVoteLinkTarget = normalizeVoteLinkTarget(voteLinkTarget)
 
   const votingTpis = await TpiPlanningModel.find({
     year,
@@ -381,7 +529,9 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     const link = await buildVoteAccessLink({
       year,
       person: item.voter,
-      baseUrl,
+      baseUrl: voteBaseUrl || baseUrl,
+      redirectPath: voteRedirectPath,
+      target: normalizedVoteLinkTarget,
       generateLinks,
       magicLinks
     })
@@ -404,7 +554,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       status: '',
       tpiId: null,
       tpis,
-      redirectPath: link.redirectPath || `/planning/${year}`,
+      redirectPath: link.redirectPath || voteRedirectPath || `/planning/${year}`,
       expiresAt: link.expiresAt,
       token: link.token,
       url: link.url,
@@ -435,7 +585,10 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     pendingLinkCount: Math.max(linkCount - availableLinkCount, 0),
     unrecoverableGeneratedLinkCount,
     recipientCount: uniqueRecipients.size,
-    tpiCount: uniqueTpis.size
+    tpiCount: uniqueTpis.size,
+    linkTarget: normalizedVoteLinkTarget,
+    baseUrl: voteBaseUrl || baseUrl,
+    redirectPath: voteRedirectPath || `/planning/${year}`
   }
 }
 
@@ -470,14 +623,22 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     getPublication,
     listPublicationVersions: listVersions,
     publicationVersion: requestedPublicationVersion,
-    generateLinks
+    generateLinks,
+    soutenanceRedirectPath,
+    soutenanceLinkTarget
   } = dependencies
+  const normalizedSoutenanceLinkTarget = normalizeSoutenanceLinkTarget(soutenanceLinkTarget)
+  const source = getSoutenanceAccessLinkSource(normalizedSoutenanceLinkTarget)
 
   const normalizedRequestedVersion = parsePublicationVersion(requestedPublicationVersion)
   const publicationVersion = normalizedRequestedVersion
     ? await getPublication(year, normalizedRequestedVersion)
     : await getActivePublication(year)
-  const availableVersions = normalizePublicationVersions(await listVersions(year))
+  const publicationLinkStats = await getSoutenancePublicationLinkStats(year, magicLinks, [source])
+  const availableVersions = applyPublicationLinkStats(
+    normalizePublicationVersions(await listVersions(year)),
+    publicationLinkStats
+  )
 
   if (!publicationVersion?.rooms?.length) {
     return {
@@ -530,9 +691,11 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
       year,
       person: recipient,
       baseUrl,
+      redirectPath: soutenanceRedirectPath || buildDefensePublicPath(year),
       publicationVersion: publicationVersion.version || null,
       generateLinks,
-      magicLinks
+      magicLinks,
+      target: normalizedSoutenanceLinkTarget
     })
 
     entry.soutenanceLinks.push({
@@ -576,11 +739,21 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
 async function buildAccessLinkPreview({
   year,
   baseUrl,
+  voteBaseUrl = null,
+  voteRedirectPath = null,
+  voteLinkTarget = 'app',
+  soutenanceBaseUrl = null,
+  soutenanceRedirectPath = null,
+  soutenanceLinkTarget = 'app',
   publicationVersion = null,
   generateLinks = false,
   dependencies = {}
 }) {
   const normalizedYear = Number.parseInt(year, 10)
+  const normalizedSoutenanceLinkTarget = normalizeSoutenanceLinkTarget(soutenanceLinkTarget)
+  const resolvedSoutenanceBaseUrl = typeof soutenanceBaseUrl === 'string' && soutenanceBaseUrl.trim()
+    ? soutenanceBaseUrl.trim()
+    : baseUrl
   const peopleMap = new Map()
   const resolvedDependencies = {
     PersonModel: dependencies.PersonModel || Person,
@@ -591,7 +764,18 @@ async function buildAccessLinkPreview({
     getPublication: dependencies.getPublication || getPublicationVersion,
     listPublicationVersions: dependencies.listPublicationVersions || listPublicationVersions,
     publicationVersion,
-    generateLinks: generateLinks === true
+    generateLinks: generateLinks === true,
+    voteBaseUrl: typeof voteBaseUrl === 'string' && voteBaseUrl.trim()
+      ? voteBaseUrl.trim()
+      : baseUrl,
+    voteRedirectPath: typeof voteRedirectPath === 'string' && voteRedirectPath.trim()
+      ? voteRedirectPath.trim()
+      : `/planning/${normalizedYear}`,
+    voteLinkTarget: normalizeVoteLinkTarget(voteLinkTarget),
+    soutenanceRedirectPath: typeof soutenanceRedirectPath === 'string' && soutenanceRedirectPath.trim()
+      ? soutenanceRedirectPath.trim()
+      : buildDefensePublicPath(normalizedYear),
+    soutenanceLinkTarget: normalizedSoutenanceLinkTarget
   }
 
   const votePreview = await buildVoteLinkPreview(
@@ -602,7 +786,7 @@ async function buildAccessLinkPreview({
   )
   const soutenancePreview = await buildSoutenanceLinkPreview(
     normalizedYear,
-    baseUrl,
+    resolvedSoutenanceBaseUrl,
     peopleMap,
     resolvedDependencies
   )
@@ -638,6 +822,9 @@ async function buildAccessLinkPreview({
     },
     contexts: {
       vote: {
+        linkTarget: votePreview.linkTarget,
+        baseUrl: votePreview.baseUrl,
+        redirectPath: votePreview.redirectPath,
         tpiCount: votePreview.tpiCount,
         recipientCount: votePreview.recipientCount,
         linkCount: votePreview.linkCount,
@@ -646,6 +833,9 @@ async function buildAccessLinkPreview({
         unrecoverableGeneratedLinkCount: votePreview.unrecoverableGeneratedLinkCount || 0
       },
       soutenance: {
+        linkTarget: normalizedSoutenanceLinkTarget,
+        baseUrl: resolvedSoutenanceBaseUrl,
+        redirectPath: resolvedDependencies.soutenanceRedirectPath,
         publicationVersion: soutenancePreview.publicationVersion,
         requestedPublicationVersion: soutenancePreview.requestedPublicationVersion,
         availableVersions: soutenancePreview.availableVersions,

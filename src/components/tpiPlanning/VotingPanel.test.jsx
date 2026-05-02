@@ -225,6 +225,33 @@ describe('VotingPanel', () => {
     expect(voteService.respondToVote).not.toHaveBeenCalled()
   })
 
+  test('respecte la limite de propositions fournie par la configuration', () => {
+    const pendingVotes = buildPendingVotes().map((group) => ({
+      ...group,
+      voteSettings: {
+        maxProposalsPerTpi: 2,
+        allowSpecialRequest: false
+      }
+    }))
+
+    render(<VotingPanel pendingVotes={pendingVotes} onVoteSubmitted={jest.fn()} />)
+
+    fireEvent.click(screen.getByText('TPI-2026-001'))
+    fireEvent.click(screen.getByRole('button', { name: /^Proposer/i }))
+
+    const addButtons = screen.getAllByRole('button', { name: /½ journée|Déjà proposé|Planning/i })
+    fireEvent.click(addButtons[0])
+    fireEvent.click(addButtons[1])
+
+    expect(screen.getByText(/^2\/2$/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Ajouter une demande spéciale/i)).not.toBeInTheDocument()
+
+    fireEvent.click(addButtons[2])
+
+    expect(screen.getByText(/Maximum 2 créneaux proposés par TPI\./)).toBeInTheDocument()
+    expect(voteService.respondToVote).not.toHaveBeenCalled()
+  })
+
   test('autorise une demande spéciale avec date et raison', async () => {
     render(<VotingPanel pendingVotes={buildPendingVotes()} onVoteSubmitted={jest.fn()} />)
 

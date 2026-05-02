@@ -60,9 +60,8 @@ const planningSnapshotSchema = new mongoose.Schema({
 planningSnapshotSchema.index({ year: 1, version: -1 }, { unique: true })
 planningSnapshotSchema.index({ year: 1, isActive: 1, frozenAt: -1 })
 
-planningSnapshotSchema.pre('save', function(next) {
+planningSnapshotSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const PlanningSnapshot = mongoose.models.PlanningSnapshot || mongoose.model(

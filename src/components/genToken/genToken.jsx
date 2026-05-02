@@ -23,6 +23,9 @@ const DEFAULT_EMAIL_SETTINGS = {
   replyToEmail: '',
   defaultDeliveryMode: 'outlook'
 }
+const DEFAULT_PUBLICATION_SETTINGS = {
+  publicBaseUrl: 'https://tpi26.ch'
+}
 
 function formatRoleLabel(role) {
   if (role === 'expert1') {
@@ -95,6 +98,52 @@ function normalizeEmailSettings(value = {}) {
   }
 }
 
+function normalizePublicBaseUrl(value, fallback = DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl) {
+  const rawValue = String(value || '').trim()
+  const rawFallback = String(fallback || DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl).trim()
+  const candidate = rawValue || rawFallback
+
+  if (!candidate) {
+    return ''
+  }
+
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(candidate)
+    ? candidate
+    : `https://${candidate}`
+
+  try {
+    const url = new URL(withProtocol)
+    url.hash = ''
+    url.search = ''
+    return url.toString().replace(/\/+$/, '')
+  } catch (error) {
+    return rawFallback
+  }
+}
+
+function normalizePublicationSettings(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+
+  return {
+    publicBaseUrl: normalizePublicBaseUrl(
+      source.publicBaseUrl || source.staticPublicBaseUrl || source.publicSiteBaseUrl || source.domain
+    )
+  }
+}
+
+function formatUrlHost(value) {
+  const rawValue = String(value || '').trim()
+  if (!rawValue) {
+    return ''
+  }
+
+  try {
+    return new URL(rawValue).host || rawValue
+  } catch (error) {
+    return rawValue.replace(/^https?:\/\//i, '').replace(/\/+$/, '')
+  }
+}
+
 function getPublicationVersionRequest(value) {
   const parsed = Number.parseInt(String(value || ''), 10)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
@@ -105,7 +154,42 @@ function formatPublicationVersionLabel(versionEntry) {
     return 'Publication active'
   }
 
-  return `Publication v${versionEntry.version}${versionEntry.isActive ? ' · active' : ''}`
+  const generatedLabel = formatPublicationLinkCountLabel(versionEntry)
+
+  return `Publication v${versionEntry.version}${versionEntry.isActive ? ' · active' : ''}${generatedLabel}`
+}
+
+function getPublicationRecoverableLinkCount(versionEntry) {
+  const recoverableCount = Number.parseInt(String(versionEntry?.recoverableGeneratedLinkCount || ''), 10)
+  return Number.isInteger(recoverableCount) && recoverableCount > 0 ? recoverableCount : 0
+}
+
+function getPublicationGeneratedLinkCount(versionEntry) {
+  const generatedCount = Number.parseInt(String(versionEntry?.generatedLinkCount || ''), 10)
+  return Number.isInteger(generatedCount) && generatedCount > 0 ? generatedCount : 0
+}
+
+function formatPublicationLinkCountLabel(versionEntry) {
+  const recoverableCount = getPublicationRecoverableLinkCount(versionEntry)
+  if (recoverableCount > 0) {
+    return ` · ${recoverableCount} lien${recoverableCount > 1 ? 's' : ''}`
+  }
+
+  const generatedCount = getPublicationGeneratedLinkCount(versionEntry)
+  return generatedCount > 0
+    ? ` · ${generatedCount} non récupérable${generatedCount > 1 ? 's' : ''}`
+    : ''
+}
+
+function formatActivePublicationOptionLabel(availableVersions = [], context = {}) {
+  const activeVersion = availableVersions.find((entry) => entry?.isActive)
+  const version = activeVersion?.version || context?.publicationVersion
+
+  if (!version) {
+    return 'Publication active'
+  }
+
+  return `Publication active (v${version})${formatPublicationLinkCountLabel(activeVersion)}`
 }
 
 function buildPublicationVersionOptions(context = {}) {
@@ -122,7 +206,7 @@ function buildPublicationVersionOptions(context = {}) {
 
   if (options.length > 0) {
     return [
-      { value: 'active', label: 'Publication active' },
+      { value: 'active', label: formatActivePublicationOptionLabel(availableVersions, context) },
       ...options
     ]
   }
@@ -544,6 +628,11 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const [successMessage, setSuccessMessage] = useState('')
   const [selectedPublicationVersion, setSelectedPublicationVersion] = useState('active')
   const [emailSettings, setEmailSettings] = useState(DEFAULT_EMAIL_SETTINGS)
+  const [publicationSettings, setPublicationSettings] = useState(DEFAULT_PUBLICATION_SETTINGS)
+  const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
+  const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
+  const [usePublicationSiteLinks, setUsePublicationSiteLinks] = useState(false)
+  const [useVotePublicationSiteLinks, setUseVotePublicationSiteLinks] = useState(false)
   const [prepareWithOutlook, setPrepareWithOutlook] = useState(true)
   const [invitationDrafts, setInvitationDrafts] = useState([])
 
@@ -555,7 +644,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     let isCancelled = false
 
-    const loadEmailSettings = async () => {
+    const loadCatalogSettings = async () => {
       try {
         const catalog = await planningCatalogService.getGlobal()
         if (isCancelled) {
@@ -564,21 +653,51 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
         const normalizedSettings = normalizeEmailSettings(catalog?.emailSettings)
         setEmailSettings(normalizedSettings)
+        setPublicationSettings(normalizePublicationSettings(catalog?.publicationSettings))
         setPrepareWithOutlook(normalizedSettings.defaultDeliveryMode !== 'automatic')
       } catch (error) {
         if (!isCancelled) {
           setEmailSettings(DEFAULT_EMAIL_SETTINGS)
+          setPublicationSettings(DEFAULT_PUBLICATION_SETTINGS)
           setPrepareWithOutlook(true)
         }
       }
     }
 
-    loadEmailSettings()
+    loadCatalogSettings()
 
     return () => {
       isCancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadStaticPublicationStatus = async () => {
+      try {
+        const [status, voteStatus] = await Promise.all([
+          workflowPlanningService.getStaticPublicationStatus(selectedYear),
+          workflowPlanningService.getStaticVotePublicationStatus(selectedYear)
+        ])
+        if (!isCancelled) {
+          setStaticPublicationInfo(status || null)
+          setStaticVotePublicationInfo(voteStatus || null)
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setStaticPublicationInfo(null)
+          setStaticVotePublicationInfo(null)
+        }
+      }
+    }
+
+    loadStaticPublicationStatus()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [selectedYear])
 
   useEffect(() => {
     if (YEARS_CONFIG.isSupportedYear(requestedYear)) {
@@ -649,6 +768,51 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     })
   }, [linkTypeFilter, previewPayload?.people, searchQuery])
 
+  const staticPublicationPublicUrl = typeof staticPublicationInfo?.publicUrl === 'string'
+    ? staticPublicationInfo.publicUrl.trim()
+    : ''
+  const staticVotePublicationPublicUrl = typeof staticVotePublicationInfo?.publicUrl === 'string'
+    ? staticVotePublicationInfo.publicUrl.trim()
+    : ''
+  const configuredPublicationBaseUrl = normalizePublicationSettings(publicationSettings).publicBaseUrl
+  const publicationTargetLabel = formatUrlHost(staticPublicationPublicUrl || configuredPublicationBaseUrl)
+  const votePublicationTargetLabel = formatUrlHost(staticVotePublicationPublicUrl)
+  const canUsePublicationSiteLinks = Boolean(staticPublicationPublicUrl)
+  const canUseVotePublicationSiteLinks = Boolean(staticVotePublicationPublicUrl)
+  const accessLinkTargetOptions = useMemo(() => ({
+    ...(usePublicationSiteLinks && canUsePublicationSiteLinks
+      ? {
+          soutenanceLinkTarget: 'publication',
+          soutenancePublicUrl: staticPublicationPublicUrl
+        }
+      : {}),
+    ...(useVotePublicationSiteLinks && canUseVotePublicationSiteLinks
+      ? {
+          voteLinkTarget: 'static',
+          votePublicUrl: staticVotePublicationPublicUrl
+        }
+      : {})
+  }), [
+    canUsePublicationSiteLinks,
+    canUseVotePublicationSiteLinks,
+    staticPublicationPublicUrl,
+    staticVotePublicationPublicUrl,
+    usePublicationSiteLinks,
+    useVotePublicationSiteLinks
+  ])
+
+  useEffect(() => {
+    if (usePublicationSiteLinks && !canUsePublicationSiteLinks) {
+      setUsePublicationSiteLinks(false)
+    }
+  }, [canUsePublicationSiteLinks, usePublicationSiteLinks])
+
+  useEffect(() => {
+    if (useVotePublicationSiteLinks && !canUseVotePublicationSiteLinks) {
+      setUseVotePublicationSiteLinks(false)
+    }
+  }, [canUseVotePublicationSiteLinks, useVotePublicationSiteLinks])
+
   const loadAccessLinksPreview = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++accessLinkRequestIdRef.current
     setIsPreviewLoading(true)
@@ -663,7 +827,10 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       const preview = await workflowPlanningService.previewAccessLinks(
         selectedYear,
         window.location.origin,
-        publicationVersion ? { publicationVersion } : {}
+        {
+          ...(publicationVersion ? { publicationVersion } : {}),
+          ...accessLinkTargetOptions
+        }
       )
 
       if (requestId !== accessLinkRequestIdRef.current) {
@@ -688,7 +855,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsPreviewLoading(false)
     }
-  }, [selectedPublicationVersion, selectedYear])
+  }, [selectedPublicationVersion, selectedYear, accessLinkTargetOptions])
 
   const handleGeneratePreview = useCallback(async () => {
     await loadAccessLinksPreview({ silent: false })
@@ -706,7 +873,10 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       const result = await workflowPlanningService.generateAccessLinks(
         selectedYear,
         window.location.origin,
-        publicationVersion ? { publicationVersion } : {}
+        {
+          ...(publicationVersion ? { publicationVersion } : {}),
+          ...accessLinkTargetOptions
+        }
       )
 
       if (requestId !== accessLinkRequestIdRef.current) {
@@ -728,7 +898,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedPublicationVersion, selectedYear])
+  }, [selectedPublicationVersion, selectedYear, accessLinkTargetOptions])
 
   useEffect(() => {
     loadAccessLinksPreview({ silent: true })
@@ -832,6 +1002,9 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const previewContexts = previewPayload?.contexts || {}
   const workflowLabel = formatWorkflowLabel(previewPayload?.workflowState)
   const publicationVersion = previewContexts?.soutenance?.publicationVersion
+  const availablePublicationVersions = Array.isArray(previewContexts?.soutenance?.availableVersions)
+    ? previewContexts.soutenance.availableVersions
+    : []
   const publicationVersionOptions = buildPublicationVersionOptions(previewContexts?.soutenance)
   const selectedPublicationVersionValue = publicationVersionOptions.some((option) => option.value === selectedPublicationVersion)
     ? selectedPublicationVersion
@@ -849,6 +1022,20 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       : currentRequestedPublicationVersion === null ||
         (activePublicationVersion !== null && currentPublicationVersion === activePublicationVersion)
   const hasGeneratedSoutenanceLinks = Boolean(previewPayload?.summary?.soutenanceGeneratedLinkCount)
+  const suggestedPublicationWithLinks = availablePublicationVersions.find((entry) => {
+    const version = getPublicationVersionRequest(entry?.version)
+    return (
+      version &&
+      version !== currentPublicationVersion &&
+      getPublicationRecoverableLinkCount(entry) > 0
+    )
+  })
+  const shouldSuggestPublicationWithLinks = Boolean(
+    previewPayload &&
+    !hasGeneratedSoutenanceLinks &&
+    suggestedPublicationWithLinks
+  )
+  const suggestedPublicationLinkCount = getPublicationRecoverableLinkCount(suggestedPublicationWithLinks)
   const prepareEmailsTitle = !isPublicationSelectionSynced
     ? "Préparez ou générez les liens pour la publication sélectionnée."
     : !hasGeneratedSoutenanceLinks
@@ -861,6 +1048,21 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     ? 'Remplacer les liens d’accès admin déjà générés.'
     : 'Générer les liens d’accès.'
   const isBusy = isPreviewLoading || isGenerating
+  const publicationSiteLinksTitle = canUsePublicationSiteLinks
+    ? `Générer les liens de défense vers ${staticPublicationPublicUrl}.`
+    : 'URL publique de publication indisponible. Vérifiez la configuration et la génération statique.'
+  const votePublicationSiteLinksTitle = canUseVotePublicationSiteLinks
+    ? `Générer les liens de vote vers ${staticVotePublicationPublicUrl}.`
+    : 'URL publique de vote statique indisponible. Générez la publication vote avant de cibler le mini-site.'
+  const handleShowSuggestedPublication = () => {
+    if (!suggestedPublicationWithLinks?.version) {
+      return
+    }
+
+    setSelectedPublicationVersion(String(suggestedPublicationWithLinks.version))
+    setErrorMessage('')
+    setSuccessMessage('')
+  }
 
   return (
     <div className='token-generator-page page-with-toolbar'>
@@ -883,6 +1085,14 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                   : previewPayload.hasGeneratedLinks
                     ? 'Liens partiels'
                     : 'Aperçu seul'}
+              </span>
+            ) : null}
+            <span className='page-tools-chip'>
+              {usePublicationSiteLinks ? `Site publication · ${publicationTargetLabel || 'non défini'}` : 'Site application'}
+            </span>
+            {useVotePublicationSiteLinks ? (
+              <span className='page-tools-chip'>
+                Vote statique · {votePublicationTargetLabel || 'non défini'}
               </span>
             ) : null}
           </div>
@@ -953,6 +1163,34 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
             </select>
           </label>
 
+          <label className='page-tools-field token-access-publication-checkbox' htmlFor='use-publication-site-links'>
+            <span className='page-tools-field-label'>Site</span>
+            <span className='token-access-checkbox-row' title={publicationSiteLinksTitle}>
+              <input
+                id='use-publication-site-links'
+                type='checkbox'
+                checked={usePublicationSiteLinks}
+                onChange={(event) => setUsePublicationSiteLinks(event.target.checked)}
+                disabled={isBusy || !canUsePublicationSiteLinks}
+              />
+              <span>Publication</span>
+            </span>
+          </label>
+
+          <label className='page-tools-field token-access-publication-checkbox' htmlFor='use-vote-publication-site-links'>
+            <span className='page-tools-field-label'>Votes</span>
+            <span className='token-access-checkbox-row' title={votePublicationSiteLinksTitle}>
+              <input
+                id='use-vote-publication-site-links'
+                type='checkbox'
+                checked={useVotePublicationSiteLinks}
+                onChange={(event) => setUseVotePublicationSiteLinks(event.target.checked)}
+                disabled={isBusy || !canUseVotePublicationSiteLinks}
+              />
+              <span>Mini-site</span>
+            </span>
+          </label>
+
           <div className='page-tools-field page-tools-field-action'>
             <button
               type='button'
@@ -1012,7 +1250,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         </div>
 
         <div className='token-access-toolbar-note'>
-          L’aperçu recharge les liens déjà générés quand ils sont encore valides. La génération remplace les liens admin précédents. L’envoi automatique reste désactivé: le mode Outlook prépare seulement des brouillons.
+          L’aperçu recharge les liens déjà générés quand ils sont encore valides. La génération remplace les liens admin du site choisi. Le site publication ne concerne que les liens de défense. L’envoi automatique reste désactivé: le mode Outlook prépare seulement des brouillons.
         </div>
       </PageToolbar>
 
@@ -1033,6 +1271,26 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
           {previewSummary?.unrecoverableGeneratedLinkCount > 0 ? (
             <div className='token-generator-alert' role='status'>
               {previewSummary.unrecoverableGeneratedLinkCount} lien(s) généré(s) avant la persistance ne peuvent pas être reconstruits. Régénérez une fois pour les rendre relisibles.
+            </div>
+          ) : null}
+
+          {shouldSuggestPublicationWithLinks ? (
+            <div className='token-generator-alert token-generator-alert-action' role='status'>
+              <span>
+                La publication affichée v{publicationVersion || 'active'} n’a pas encore de liens générés.
+                {' '}
+                Des liens existent pour la publication v{suggestedPublicationWithLinks.version}
+                {' '}
+                ({suggestedPublicationLinkCount} lien{suggestedPublicationLinkCount > 1 ? 's' : ''}).
+              </span>
+              <button
+                type='button'
+                className='token-access-btn secondary'
+                onClick={handleShowSuggestedPublication}
+                disabled={isBusy}
+              >
+                Afficher v{suggestedPublicationWithLinks.version}
+              </button>
             </div>
           ) : null}
 

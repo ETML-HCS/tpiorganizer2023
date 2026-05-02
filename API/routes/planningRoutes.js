@@ -22,6 +22,9 @@ const emailService = require('../services/emailService')
 const { filterPlanifiableTpis } = require('../services/tpiPlanningVisibility')
 const {
   getPlanningConfig,
+  getPlanningConfigIfAvailable,
+  normalizeAccessLinkSettings,
+  normalizeWorkflowSettings,
   savePlanningConfig
 } = require('../services/planningConfigService')
 const {
@@ -35,6 +38,7 @@ const {
   toPlanningTpiResponseObject
 } = require('../services/planningTpiResponseService')
 const {
+  getSharedEmailSettingsIfAvailable,
   getSharedPlanningCatalog,
   saveSharedPlanningCatalog
 } = require('../services/planningCatalogService')
@@ -63,6 +67,70 @@ function getRouteErrorResponse(error, fallbackMessage) {
         : fallbackMessage
     }
   }
+}
+
+function toPublicVoteSettings(planningConfig = {}) {
+  const settings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
+  return {
+    maxProposalsPerTpi: settings.maxVoteProposals,
+    allowSpecialRequest: settings.allowSpecialVoteRequest
+  }
+}
+
+async function getVoteSettingsForYear(year, cache = null) {
+  const numericYear = toInteger(year)
+  const cacheKey = Number.isInteger(numericYear) ? String(numericYear) : ''
+
+  if (cache && cacheKey && cache.has(cacheKey)) {
+    return cache.get(cacheKey)
+  }
+
+  let settings = toPublicVoteSettings()
+
+  if (Number.isInteger(numericYear)) {
+    try {
+      const planningConfig = await getPlanningConfigIfAvailable(numericYear)
+      settings = toPublicVoteSettings(planningConfig)
+    } catch (error) {
+      console.warn(`Impossible de charger les règles de vote ${numericYear}:`, error?.message || error)
+    }
+  }
+
+  if (cache && cacheKey) {
+    cache.set(cacheKey, settings)
+  }
+
+  return settings
+}
+
+function buildMaxVoteProposalsMessage(limit, suffix = 'par TPI et par votant') {
+  return `Maximum ${limit} créneau${limit > 1 ? 'x' : ''} alternatif${limit > 1 ? 's' : ''} ${suffix}.`
+}
+
+async function getAccessLinkSettingsForYear(year, cache = null) {
+  const numericYear = toInteger(year)
+  const cacheKey = Number.isInteger(numericYear) ? String(numericYear) : ''
+
+  if (cache && cacheKey && cache.has(cacheKey)) {
+    return cache.get(cacheKey)
+  }
+
+  let settings = normalizeAccessLinkSettings()
+
+  if (Number.isInteger(numericYear)) {
+    try {
+      const planningConfig = await getPlanningConfigIfAvailable(numericYear)
+      settings = normalizeAccessLinkSettings(planningConfig?.accessLinkSettings)
+    } catch (error) {
+      console.warn(`Impossible de charger les règles de liens ${numericYear}:`, error?.message || error)
+    }
+  }
+
+  if (cache && cacheKey) {
+    cache.set(cacheKey, settings)
+  }
+
+  return settings
 }
 
 router.get('/catalog', async (req, res) => {
@@ -780,11 +848,13 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
         allowedDateKeys: [],
         allowedDateLabels: [],
         source: 'planning_slots'
-      }
+      },
+      settings: toPublicVoteSettings()
     }
   }
 
   let planningConfig = null
+  let voteSettings = toPublicVoteSettings()
   let proposalContext = {
     candidateClass: String(tpi?.classe || '').trim(),
     candidateClassLabel: String(tpi?.classe || '').trim(),
@@ -798,6 +868,7 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
   try {
     if (mongoose.connection?.readyState === 1) {
       planningConfig = await getPlanningConfig(tpi?.year)
+      voteSettings = toPublicVoteSettings(planningConfig)
       proposalContext = buildVoteProposalContext(tpi, planningConfig)
     }
   } catch (error) {
@@ -927,7 +998,8 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
 
   return {
     options: await attachVoteQueueCountsToProposalOptions(sortedOptions, tpi),
-    context: proposalContext
+    context: proposalContext,
+    settings: voteSettings
   }
 }
 
@@ -953,6 +1025,7 @@ router.post('/auth/magic-link', async (req, res) => {
     const magicLink = await magicLinkService.generateMagicLink(email, baseUrl)
     
     // Envoyer l'email
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
     await emailService.sendEmail(email, 'voteRequest', {
       recipientName: magicLink.personName,
       magicLinkUrl: magicLink.url,
@@ -962,7 +1035,7 @@ router.post('/auth/magic-link', async (req, res) => {
       role: 'Utilisateur',
       slots: [],
       deadline: magicLink.expiresAt.toLocaleDateString('fr-CH')
-    })
+    }, { emailSettings })
     
     res.json({ 
       success: true, 
@@ -1747,6 +1820,7 @@ router.post('/tpi/:id/propose-slots', authMiddleware, requireObjectIdParam('id',
         .populate('proposedSlots.slot')
       
       const baseUrl = `${req.protocol}://${req.get('host')}/api/planning`
+      const accessLinkSettings = await getAccessLinkSettingsForYear(tpi.year)
       
       // Générer les magic links pour chaque votant
       const voters = [
@@ -1758,7 +1832,9 @@ router.post('/tpi/:id/propose-slots', authMiddleware, requireObjectIdParam('id',
       const magicLinks = []
       
       for (const voter of voters) {
-        const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl)
+        const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl, {
+          expiresInHours: accessLinkSettings.voteLinkValidityHours
+        })
         magicLinks.push({
           ...link,
           email: voter.person.email,
@@ -1773,7 +1849,11 @@ router.post('/tpi/:id/propose-slots', authMiddleware, requireObjectIdParam('id',
         })
       }
       
-      await emailService.sendVoteRequests(tpi, magicLinks)
+      const emailSettings = await getSharedEmailSettingsIfAvailable()
+      await emailService.sendVoteRequests(tpi, magicLinks, {
+        emailSettings,
+        expiresInHours: accessLinkSettings.voteLinkValidityHours
+      })
     }
     
     res.json(result)
@@ -1966,6 +2046,7 @@ router.get('/votes/pending', authMiddleware, async (req, res) => {
         const proposalData = await buildVoteProposalOptionsForTpi(group.tpi, group.slots)
         group.proposalOptions = proposalData.options
         group.proposalContext = proposalData.context
+        group.voteSettings = proposalData.settings
       })
     )
     
@@ -2018,10 +2099,6 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       return res.status(400).json({ error: 'fixedVoteId invalide' })
     }
 
-    if (proposedSlotIds.length > 3) {
-      return res.status(400).json({ error: 'Maximum 3 créneaux proposés par réponse.' })
-    }
-
     if (proposedSlotIds.some(slotId => !isValidObjectId(slotId))) {
       return res.status(400).json({ error: 'proposedSlotIds contient un identifiant invalide.' })
     }
@@ -2042,7 +2119,7 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
 
     if (mode === 'proposal' && proposedSlotIds.length === 0 && !hasSpecialRequest) {
       return res.status(400).json({
-        error: 'Choisissez jusqu à 3 créneaux ou saisissez une demande spéciale.'
+        error: 'Choisissez au moins un créneau ou saisissez une demande spéciale.'
       })
     }
 
@@ -2055,6 +2132,19 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
 
     if (!isVoteScopeCompatibleWithTpi(req, tpi, tpi.year)) {
       return rejectVoteScope(res, 'TPI hors scope du lien de vote.')
+    }
+
+    const voteSettings = await getVoteSettingsForYear(tpi.year)
+    const maxVoteProposals = voteSettings.maxProposalsPerTpi
+
+    if (proposedSlotIds.length > maxVoteProposals) {
+      return res.status(400).json({
+        error: buildMaxVoteProposalsMessage(maxVoteProposals, 'par réponse')
+      })
+    }
+
+    if (hasSpecialRequest && voteSettings.allowSpecialRequest === false) {
+      return res.status(400).json({ error: 'La demande spéciale est désactivée pour cette année.' })
     }
 
     const existingVotes = await Vote.find({
@@ -2229,6 +2319,7 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
     }
     
     const results = []
+    const voteSettingsByYear = new Map()
     let firstSuccessfulVoteId = null
     let firstSuccessfulDecision = null
     
@@ -2252,20 +2343,21 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
       }
 
       if (voteData.decision === 'preferred') {
+        const voteSettings = await getVoteSettingsForYear(vote.tpiPlanning?.year, voteSettingsByYear)
         const preferredCount = await getPreferredVoteCountForVoter({
           tpiPlanningId: vote.tpiPlanning._id || vote.tpiPlanning,
           voterId: voterObjectId,
           excludeVoteId: vote._id
         })
 
-      if (preferredCount + 1 > 3) {
-        results.push({
-          voteId: voteData.voteId,
-          success: false,
-          error: 'Maximum 3 créneaux alternatifs par TPI et par votant.'
-        })
-        continue
-      }
+        if (preferredCount + 1 > voteSettings.maxProposalsPerTpi) {
+          results.push({
+            voteId: voteData.voteId,
+            success: false,
+            error: buildMaxVoteProposalsMessage(voteSettings.maxProposalsPerTpi)
+          })
+          continue
+        }
       }
       
       vote.decision = voteData.decision
@@ -2466,14 +2558,15 @@ router.post('/votes/:id', authMiddleware, requireObjectIdParam('id', 'Identifian
     }
 
     if (decision === 'preferred') {
+      const voteSettings = await getVoteSettingsForYear(vote.tpiPlanning?.year)
       const preferredCount = await getPreferredVoteCountForVoter({
         tpiPlanningId: vote.tpiPlanning._id || vote.tpiPlanning,
         voterId: voterObjectId,
         excludeVoteId: vote._id
       })
 
-      if (preferredCount + 1 > 3) {
-        return res.status(400).json({ error: 'Maximum 3 créneaux alternatifs par TPI et par votant.' })
+      if (preferredCount + 1 > voteSettings.maxProposalsPerTpi) {
+        return res.status(400).json({ error: buildMaxVoteProposalsMessage(voteSettings.maxProposalsPerTpi) })
       }
     }
     
@@ -2568,7 +2661,8 @@ router.post('/assign/:slotId', authMiddleware, requireObjectIdParam('slotId', 'I
         .populate('candidat expert1 expert2 chefProjet')
       
       const recipients = [tpi.candidat, tpi.expert1, tpi.expert2, tpi.chefProjet]
-      await emailService.sendSoutenanceConfirmations(tpi, result.slot, recipients)
+      const emailSettings = await getSharedEmailSettingsIfAvailable()
+      await emailService.sendSoutenanceConfirmations(tpi, result.slot, recipients, { emailSettings })
     }
     
     res.json(result)
@@ -2596,6 +2690,7 @@ router.post('/tpi/:id/resend-votes', authMiddleware, requireObjectIdParam('id', 
     }
     
     const baseUrl = `${req.protocol}://${req.get('host')}/api/planning`
+    const accessLinkSettings = await getAccessLinkSettingsForYear(tpi.year)
     
     // Générer les magic links pour chaque votant
     const voters = [
@@ -2608,7 +2703,9 @@ router.post('/tpi/:id/resend-votes', authMiddleware, requireObjectIdParam('id', 
     
     for (const voter of voters) {
       if (voter.person) {
-        const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl)
+        const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl, {
+          expiresInHours: accessLinkSettings.voteLinkValidityHours
+        })
         magicLinks.push({
           ...link,
           email: voter.person.email,
@@ -2626,7 +2723,11 @@ router.post('/tpi/:id/resend-votes', authMiddleware, requireObjectIdParam('id', 
     }
     
     // Envoyer les emails
-    await emailService.sendVoteRequests(tpi, magicLinks)
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
+    await emailService.sendVoteRequests(tpi, magicLinks, {
+      emailSettings,
+      expiresInHours: accessLinkSettings.voteLinkValidityHours
+    })
     
     res.json({ 
       success: true, 

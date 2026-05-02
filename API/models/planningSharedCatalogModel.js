@@ -177,6 +177,16 @@ const emailSettingsSchema = new mongoose.Schema(
   { _id: false }
 )
 
+const publicationSettingsSchema = new mongoose.Schema(
+  {
+    publicBaseUrl: {
+      type: String,
+      default: 'https://tpi26.ch'
+    }
+  },
+  { _id: false }
+)
+
 const siteCatalogSchema = new mongoose.Schema(
   {
     id: {
@@ -246,6 +256,10 @@ const planningSharedCatalogSchema = new mongoose.Schema({
     type: emailSettingsSchema,
     default: () => ({})
   },
+  publicationSettings: {
+    type: publicationSettingsSchema,
+    default: () => ({})
+  },
   sites: {
     type: [siteCatalogSchema],
     default: []
@@ -260,9 +274,8 @@ const planningSharedCatalogSchema = new mongoose.Schema({
   }
 })
 
-planningSharedCatalogSchema.pre('save', function(next) {
+planningSharedCatalogSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const PlanningSharedCatalog = mongoose.models.PlanningSharedCatalog || mongoose.model(

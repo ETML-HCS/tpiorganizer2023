@@ -15,7 +15,22 @@ import {
 } from '../shared/InlineIcons'
 import './VotingPanel.css'
 
-const MAX_PROPOSALS_PER_TPI = 3
+const DEFAULT_MAX_PROPOSALS_PER_TPI = 3
+
+function normalizeVoteSettings(group = {}) {
+  const source = group?.voteSettings && typeof group.voteSettings === 'object'
+    ? group.voteSettings
+    : {}
+  const rawMax = source.maxProposalsPerTpi ?? source.maxVoteProposals
+  const maxProposals = Number.parseInt(String(rawMax), 10)
+
+  return {
+    maxProposalsPerTpi: Number.isInteger(maxProposals) && maxProposals > 0
+      ? maxProposals
+      : DEFAULT_MAX_PROPOSALS_PER_TPI,
+    allowSpecialRequest: source.allowSpecialRequest !== false && source.allowSpecialVoteRequest !== false
+  }
+}
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -144,7 +159,7 @@ function normalizeProposalOptions(group) {
     .filter((entry) => entry.slotId)
 }
 
-function getModeSummary(state) {
+function getModeSummary(state, maxProposals = DEFAULT_MAX_PROPOSALS_PER_TPI) {
   if (state?.mode === 'ok') {
     return 'OK prêt'
   }
@@ -152,7 +167,7 @@ function getModeSummary(state) {
   if (state?.mode === 'proposal') {
     const proposalCount = Array.isArray(state.selectedSlotIds) ? state.selectedSlotIds.length : 0
     if (proposalCount > 0) {
-      return `${proposalCount}/${MAX_PROPOSALS_PER_TPI} propositions`
+      return `${proposalCount}/${maxProposals} propositions`
     }
 
     if (state.specialEnabled) {
@@ -316,7 +331,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
     setSubmitError(null)
   }, [updateResponseState])
 
-  const toggleProposalSlot = useCallback((tpiId, slotId) => {
+  const toggleProposalSlot = useCallback((tpiId, slotId, maxProposals = DEFAULT_MAX_PROPOSALS_PER_TPI) => {
     updateResponseState(tpiId, (currentState) => {
       const currentSelection = Array.isArray(currentState.selectedSlotIds)
         ? currentState.selectedSlotIds
@@ -331,8 +346,8 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
         }
       }
 
-      if (currentSelection.length >= MAX_PROPOSALS_PER_TPI) {
-        setSubmitError(`Maximum ${MAX_PROPOSALS_PER_TPI} créneaux proposés par TPI.`)
+      if (currentSelection.length >= maxProposals) {
+        setSubmitError(`Maximum ${maxProposals} créneau${maxProposals > 1 ? 'x' : ''} proposé${maxProposals > 1 ? 's' : ''} par TPI.`)
         return currentState
       }
 
@@ -362,6 +377,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
   const handleSubmitVote = useCallback(async (group) => {
     const tpiId = String(group?.tpi?._id || '')
     const state = responses[tpiId] || createDefaultResponseState()
+    const voteSettings = normalizeVoteSettings(group)
     const fixedVoteId = group?.fixedVoteId
       || (group?.fixedSlot?.voteId ? String(group.fixedSlot.voteId) : '')
 
@@ -377,6 +393,16 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
 
     if (state.mode === 'proposal' && state.selectedSlotIds.length === 0 && !state.specialEnabled) {
       setSubmitError('Ajoutez au moins un créneau ou activez la demande spéciale.')
+      return
+    }
+
+    if (state.mode === 'proposal' && state.selectedSlotIds.length > voteSettings.maxProposalsPerTpi) {
+      setSubmitError(`Maximum ${voteSettings.maxProposalsPerTpi} créneau${voteSettings.maxProposalsPerTpi > 1 ? 'x' : ''} proposé${voteSettings.maxProposalsPerTpi > 1 ? 's' : ''} par TPI.`)
+      return
+    }
+
+    if (state.specialEnabled && !voteSettings.allowSpecialRequest) {
+      setSubmitError('La demande spéciale est désactivée pour cette année.')
       return
     }
 
@@ -424,12 +450,15 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
   const votingSummary = useMemo(() => {
     return pendingVotes.map((group) => {
       const tpiId = String(group?.tpi?._id || '')
+      const voteSettings = normalizeVoteSettings(group)
       return {
         tpiId,
-        summary: getModeSummary(responses[tpiId])
+        summary: getModeSummary(responses[tpiId], voteSettings.maxProposalsPerTpi)
       }
     })
   }, [pendingVotes, responses])
+
+  const headerVoteSettings = normalizeVoteSettings(pendingVotes[0])
 
   if (pendingVotes.length === 0) {
     return (
@@ -456,8 +485,8 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
         </h2>
         <p
           className="panel-description hover-detail"
-          data-tooltip={`Pour chaque TPI, choisissez OK si la date fixée convient, ou Proposition pour suggérer jusqu'à ${MAX_PROPOSALS_PER_TPI} demi-journées avec une demande spéciale si nécessaire.`}
-          title={`Pour chaque TPI, choisissez OK si la date fixée convient, ou Proposition pour suggérer jusqu'à ${MAX_PROPOSALS_PER_TPI} demi-journées avec une demande spéciale si nécessaire.`}
+          data-tooltip={`Pour chaque TPI, choisissez OK si la date fixée convient, ou Proposition pour suggérer jusqu'à ${headerVoteSettings.maxProposalsPerTpi} demi-journées${headerVoteSettings.allowSpecialRequest ? ' avec une demande spéciale si nécessaire' : ''}.`}
+          title={`Pour chaque TPI, choisissez OK si la date fixée convient, ou Proposition pour suggérer jusqu'à ${headerVoteSettings.maxProposalsPerTpi} demi-journées${headerVoteSettings.allowSpecialRequest ? ' avec une demande spéciale si nécessaire' : ''}.`}
         >
           <strong>OK</strong> ou <strong>Proposition</strong>.
         </p>
@@ -490,6 +519,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
           const proposalOptions = normalizeProposalOptions(group)
           const proposalContextSummary = buildProposalContextSummary(group)
           const proposalContextTitle = buildProposalContextTitle(group)
+          const voteSettings = normalizeVoteSettings(group)
           const state = responses[tpiId] || {
             mode: '',
             selectedSlotIds: [],
@@ -600,8 +630,8 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                       <div className="slot-group-header alternative-group">
                         <div>
                           <h3>Propositions</h3>
-                          <p title={`Choisissez jusqu'à ${MAX_PROPOSALS_PER_TPI} demi-journées. Les propositions sélectionnées seront transmises à l'administration.`}>
-                            Max {MAX_PROPOSALS_PER_TPI} demi-journées.
+                          <p title={`Choisissez jusqu'à ${voteSettings.maxProposalsPerTpi} demi-journées. Les propositions sélectionnées seront transmises à l'administration.`}>
+                            Max {voteSettings.maxProposalsPerTpi} demi-journées.
                           </p>
                           {proposalContextSummary ? (
                             <p
@@ -615,10 +645,10 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                         </div>
                         <span
                           className="slot-group-badge alternatives hover-detail"
-                          data-tooltip={`${state.selectedSlotIds.length} proposition${state.selectedSlotIds.length > 1 ? 's' : ''} sélectionnée${state.selectedSlotIds.length > 1 ? 's' : ''} sur ${MAX_PROPOSALS_PER_TPI} possibles.`}
-                          title={`${state.selectedSlotIds.length} proposition${state.selectedSlotIds.length > 1 ? 's' : ''} sélectionnée${state.selectedSlotIds.length > 1 ? 's' : ''} sur ${MAX_PROPOSALS_PER_TPI} possibles.`}
+                          data-tooltip={`${state.selectedSlotIds.length} proposition${state.selectedSlotIds.length > 1 ? 's' : ''} sélectionnée${state.selectedSlotIds.length > 1 ? 's' : ''} sur ${voteSettings.maxProposalsPerTpi} possibles.`}
+                          title={`${state.selectedSlotIds.length} proposition${state.selectedSlotIds.length > 1 ? 's' : ''} sélectionnée${state.selectedSlotIds.length > 1 ? 's' : ''} sur ${voteSettings.maxProposalsPerTpi} possibles.`}
                         >
-                          {state.selectedSlotIds.length}/{MAX_PROPOSALS_PER_TPI}
+                          {state.selectedSlotIds.length}/{voteSettings.maxProposalsPerTpi}
                         </span>
                       </div>
 
@@ -632,7 +662,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                               type="button"
                               key={slotId || `${tpiId}-${index}`}
                               className={`slot-vote-card alternative proposal-select-card ${isSelected ? 'preferred' : ''}`}
-                              onClick={() => toggleProposalSlot(tpiId, slotId)}
+                              onClick={() => toggleProposalSlot(tpiId, slotId, voteSettings.maxProposalsPerTpi)}
                               title={getProposalCardTitle(option, isSelected)}
                             >
                               <div className="slot-card-head">
@@ -686,58 +716,60 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                         )}
                       </div>
 
-                      <div className="special-request-box">
-                        <div className="special-request-toggle-row">
-                          <span
-                            className="special-request-toggle-label hover-detail"
-                            data-tooltip="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
-                            title="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
-                          >
-                            Demande spéciale
-                          </span>
-                          <BinaryToggle
-                            value={Boolean(state.specialEnabled)}
-                            onChange={(nextValue) => toggleSpecialRequest(tpiId, nextValue)}
-                            name={`special-request-${tpiId}`}
-                            className="special-request-toggle"
-                            ariaLabel="Activation de la demande spéciale"
-                            iconOnly
-                            trueLabel="Ajouter une demande spéciale"
-                            falseLabel="Ne pas ajouter de demande spéciale"
-                            trueIcon={AlertIcon}
-                            falseIcon={CloseIcon}
-                          />
-                        </div>
-                        <p
-                          className="special-request-help hover-detail"
-                          data-tooltip="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
-                          title="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
-                        >
-                          Hors planning ou contrainte.
-                        </p>
-
-                        {state.specialEnabled && (
-                          <div className="special-request-fields">
-                            <label className="special-request-field">
-                              <span>Date demandée</span>
-                              <input
-                                type="date"
-                                value={state.specialDate}
-                                onChange={(event) => updateSpecialField(tpiId, 'specialDate', event.target.value)}
-                              />
-                            </label>
-                            <label className="special-request-field special-request-field-wide">
-                              <span>Raison / contexte</span>
-                              <textarea
-                                rows={3}
-                                value={state.specialReason}
-                                onChange={(event) => updateSpecialField(tpiId, 'specialReason', event.target.value)}
-                                placeholder="Expliquez la contrainte, le contexte ou la demande particulière..."
-                              />
-                            </label>
+                      {voteSettings.allowSpecialRequest ? (
+                        <div className="special-request-box">
+                          <div className="special-request-toggle-row">
+                            <span
+                              className="special-request-toggle-label hover-detail"
+                              data-tooltip="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
+                              title="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
+                            >
+                              Demande spéciale
+                            </span>
+                            <BinaryToggle
+                              value={Boolean(state.specialEnabled)}
+                              onChange={(nextValue) => toggleSpecialRequest(tpiId, nextValue)}
+                              name={`special-request-${tpiId}`}
+                              className="special-request-toggle"
+                              ariaLabel="Activation de la demande spéciale"
+                              iconOnly
+                              trueLabel="Ajouter une demande spéciale"
+                              falseLabel="Ne pas ajouter de demande spéciale"
+                              trueIcon={AlertIcon}
+                              falseIcon={CloseIcon}
+                            />
                           </div>
-                        )}
-                      </div>
+                          <p
+                            className="special-request-help hover-detail"
+                            data-tooltip="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
+                            title="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
+                          >
+                            Hors planning ou contrainte.
+                          </p>
+
+                          {state.specialEnabled && (
+                            <div className="special-request-fields">
+                              <label className="special-request-field">
+                                <span>Date demandée</span>
+                                <input
+                                  type="date"
+                                  value={state.specialDate}
+                                  onChange={(event) => updateSpecialField(tpiId, 'specialDate', event.target.value)}
+                                />
+                              </label>
+                              <label className="special-request-field special-request-field-wide">
+                                <span>Raison / contexte</span>
+                                <textarea
+                                  rows={3}
+                                  value={state.specialReason}
+                                  onChange={(event) => updateSpecialField(tpiId, 'specialReason', event.target.value)}
+                                  placeholder="Expliquez la contrainte, le contexte ou la demande particulière..."
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
                     </>
                   )}
 

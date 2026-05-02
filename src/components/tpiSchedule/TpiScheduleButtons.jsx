@@ -35,6 +35,19 @@ import {
   normalizeSoutenanceDateEntries
 } from "./soutenanceDateUtils"
 
+const formatPublicationTargetLabel = (url) => {
+  const rawUrl = typeof url === "string" ? url.trim() : ""
+  if (!rawUrl) {
+    return "le site publication"
+  }
+
+  try {
+    return new URL(rawUrl).host || rawUrl
+  } catch (error) {
+    return rawUrl.replace(/^https?:\/\//i, "").replace(/\/+$/, "") || "le site publication"
+  }
+}
+
 const TpiScheduleButtons = ({
   onToggleEditing,
   onDeleteAllRooms = null,
@@ -212,9 +225,13 @@ const TpiScheduleButtons = ({
     ? "Génération..."
     : "Générer page statique"
   const previewStaticPublicationLabel = "Prévisualiser"
+  const staticPublicationPublicUrl = typeof staticPublicationInfo?.publicUrl === "string"
+    ? staticPublicationInfo.publicUrl
+    : ""
+  const staticPublicationTargetLabel = formatPublicationTargetLabel(staticPublicationPublicUrl)
   const publishStaticPublicationLabel = isActionRunning("staticPublish")
     ? "Publication FTP..."
-    : "Publier sur tpi26.ch"
+    : `Publier sur ${staticPublicationTargetLabel}`
   const workflowActionLabels = {
     autoPlan: "Automatisation",
     validate: "Vérification",
@@ -319,9 +336,6 @@ const TpiScheduleButtons = ({
   const staticPublicationLastPublishStatus = String(staticPublicationInfo?.lastPublishStatus || "")
   const staticPublicationLastPublishMessage = typeof staticPublicationInfo?.lastPublishMessage === "string"
     ? staticPublicationInfo.lastPublishMessage.trim()
-    : ""
-  const staticPublicationPublicUrl = typeof staticPublicationInfo?.publicUrl === "string"
-    ? staticPublicationInfo.publicUrl
     : ""
   const canPreviewStaticPublication = staticPublicationAvailable && typeof onPreviewStaticPublication === "function"
   const canPublishStaticPublication = staticPublicationAvailable && typeof onPublishStaticPublication === "function"
@@ -1347,7 +1361,7 @@ const TpiScheduleButtons = ({
                     <strong>Page publique statique</strong>
                     <p>
                       Génère une page HTML autonome pour les soutenances, vérifie le rendu localement,
-                      puis publie le dossier prêt à consulter sur tpi26.ch par FTP.
+                      puis publie le dossier prêt à consulter sur {staticPublicationTargetLabel} par FTP.
                     </p>
                     <div
                       className={`planning-static-publication-status planning-static-publication-status--${staticPublicationStatusTone}`}
@@ -1403,7 +1417,7 @@ const TpiScheduleButtons = ({
                       disabled={workflowActionLoading || !canPublishStaticPublication}
                       title={
                         staticPublicationAvailable
-                          ? "Publier le dossier généré sur tpi26.ch via FTP."
+                          ? `Publier le dossier généré sur ${staticPublicationTargetLabel} via FTP.`
                           : "Génère la page statique avant la publication FTP."
                       }
                       aria-label={publishStaticPublicationLabel}

@@ -2,6 +2,7 @@ const crypto = require('crypto')
 
 const Person = require('../models/personModel')
 const { MagicLink } = require('../models/magicLinkModel')
+const planningConfigService = require('./planningConfigService')
 const { buildDefensePublicPath } = require('../utils/publicRoutes')
 
 const DEFAULT_EXPIRY_HOURS = Object.freeze({
@@ -49,6 +50,50 @@ function getMaxUses(type) {
   }
 
   return DEFAULT_MAX_USES[type] || 1
+}
+
+function buildEnvAccessLinkFallback() {
+  return {
+    voteLinkValidityHours: getExpiryHours('vote'),
+    voteLinkMaxUses: getMaxUses('vote'),
+    soutenanceLinkValidityHours: getExpiryHours('soutenance'),
+    soutenanceLinkMaxUses: getMaxUses('soutenance')
+  }
+}
+
+async function getAccessLinkSettingsForYear(year) {
+  const planningConfig = await planningConfigService.getPlanningConfigIfAvailable(year)
+  return planningConfigService.normalizeAccessLinkSettings(
+    planningConfig?.accessLinkSettings,
+    buildEnvAccessLinkFallback()
+  )
+}
+
+async function resolveMagicLinkPolicy({
+  type,
+  year,
+  maxUses = null,
+  expiresInHours = null,
+  accessLinkSettings = null
+}) {
+  const settings = accessLinkSettings
+    ? planningConfigService.normalizeAccessLinkSettings(accessLinkSettings, buildEnvAccessLinkFallback())
+    : await getAccessLinkSettingsForYear(year)
+  const configuredExpiryHours = type === 'vote'
+    ? settings.voteLinkValidityHours
+    : settings.soutenanceLinkValidityHours
+  const configuredMaxUses = type === 'vote'
+    ? settings.voteLinkMaxUses
+    : settings.soutenanceLinkMaxUses
+
+  return {
+    expiresInHours: Number.isInteger(expiresInHours) && expiresInHours > 0
+      ? expiresInHours
+      : configuredExpiryHours,
+    maxUses: Number.isInteger(maxUses) && maxUses > 0
+      ? maxUses
+      : configuredMaxUses
+  }
 }
 
 function hashToken(token) {
@@ -115,6 +160,7 @@ async function createTypedMagicLink({
   scope = {},
   maxUses = null,
   expiresInHours = null,
+  accessLinkSettings = null,
   persistToken = false
 }) {
   if (!['vote', 'soutenance'].includes(type)) {
@@ -138,13 +184,16 @@ async function createTypedMagicLink({
   const token = crypto.randomBytes(32).toString('hex')
   const tokenHash = hashToken(token)
   const now = new Date()
-  const hours = Number.isInteger(expiresInHours) && expiresInHours > 0
-    ? expiresInHours
-    : getExpiryHours(type)
+  const policy = await resolveMagicLinkPolicy({
+    type,
+    year,
+    maxUses,
+    expiresInHours,
+    accessLinkSettings
+  })
+  const hours = policy.expiresInHours
   const expiry = new Date(now.getTime() + hours * 60 * 60 * 1000)
-  const allowedUses = Number.isInteger(maxUses) && maxUses > 0
-    ? maxUses
-    : getMaxUses(type)
+  const allowedUses = policy.maxUses
 
   const created = await MagicLink.create({
     tokenHash,
@@ -180,6 +229,7 @@ async function createVoteMagicLink({
   baseUrl,
   redirectPath = null,
   recipientEmail = null,
+  accessLinkSettings = null,
   persistToken = false
 }) {
   return await createTypedMagicLink({
@@ -191,6 +241,7 @@ async function createVoteMagicLink({
     recipientEmail,
     role,
     scope,
+    accessLinkSettings,
     persistToken
   })
 }
@@ -202,6 +253,7 @@ async function createSoutenanceMagicLink({
   baseUrl,
   redirectPath = null,
   recipientEmail = null,
+  accessLinkSettings = null,
   persistToken = false
 }) {
   return await createTypedMagicLink({
@@ -213,6 +265,7 @@ async function createSoutenanceMagicLink({
     recipientEmail,
     role: null,
     scope,
+    accessLinkSettings,
     persistToken
   })
 }
@@ -348,6 +401,74 @@ async function findReusableMagicLink({
   }
 }
 
+async function listSoutenancePublicationAccessLinkStats({
+  year,
+  sources = []
+} = {}) {
+  const normalizedYear = Number.parseInt(year, 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour statistiques magic links.')
+  }
+
+  const query = {
+    year: normalizedYear,
+    type: 'soutenance',
+    revokedAt: null,
+    expiresAt: { $gt: new Date() },
+    'scope.kind': 'published_soutenances'
+  }
+
+  const normalizedSources = normalizeSourceFilters(sources)
+  if (normalizedSources.length > 0) {
+    query['scope.source'] = { $in: normalizedSources }
+  }
+
+  const rows = await MagicLink.aggregate([
+    { $match: query },
+    {
+      $match: {
+        $or: [
+          { maxUses: { $lte: 0 } },
+          { $expr: { $lt: ['$usageCount', '$maxUses'] } }
+        ]
+      }
+    },
+    {
+      $group: {
+        _id: '$scope.publicationVersion',
+        generatedLinkCount: { $sum: 1 },
+        recoverableGeneratedLinkCount: {
+          $sum: {
+            $cond: [
+              {
+                $gt: [
+                  { $strLenCP: { $ifNull: ['$rawToken', ''] } },
+                  0
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        earliestExpiry: { $min: '$expiresAt' },
+        latestExpiry: { $max: '$expiresAt' }
+      }
+    },
+    { $sort: { _id: -1 } }
+  ])
+
+  return (rows || [])
+    .map((row) => ({
+      publicationVersion: Number.parseInt(row?._id, 10),
+      generatedLinkCount: Number(row?.generatedLinkCount || 0),
+      recoverableGeneratedLinkCount: Number(row?.recoverableGeneratedLinkCount || 0),
+      earliestExpiry: row?.earliestExpiry || null,
+      latestExpiry: row?.latestExpiry || null
+    }))
+    .filter((row) => Number.isInteger(row.publicationVersion) && row.publicationVersion > 0)
+}
+
 function isTokenLooksValid(rawToken) {
   return (
     typeof rawToken === 'string' &&
@@ -411,11 +532,13 @@ async function resolveMagicLink(rawToken) {
 module.exports = {
   DEFAULT_EXPIRY_HOURS,
   DEFAULT_MAX_USES,
+  buildEnvAccessLinkFallback,
   createTypedMagicLink,
   createVoteMagicLink,
   createSoutenanceMagicLink,
   revokeActiveMagicLinks,
   findReusableMagicLink,
+  listSoutenancePublicationAccessLinkStats,
   resolveMagicLink,
   isTokenLooksValid
 }

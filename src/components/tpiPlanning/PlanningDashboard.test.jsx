@@ -231,6 +231,29 @@ describe('PlanningDashboard', () => {
     jest.spyOn(planningServices.slotService, 'getCalendar').mockResolvedValue([])
     jest.spyOn(planningServices.workflowPlanningService, 'getYearState').mockResolvedValue({ state: 'planning' })
     jest.spyOn(planningServices.workflowPlanningService, 'getActiveSnapshot').mockResolvedValue(null)
+    jest.spyOn(planningServices.workflowPlanningService, 'getStaticVotePublicationStatus').mockResolvedValue({
+      available: false,
+      publicUrl: 'https://tpi26.ch/votes-2026/',
+      syncSecretConfigured: false
+    })
+    jest.spyOn(planningServices.workflowPlanningService, 'generateStaticVotePublication').mockResolvedValue({
+      success: true,
+      available: true,
+      groupCount: 1,
+      accessLinkCount: 1,
+      syncSecretConfigured: true
+    })
+    jest.spyOn(planningServices.workflowPlanningService, 'publishStaticVotePublication').mockResolvedValue({
+      success: true,
+      available: true,
+      publicUrl: 'https://tpi26.ch/votes-2026/'
+    })
+    jest.spyOn(planningServices.workflowPlanningService, 'syncStaticVotePublication').mockResolvedValue({
+      success: true,
+      receivedCount: 1,
+      importedCount: 1,
+      failedCount: 0
+    })
     jest.spyOn(planningServices.workflowPlanningService, 'startVotesWithoutEmails').mockResolvedValue({
       success: true,
       workflowState: 'voting_open',

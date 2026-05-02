@@ -4,6 +4,7 @@
  */
 
 const nodemailer = require('nodemailer')
+const { normalizeEmailSettings } = require('./planningCatalogService')
 
 // Configuration du transporteur (à adapter selon l'environnement)
 const createTransporter = () => {
@@ -34,13 +35,109 @@ const createTransporter = () => {
 
 const transporter = createTransporter()
 
+function sanitizeHeaderText(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).replace(/[\r\n]+/g, ' ').trim()
+}
+
+function sanitizeEmailAddress(value) {
+  const email = sanitizeHeaderText(value).replace(/,/g, '').toLowerCase()
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return ''
+  }
+
+  return email
+}
+
+function quoteDisplayName(value) {
+  const displayName = sanitizeHeaderText(value) || 'TPI Organizer'
+  return `"${displayName.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function buildConfiguredSender(emailSettings = {}) {
+  const settings = normalizeEmailSettings(emailSettings)
+  const senderEmail = sanitizeEmailAddress(settings.senderEmail)
+
+  if (!senderEmail) {
+    return process.env.SMTP_FROM || '"TPI Organizer" <noreply@tpi-organizer.ch>'
+  }
+
+  return `${quoteDisplayName(settings.senderName)} <${senderEmail}>`
+}
+
+function buildMailOptions({ to, emailContent, emailSettings = {} }) {
+  const settings = normalizeEmailSettings(emailSettings)
+  const replyToEmail = sanitizeEmailAddress(settings.replyToEmail)
+  const mailOptions = {
+    from: buildConfiguredSender(settings),
+    to,
+    subject: emailContent.subject,
+    text: emailContent.text,
+    html: emailContent.html
+  }
+
+  if (replyToEmail) {
+    mailOptions.replyTo = replyToEmail
+  }
+
+  return mailOptions
+}
+
+function getConfiguredBrandName(emailSettings = {}) {
+  const settings = normalizeEmailSettings(emailSettings)
+  return sanitizeHeaderText(settings.senderName) || 'TPI Organizer'
+}
+
+function getConfiguredContactEmail(emailSettings = {}) {
+  const settings = normalizeEmailSettings(emailSettings)
+  return sanitizeEmailAddress(settings.replyToEmail || settings.senderEmail)
+}
+
+function formatLinkValidityLabel(hours) {
+  const parsed = Number.parseInt(String(hours), 10)
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return '24 heures'
+  }
+
+  if (parsed % 24 === 0) {
+    const days = parsed / 24
+    return `${days} jour${days > 1 ? 's' : ''}`
+  }
+
+  return `${parsed} heure${parsed > 1 ? 's' : ''}`
+}
+
+function buildTemplateData(data = {}, options = {}) {
+  const emailSettings = options.emailSettings || data?.emailSettings || {}
+  const brandName = sanitizeHeaderText(data?.brandName) || getConfiguredBrandName(emailSettings)
+  const contactEmail = sanitizeEmailAddress(data?.contactEmail) || getConfiguredContactEmail(emailSettings)
+
+  return {
+    ...(data || {}),
+    brandName,
+    contactEmail,
+    emailFooterSignature: data?.emailFooterSignature || `ETML / CFPV - ${brandName}`,
+    autoReplyNotice: data?.autoReplyNotice || (
+      contactEmail
+        ? `Pour toute question, contactez ${contactEmail}.`
+        : 'Ce message est automatique, merci de ne pas y répondre.'
+    ),
+    linkValidityLabel: data?.linkValidityLabel || options.linkValidityLabel || formatLinkValidityLabel(options.expiresInHours)
+  }
+}
+
 // Templates d'emails
 const emailTemplates = {
   /**
    * Email avec magic link pour voter
    */
   voteRequest: (data) => ({
-    subject: `[TPI Organizer] Votez pour les créneaux de défense - ${data.candidateName}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Votez pour les créneaux de défense - ${data.candidateName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -59,7 +156,7 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎓 TPI Organizer</h1>
+            <h1>🎓 ${data.brandName || 'TPI Organizer'}</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
@@ -87,18 +184,18 @@ const emailTemplates = {
               <a href="${data.magicLinkUrl}" class="button">Voter maintenant</a>
             </p>
             
-            <p><small>Ce lien est valide pendant 24 heures. Si vous ne pouvez pas voter avant la date limite, contactez l'administration.</small></p>
+            <p><small>Ce lien est valide pendant ${data.linkValidityLabel || '24 heures'}. Si vous ne pouvez pas voter avant la date limite, contactez l'administration.</small></p>
           </div>
           <div class="footer">
-            <p>ETML / CFPV - TPI Organizer</p>
-            <p>Ce message est automatique, merci de ne pas y répondre.</p>
+            <p>${data.emailFooterSignature || 'ETML / CFPV - TPI Organizer'}</p>
+            <p>${data.autoReplyNotice || 'Ce message est automatique, merci de ne pas y répondre.'}</p>
           </div>
         </div>
       </body>
       </html>
     `,
     text: `
-      TPI Organizer - Demande de vote
+      ${data.brandName || 'TPI Organizer'} - Demande de vote
       
       Bonjour ${data.recipientName},
       
@@ -112,7 +209,7 @@ const emailTemplates = {
       
       Cliquez sur ce lien pour voter: ${data.magicLinkUrl}
       
-      Ce lien est valide pendant 24 heures.
+      Ce lien est valide pendant ${data.linkValidityLabel || '24 heures'}.
     `
   }),
 
@@ -120,7 +217,7 @@ const emailTemplates = {
    * Email d'acces a la vue finale des défenses
    */
   soutenanceAccess: (data) => ({
-    subject: `[TPI Organizer] Acces Défenses ${data.year}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Acces Défenses ${data.year}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -167,7 +264,7 @@ const emailTemplates = {
    * Email avec un magic link unique pour tous les votes d'une partie prenante.
    */
   voteRequestDigest: (data) => ({
-    subject: `[TPI Organizer] Votes de défense à traiter - ${data.year}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Votes de défense à traiter - ${data.year}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -186,7 +283,7 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎓 TPI Organizer</h1>
+            <h1>🎓 ${data.brandName || 'TPI Organizer'}</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
@@ -216,7 +313,7 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      TPI Organizer - Votes de défense
+      ${data.brandName || 'TPI Organizer'} - Votes de défense
 
       Bonjour ${data.recipientName},
 
@@ -237,7 +334,7 @@ const emailTemplates = {
    * Email de rappel de vote
    */
   voteReminder: (data) => ({
-    subject: `[RAPPEL] Votez pour les créneaux - ${data.candidateName}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Rappel vote - ${data.candidateName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -254,7 +351,7 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>⚠️ Rappel - Vote en attente</h1>
+            <h1>⚠️ ${data.brandName || 'TPI Organizer'} - Vote en attente</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
@@ -272,7 +369,7 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      RAPPEL - Vote en attente
+      ${data.brandName || 'TPI Organizer'} - Rappel vote
       
       Bonjour ${data.recipientName},
       
@@ -287,7 +384,7 @@ const emailTemplates = {
    * Rappel avec un lien unique pour tous les votes encore attendus.
    */
   voteReminderDigest: (data) => ({
-    subject: `[RAPPEL] Votes TPI en attente - ${data.year}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Rappel votes TPI - ${data.year}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -305,7 +402,7 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>⚠️ Rappel - Votes en attente</h1>
+            <h1>⚠️ ${data.brandName || 'TPI Organizer'} - Votes en attente</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
@@ -326,7 +423,7 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      RAPPEL - Votes en attente
+      ${data.brandName || 'TPI Organizer'} - Rappel votes
 
       Bonjour ${data.recipientName},
 
@@ -469,16 +566,14 @@ const emailTemplates = {
 /**
  * Envoie un email
  */
-async function sendEmail(to, template, data) {
-  const emailContent = emailTemplates[template](data)
-  
-  const mailOptions = {
-    from: process.env.SMTP_FROM || '"TPI Organizer" <noreply@tpi-organizer.ch>',
+async function sendEmail(to, template, data, options = {}) {
+  const templateData = buildTemplateData(data, options)
+  const emailContent = emailTemplates[template](templateData)
+  const mailOptions = buildMailOptions({
     to,
-    subject: emailContent.subject,
-    text: emailContent.text,
-    html: emailContent.html
-  }
+    emailContent,
+    emailSettings: options.emailSettings || templateData?.emailSettings
+  })
   
   try {
     const info = await transporter.sendMail(mailOptions)
@@ -492,7 +587,7 @@ async function sendEmail(to, template, data) {
 /**
  * Envoie les demandes de vote à tous les votants d'un TPI
  */
-async function sendVoteRequests(tpi, magicLinks) {
+async function sendVoteRequests(tpi, magicLinks, options = {}) {
   const results = []
   
   for (const link of magicLinks) {
@@ -506,7 +601,7 @@ async function sendVoteRequests(tpi, magicLinks) {
       slots: link.slots,
       deadline: tpi.votingSession.deadline.toLocaleDateString('fr-CH'),
       magicLinkUrl: link.url
-    })
+    }, options)
     
     results.push({ email: link.email, ...result })
   }
@@ -530,7 +625,7 @@ async function sendVoteDigestRequests(targets, options = {}) {
       tpis: target.tpis || [],
       deadline: target.deadline || '',
       magicLinkUrl: target.url
-    })
+    }, options)
 
     results.push({ email: target.email, ...result })
   }
@@ -545,7 +640,7 @@ function canReceiveAutomaticEmail(recipient) {
 /**
  * Envoie les confirmations de défense
  */
-async function sendSoutenanceConfirmations(tpi, slot, recipients) {
+async function sendSoutenanceConfirmations(tpi, slot, recipients, options = {}) {
   const results = []
   
   for (const recipient of recipients) {
@@ -569,7 +664,7 @@ async function sendSoutenanceConfirmations(tpi, slot, recipients) {
       expert2: expert2Name,
       chefProjet: chefProjetName,
       calendarUrl: '#' // À implémenter: génération de lien ICS
-    })
+    }, options)
     
     results.push({ email: recipient.email, ...result })
   }
@@ -578,6 +673,10 @@ async function sendSoutenanceConfirmations(tpi, slot, recipients) {
 }
 
 module.exports = {
+  buildConfiguredSender,
+  buildTemplateData,
+  formatLinkValidityLabel,
+  buildMailOptions,
   sendEmail,
   sendVoteDigestRequests,
   sendVoteRequests,

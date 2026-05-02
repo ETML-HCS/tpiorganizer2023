@@ -70,9 +70,8 @@ const workflowYearSchema = new mongoose.Schema({
   }
 })
 
-workflowYearSchema.pre('save', function(next) {
+workflowYearSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const WorkflowYear = mongoose.models.WorkflowYear || mongoose.model(

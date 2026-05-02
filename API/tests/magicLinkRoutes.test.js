@@ -21,6 +21,45 @@ test('soutenance magic links are valid for 4 days by default', () => {
   assert.equal(DEFAULT_EXPIRY_HOURS.soutenance, 24 * 4)
 })
 
+test('legacy planning magic links accept a custom expiration duration', async () => {
+  const Person = require('../models/personModel')
+  const magicLinkService = require('../services/magicLinkService')
+  const originalFindOne = Person.findOne
+  const fixedNow = Date.parse('2026-04-01T00:00:00.000Z')
+  const originalDateNow = Date.now
+  const savedPeople = []
+
+  Date.now = () => fixedNow
+  Person.findOne = async () => ({
+    _id: 'person-1',
+    email: 'alice@example.com',
+    fullName: 'Alice Expert',
+    save: async function save() {
+      savedPeople.push({
+        magicLinkToken: this.magicLinkToken,
+        magicLinkExpires: this.magicLinkExpires
+      })
+    }
+  })
+
+  try {
+    const link = await magicLinkService.generateMagicLink(
+      'ALICE@example.com',
+      'https://example.test/api/planning',
+      { expiresInHours: 72 }
+    )
+
+    assert.equal(link.expiresInHours, 72)
+    assert.equal(link.expiresAt.toISOString(), '2026-04-04T00:00:00.000Z')
+    assert.equal(savedPeople.length, 1)
+    assert.equal(savedPeople[0].magicLinkExpires.toISOString(), '2026-04-04T00:00:00.000Z')
+    assert.match(link.url, /^https:\/\/example\.test\/api\/planning\/auth\/verify\?token=/)
+  } finally {
+    Person.findOne = originalFindOne
+    Date.now = originalDateNow
+  }
+})
+
 test('revokeActiveMagicLinks filters by source and keeps the new link active', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
   const magicLinkV2Service = require('../services/magicLinkV2Service')
@@ -93,6 +132,66 @@ test('revokeActiveMagicLinks can scope revocation by publication version', async
     assert.deepEqual(calls[0].query['scope.source'].$in, ['admin_access_generated'])
   } finally {
     MagicLink.updateMany = originalUpdateMany
+  }
+})
+
+test('create magic links applique les paramètres annuels de validité et d usages', async () => {
+  const { MagicLink } = require('../models/magicLinkModel')
+  const planningConfigService = require('../services/planningConfigService')
+  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const originalCreate = MagicLink.create
+  const originalGetPlanningConfigIfAvailable = planningConfigService.getPlanningConfigIfAvailable
+  const calls = []
+
+  MagicLink.create = async (payload) => {
+    calls.push(payload)
+    return { _id: `link-${calls.length}` }
+  }
+  planningConfigService.getPlanningConfigIfAvailable = async () => ({
+    accessLinkSettings: {
+      voteLinkValidityHours: 48,
+      voteLinkMaxUses: 9,
+      soutenanceLinkValidityHours: 120,
+      soutenanceLinkMaxUses: 80
+    }
+  })
+
+  const before = Date.now()
+
+  try {
+    await magicLinkV2Service.createVoteMagicLink({
+      year: 2026,
+      person: {
+        _id: 'person-1',
+        email: 'alice@example.com'
+      },
+      role: null,
+      scope: { source: 'vote_campaign' },
+      baseUrl: 'http://localhost:3000'
+    })
+
+    await magicLinkV2Service.createSoutenanceMagicLink({
+      year: 2026,
+      person: {
+        _id: 'person-2',
+        email: 'bob@example.com'
+      },
+      scope: { source: 'admin_access_generated' },
+      baseUrl: 'http://localhost:3000'
+    })
+
+    const after = Date.now()
+
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].maxUses, 9)
+    assert.equal(calls[1].maxUses, 80)
+    assert.ok(calls[0].expiresAt.getTime() >= before + 48 * 60 * 60 * 1000)
+    assert.ok(calls[0].expiresAt.getTime() <= after + 48 * 60 * 60 * 1000)
+    assert.ok(calls[1].expiresAt.getTime() >= before + 120 * 60 * 60 * 1000)
+    assert.ok(calls[1].expiresAt.getTime() <= after + 120 * 60 * 60 * 1000)
+  } finally {
+    MagicLink.create = originalCreate
+    planningConfigService.getPlanningConfigIfAvailable = originalGetPlanningConfigIfAvailable
   }
 })
 

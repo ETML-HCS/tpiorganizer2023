@@ -21,6 +21,35 @@ const DEFAULT_SITE_SCHEDULE = {
   manualRoomTarget: null,
   active: true
 }
+const DEFAULT_WORKFLOW_SETTINGS = {
+  voteDeadlineDays: 7,
+  maxVoteProposals: 3,
+  allowSpecialVoteRequest: true,
+  automaticVoteRemindersEnabled: false,
+  voteReminderLeadHours: 48,
+  maxVoteReminders: 1,
+  voteReminderCooldownHours: 24
+}
+const DEFAULT_ACCESS_LINK_SETTINGS = {
+  voteLinkValidityHours: 24 * 7,
+  voteLinkMaxUses: 20,
+  soutenanceLinkValidityHours: 24 * 4,
+  soutenanceLinkMaxUses: 60
+}
+const MIN_VOTE_DEADLINE_DAYS = 1
+const MAX_VOTE_DEADLINE_DAYS = 60
+const MIN_VOTE_PROPOSALS = 1
+const MAX_VOTE_PROPOSALS = 10
+const MIN_VOTE_REMINDER_LEAD_HOURS = 1
+const MAX_VOTE_REMINDER_LEAD_HOURS = 24 * 30
+const MIN_VOTE_REMINDERS = 0
+const MAX_VOTE_REMINDERS = 10
+const MIN_VOTE_REMINDER_COOLDOWN_HOURS = 1
+const MAX_VOTE_REMINDER_COOLDOWN_HOURS = 24 * 30
+const MIN_ACCESS_LINK_VALIDITY_HOURS = 1
+const MAX_ACCESS_LINK_VALIDITY_HOURS = 24 * 365
+const MIN_ACCESS_LINK_MAX_USES = 1
+const MAX_ACCESS_LINK_MAX_USES = 1000
 const DEFAULT_SITE_PLANNING_COLORS = [
   '#1D4ED8',
   '#0F766E',
@@ -217,6 +246,114 @@ function normalizeMinuteValue(value, fallbackMinutes, legacyHoursFallback = null
   }
 
   return fallbackMinutes
+}
+
+function normalizeBoundedInteger(value, fallback, min, max) {
+  const numeric = Number.parseInt(String(value), 10)
+  const fallbackValue = Number.parseInt(String(fallback), 10)
+  const safeFallback = Number.isInteger(fallbackValue)
+    ? Math.max(min, Math.min(max, fallbackValue))
+    : min
+
+  if (!Number.isInteger(numeric)) {
+    return safeFallback
+  }
+
+  return Math.max(min, Math.min(max, numeric))
+}
+
+function normalizeBooleanOption(source, fallback) {
+  if (typeof source === 'boolean') {
+    return source
+  }
+
+  if (typeof fallback === 'boolean') {
+    return fallback
+  }
+
+  return true
+}
+
+function normalizeWorkflowSettings(value = {}, fallback = DEFAULT_WORKFLOW_SETTINGS) {
+  const source = value && typeof value === 'object' ? value : {}
+  const fallbackSource = fallback && typeof fallback === 'object'
+    ? fallback
+    : DEFAULT_WORKFLOW_SETTINGS
+
+  return {
+    voteDeadlineDays: normalizeBoundedInteger(
+      source.voteDeadlineDays ?? source.votingDeadlineDays ?? source.voteDeadline,
+      fallbackSource.voteDeadlineDays ?? DEFAULT_WORKFLOW_SETTINGS.voteDeadlineDays,
+      MIN_VOTE_DEADLINE_DAYS,
+      MAX_VOTE_DEADLINE_DAYS
+    ),
+    maxVoteProposals: normalizeBoundedInteger(
+      source.maxVoteProposals ?? source.maxProposalsPerVote ?? source.maxAlternativeSlots,
+      fallbackSource.maxVoteProposals ?? DEFAULT_WORKFLOW_SETTINGS.maxVoteProposals,
+      MIN_VOTE_PROPOSALS,
+      MAX_VOTE_PROPOSALS
+    ),
+    allowSpecialVoteRequest: normalizeBooleanOption(
+      source.allowSpecialVoteRequest ?? source.allowSpecialRequest,
+      fallbackSource.allowSpecialVoteRequest
+    ),
+    automaticVoteRemindersEnabled: normalizeBooleanOption(
+      source.automaticVoteRemindersEnabled ?? source.autoVoteRemindersEnabled ?? source.automaticRemindersEnabled,
+      fallbackSource.automaticVoteRemindersEnabled ?? DEFAULT_WORKFLOW_SETTINGS.automaticVoteRemindersEnabled
+    ),
+    voteReminderLeadHours: normalizeBoundedInteger(
+      source.voteReminderLeadHours ?? source.reminderLeadHours ?? source.voteReminderBeforeDeadlineHours,
+      fallbackSource.voteReminderLeadHours ?? DEFAULT_WORKFLOW_SETTINGS.voteReminderLeadHours,
+      MIN_VOTE_REMINDER_LEAD_HOURS,
+      MAX_VOTE_REMINDER_LEAD_HOURS
+    ),
+    maxVoteReminders: normalizeBoundedInteger(
+      source.maxVoteReminders ?? source.maxRemindersPerVote ?? source.voteReminderMaxCount,
+      fallbackSource.maxVoteReminders ?? DEFAULT_WORKFLOW_SETTINGS.maxVoteReminders,
+      MIN_VOTE_REMINDERS,
+      MAX_VOTE_REMINDERS
+    ),
+    voteReminderCooldownHours: normalizeBoundedInteger(
+      source.voteReminderCooldownHours ?? source.reminderCooldownHours ?? source.voteReminderIntervalHours,
+      fallbackSource.voteReminderCooldownHours ?? DEFAULT_WORKFLOW_SETTINGS.voteReminderCooldownHours,
+      MIN_VOTE_REMINDER_COOLDOWN_HOURS,
+      MAX_VOTE_REMINDER_COOLDOWN_HOURS
+    )
+  }
+}
+
+function normalizeAccessLinkSettings(value = {}, fallback = DEFAULT_ACCESS_LINK_SETTINGS) {
+  const source = value && typeof value === 'object' ? value : {}
+  const fallbackSource = fallback && typeof fallback === 'object'
+    ? fallback
+    : DEFAULT_ACCESS_LINK_SETTINGS
+
+  return {
+    voteLinkValidityHours: normalizeBoundedInteger(
+      source.voteLinkValidityHours ?? source.voteValidityHours ?? source.voteExpiryHours,
+      fallbackSource.voteLinkValidityHours ?? DEFAULT_ACCESS_LINK_SETTINGS.voteLinkValidityHours,
+      MIN_ACCESS_LINK_VALIDITY_HOURS,
+      MAX_ACCESS_LINK_VALIDITY_HOURS
+    ),
+    voteLinkMaxUses: normalizeBoundedInteger(
+      source.voteLinkMaxUses ?? source.voteMaxUses,
+      fallbackSource.voteLinkMaxUses ?? DEFAULT_ACCESS_LINK_SETTINGS.voteLinkMaxUses,
+      MIN_ACCESS_LINK_MAX_USES,
+      MAX_ACCESS_LINK_MAX_USES
+    ),
+    soutenanceLinkValidityHours: normalizeBoundedInteger(
+      source.soutenanceLinkValidityHours ?? source.soutenanceValidityHours ?? source.soutenanceExpiryHours,
+      fallbackSource.soutenanceLinkValidityHours ?? DEFAULT_ACCESS_LINK_SETTINGS.soutenanceLinkValidityHours,
+      MIN_ACCESS_LINK_VALIDITY_HOURS,
+      MAX_ACCESS_LINK_VALIDITY_HOURS
+    ),
+    soutenanceLinkMaxUses: normalizeBoundedInteger(
+      source.soutenanceLinkMaxUses ?? source.soutenanceMaxUses,
+      fallbackSource.soutenanceLinkMaxUses ?? DEFAULT_ACCESS_LINK_SETTINGS.soutenanceLinkMaxUses,
+      MIN_ACCESS_LINK_MAX_USES,
+      MAX_ACCESS_LINK_MAX_USES
+    )
+  }
 }
 
 function normalizeSoutenanceDateEntry(value) {
@@ -741,7 +878,9 @@ function buildDefaultPlanningConfig(year, catalogSites = []) {
     schemaVersion: DEFAULT_SCHEMA_VERSION,
     classTypes: normalizeClassTypeEntries([], DEFAULT_CLASS_TYPES),
     soutenanceDates: [],
-    siteConfigs
+    siteConfigs,
+    workflowSettings: { ...DEFAULT_WORKFLOW_SETTINGS },
+    accessLinkSettings: { ...DEFAULT_ACCESS_LINK_SETTINGS }
   })
 }
 
@@ -775,7 +914,9 @@ function normalizeStoredConfig(document, year, fallbackConfig = null, catalogSit
         : DEFAULT_SCHEMA_VERSION,
     classTypes,
     soutenanceDates: flattenClassTypeDates(classTypes),
-    siteConfigs
+    siteConfigs,
+    workflowSettings: normalizeWorkflowSettings(source.workflowSettings, fallback.workflowSettings),
+    accessLinkSettings: normalizeAccessLinkSettings(source.accessLinkSettings, fallback.accessLinkSettings)
   })
 }
 
@@ -816,7 +957,9 @@ async function getPlanningConfig(year) {
         schemaVersion: DEFAULT_SCHEMA_VERSION,
         classTypes: [],
         soutenanceDates: [],
-        siteConfigs: fallback.siteConfigs
+        siteConfigs: fallback.siteConfigs,
+        workflowSettings: fallback.workflowSettings,
+        accessLinkSettings: fallback.accessLinkSettings
       }
     },
     {
@@ -877,7 +1020,9 @@ async function savePlanningConfig(year, payload = {}) {
       schemaVersion: normalizedConfig.schemaVersion,
       classTypes: normalizedConfig.classTypes,
       soutenanceDates: normalizedConfig.soutenanceDates,
-      siteConfigs: normalizedConfig.siteConfigs
+      siteConfigs: normalizedConfig.siteConfigs,
+      workflowSettings: normalizedConfig.workflowSettings,
+      accessLinkSettings: normalizedConfig.accessLinkSettings
     },
     {
       upsert: true,
@@ -890,14 +1035,18 @@ async function savePlanningConfig(year, payload = {}) {
 }
 
 module.exports = {
+  DEFAULT_ACCESS_LINK_SETTINGS,
+  DEFAULT_WORKFLOW_SETTINGS,
   buildDefaultPlanningConfig,
   decimalHoursToTimeString,
   flattenClassTypeDates,
   getPlanningConfig,
   getPlanningConfigIfAvailable,
   normalizeClassTypeEntries,
+  normalizeAccessLinkSettings,
   normalizeSoutenanceDateEntries,
   normalizeStoredConfig,
+  normalizeWorkflowSettings,
   normalizeYearConfigPayload,
   savePlanningConfig
 }

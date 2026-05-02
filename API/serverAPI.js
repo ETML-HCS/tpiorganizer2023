@@ -38,6 +38,7 @@ const planningRoutes = require('./routes/planningRoutes')
 const tpiDossierRoutes = require('./routes/tpiDossierRoutes')
 const workflowRoutes = require('./routes/workflowRoutes')
 const importRoutes = require('./routes/importRoutes')
+const staticVotePublicationService = require('./services/staticVotePublicationService')
 
 // Constante pour vérifier si l'application est en mode démo
 const isDemo = process.env.NODE_ENV !== 'production' && process.env.REACT_APP_DEBUG === 'true'
@@ -367,6 +368,63 @@ app.put(
   }
 )
 
+function parseStaticVoteAutoSyncYears() {
+  const rawValue = (
+    process.env.STATIC_VOTE_AUTO_SYNC_YEARS ||
+    process.env.STATIC_VOTE_AUTO_SYNC_YEAR ||
+    String(new Date().getFullYear())
+  )
+
+  return Array.from(new Set(
+    String(rawValue)
+      .split(',')
+      .map(value => Number.parseInt(value.trim(), 10))
+      .filter(year => Number.isInteger(year) && year >= 2000 && year <= 2100)
+  ))
+}
+
+async function runStaticVoteAutoSync({ logger = console } = {}) {
+  if (process.env.STATIC_VOTE_AUTO_SYNC !== 'true') {
+    return null
+  }
+
+  if (!process.env.STATIC_VOTE_SYNC_SECRET) {
+    logger.warn('STATIC_VOTE_AUTO_SYNC actif mais STATIC_VOTE_SYNC_SECRET manquant.')
+    return null
+  }
+
+  const years = parseStaticVoteAutoSyncYears()
+
+  if (years.length === 0) {
+    logger.warn('STATIC_VOTE_AUTO_SYNC actif mais aucune annee valide configuree.')
+    return null
+  }
+
+  const results = []
+
+  for (const year of years) {
+    try {
+      const result = await staticVotePublicationService.syncStaticVoteResponses({ year })
+      results.push(result)
+      logger.log(
+        `Synchronisation votes statiques ${year}: ` +
+        `${result.importedCount}/${result.receivedCount} importe(s), ` +
+        `${result.skippedCount} ignore(s), ${result.failedCount} erreur(s).`
+      )
+    } catch (error) {
+      const result = {
+        success: false,
+        year,
+        error: error?.message || 'Erreur inconnue'
+      }
+      results.push(result)
+      logger.warn(`Synchronisation votes statiques ${year} impossible: ${result.error}`)
+    }
+  }
+
+  return results
+}
+
 async function startServer(options = {}) {
   const {
     connectDb = true,
@@ -384,7 +442,7 @@ async function startServer(options = {}) {
     }
   }
 
-  return await new Promise((resolve, reject) => {
+  const server = await new Promise((resolve, reject) => {
     const handleError = error => {
       cleanup()
       reject(error)
@@ -407,6 +465,10 @@ async function startServer(options = {}) {
       server.once('error', handleError)
     }
   })
+
+  void runStaticVoteAutoSync({ logger })
+
+  return server
 }
 
 if (require.main === module) {
@@ -418,5 +480,6 @@ if (require.main === module) {
 
 module.exports = {
   app,
+  runStaticVoteAutoSync,
   startServer
 }

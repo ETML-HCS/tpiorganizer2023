@@ -85,9 +85,8 @@ const magicLinkSchema = new mongoose.Schema({
 
 magicLinkSchema.index({ type: 1, year: 1, createdAt: -1 })
 
-magicLinkSchema.pre('save', function(next) {
+magicLinkSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 const MagicLink = mongoose.models.MagicLink || mongoose.model(

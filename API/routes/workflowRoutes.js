@@ -11,8 +11,11 @@ const planningAutomationService = require('../services/planningAutomationService
 const planningValidationService = require('../services/planningValidationService')
 const schedulingService = require('../services/schedulingService')
 const staticDefensePublicationService = require('../services/staticDefensePublicationService')
+const staticVotePublicationService = require('../services/staticVotePublicationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
+const { getSharedEmailSettingsIfAvailable } = require('../services/planningCatalogService')
+const publicationDeploymentConfigService = require('../services/publicationDeploymentConfigService')
 const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
 const { buildDefensePublicPath } = require('../utils/publicRoutes')
 const {
@@ -76,6 +79,39 @@ function getFrontendBaseUrl(req) {
     req.body?.baseUrl || req.get('origin'),
     `${req.protocol}://${req.get('host')}`
   )
+}
+
+function normalizeSoutenanceLinkTarget(rawValue) {
+  return rawValue === 'publication' ? 'publication' : 'app'
+}
+
+function normalizeVoteLinkTarget(rawValue) {
+  return rawValue === 'static' || rawValue === 'publication' ? 'static' : 'app'
+}
+
+function buildSoutenancePublicationLinkTarget(rawPublicUrl) {
+  const publicUrl = compactText(rawPublicUrl)
+
+  if (!publicUrl) {
+    return null
+  }
+
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(publicUrl)
+    ? publicUrl
+    : `https://${publicUrl}`
+
+  try {
+    const url = new URL(withProtocol)
+    const baseUrl = `${url.protocol}//${url.host}`
+    const path = `${url.pathname || '/'}${url.search || ''}` || '/'
+
+    return {
+      baseUrl,
+      redirectPath: path
+    }
+  } catch (error) {
+    return null
+  }
 }
 
 function compactText(value) {
@@ -881,9 +917,19 @@ router.post(
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`
-      const result = await votingCampaignService.startVotesCampaign(year, baseUrl, {
-        skipEmails
-      })
+      const startVoteOptions = { skipEmails }
+      const requestedVoteLinkTarget = compactText(req.body?.voteLinkTarget)
+      const requestedVotePublicUrl = compactText(req.body?.votePublicUrl || req.body?.staticVotePublicUrl)
+
+      if (requestedVoteLinkTarget) {
+        startVoteOptions.voteLinkTarget = requestedVoteLinkTarget
+      }
+
+      if (requestedVotePublicUrl) {
+        startVoteOptions.votePublicUrl = requestedVotePublicUrl
+      }
+
+      const result = await votingCampaignService.startVotesCampaign(year, baseUrl, startVoteOptions)
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -1044,6 +1090,7 @@ async function handleDevVoteEmails(req, res) {
       : ''
     const links = []
     let emailsSucceeded = 0
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
 
     for (const vote of target.votes) {
       const link = await magicLinkV2Service.createVoteMagicLink({
@@ -1070,7 +1117,7 @@ async function handleDevVoteEmails(req, res) {
         slots,
         deadline: fallbackDeadline || link.expiresAt.toLocaleDateString('fr-CH'),
         magicLinkUrl: link.url
-      })
+      }, { emailSettings })
 
       if (emailDelivery.success) {
         emailsSucceeded += 1
@@ -1159,6 +1206,7 @@ async function handleDevSoutenanceEmails(req, res) {
     })
     const links = []
     let emailsSucceeded = 0
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
 
     for (const participant of target.participants) {
       const link = await magicLinkV2Service.createSoutenanceMagicLink({
@@ -1185,7 +1233,7 @@ async function handleDevSoutenanceEmails(req, res) {
         year,
         magicLinkUrl: link.url,
         deadline: link.expiresAt.toLocaleDateString('fr-CH')
-      })
+      }, { emailSettings })
 
       if (emailDelivery.success) {
         emailsSucceeded += 1
@@ -1267,6 +1315,41 @@ router.post(
   handleDevSoutenanceEmails
 )
 
+router.get(
+  '/static-publication/config',
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const config = await publicationDeploymentConfigService.getPublicationDeploymentConfig()
+      return res.status(200).json(config)
+    } catch (error) {
+      console.error('Erreur chargement configuration publication:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors du chargement de la configuration publication.'
+      })
+    }
+  }
+)
+
+router.put(
+  '/static-publication/config',
+  authMiddleware,
+  requireRole('admin'),
+  requireNonEmptyBody('Configuration publication requise.'),
+  async (req, res) => {
+    try {
+      const config = await publicationDeploymentConfigService.savePublicationDeploymentConfig(req.body)
+      return res.status(200).json(config)
+    } catch (error) {
+      console.error('Erreur sauvegarde configuration publication:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la sauvegarde de la configuration publication.'
+      })
+    }
+  }
+)
+
 async function safeLogAccessLinksAudit(event) {
   try {
     await workflowService.logWorkflowAuditEvent(event)
@@ -1282,10 +1365,34 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
     const baseUrl = getFrontendBaseUrl(req)
+    const voteLinkTarget = normalizeVoteLinkTarget(req.body?.voteLinkTarget)
+    const soutenanceLinkTarget = normalizeSoutenanceLinkTarget(req.body?.soutenanceLinkTarget)
+    const votePublicationTarget = voteLinkTarget === 'static'
+      ? await staticVotePublicationService.getStaticVoteLinkTarget(
+        year,
+        req.body?.votePublicUrl || req.body?.staticVotePublicUrl
+      )
+      : null
+    const publicationTarget = soutenanceLinkTarget === 'publication'
+      ? buildSoutenancePublicationLinkTarget(req.body?.soutenancePublicUrl || req.body?.publicationPublicUrl)
+      : null
+
+    if (soutenanceLinkTarget === 'publication' && !publicationTarget) {
+      return res.status(400).json({
+        error: 'URL publique de publication invalide ou absente.'
+      })
+    }
+
     const publicationVersion = parseOptionalPositiveInteger(req.body?.publicationVersion)
     const preview = await buildAccessLinkPreview({
       year,
       baseUrl,
+      voteBaseUrl: votePublicationTarget?.baseUrl || baseUrl,
+      voteRedirectPath: votePublicationTarget?.redirectPath || `/planning/${year}`,
+      voteLinkTarget,
+      soutenanceBaseUrl: publicationTarget?.baseUrl || baseUrl,
+      soutenanceRedirectPath: publicationTarget?.redirectPath || buildDefensePublicPath(year),
+      soutenanceLinkTarget: publicationTarget ? 'publication' : 'app',
       publicationVersion,
       generateLinks
     })
@@ -1321,8 +1428,11 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
     }
 
     console.error(`Erreur ${actionLabel} liens d acces:`, error)
-    return res.status(500).json({
-      error: generateLinks
+    const statusCode = error.statusCode || 500
+    return res.status(statusCode).json({
+      error: statusCode < 500 && error?.message
+        ? error.message
+        : generateLinks
         ? 'Erreur lors de la generation des liens d acces.'
         : 'Erreur lors de la preparation des liens d acces.'
     })
@@ -1368,13 +1478,27 @@ router.post(
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`
-      const result = await votingCampaignService.remindPendingVotes(year, baseUrl)
+      const reminderOptions = { automatic: req.body?.automatic === true }
+      const requestedVoteLinkTarget = compactText(req.body?.voteLinkTarget)
+      const requestedVotePublicUrl = compactText(req.body?.votePublicUrl || req.body?.staticVotePublicUrl)
+
+      if (requestedVoteLinkTarget) {
+        reminderOptions.voteLinkTarget = requestedVoteLinkTarget
+      }
+
+      if (requestedVotePublicUrl) {
+        reminderOptions.votePublicUrl = requestedVotePublicUrl
+      }
+
+      const result = await votingCampaignService.remindPendingVotes(year, baseUrl, reminderOptions)
 
       await workflowService.logWorkflowAuditEvent({
         year,
         action: 'workflow.votes.remind',
         user: req.user,
         payload: {
+          automatic: result.automatic === true,
+          skipped: result.skipped === true,
           reminderTargets: result.reminderTargets,
           emailsSent: result.emailsSent,
           emailsSucceeded: result.emailsSucceeded
@@ -1836,6 +1960,182 @@ router.post(
       console.error('Erreur publication statique FTP:', error)
       return res.status(error.statusCode || 500).json({
         error: error.message || 'Erreur lors de la publication statique par FTP.'
+      })
+    }
+  }
+)
+
+router.get(
+  '/:year/static-votes/status',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const status = await staticVotePublicationService.getStaticVotePublicationStatus(req.validatedParams.year)
+
+      return res.status(200).json(status)
+    } catch (error) {
+      console.error('Erreur statut publication vote statique:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la lecture de la publication vote statique.'
+      })
+    }
+  }
+)
+
+router.get(
+  '/:year/static-votes/preview',
+  requireYearParam('year'),
+  async (req, res) => {
+    try {
+      const status = await staticVotePublicationService.getStaticVotePublicationStatus(req.validatedParams.year)
+
+      if (!status.available) {
+        return res.status(404).send('Publication vote non generee.')
+      }
+
+      res.setHeader('Cache-Control', 'no-store')
+      return res.sendFile(status.indexPath)
+    } catch (error) {
+      console.error('Erreur aperçu publication vote statique:', error)
+      return res.status(error.statusCode || 500).send(
+        error.message || 'Erreur lors de l apercu de la publication vote statique.'
+      )
+    }
+  }
+)
+
+router.post(
+  '/:year/static-votes/generate',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const result = await staticVotePublicationService.generateStaticVotesSite(year)
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticVotes.generate',
+        user: req.user,
+        payload: {
+          campaignId: result.campaignId,
+          groupCount: result.groupCount,
+          accessLinkCount: result.accessLinkCount,
+          previewPath: result.previewPath,
+          remoteDir: result.remoteDir
+        },
+        success: true
+      })
+
+      return res.status(200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticVotes.generate',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error.message
+      })
+
+      console.error('Erreur generation publication vote statique:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la generation de la publication vote statique.'
+      })
+    }
+  }
+)
+
+router.post(
+  '/:year/static-votes/publish',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const result = await staticVotePublicationService.publishStaticVotesSite(year)
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticVotes.publish',
+        user: req.user,
+        payload: {
+          publicUrl: result.publicUrl,
+          remoteDir: result.remoteDir,
+          groupCount: result.groupCount,
+          accessLinkCount: result.accessLinkCount
+        },
+        success: true
+      })
+
+      return res.status(200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticVotes.publish',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error.message
+      })
+
+      console.error('Erreur publication vote statique FTP:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la publication vote statique par FTP.'
+      })
+    }
+  }
+)
+
+router.post(
+  '/:year/static-votes/sync',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+    const remoteUrl = compactText(req.body?.remoteUrl)
+
+    try {
+      const result = await staticVotePublicationService.syncStaticVoteResponses({
+        year,
+        remoteUrl
+      })
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticVotes.sync',
+        user: req.user,
+        payload: {
+          receivedCount: result.receivedCount,
+          importedCount: result.importedCount,
+          skippedCount: result.skippedCount,
+          failedCount: result.failedCount,
+          sourceUrl: result.sourceUrl
+        },
+        success: result.failedCount === 0
+      })
+
+      return res.status(result.failedCount > 0 ? 207 : 200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.staticVotes.sync',
+        user: req.user,
+        payload: { remoteUrl },
+        success: false,
+        error: error.message
+      })
+
+      console.error('Erreur synchronisation vote statique:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la synchronisation des votes statiques.'
       })
     }
   }

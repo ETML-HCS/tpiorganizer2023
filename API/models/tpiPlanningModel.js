@@ -123,6 +123,8 @@ const tpiPlanningSchema = new Schema({
     deadline: { type: Date },
     // Nombre de rappels envoyés
     remindersCount: { type: Number, default: 0 },
+    // Dernier rappel envoyé pour éviter les relances automatiques trop rapprochées
+    lastReminderSentAt: { type: Date },
     // Résumé des votes
     voteSummary: {
       expert1Voted: { type: Boolean, default: false },
@@ -200,9 +202,8 @@ tpiPlanningSchema.index({ chefProjet: 1, year: 1 })
 tpiPlanningSchema.index({ confirmedSlot: 1 })
 
 // Middleware pre-save
-tpiPlanningSchema.pre('save', function(next) {
+tpiPlanningSchema.pre('save', function() {
   this.updatedAt = new Date()
-  next()
 })
 
 // Méthode pour ajouter une entrée à l'historique
