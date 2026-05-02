@@ -462,8 +462,12 @@ describe('PlanningDashboard', () => {
     renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /tous les tpi/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /à relancer/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /prêts à clore/i })).toBeInTheDocument()
+    expect(screen.getByText(/1 TPI visible · 0 complets · 1 réponse manquante/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /relancer non-repondants/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /a relancer/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /à relancer/i })).toBeInTheDocument()
     expect(screen.getByText('TPI-2026-042')).toBeInTheDocument()
     expect(screen.getByText(/manque: chef de projet/i)).toBeInTheDocument()
     expect(screen.getByText(/créneaux votés/i)).toBeInTheDocument()

@@ -83,9 +83,21 @@ const TAB_PRESENTATIONS = {
   },
   votes: {
     kicker: 'Campagne',
-    title: 'Votes',
-    adminDescription: 'Réponses reçues, relances et clôture.',
+    title: 'Tous les TPI',
+    adminDescription: 'Suivi global des réponses, relances et clôture.',
     viewerDescription: 'Réponds aux votes ouverts.'
+  },
+  'vote-pending': {
+    kicker: 'Relances',
+    title: 'À relancer',
+    adminDescription: 'TPI avec au moins une réponse de vote manquante.',
+    viewerDescription: 'Votes encore en attente.'
+  },
+  'vote-ready': {
+    kicker: 'Clôture',
+    title: 'Prêts à clore',
+    adminDescription: 'TPI dont les trois rôles ont répondu.',
+    viewerDescription: 'Votes complets.'
   },
   conflicts: {
     kicker: 'Forçage',
@@ -94,6 +106,8 @@ const TAB_PRESENTATIONS = {
     viewerDescription: 'Aucune action manuelle.'
   }
 }
+
+const VOTE_WORKFLOW_TAB_IDS = ['votes', 'vote-pending', 'vote-ready']
 
 const VALIDATION_ISSUE_LABELS = {
   person_overlap: 'Conflit de personne',
@@ -960,14 +974,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const voteWorkflowSections = useMemo(() => ([
     {
       id: 'pending',
-      title: 'A relancer',
-      helper: 'Votes encore manquants. Ce sont les personnes a cibler avant la cloture.',
+      title: 'À relancer',
+      helper: 'Votes encore manquants. Ce sont les personnes à cibler avant la clôture.',
       rows: voteWorkflowRows.filter((row) => row.bucket === 'pending')
     },
     {
       id: 'ready',
-      title: 'Prets pour cloture',
-      helper: 'Les trois roles ont repondu. La cloture decidera automatiquement ou basculera en manuel.',
+      title: 'Prêts pour clôture',
+      helper: 'Les trois rôles ont répondu. La clôture décidera automatiquement ou basculera en manuel.',
       rows: voteWorkflowRows.filter((row) => row.bucket === 'ready')
     },
     {
@@ -978,11 +992,23 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     },
     {
       id: 'confirmed',
-      title: 'Confirmes',
-      helper: 'Les défenses ont un creneau confirme.',
+      title: 'Confirmés',
+      helper: 'Les défenses ont un créneau confirmé.',
       rows: voteWorkflowRows.filter((row) => row.bucket === 'confirmed')
     }
   ]), [voteWorkflowRows])
+
+  const activeVoteWorkflowSections = useMemo(() => {
+    if (activeTab === 'vote-pending') {
+      return voteWorkflowSections.filter((section) => section.id === 'pending')
+    }
+
+    if (activeTab === 'vote-ready') {
+      return voteWorkflowSections.filter((section) => section.id === 'ready')
+    }
+
+    return voteWorkflowSections
+  }, [activeTab, voteWorkflowSections])
 
   const legacyPlanningPerimeterEntries = useMemo(() => {
     if (!isAdmin || !legacyTpis.length) {
@@ -1871,10 +1897,21 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
 
     return [
-      { id: 'votes', label: 'Votes', icon: <VoteIcon className='page-tools-tab-icon-svg' />, count: voteTrackingTpis.length },
-      { id: 'conflicts', label: 'À forcer', icon: <WrenchIcon className='page-tools-tab-icon-svg' />, count: stats.conflicts }
+      { id: 'votes', label: 'Tous les TPI', icon: <VoteIcon className='page-tools-tab-icon-svg' />, count: voteTrackingTpis.length },
+      { id: 'vote-pending', label: 'À relancer', icon: <MailIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.pendingTpis },
+      { id: 'vote-ready', label: 'Prêts à clore', icon: <CheckIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.readyTpis },
+      { id: 'conflicts', label: 'À forcer', icon: <WrenchIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.manualTpis || stats.conflicts }
     ]
-  }, [isScopedVoteViewer, stats.pendingVotes, stats.total, stats.conflicts, voteTrackingTpis.length])
+  }, [
+    isScopedVoteViewer,
+    stats.pendingVotes,
+    stats.total,
+    stats.conflicts,
+    voteTrackingTpis.length,
+    voteWorkflowStats.pendingTpis,
+    voteWorkflowStats.readyTpis,
+    voteWorkflowStats.manualTpis
+  ])
 
   const workflowSteps = useMemo(() => {
     if (!isAdmin) {
@@ -1911,10 +1948,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     manualRequiredCount
   ])
 
-  const activeTabMeta = useMemo(
-    () => tabs.find((tab) => tab.id === activeTab) || tabs[0] || null,
-    [activeTab, tabs]
-  )
   const activeTabPresentation = useMemo(() => {
     const presentation = TAB_PRESENTATIONS[activeTab] || TAB_PRESENTATIONS.list
 
@@ -1930,12 +1963,36 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     ? activePlanningSiteLabels.join(', ')
     : `Aucun site actif pour ${year}`
   const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || STATUS_FILTER_LABELS.all
-  const activeViewLabel = activeTabMeta?.label || (activeTab === 'list' ? 'Liste complète' : 'Votes')
-  const activeViewCount = activeTab === 'list'
-    ? filteredTpis.length
-    : activeTab === 'votes'
-      ? (isAdmin ? filteredVoteTrackingTpis.length : pendingVotes.length)
-      : conflicts.length
+  const activeViewCount = (() => {
+    if (activeTab === 'list') {
+      return filteredTpis.length
+    }
+
+    if (activeTab === 'votes') {
+      return isAdmin ? filteredVoteTrackingTpis.length : pendingVotes.length
+    }
+
+    if (activeTab === 'vote-pending') {
+      return voteWorkflowRows.filter((row) => row.bucket === 'pending').length
+    }
+
+    if (activeTab === 'vote-ready') {
+      return voteWorkflowRows.filter((row) => row.bucket === 'ready').length
+    }
+
+    if (activeTab === 'conflicts') {
+      return voteWorkflowStats.manualTpis || conflicts.length
+    }
+
+    return conflicts.length
+  })()
+  const isVoteWorkspaceTab = VOTE_WORKFLOW_TAB_IDS.includes(activeTab)
+  const visibleTpiSummary = `${activeViewCount} TPI visible${activeViewCount === 1 ? '' : 's'}`
+  const completeTpiSummary = `${voteWorkflowStats.readyTpis} complet${voteWorkflowStats.readyTpis === 1 ? '' : 's'}`
+  const missingVoteSummary = `${voteWorkflowStats.missingVotes} réponse${voteWorkflowStats.missingVotes === 1 ? '' : 's'} manquante${voteWorkflowStats.missingVotes === 1 ? '' : 's'}`
+  const planningCommandSummaryText = isAdmin
+    ? `${visibleTpiSummary} · ${completeTpiSummary} · ${missingVoteSummary}`
+    : `${activeViewCount} élément${activeViewCount > 1 ? 's' : ''} visible${activeViewCount > 1 ? 's' : ''}`
   const hasDashboardNotices = Boolean(
     error ||
     successMessage ||
@@ -2182,15 +2239,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             <p>{activeTabPresentation.description}</p>
           </div>
           <div className="planning-command-summary">
-            <span className="planning-command-chip">
-              Vue {activeViewLabel}
+            <span className="planning-command-chip is-summary">
+              {planningCommandSummaryText}
             </span>
-            <span className="planning-command-chip">
-              {activeViewCount} element{activeViewCount > 1 ? 's' : ''} visibles
-            </span>
-            <span className="planning-command-chip">
+            {statusFilter !== 'all' ? (
+              <span className="planning-command-chip">
               {statusFilterLabel}
-            </span>
+              </span>
+            ) : null}
             {searchQuery ? (
               <span className="planning-command-chip is-emphasis">
                 Recherche: {searchQuery}
@@ -2415,7 +2471,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           </>
         )}
 
-        {activeTab === 'votes' && isAdmin && (
+        {isVoteWorkspaceTab && isAdmin && (
           <section className="vote-workflow-panel">
             <div className="vote-workflow-header">
               <div className="vote-workflow-title-block">
@@ -2636,7 +2692,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 </div>
 
                 <div className="vote-workflow-sections">
-                  {voteWorkflowSections.map((section) => (
+                  {activeVoteWorkflowSections.map((section) => (
                     <section
                       key={section.id}
                       className={`vote-workflow-queue is-${section.id}`}

@@ -2157,6 +2157,12 @@
   color: #1d4ed8;
 }
 
+.planning-command-chip.is-summary {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(248, 250, 252, 0.95);
+  color: #0f172a;
+}
+
 .planning-hero-inline-chip.state-planning {
   border-color: rgba(245, 158, 11, 0.18);
   background: rgba(255, 247, 237, 0.95);

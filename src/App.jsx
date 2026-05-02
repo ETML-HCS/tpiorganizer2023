@@ -161,6 +161,20 @@ const getAppHeaderModule = (pathname) => {
   }
 }
 
+const getBrowserTitle = (pathname, currentModule) => {
+  if (pathname === "/login") {
+    return "Connexion · TPI Organizer"
+  }
+
+  const moduleLabel = compactText(currentModule?.label)
+
+  if (!moduleLabel || moduleLabel === "TPI Organizer") {
+    return "TPI Organizer"
+  }
+
+  return `${moduleLabel} · TPI Organizer`
+}
+
 const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessionToken }) => {
   const appSessionPayload = decodeJwtPayload(appSessionToken)
   const planningSessionPayload = decodeJwtPayload(planningSessionToken)
@@ -352,6 +366,14 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     () => getAppHeaderModule(location.pathname),
     [location.pathname]
   )
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return
+    }
+
+    document.title = getBrowserTitle(location.pathname, currentModule)
+  }, [currentModule, location.pathname])
 
   // Fonction mémorisée pour déterminer si l'en-tête doit être affiché
   const shouldShowHeader = useMemo(() => {
