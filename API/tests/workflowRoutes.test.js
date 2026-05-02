@@ -410,6 +410,86 @@ test('POST /api/workflow/:year/access-links/generate rejects publication target 
   }
 })
 
+test('POST /api/workflow/:year/publication/deactivate disables publication and reopens votes', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const publishedSoutenanceService = require('../services/publishedSoutenanceService')
+  const votingCampaignService = require('../services/votingCampaignService')
+
+  let transitionArgs = null
+  let startVotesArgs = null
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published' })),
+    patchMethod(workflowService, 'hasActivePlanningSnapshot', async () => ({ version: 2 })),
+    patchMethod(publishedSoutenanceService, 'deactivatePublication', async () => ({
+      deactivatedPublicationCount: 1,
+      deactivatedVersions: [3],
+      revokedSoutenanceLinks: 4,
+      reopenedDirectPublicationCount: 2,
+      deactivatedAt: '2026-05-02T12:00:00.000Z'
+    })),
+    patchMethod(votingCampaignService, 'startVotesCampaign', async (...args) => {
+      startVotesArgs = args
+      return {
+        tpiCount: 2,
+        totalEmails: 0,
+        successfulEmails: 0,
+        failedEmails: 0,
+        emailsSkipped: true,
+        details: []
+      }
+    }),
+    patchMethod(workflowService, 'transitionWorkflowYear', async (args) => {
+      transitionArgs = args
+      return {
+        changed: true,
+        workflow: {
+          year: args.year,
+          state: 'voting_open'
+        }
+      }
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/deactivate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.workflowState, 'voting_open')
+    assert.equal(body.deactivatedPublicationCount, 1)
+    assert.equal(body.revokedSoutenanceLinks, 4)
+    assert.equal(body.reopenedDirectPublicationCount, 2)
+    assert.equal(body.voteCampaign.tpiCount, 2)
+    assert.equal(startVotesArgs[0], 2026)
+    assert.deepEqual(startVotesArgs[2], { skipEmails: true })
+    assert.equal(transitionArgs.targetState, 'voting_open')
+    assert.equal(transitionArgs.allowReopenVotesFromPublication, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('GET /api/workflow/static-publication/config requires authentication', async () => {
   const jwtSecret = 'test-jwt-secret'
   const { app, restoreEnv } = loadTestApp({

@@ -69,11 +69,16 @@ const baseProps = {
   onRemindVotes: jest.fn(),
   onCloseVotes: jest.fn(),
   onPublishDefinitive: jest.fn(),
+  onDeactivatePublication: jest.fn(),
   onSendSoutenanceLinks: jest.fn(),
   onGenerateStaticPublication: jest.fn(),
   onPreviewStaticPublication: jest.fn(),
   onPublishStaticPublication: jest.fn(),
   staticPublicationInfo: null,
+  onGenerateStaticVotePublication: jest.fn(),
+  onPublishStaticVotePublication: jest.fn(),
+  onSyncStaticVotePublication: jest.fn(),
+  staticVotePublicationInfo: null,
   onOpenVotesTracking: jest.fn(),
   onOpenSoutenances: jest.fn(),
   roomsCount: 4,
@@ -490,6 +495,27 @@ describe('TpiScheduleButtons - Données', () => {
     expect(onPublishDefinitive).toHaveBeenCalledTimes(1)
   })
 
+  test('permet de desactiver la publication pour revenir aux votes', () => {
+    const onDeactivatePublication = jest.fn()
+
+    renderButtons({
+      workflowState: 'published',
+      onDeactivatePublication
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Finalisation/i }))
+
+    const deactivateButton = screen.getByRole('button', {
+      name: /Revenir aux votes/i
+    })
+    expect(deactivateButton).toBeEnabled()
+
+    fireEvent.click(deactivateButton)
+
+    expect(onDeactivatePublication).toHaveBeenCalledTimes(1)
+  })
+
   test('affiche la publication statique après Finalisation dans le workflow', () => {
     renderButtons({
       staticPublicationInfo: {
@@ -529,6 +555,37 @@ describe('TpiScheduleButtons - Données', () => {
     expect(baseProps.onGenerateStaticPublication).toHaveBeenCalledTimes(1)
     expect(baseProps.onPreviewStaticPublication).toHaveBeenCalledTimes(1)
     expect(baseProps.onPublishStaticPublication).toHaveBeenCalledTimes(1)
+  })
+
+  test('affiche et déclenche les actions du mini-site vote dans la page statique', () => {
+    renderButtons({
+      staticVotePublicationInfo: {
+        available: true,
+        generatedAt: '2026-05-01T10:00:00.000Z',
+        publicUrl: 'https://tpi26.ch/votes-2026/',
+        syncSecretConfigured: true,
+        siteSyncSecretConfigured: true
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Page statique/i }))
+
+    expect(screen.getByText(/Mini-site vote/i)).toBeInTheDocument()
+    expect(screen.getByText(/Dernière génération vote:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Publication FTP vote: en attente/i)).toBeInTheDocument()
+    expect(screen.getByText(/Secret sync local configuré/i)).toBeInTheDocument()
+    expect(screen.getByText(/Secret sync inclus dans le site généré/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Générer vote web/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Liens vote/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Publier vote sur tpi26\.ch/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Sync vote web/i }))
+
+    expect(baseProps.onGenerateStaticVotePublication).toHaveBeenCalledTimes(1)
+    expect(baseProps.onOpenVoteAccessPreview).toHaveBeenCalledTimes(1)
+    expect(baseProps.onPublishStaticVotePublication).toHaveBeenCalledTimes(1)
+    expect(baseProps.onSyncStaticVotePublication).toHaveBeenCalledTimes(1)
   })
 
   test('affiche la réussite de publication statique FTP', () => {

@@ -317,9 +317,18 @@ function derivePublicPathFromRemoteDir(remoteDir, year) {
 
 function normalizeStaticPublicPath(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
-  const configuredDeploymentPath = compactText(deploymentConfig?.publicPath)
+  const configuredDeploymentPath = compactText(
+    deploymentConfig?.defensePublicPath ||
+    deploymentConfig?.publicPath
+  )
   const configuredPublicPath = compactText(
     configuredDeploymentPath ||
+    process.env.STATIC_DEFENSE_PUBLIC_PATH ||
+    process.env.STATIC_DEFENSE_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_DEFENSE_PUBLIC_PATH ||
+    process.env.STATIC_SOUTENANCE_PUBLIC_PATH ||
+    process.env.STATIC_SOUTENANCE_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_SOUTENANCE_PUBLIC_PATH ||
     process.env.STATIC_PUBLIC_PATH ||
     process.env.STATIC_PUBLICATION_PUBLIC_PATH ||
     process.env.FTP_STATIC_PUBLIC_PATH
@@ -329,7 +338,13 @@ function normalizeStaticPublicPath(year, deploymentConfig = null) {
     return normalizeSlashPath(withPublicationYear(configuredPublicPath, normalizedYear))
   }
 
-  const configuredStaticRemoteDir = compactText(deploymentConfig?.staticRemoteDir || process.env.FTP_STATIC_REMOTE_DIR)
+  const configuredStaticRemoteDir = compactText(
+    deploymentConfig?.defenseRemoteDir ||
+    deploymentConfig?.staticRemoteDir ||
+    process.env.FTP_STATIC_DEFENSE_REMOTE_DIR ||
+    process.env.FTP_STATIC_SOUTENANCE_REMOTE_DIR ||
+    process.env.FTP_STATIC_REMOTE_DIR
+  )
   const configuredRemoteBaseDir = compactText(deploymentConfig?.remoteDir || process.env.FTP_REMOTE_DIR)
 
   if (configuredStaticRemoteDir && !configuredRemoteBaseDir) {
@@ -342,7 +357,13 @@ function normalizeStaticPublicPath(year, deploymentConfig = null) {
 function normalizeRemoteDir(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
   const remoteBaseDir = compactText(deploymentConfig?.remoteDir || process.env.FTP_REMOTE_DIR)
-  const staticRemoteDir = compactText(deploymentConfig?.staticRemoteDir || process.env.FTP_STATIC_REMOTE_DIR)
+  const staticRemoteDir = compactText(
+    deploymentConfig?.defenseRemoteDir ||
+    deploymentConfig?.staticRemoteDir ||
+    process.env.FTP_STATIC_DEFENSE_REMOTE_DIR ||
+    process.env.FTP_STATIC_SOUTENANCE_REMOTE_DIR ||
+    process.env.FTP_STATIC_REMOTE_DIR
+  )
   const defaultStaticDir = `${DEFAULT_STATIC_PUBLIC_PATH_PREFIX}-${normalizedYear}`
 
   if (staticRemoteDir) {

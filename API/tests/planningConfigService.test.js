@@ -35,6 +35,8 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
     voteReminderCooldownHours: 24
   })
   assert.deepEqual(config.accessLinkSettings, {
+    defaultVoteLinkTarget: 'app',
+    defaultSoutenanceLinkTarget: 'app',
     voteLinkValidityHours: 168,
     voteLinkMaxUses: 20,
     soutenanceLinkValidityHours: 96,
@@ -71,6 +73,8 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
         voteReminderCooldownHours: 12
       },
       accessLinkSettings: {
+        defaultVoteLinkTarget: 'static',
+        defaultSoutenanceLinkTarget: 'publication',
         voteLinkValidityHours: 72,
         voteLinkMaxUses: 12,
         soutenanceLinkValidityHours: 240,
@@ -136,6 +140,8 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
     voteReminderCooldownHours: 12
   })
   assert.deepEqual(config.accessLinkSettings, {
+    defaultVoteLinkTarget: 'static',
+    defaultSoutenanceLinkTarget: 'publication',
     voteLinkValidityHours: 72,
     voteLinkMaxUses: 12,
     soutenanceLinkValidityHours: 240,

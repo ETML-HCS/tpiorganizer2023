@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { authPlanningService, planningCatalogService, planningConfigService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
@@ -691,10 +691,71 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [proposalMoveLoadingKey, setProposalMoveLoadingKey] = useState('')
   const [proposalMoveApplying, setProposalMoveApplying] = useState(false)
   const [preferenceActionLoadingKey, setPreferenceActionLoadingKey] = useState('')
+  const staticVoteAutoSyncYearsRef = useRef(new Set())
 
   // Filtres
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+
+  const fetchStaticVotePublicationStatus = useCallback(async () => {
+    if (!isAdmin || typeof workflowPlanningService.getStaticVotePublicationStatus !== 'function') {
+      return null
+    }
+
+    try {
+      return await workflowPlanningService.getStaticVotePublicationStatus(year)
+    } catch (err) {
+      if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
+        console.warn('Statut publication vote statique indisponible:', err)
+      }
+      return null
+    }
+  }, [year, isAdmin])
+
+  const tryAutoSyncStaticVotes = useCallback(async () => {
+    if (!isAdmin || typeof workflowPlanningService.syncStaticVotePublication !== 'function') {
+      return undefined
+    }
+
+    const yearKey = String(year)
+    if (staticVoteAutoSyncYearsRef.current.has(yearKey)) {
+      return undefined
+    }
+
+    const status = await fetchStaticVotePublicationStatus()
+
+    if (!status?.available || status?.syncSecretConfigured !== true) {
+      return status
+    }
+
+    staticVoteAutoSyncYearsRef.current.add(yearKey)
+
+    try {
+      const result = await workflowPlanningService.syncStaticVotePublication(year)
+      const syncedAt = new Date().toISOString()
+
+      return {
+        ...(status || {}),
+        lastSyncAt: syncedAt,
+        lastSyncStatus: Number(result?.failedCount || 0) > 0 ? 'warning' : 'success',
+        lastSyncMessage: 'Synchronisation automatique au chargement.',
+        lastSyncReceivedCount: Number(result?.receivedCount || 0),
+        lastSyncImportedCount: Number(result?.importedCount || 0),
+        lastSyncFailedCount: Number(result?.failedCount || 0)
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Synchronisation automatique des votes statiques indisponible:', err)
+      }
+
+      return {
+        ...(status || {}),
+        lastSyncAt: new Date().toISOString(),
+        lastSyncStatus: 'error',
+        lastSyncMessage: getApiErrorMessage(err, 'Synchronisation automatique indisponible.')
+      }
+    }
+  }, [year, isAdmin, fetchStaticVotePublicationStatus])
 
   /**
    * Charge toutes les données de planification
@@ -705,6 +766,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     setValidationResult(null)
     
     try {
+      const staticVoteAutoSyncResponse = await tryAutoSyncStaticVotes()
       const snapshotRequest = isAdmin
         ? Promise.resolve(workflowPlanningService.getActiveSnapshot(year))
           .catch(err => {
@@ -720,13 +782,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         : Promise.resolve(null)
 
       const staticVotePublicationRequest = isAdmin
-        ? Promise.resolve(workflowPlanningService.getStaticVotePublicationStatus(year))
-          .catch(err => {
-            if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
-              console.warn('Statut publication vote statique indisponible:', err)
-            }
-            return null
-          })
+        ? staticVoteAutoSyncResponse !== undefined
+          ? Promise.resolve(staticVoteAutoSyncResponse)
+          : fetchStaticVotePublicationStatus()
         : Promise.resolve(null)
 
       const planningConfigRequest = Promise.resolve(planningConfigService.getByYear(year)).catch(err => {
@@ -807,7 +865,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     } finally {
       setIsLoading(false)
     }
-  }, [year, isAdmin])
+  }, [year, isAdmin, fetchStaticVotePublicationStatus, tryAutoSyncStaticVotes])
 
   useEffect(() => {
     let isCancelled = false

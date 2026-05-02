@@ -174,6 +174,16 @@ const planningWorkflowSettingsSchema = new mongoose.Schema(
 
 const planningAccessLinkSettingsSchema = new mongoose.Schema(
   {
+    defaultVoteLinkTarget: {
+      type: String,
+      enum: ['app', 'static'],
+      default: 'app'
+    },
+    defaultSoutenanceLinkTarget: {
+      type: String,
+      enum: ['app', 'publication'],
+      default: 'app'
+    },
     voteLinkValidityHours: {
       type: Number,
       default: 24 * 7

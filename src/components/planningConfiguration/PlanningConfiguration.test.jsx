@@ -110,8 +110,10 @@ const mockPublicationDeploymentConfig = {
   passwordUpdatedAt: '2026-01-15T10:00:00.000Z',
   remoteDir: '/home/account/domains/tpi26.ch/public_html',
   staticRemoteDir: 'soutenances-{year}',
+  voteRemoteDir: 'votes-{year}',
   publicBaseUrl: 'https://tpi26.ch',
-  publicPath: '/soutenances-{year}'
+  publicPath: '/soutenances-{year}',
+  votePublicPath: '/votes-{year}'
 }
 
 const mockYearConfig = {
@@ -127,6 +129,8 @@ const mockYearConfig = {
     voteReminderCooldownHours: 24
   },
   accessLinkSettings: {
+    defaultVoteLinkTarget: 'app',
+    defaultSoutenanceLinkTarget: 'app',
     voteLinkValidityHours: 168,
     voteLinkMaxUses: 20,
     soutenanceLinkValidityHours: 96,
@@ -174,6 +178,8 @@ const mockYearConfigWithCustomTypes = {
     voteReminderCooldownHours: 24
   },
   accessLinkSettings: {
+    defaultVoteLinkTarget: 'app',
+    defaultSoutenanceLinkTarget: 'app',
     voteLinkValidityHours: 168,
     voteLinkMaxUses: 20,
     soutenanceLinkValidityHours: 96,
@@ -806,11 +812,17 @@ describe('PlanningConfiguration', () => {
     render(<PlanningConfiguration />)
 
     const accessLinkCard = await openAccessLinkCard()
+    fireEvent.change(within(accessLinkCard).getByLabelText('Cible vote'), {
+      target: { value: 'static' }
+    })
     fireEvent.change(within(accessLinkCard).getByLabelText('Lien vote (heures)'), {
       target: { value: '72' }
     })
     fireEvent.change(within(accessLinkCard).getByLabelText('Usages vote'), {
       target: { value: '12' }
+    })
+    fireEvent.change(within(accessLinkCard).getByLabelText('Cible défense'), {
+      target: { value: 'publication' }
     })
     fireEvent.change(within(accessLinkCard).getByLabelText('Lien défense (heures)'), {
       target: { value: '240' }
@@ -827,6 +839,8 @@ describe('PlanningConfiguration', () => {
       2026,
       expect.objectContaining({
         accessLinkSettings: {
+          defaultVoteLinkTarget: 'static',
+          defaultSoutenanceLinkTarget: 'publication',
           voteLinkValidityHours: 72,
           voteLinkMaxUses: 12,
           soutenanceLinkValidityHours: 240,
@@ -1038,11 +1052,17 @@ describe('PlanningConfiguration', () => {
     fireEvent.change(within(publicationCard).getByLabelText('Mot de passe'), {
       target: { value: 'secret-value' }
     })
-    fireEvent.change(within(publicationCard).getByLabelText('Dossier distant'), {
+    fireEvent.change(within(publicationCard).getByLabelText('Racine FTP'), {
       target: { value: '/var/www/tpi26.ch' }
     })
-    fireEvent.change(within(publicationCard).getByLabelText('Sous-dossier'), {
+    fireEvent.change(within(publicationCard).getByLabelText('Dossier défenses'), {
       target: { value: 'planning-{year}' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Dossier votes'), {
+      target: { value: 'votes-{year}' }
+    })
+    fireEvent.change(within(publicationCard).getByLabelText('Chemin votes'), {
+      target: { value: '/votes-{year}' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -1059,7 +1079,11 @@ describe('PlanningConfiguration', () => {
         password: 'secret-value',
         clearPassword: false,
         remoteDir: '/var/www/tpi26.ch',
-        staticRemoteDir: 'planning-{year}'
+        staticRemoteDir: 'planning-{year}',
+        defenseRemoteDir: 'planning-{year}',
+        voteRemoteDir: 'votes-{year}',
+        defensePublicPath: '/soutenances-{year}',
+        votePublicPath: '/votes-{year}'
       })
     )
     expect(planningCatalogService.saveGlobal).not.toHaveBeenCalled()

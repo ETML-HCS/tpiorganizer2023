@@ -18,11 +18,15 @@ const STATIC_PUBLICATION_ENV_KEYS = [
   'FTP_PORT',
   'FTP_PROTOCOL',
   'FTP_REMOTE_DIR',
+  'FTP_STATIC_DEFENSE_PUBLIC_PATH',
+  'FTP_STATIC_DEFENSE_REMOTE_DIR',
   'FTP_STATIC_REMOTE_DIR',
   'FTP_STATIC_PUBLIC_PATH',
   'FTP_USER',
   'PUBLICATION_FTP_PROTOCOL',
   'PUBLIC_SITE_BASE_URL',
+  'STATIC_DEFENSE_PUBLIC_PATH',
+  'STATIC_DEFENSE_PUBLICATION_PUBLIC_PATH',
   'STATIC_PUBLIC_BASE_URL',
   'STATIC_PUBLIC_PATH',
   'STATIC_PUBLICATION_DIR',
@@ -244,5 +248,20 @@ test('getStaticPublicationStatus can target the public webroot directly', async 
 
     assert.equal(status.remoteDir, '/home/account/domains/tpi26.ch/public_html')
     assert.equal(status.publicUrl, 'https://tpi26.ch/')
+  })
+})
+
+test('getStaticPublicationStatus accepte les alias explicites de publication defenses', async () => {
+  await withPublicationEnv({
+    FTP_REMOTE_DIR: '/home/account/domains/tpi26.ch/public_html',
+    FTP_STATIC_DEFENSE_REMOTE_DIR: 'defenses-{year}',
+    STATIC_DEFENSE_PUBLIC_PATH: '/defenses-{year}',
+    STATIC_PUBLICATION_DIR: path.join(os.tmpdir(), 'tpiorganizer-static-publication-defenses'),
+    STATIC_PUBLIC_BASE_URL: 'https://tpi26.ch'
+  }, async () => {
+    const status = await getStaticPublicationStatus(2026)
+
+    assert.equal(status.remoteDir, '/home/account/domains/tpi26.ch/public_html/defenses-2026')
+    assert.equal(status.publicUrl, 'https://tpi26.ch/defenses-2026/')
   })
 })

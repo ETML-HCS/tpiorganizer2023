@@ -45,6 +45,10 @@ function isTransitionAllowed(from, to, options = {}) {
     return true
   }
 
+  if (options?.allowReopenVotesFromPublication === true && from === 'published' && to === 'voting_open') {
+    return true
+  }
+
   return getAllowedTransitions(from).includes(to)
 }
 
@@ -128,7 +132,8 @@ async function transitionWorkflowYear({
   year,
   targetState,
   user,
-  allowDirectPublication = false
+  allowDirectPublication = false,
+  allowReopenVotesFromPublication = false
 }) {
   if (!isWorkflowState(targetState)) {
     throw new Error('Etat workflow invalide.')
@@ -144,7 +149,10 @@ async function transitionWorkflowYear({
     }
   }
 
-  if (!isTransitionAllowed(currentState, targetState, { allowDirectPublication })) {
+  if (!isTransitionAllowed(currentState, targetState, {
+    allowDirectPublication,
+    allowReopenVotesFromPublication
+  })) {
     const error = new WorkflowTransitionError('Transition workflow invalide.', {
       currentState,
       targetState,
@@ -178,6 +186,10 @@ async function transitionWorkflowYear({
 
   if (targetState === 'voting_open' && !workflow.votingOpenedAt) {
     workflow.votingOpenedAt = now
+  }
+
+  if (targetState === 'voting_open' && currentState === 'published' && allowReopenVotesFromPublication) {
+    workflow.publishedAt = null
   }
 
   if (targetState === 'published' && !workflow.publishedAt) {

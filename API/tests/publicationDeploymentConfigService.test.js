@@ -13,13 +13,21 @@ const DEPLOYMENT_ENV_KEYS = [
   'FTP_PORT',
   'FTP_PROTOCOL',
   'FTP_REMOTE_DIR',
+  'FTP_STATIC_DEFENSE_PUBLIC_PATH',
+  'FTP_STATIC_DEFENSE_REMOTE_DIR',
   'FTP_STATIC_REMOTE_DIR',
+  'FTP_STATIC_VOTE_REMOTE_DIR',
   'FTP_USER',
   'PUBLICATION_FTP_PROTOCOL',
   'PUBLIC_SITE_BASE_URL',
+  'STATIC_DEFENSE_PUBLIC_PATH',
+  'STATIC_DEFENSE_PUBLICATION_PUBLIC_PATH',
   'STATIC_PUBLIC_BASE_URL',
   'STATIC_PUBLIC_PATH',
-  'STATIC_PUBLICATION_PUBLIC_PATH'
+  'STATIC_PUBLICATION_PUBLIC_PATH',
+  'FTP_STATIC_VOTE_PUBLIC_PATH',
+  'STATIC_VOTE_PUBLIC_PATH',
+  'STATIC_VOTE_PUBLICATION_PUBLIC_PATH'
 ]
 
 function withDeploymentEnv(values, run) {
@@ -58,9 +66,11 @@ test('buildEnvDeploymentConfig normalise le protocole, le port et les chemins pu
     FTP_USER: ' deploy ',
     FTP_PASSWORD: ' secret ',
     FTP_REMOTE_DIR: '/var/www',
-    FTP_STATIC_REMOTE_DIR: 'soutenances-{year}',
+    FTP_STATIC_DEFENSE_REMOTE_DIR: 'soutenances-{year}',
+    FTP_STATIC_VOTE_REMOTE_DIR: 'votes-{year}',
     STATIC_PUBLIC_BASE_URL: 'publication.example.ch/',
-    STATIC_PUBLICATION_PUBLIC_PATH: 'soutenances-{year}'
+    STATIC_DEFENSE_PUBLIC_PATH: 'soutenances-{year}',
+    STATIC_VOTE_PUBLIC_PATH: 'votes-{year}'
   }, () => {
     const config = buildEnvDeploymentConfig()
 
@@ -71,8 +81,12 @@ test('buildEnvDeploymentConfig normalise le protocole, le port et les chemins pu
     assert.equal(config.password, 'secret')
     assert.equal(config.remoteDir, '/var/www')
     assert.equal(config.staticRemoteDir, 'soutenances-{year}')
+    assert.equal(config.defenseRemoteDir, 'soutenances-{year}')
+    assert.equal(config.voteRemoteDir, 'votes-{year}')
     assert.equal(config.publicBaseUrl, 'https://publication.example.ch')
     assert.equal(config.publicPath, '/soutenances-{year}')
+    assert.equal(config.defensePublicPath, '/soutenances-{year}')
+    assert.equal(config.votePublicPath, '/votes-{year}')
   })
 })
 
@@ -104,6 +118,30 @@ test('toPublicDeploymentConfig masque le mot de passe chiffre', () => {
   assert.equal(publicConfig.publicBaseUrl, 'https://publication.example.ch')
 })
 
+test('normalizeDeploymentConfig accepte les alias explicites defenses et votes', () => {
+  const normalized = normalizeDeploymentConfig(
+    {
+      defenseRemoteDir: 'defenses-{year}',
+      defensePublicPath: 'defenses-{year}',
+      votePublicationRemoteDir: 'votes-{year}',
+      votePublicationPublicPath: 'votes-{year}'
+    },
+    {
+      protocol: 'ftp',
+      port: 21,
+      publicBaseUrl: 'https://tpi26.ch'
+    }
+  )
+
+  assert.equal(normalized.staticRemoteDir, 'defenses-{year}')
+  assert.equal(normalized.defenseRemoteDir, 'defenses-{year}')
+  assert.equal(normalized.publicPath, '/defenses-{year}')
+  assert.equal(normalized.defensePublicPath, '/defenses-{year}')
+  assert.equal(normalized.voteRemoteDir, 'votes-{year}')
+  assert.equal(normalized.votePublicPath, '/votes-{year}')
+  assert.equal(toPublicDeploymentConfig(normalized).defensePublicPath, '/defenses-{year}')
+})
+
 test('normalizeDeploymentConfig peut effacer le mot de passe existant', () => {
   const existing = normalizeDeploymentConfig(
     {
@@ -126,4 +164,19 @@ test('normalizeDeploymentConfig peut effacer le mot de passe existant', () => {
 
   assert.equal(cleared.passwordEncrypted, '')
   assert.equal(toPublicDeploymentConfig(cleared).hasPassword, false)
+})
+
+test('normalizeDeploymentConfig accepte domain comme alias du domaine de publication', () => {
+  const normalized = normalizeDeploymentConfig(
+    {
+      domain: 'vote-publication.example.ch/'
+    },
+    {
+      protocol: 'ftp',
+      port: 21,
+      publicBaseUrl: 'https://tpi26.ch'
+    }
+  )
+
+  assert.equal(normalized.publicBaseUrl, 'https://vote-publication.example.ch')
 })

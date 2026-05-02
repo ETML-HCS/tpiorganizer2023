@@ -53,7 +53,8 @@ Scripts utiles :
 - `DB_URI` configure MongoDB.
 - `JWT_SECRET` est requis pour les sessions et magic links.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` et `SMTP_FROM` pilotent l'envoi automatique.
-- `STATIC_PUBLIC_BASE_URL`, `STATIC_PUBLIC_PATH`, `FTP_HOST`, `FTP_PORT`, `FTP_USER`, `FTP_PASSWORD`, `FTP_REMOTE_DIR` et `FTP_STATIC_REMOTE_DIR` restent disponibles comme fallback de publication.
+- `STATIC_PUBLIC_BASE_URL`, `FTP_HOST`, `FTP_PORT`, `FTP_USER`, `FTP_PASSWORD` et `FTP_REMOTE_DIR` forment la base commune de publication.
+- Les chemins publiés sont configurables par site: `STATIC_DEFENSE_PUBLIC_PATH` / `FTP_STATIC_DEFENSE_REMOTE_DIR` pour les défenses, `STATIC_VOTE_PUBLIC_PATH` / `FTP_STATIC_VOTE_REMOTE_DIR` pour les votes. Les anciens `STATIC_PUBLIC_PATH`, `STATIC_PUBLICATION_PUBLIC_PATH`, `FTP_STATIC_PUBLIC_PATH` et `FTP_STATIC_REMOTE_DIR` restent acceptés comme fallback des défenses.
 - La configuration de publication peut aussi être enregistrée depuis l'interface. Le mot de passe est stocké chiffré côté MongoDB via `PublicationDeploymentConfig`.
 - `STATIC_VOTE_SYNC_SECRET` est requis pour synchroniser les votes saisis sur le mini-site statique.
 - `STATIC_VOTE_AUTO_SYNC=true` active la synchronisation automatique au démarrage de l'API pour les années configurées via `STATIC_VOTE_AUTO_SYNC_YEARS`.

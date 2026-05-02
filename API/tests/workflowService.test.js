@@ -32,6 +32,10 @@ test('transition matrix allows only forward workflow', () => {
   )
   assert.equal(workflowService.isTransitionAllowed('published', 'planning'), false)
   assert.equal(workflowService.isTransitionAllowed('published', 'voting_open'), false)
+  assert.equal(
+    workflowService.isTransitionAllowed('published', 'voting_open', { allowReopenVotesFromPublication: true }),
+    true
+  )
 })
 
 test('isWorkflowState validates allowed values only', () => {
@@ -154,6 +158,70 @@ test('transitionWorkflowYear records the transition and audit metadata on succes
       to: 'voting_open'
     })
     assert.equal(auditEvents[0].success, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('transitionWorkflowYear can reopen votes from publication and clears publishedAt', async () => {
+  const workflow = {
+    year: 2026,
+    state: 'published',
+    planningAt: new Date('2026-01-10T08:00:00.000Z'),
+    votingOpenedAt: new Date('2026-03-15T08:00:00.000Z'),
+    publishedAt: new Date('2026-04-20T08:00:00.000Z'),
+    lastTransitionAt: new Date('2026-04-20T08:00:00.000Z'),
+    createdAt: new Date('2026-01-10T08:00:00.000Z'),
+    updatedAt: new Date('2026-04-20T08:00:00.000Z'),
+    transitions: [],
+    save: async function save() {
+      return this
+    }
+  }
+  const auditEvents = []
+
+  const restore = [
+    patchMethod(WorkflowYear, 'findOne', async () => workflow),
+    patchMethod(PlanningSnapshot, 'findOne', () => ({
+      select() {
+        return {
+          lean: async () => ({
+            _id: 'snapshot-2',
+            version: 4,
+            hash: 'hash-456',
+            frozenAt: new Date('2026-03-20T12:00:00.000Z')
+          })
+        }
+      }
+    })),
+    patchMethod(WorkflowAuditEvent, 'create', async (payload) => {
+      auditEvents.push(payload)
+      return payload
+    })
+  ]
+
+  try {
+    const result = await workflowService.transitionWorkflowYear({
+      year: 2026,
+      targetState: 'voting_open',
+      user: { id: 'admin-2', email: 'admin2@example.com', roles: ['admin'] },
+      allowReopenVotesFromPublication: true
+    })
+
+    assert.equal(result.changed, true)
+    assert.equal(result.workflow.state, 'voting_open')
+    assert.equal(workflow.state, 'voting_open')
+    assert.equal(workflow.publishedAt, null)
+    assert.equal(workflow.transitions.length, 1)
+    assert.equal(workflow.transitions[0].from, 'published')
+    assert.equal(workflow.transitions[0].to, 'voting_open')
+    assert.equal(auditEvents.length, 1)
+    assert.deepEqual(auditEvents[0].payload, {
+      from: 'published',
+      to: 'voting_open'
+    })
   } finally {
     while (restore.length > 0) {
       restore.pop()()

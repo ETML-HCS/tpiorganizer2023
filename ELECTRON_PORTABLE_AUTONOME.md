@@ -113,12 +113,27 @@ Pour Electron :
 
 ## Questions à trancher plus tard
 
-- Les données doivent-elles rester dans le même dossier que l'exécutable ou dans le profil utilisateur Windows ?
-- L'application doit-elle fonctionner entièrement hors ligne, y compris l'envoi d'emails ?
-- Faut-il conserver une compatibilité MongoDB Atlas pour un mode hybride ?
-- Quel format d'export complet doit devenir la référence : JSON, CSV, ou les deux ?
-- Le mode portable doit-il être mono-utilisateur ou partager une base entre plusieurs postes ?
-- Les publications statiques doivent-elles être disponibles depuis le desktop, ou réservées au mode web/admin ?
+Emplacement des données
+Les données doivent‑elles rester dans le même dossier que l’exécutable ou dans le profil utilisateur Windows
+→ Version portable : un dossier portant le nom de l’application est créé, et tous les fichiers nécessaires y sont stockés.
+
+Fonctionnement hors ligne et envoi d’emails
+L’application doit‑elle fonctionner entièrement hors ligne, y compris pour l’envoi d’emails
+→ Oui, tout fonctionne localement.
+Pour l’envoi d’emails : soit l’utilisateur fournit son adresse Outlook, soit une fenêtre Outlook s’ouvre pour finaliser l’envoi.
+
+Compatibilité MongoDB Atlas (mode hybride)
+→ Non, aucune compatibilité Atlas n’est requise.
+
+Format d’export de référence
+→ JSON et CSV, l’utilisateur choisit le format souhaité.
+
+Mode portable : mono‑utilisateur ou base partagée
+→ Mono‑utilisateur uniquement.
+
+Publications statiques : desktop ou web/admin
+→ Disponibles depuis le desktop.
+La version web disparaît : le programme devient exclusivement une application desktop.
 
 ## Prochaine action utile
 

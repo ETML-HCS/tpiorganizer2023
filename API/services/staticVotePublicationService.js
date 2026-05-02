@@ -22,6 +22,7 @@ const {
 const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
 const DEFAULT_STATIC_VOTE_PATH_PREFIX = 'votes'
+const DEFAULT_STATIC_VOTE_SYNC_TIMEOUT_MS = 15000
 const STATIC_VOTE_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_VOTE_BOOTSTRAP -->'
 const STATIC_VOTE_IMPORT_PREFIX = 'static-vote'
 const VOTE_TPI_STATUSES = ['voting', 'pending_validation']
@@ -44,6 +45,11 @@ function parseYear(value) {
   }
 
   return parsed
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
 function escapeHtml(value) {
@@ -181,7 +187,11 @@ function getDefaultStaticVotePublicPath(year) {
 
 function normalizeVotePublicPath(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
-  const configuredDeploymentPath = compactText(deploymentConfig?.votePublicPath)
+  const configuredDeploymentPath = compactText(
+    deploymentConfig?.votePublicPath ||
+    deploymentConfig?.staticVotePublicPath ||
+    deploymentConfig?.votePublicationPublicPath
+  )
   const configuredPublicPath = compactText(
     configuredDeploymentPath ||
     process.env.STATIC_VOTE_PUBLIC_PATH ||
@@ -199,7 +209,13 @@ function normalizeVotePublicPath(year, deploymentConfig = null) {
 function normalizeVoteRemoteDir(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
   const remoteBaseDir = compactText(deploymentConfig?.remoteDir || process.env.FTP_REMOTE_DIR)
-  const voteRemoteDir = compactText(deploymentConfig?.voteRemoteDir || process.env.FTP_STATIC_VOTE_REMOTE_DIR)
+  const voteRemoteDir = compactText(
+    deploymentConfig?.voteRemoteDir ||
+    deploymentConfig?.staticVoteRemoteDir ||
+    deploymentConfig?.votePublicationRemoteDir ||
+    process.env.FTP_STATIC_VOTE_REMOTE_DIR ||
+    process.env.FTP_VOTE_REMOTE_DIR
+  )
   const defaultVoteDir = `${DEFAULT_STATIC_VOTE_PATH_PREFIX}-${normalizedYear}`
 
   if (voteRemoteDir) {
@@ -274,7 +290,7 @@ async function getPublicUrl(year, deploymentConfig = null) {
   return `${baseUrl}${publicPath === '/' ? '/' : `${publicPath}/`}`
 }
 
-function buildPublicUrlLinkTarget(rawPublicUrl) {
+function buildPublicUrlLinkTarget(rawPublicUrl, year, deploymentConfig = null) {
   const publicUrl = compactText(rawPublicUrl)
 
   if (!publicUrl) {
@@ -287,18 +303,29 @@ function buildPublicUrlLinkTarget(rawPublicUrl) {
 
   try {
     const url = new URL(withProtocol)
+    const pathname = compactText(url.pathname) || '/'
+    const hasExplicitPath = pathname !== '/'
+    const redirectPathname = hasExplicitPath
+      ? pathname
+      : `${normalizeVotePublicPath(year, deploymentConfig).replace(/\/+$/, '')}/`
+
     return {
       baseUrl: `${url.protocol}//${url.host}`,
-      redirectPath: `${url.pathname || '/'}${url.search || ''}` || '/'
+      redirectPath: `${redirectPathname}${url.search || ''}` || '/'
     }
   } catch (error) {
     return null
   }
 }
 
-async function getStaticVoteLinkTarget(year, explicitPublicUrl = '') {
-  const publicUrl = compactText(explicitPublicUrl) || await getPublicUrl(year)
-  const target = buildPublicUrlLinkTarget(publicUrl)
+async function getStaticVoteLinkTarget(year, explicitPublicUrl = '', deploymentConfig = null) {
+  const normalizedYear = parseYear(year)
+  const publicUrl = compactText(explicitPublicUrl)
+  const resolvedDeploymentConfig = deploymentConfig || (!publicUrl
+    ? await getPublicationDeploymentConfigIfAvailable()
+    : null)
+  const resolvedPublicUrl = publicUrl || await getPublicUrl(normalizedYear, resolvedDeploymentConfig)
+  const target = buildPublicUrlLinkTarget(resolvedPublicUrl, normalizedYear, resolvedDeploymentConfig)
 
   if (!target) {
     const error = new Error('URL publique de vote statique invalide ou absente.')
@@ -311,6 +338,13 @@ async function getStaticVoteLinkTarget(year, explicitPublicUrl = '') {
 
 function getSyncSecret() {
   return compactText(process.env.STATIC_VOTE_SYNC_SECRET)
+}
+
+function getSyncTimeoutMs(value = null) {
+  return parsePositiveInteger(
+    value ?? process.env.STATIC_VOTE_SYNC_TIMEOUT_MS,
+    DEFAULT_STATIC_VOTE_SYNC_TIMEOUT_MS
+  )
 }
 
 function getSlotIdFromProposedSlot(proposedSlot) {
@@ -970,16 +1004,68 @@ function staticVoteReadRecords(): array
     return $records;
 }
 
-function staticVoteAppendRecord(array $record): void
+function staticVoteFindExistingRecordInList(array $records, string $tokenHash, string $campaignId, string $tpiId): ?array
 {
-    $path = staticVoteRecordsPath();
+    foreach ($records as $record) {
+        if (
+            is_array($record) &&
+            staticVoteText($record['tokenHash'] ?? '') === $tokenHash &&
+            staticVoteText($record['campaignId'] ?? '') === $campaignId &&
+            staticVoteText($record['tpiId'] ?? '') === $tpiId
+        ) {
+            return $record;
+        }
+    }
+
+    return null;
+}
+
+function staticVoteAppendUniqueRecord(array $record, string $tokenHash, string $campaignId, string $tpiId): ?array
+{
+    $dir = staticVoteDataDir();
+    $lockPath = $dir . DIRECTORY_SEPARATOR . 'votes.lock';
+    $lockHandle = fopen($lockPath, 'c');
+
+    if ($lockHandle === false) {
+        staticVoteJson(500, ['success' => false, 'error' => 'Verrouillage impossible.']);
+    }
+
+    if (!flock($lockHandle, LOCK_EX)) {
+        fclose($lockHandle);
+        staticVoteJson(500, ['success' => false, 'error' => 'Verrouillage impossible.']);
+    }
+
+    $existingSubmission = staticVoteFindExistingRecordInList(
+        staticVoteReadRecords(),
+        $tokenHash,
+        $campaignId,
+        $tpiId
+    );
+
+    if ($existingSubmission !== null) {
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+        return $existingSubmission;
+    }
+
     $encoded = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     if (!is_string($encoded) || $encoded === '') {
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
         staticVoteJson(500, ['success' => false, 'error' => 'Enregistrement impossible.']);
     }
 
-    file_put_contents($path, $encoded . PHP_EOL, FILE_APPEND | LOCK_EX);
+    $written = file_put_contents(staticVoteRecordsPath(), $encoded . PHP_EOL, FILE_APPEND);
+
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
+
+    if ($written === false) {
+        staticVoteJson(500, ['success' => false, 'error' => 'Enregistrement impossible.']);
+    }
+
+    return null;
 }
 
 function staticVoteFindAccessEntry(array $accessLinks, string $tokenHash): ?array
@@ -1058,12 +1144,16 @@ function staticVoteAllowedProposalSlotIds(array $group): array
     return $ids;
 }
 
-function staticVoteSubmittedTpiIds(string $tokenHash): array
+function staticVoteSubmittedTpiIds(string $tokenHash, string $campaignId): array
 {
     $ids = [];
 
     foreach (staticVoteReadRecords() as $record) {
         if (staticVoteText($record['tokenHash'] ?? '') !== $tokenHash) {
+            continue;
+        }
+
+        if ($campaignId !== '' && staticVoteText($record['campaignId'] ?? '') !== $campaignId) {
             continue;
         }
 
@@ -1078,17 +1168,7 @@ function staticVoteSubmittedTpiIds(string $tokenHash): array
 
 function staticVoteFindExistingSubmission(string $tokenHash, string $campaignId, string $tpiId): ?array
 {
-    foreach (staticVoteReadRecords() as $record) {
-        if (
-            staticVoteText($record['tokenHash'] ?? '') === $tokenHash &&
-            staticVoteText($record['campaignId'] ?? '') === $campaignId &&
-            staticVoteText($record['tpiId'] ?? '') === $tpiId
-        ) {
-            return $record;
-        }
-    }
-
-    return null;
+    return staticVoteFindExistingRecordInList(staticVoteReadRecords(), $tokenHash, $campaignId, $tpiId);
 }
 
 function staticVoteRandomId(string $tokenHash, string $tpiId): string
@@ -1199,7 +1279,15 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         'tokenHash' => $tokenHash,
     ];
 
-    staticVoteAppendRecord($record);
+    $existingSubmission = staticVoteAppendUniqueRecord($record, $tokenHash, $campaignId, $tpiId);
+    if ($existingSubmission !== null) {
+        staticVoteJson(409, [
+            'success' => false,
+            'error' => 'Vote deja transmis pour ce TPI.',
+            'id' => staticVoteText($existingSubmission['id'] ?? ''),
+        ]);
+    }
+
     staticVoteJson(200, ['success' => true, 'id' => $record['id'], 'submittedAt' => $record['submittedAt']]);
 }
 
@@ -1240,7 +1328,10 @@ $staticVoteViewer = [
 $staticVoteBrowserPayload = $staticVotePayload;
 $staticVoteBrowserPayload['viewer'] = $staticVoteViewer;
 $staticVoteBrowserPayload['groups'] = staticVoteFilteredGroups($staticVotePayload, $staticVoteAccessEntry);
-$staticVoteBrowserPayload['submittedTpiIds'] = staticVoteSubmittedTpiIds($staticVoteTokenHash);
+$staticVoteBrowserPayload['submittedTpiIds'] = staticVoteSubmittedTpiIds(
+    $staticVoteTokenHash,
+    staticVoteText($staticVotePayload['campaignId'] ?? '')
+);
 $staticVoteBootstrap = '<script>window.__STATIC_VOTE_BOOTSTRAP__=' .
     json_encode($staticVoteBrowserPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) .
     ';</script>';
@@ -1400,7 +1491,8 @@ async function getStaticVotePublicationStatus(year, deploymentConfig = null) {
     voterCount: Number(manifest.voterCount || 0),
     groupCount: Number(manifest.groupCount || 0),
     accessLinkCount: Number(manifest.accessLinkCount || 0),
-    syncSecretConfigured: Boolean(manifest.syncSecretConfigured || getSyncSecret())
+    siteSyncSecretConfigured: Boolean(manifest.syncSecretConfigured),
+    syncSecretConfigured: Boolean(getSyncSecret())
   }
 }
 
@@ -1792,7 +1884,13 @@ async function resolveStaticVoteSyncUrl(year, explicitRemoteUrl = '') {
   return `${await getPublicUrl(year)}sync.php`
 }
 
-async function fetchStaticVoteRecords({ year, remoteUrl = '', syncSecret = '', fetchImpl = null } = {}) {
+async function fetchStaticVoteRecords({
+  year,
+  remoteUrl = '',
+  syncSecret = '',
+  fetchImpl = null,
+  timeoutMs = null
+} = {}) {
   const normalizedYear = parseYear(year)
   const resolvedSecret = compactText(syncSecret || getSyncSecret())
   if (!resolvedSecret) {
@@ -1803,6 +1901,7 @@ async function fetchStaticVoteRecords({ year, remoteUrl = '', syncSecret = '', f
 
   const resolvedUrl = await resolveStaticVoteSyncUrl(normalizedYear, remoteUrl)
   const httpFetch = fetchImpl || global.fetch
+  const resolvedTimeoutMs = getSyncTimeoutMs(timeoutMs)
 
   if (typeof httpFetch !== 'function') {
     const error = new Error('fetch indisponible pour la synchronisation des votes.')
@@ -1810,12 +1909,37 @@ async function fetchStaticVoteRecords({ year, remoteUrl = '', syncSecret = '', f
     throw error
   }
 
-  const response = await httpFetch(resolvedUrl, {
+  const requestOptions = {
     headers: {
       'X-Sync-Secret': resolvedSecret,
       Accept: 'application/json'
     }
-  })
+  }
+  let timeoutHandle = null
+
+  if (typeof AbortController === 'function' && resolvedTimeoutMs > 0) {
+    const controller = new AbortController()
+    requestOptions.signal = controller.signal
+    timeoutHandle = setTimeout(() => controller.abort(), resolvedTimeoutMs)
+  }
+
+  let response
+  try {
+    response = await httpFetch(resolvedUrl, requestOptions)
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error(`Synchronisation distante expiree apres ${resolvedTimeoutMs} ms.`)
+      timeoutError.statusCode = 504
+      throw timeoutError
+    }
+
+    throw error
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle)
+    }
+  }
+
   const body = await response.json().catch(() => null)
 
   if (!response.ok || !body?.success) {
@@ -1830,13 +1954,20 @@ async function fetchStaticVoteRecords({ year, remoteUrl = '', syncSecret = '', f
   }
 }
 
-async function syncStaticVoteResponses({ year, remoteUrl = '', syncSecret = '', fetchImpl = null } = {}) {
+async function syncStaticVoteResponses({
+  year,
+  remoteUrl = '',
+  syncSecret = '',
+  fetchImpl = null,
+  timeoutMs = null
+} = {}) {
   const normalizedYear = parseYear(year)
   const remote = await fetchStaticVoteRecords({
     year: normalizedYear,
     remoteUrl,
     syncSecret,
-    fetchImpl
+    fetchImpl,
+    timeoutMs
   })
 
   const results = []

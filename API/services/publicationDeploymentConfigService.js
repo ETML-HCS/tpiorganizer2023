@@ -26,6 +26,10 @@ function parsePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null)
+}
+
 function getDefaultPort(protocol = 'ftp') {
   return ['sftp', 'ssh'].includes(protocol) ? 22 : 21
 }
@@ -127,6 +131,31 @@ function buildEnvDeploymentConfig() {
     process.env.FTP_PROTOCOL ||
     'ftp'
   )
+  const staticRemoteDir = compactText(
+    process.env.FTP_STATIC_DEFENSE_REMOTE_DIR ||
+    process.env.FTP_STATIC_SOUTENANCE_REMOTE_DIR ||
+    process.env.FTP_STATIC_REMOTE_DIR
+  )
+  const voteRemoteDir = compactText(
+    process.env.FTP_STATIC_VOTE_REMOTE_DIR ||
+    process.env.FTP_VOTE_REMOTE_DIR
+  )
+  const publicPath = normalizePublicPath(
+    process.env.STATIC_DEFENSE_PUBLIC_PATH ||
+    process.env.STATIC_DEFENSE_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_DEFENSE_PUBLIC_PATH ||
+    process.env.STATIC_SOUTENANCE_PUBLIC_PATH ||
+    process.env.STATIC_SOUTENANCE_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_SOUTENANCE_PUBLIC_PATH ||
+    process.env.STATIC_PUBLIC_PATH ||
+    process.env.STATIC_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_PUBLIC_PATH
+  )
+  const votePublicPath = normalizePublicPath(
+    process.env.STATIC_VOTE_PUBLIC_PATH ||
+    process.env.STATIC_VOTE_PUBLICATION_PUBLIC_PATH ||
+    process.env.FTP_STATIC_VOTE_PUBLIC_PATH
+  )
 
   return {
     key: CONFIG_KEY,
@@ -138,17 +167,17 @@ function buildEnvDeploymentConfig() {
     passwordEncrypted: '',
     passwordUpdatedAt: null,
     remoteDir: compactText(process.env.FTP_REMOTE_DIR),
-    staticRemoteDir: compactText(process.env.FTP_STATIC_REMOTE_DIR),
+    staticRemoteDir,
+    defenseRemoteDir: staticRemoteDir,
+    voteRemoteDir,
     publicBaseUrl: normalizePublicBaseUrl(
       process.env.STATIC_PUBLIC_BASE_URL ||
       process.env.PUBLIC_SITE_BASE_URL ||
       DEFAULT_PUBLIC_BASE_URL
     ),
-    publicPath: normalizePublicPath(
-      process.env.STATIC_PUBLIC_PATH ||
-      process.env.STATIC_PUBLICATION_PUBLIC_PATH ||
-      process.env.FTP_STATIC_PUBLIC_PATH
-    )
+    publicPath,
+    defensePublicPath: publicPath,
+    votePublicPath
   }
 }
 
@@ -168,6 +197,39 @@ function normalizeDeploymentConfig(value = {}, fallback = buildEnvDeploymentConf
       : fallbackEncrypted
   const fallbackPassword = compactText(fallbackSource.password)
 
+  const staticRemoteDir = compactText(firstDefined(
+    source.staticRemoteDir,
+    source.defenseRemoteDir,
+    source.staticDefenseRemoteDir,
+    source.soutenanceRemoteDir,
+    source.staticSoutenanceRemoteDir,
+    source.staticDir,
+    fallbackSource.staticRemoteDir,
+    fallbackSource.defenseRemoteDir
+  ))
+  const voteRemoteDir = compactText(firstDefined(
+    source.voteRemoteDir,
+    source.staticVoteRemoteDir,
+    source.votePublicationRemoteDir,
+    fallbackSource.voteRemoteDir
+  ))
+  const publicPath = normalizePublicPath(firstDefined(
+    source.publicPath,
+    source.defensePublicPath,
+    source.staticPublicPath,
+    source.staticDefensePublicPath,
+    source.soutenancePublicPath,
+    source.staticSoutenancePublicPath,
+    fallbackSource.publicPath,
+    fallbackSource.defensePublicPath
+  ))
+  const votePublicPath = normalizePublicPath(firstDefined(
+    source.votePublicPath,
+    source.staticVotePublicPath,
+    source.votePublicationPublicPath,
+    fallbackSource.votePublicPath
+  ))
+
   return {
     key: CONFIG_KEY,
     protocol,
@@ -184,14 +246,16 @@ function normalizeDeploymentConfig(value = {}, fallback = buildEnvDeploymentConf
         ? null
         : fallbackSource.passwordUpdatedAt || null,
     remoteDir: compactText(source.remoteDir ?? fallbackSource.remoteDir),
-    staticRemoteDir: compactText(source.staticRemoteDir ?? source.staticDir ?? fallbackSource.staticRemoteDir),
+    staticRemoteDir,
+    defenseRemoteDir: staticRemoteDir,
+    voteRemoteDir,
     publicBaseUrl: normalizePublicBaseUrl(
-      source.publicBaseUrl ?? source.staticPublicBaseUrl ?? source.publicSiteBaseUrl,
+      source.publicBaseUrl ?? source.staticPublicBaseUrl ?? source.publicSiteBaseUrl ?? source.domain,
       fallbackSource.publicBaseUrl
     ),
-    publicPath: normalizePublicPath(
-      source.publicPath ?? source.staticPublicPath ?? fallbackSource.publicPath
-    )
+    publicPath,
+    defensePublicPath: publicPath,
+    votePublicPath
   }
 }
 
@@ -210,8 +274,12 @@ function toPublicDeploymentConfig(config = {}) {
       : null,
     remoteDir: normalized.remoteDir,
     staticRemoteDir: normalized.staticRemoteDir,
+    defenseRemoteDir: normalized.defenseRemoteDir,
+    voteRemoteDir: normalized.voteRemoteDir,
     publicBaseUrl: normalized.publicBaseUrl,
-    publicPath: normalized.publicPath
+    publicPath: normalized.publicPath,
+    defensePublicPath: normalized.defensePublicPath,
+    votePublicPath: normalized.votePublicPath
   }
 }
 
@@ -295,8 +363,10 @@ async function savePublicationDeploymentConfig(payload = {}) {
       passwordUpdatedAt: normalized.passwordUpdatedAt,
       remoteDir: normalized.remoteDir,
       staticRemoteDir: normalized.staticRemoteDir,
+      voteRemoteDir: normalized.voteRemoteDir,
       publicBaseUrl: normalized.publicBaseUrl,
       publicPath: normalized.publicPath,
+      votePublicPath: normalized.votePublicPath,
       updatedAt: new Date()
     },
     {

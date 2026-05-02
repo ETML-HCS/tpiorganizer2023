@@ -303,6 +303,21 @@ describe('PlanningDashboard', () => {
     expect(screen.getByRole('link', { name: /ouvrir la fiche/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
   })
 
+  test('synchronise automatiquement les votes du mini-site au chargement admin', async () => {
+    planningServices.workflowPlanningService.getStaticVotePublicationStatus.mockResolvedValueOnce({
+      available: true,
+      publicUrl: 'https://tpi26.ch/votes-2026/',
+      syncSecretConfigured: true
+    })
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    await waitFor(() => {
+      expect(planningServices.workflowPlanningService.syncStaticVotePublication).toHaveBeenCalledWith('2026')
+    })
+    expect(await screen.findByText(/Planning 2026/i)).toBeInTheDocument()
+  })
+
   test('reste stable quand les services de planning renvoient des listes vides ou nulles', async () => {
     planningServices.planningCatalogService.getGlobal.mockResolvedValue(null)
     planningServices.planningConfigService.getByYear.mockResolvedValue(null)

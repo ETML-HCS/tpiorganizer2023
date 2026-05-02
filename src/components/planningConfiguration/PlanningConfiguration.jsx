@@ -62,6 +62,8 @@ const DEFAULT_WORKFLOW_SETTINGS = {
 }
 
 const DEFAULT_ACCESS_LINK_SETTINGS = {
+  defaultVoteLinkTarget: "app",
+  defaultSoutenanceLinkTarget: "app",
   voteLinkValidityHours: 24 * 7,
   voteLinkMaxUses: 20,
   soutenanceLinkValidityHours: 24 * 4,
@@ -117,8 +119,10 @@ const DEFAULT_PUBLICATION_DEPLOYMENT_SETTINGS = {
   hasPassword: false,
   remoteDir: "",
   staticRemoteDir: "",
+  voteRemoteDir: "",
   publicBaseUrl: DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl,
-  publicPath: ""
+  publicPath: "",
+  votePublicPath: ""
 }
 
 const PUBLICATION_PROTOCOL_OPTIONS = [
@@ -129,6 +133,16 @@ const PUBLICATION_PROTOCOL_OPTIONS = [
 ]
 
 const PUBLICATION_PROTOCOL_VALUES = new Set(PUBLICATION_PROTOCOL_OPTIONS.map((option) => option.value))
+
+const VOTE_LINK_TARGET_OPTIONS = [
+  { value: "app", label: "Application" },
+  { value: "static", label: "Mini-site vote" }
+]
+
+const SOUTENANCE_LINK_TARGET_OPTIONS = [
+  { value: "app", label: "Application" },
+  { value: "publication", label: "Publication web" }
+]
 
 const EMAIL_DELIVERY_MODE_OPTIONS = [
   { value: "outlook", label: "Outlook manuel" },
@@ -174,6 +188,15 @@ const normalizeBoundedInteger = (value, fallback, min, max) => {
   }
 
   return Math.max(min, Math.min(max, numeric))
+}
+
+const normalizeVoteLinkTarget = (value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget) => {
+  const normalized = compactText(value || fallback).toLowerCase()
+  return normalized === "static" || normalized === "publication" ? "static" : "app"
+}
+
+const normalizeSoutenanceLinkTarget = (value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget) => {
+  return compactText(value || fallback).toLowerCase() === "publication" ? "publication" : "app"
 }
 
 const normalizeWorkflowSettings = (value = {}, fallback = DEFAULT_WORKFLOW_SETTINGS) => {
@@ -229,6 +252,14 @@ const normalizeAccessLinkSettings = (value = {}, fallback = DEFAULT_ACCESS_LINK_
     : DEFAULT_ACCESS_LINK_SETTINGS
 
   return {
+    defaultVoteLinkTarget: normalizeVoteLinkTarget(
+      source.defaultVoteLinkTarget ?? source.voteLinkTarget ?? source.voteTarget,
+      fallbackSource.defaultVoteLinkTarget ?? DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget
+    ),
+    defaultSoutenanceLinkTarget: normalizeSoutenanceLinkTarget(
+      source.defaultSoutenanceLinkTarget ?? source.soutenanceLinkTarget ?? source.publicationLinkTarget,
+      fallbackSource.defaultSoutenanceLinkTarget ?? DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget
+    ),
     voteLinkValidityHours: normalizeBoundedInteger(
       source.voteLinkValidityHours ?? source.voteValidityHours ?? source.voteExpiryHours,
       fallbackSource.voteLinkValidityHours ?? DEFAULT_ACCESS_LINK_SETTINGS.voteLinkValidityHours,
@@ -1008,9 +1039,33 @@ const normalizePublicationDeploymentSettings = (value = {}) => {
     hasPassword: source.hasPassword === true,
     passwordUpdatedAt: compactText(source.passwordUpdatedAt),
     remoteDir: compactText(source.remoteDir),
-    staticRemoteDir: compactText(source.staticRemoteDir || source.staticDir),
+    staticRemoteDir: compactText(
+      source.staticRemoteDir ||
+      source.defenseRemoteDir ||
+      source.staticDefenseRemoteDir ||
+      source.soutenanceRemoteDir ||
+      source.staticSoutenanceRemoteDir ||
+      source.staticDir
+    ),
+    voteRemoteDir: compactText(
+      source.voteRemoteDir ||
+      source.staticVoteRemoteDir ||
+      source.votePublicationRemoteDir
+    ),
     publicBaseUrl: normalizePublicBaseUrl(source.publicBaseUrl),
-    publicPath: compactText(source.publicPath || source.staticPublicPath)
+    publicPath: compactText(
+      source.publicPath ||
+      source.defensePublicPath ||
+      source.staticPublicPath ||
+      source.staticDefensePublicPath ||
+      source.soutenancePublicPath ||
+      source.staticSoutenancePublicPath
+    ),
+    votePublicPath: compactText(
+      source.votePublicPath ||
+      source.staticVotePublicPath ||
+      source.votePublicationPublicPath
+    )
   }
 }
 
@@ -1149,8 +1204,12 @@ const buildPublicationDeploymentPayload = (draft) => {
     clearPassword: normalized.clearPassword === true,
     remoteDir: normalized.remoteDir,
     staticRemoteDir: normalized.staticRemoteDir,
+    defenseRemoteDir: normalized.staticRemoteDir,
+    voteRemoteDir: normalized.voteRemoteDir,
     publicBaseUrl: normalized.publicBaseUrl,
-    publicPath: normalized.publicPath
+    publicPath: normalized.publicPath,
+    defensePublicPath: normalized.publicPath,
+    votePublicPath: normalized.votePublicPath
   }
 
   if (normalized.password) {
@@ -1971,14 +2030,20 @@ const formatAccessLinkHours = (hours) => {
   return formatDurationHours(hours)
 }
 
+const formatLinkTargetLabel = (value, options) => {
+  return options.find((option) => option.value === value)?.label || "Application"
+}
+
 const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
   const [isExpanded, setIsExpanded] = useState(false)
   const normalizedSettings = normalizeAccessLinkSettings(settings)
   const bodyId = "configuration-access-link-settings-body"
   const summaryLine = [
-    `Vote ${formatAccessLinkHours(normalizedSettings.voteLinkValidityHours)}`,
+    `Vote ${formatLinkTargetLabel(normalizedSettings.defaultVoteLinkTarget, VOTE_LINK_TARGET_OPTIONS).toLowerCase()}`,
+    `${formatAccessLinkHours(normalizedSettings.voteLinkValidityHours)}`,
     `${normalizedSettings.voteLinkMaxUses} accès vote`,
-    `Défense ${formatAccessLinkHours(normalizedSettings.soutenanceLinkValidityHours)}`,
+    `Défense ${formatLinkTargetLabel(normalizedSettings.defaultSoutenanceLinkTarget, SOUTENANCE_LINK_TARGET_OPTIONS).toLowerCase()}`,
+    `${formatAccessLinkHours(normalizedSettings.soutenanceLinkValidityHours)}`,
     `${normalizedSettings.soutenanceLinkMaxUses} accès défense`
   ].join(" · ")
 
@@ -2026,6 +2091,24 @@ const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
             </div>
             <div className='configuration-card-grid configuration-card-grid--access-link-group'>
               <label className='page-tools-field'>
+                <span className='page-tools-field-label' title='Cible utilisée par défaut pour les liens de vote générés dans le module Accès et les emails de campagne.'>
+                  Cible vote
+                </span>
+                <select
+                  className='page-tools-field-control'
+                  value={normalizedSettings.defaultVoteLinkTarget}
+                  onChange={(event) => onChange("defaultVoteLinkTarget", event.target.value)}
+                  disabled={disabled}
+                >
+                  {VOTE_LINK_TARGET_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className='page-tools-field'>
                 <span className='page-tools-field-label' title='Durée de validité des liens de vote générés automatiquement.'>
                   Lien vote (heures)
                 </span>
@@ -2064,6 +2147,24 @@ const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
               <span className='configuration-subsection-title'>Défenses</span>
             </div>
             <div className='configuration-card-grid configuration-card-grid--access-link-group'>
+              <label className='page-tools-field'>
+                <span className='page-tools-field-label' title='Cible utilisée par défaut pour les liens de défense générés dans le module Accès.'>
+                  Cible défense
+                </span>
+                <select
+                  className='page-tools-field-control'
+                  value={normalizedSettings.defaultSoutenanceLinkTarget}
+                  onChange={(event) => onChange("defaultSoutenanceLinkTarget", event.target.value)}
+                  disabled={disabled}
+                >
+                  {SOUTENANCE_LINK_TARGET_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className='page-tools-field'>
                 <span className='page-tools-field-label' title='Durée de validité des liens vers la vue publiée des défenses.'>
                   Lien défense (heures)
@@ -2938,7 +3039,7 @@ const PublicationSettingsCard = ({
             </span>
             <h4>Publication</h4>
             <p className='configuration-section-note'>
-              Domaine public utilisé pour la page statique et les liens de soutenance publiés.
+              Domaine public et dossiers FTP des sites publiés: défenses et votes.
             </p>
           </div>
           <div className='configuration-card-head-actions'>
@@ -2970,139 +3071,184 @@ const PublicationSettingsCard = ({
       )}
 
       <div id={bodyId} className='configuration-card-body configuration-publication-card-body' hidden={!isExpanded}>
-        <div className='configuration-card-grid configuration-card-grid--publication'>
-          <label className='page-tools-field' htmlFor='configuration-publication-protocol'>
-            <span className='page-tools-field-label'>Protocole</span>
-            <select
-              id='configuration-publication-protocol'
-              className='page-tools-field-control'
-              value={normalizedSettings.protocol}
-              onChange={(event) => onChange("protocol", event.target.value)}
-              disabled={disabled}
-            >
-              {PUBLICATION_PROTOCOL_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className='configuration-publication-layout'>
+          <section className='configuration-settings-subsection configuration-publication-subsection'>
+            <div className='configuration-subsection-head'>
+              <span className='configuration-subsection-title'>Connexion</span>
+            </div>
+            <div className='configuration-card-grid configuration-card-grid--publication'>
+              <label className='page-tools-field' htmlFor='configuration-publication-protocol'>
+                <span className='page-tools-field-label'>Protocole</span>
+                <select
+                  id='configuration-publication-protocol'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.protocol}
+                  onChange={(event) => onChange("protocol", event.target.value)}
+                  disabled={disabled}
+                >
+                  {PUBLICATION_PROTOCOL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-host'>
-            <span className='page-tools-field-label'>Host</span>
-            <input
-              id='configuration-publication-host'
-              className='page-tools-field-control'
-              value={normalizedSettings.host}
-              onChange={(event) => onChange("host", event.target.value)}
-              placeholder='ftp.example.ch'
-              disabled={disabled}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-host'>
+                <span className='page-tools-field-label'>Host</span>
+                <input
+                  id='configuration-publication-host'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.host}
+                  onChange={(event) => onChange("host", event.target.value)}
+                  placeholder='ftp.example.ch'
+                  disabled={disabled}
+                />
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-port'>
-            <span className='page-tools-field-label'>Port</span>
-            <input
-              id='configuration-publication-port'
-              type='number'
-              min='1'
-              max='65535'
-              step='1'
-              className='page-tools-field-control'
-              value={normalizedSettings.port}
-              onChange={(event) => onChange("port", Number.parseInt(event.target.value, 10))}
-              disabled={disabled}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-port'>
+                <span className='page-tools-field-label'>Port</span>
+                <input
+                  id='configuration-publication-port'
+                  type='number'
+                  min='1'
+                  max='65535'
+                  step='1'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.port}
+                  onChange={(event) => onChange("port", Number.parseInt(event.target.value, 10))}
+                  disabled={disabled}
+                />
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-username'>
-            <span className='page-tools-field-label'>Utilisateur</span>
-            <input
-              id='configuration-publication-username'
-              className='page-tools-field-control'
-              value={normalizedSettings.username}
-              onChange={(event) => onChange("username", event.target.value)}
-              autoComplete='username'
-              disabled={disabled}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-username'>
+                <span className='page-tools-field-label'>Utilisateur</span>
+                <input
+                  id='configuration-publication-username'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.username}
+                  onChange={(event) => onChange("username", event.target.value)}
+                  autoComplete='username'
+                  disabled={disabled}
+                />
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-password'>
-            <span className='page-tools-field-label'>Mot de passe</span>
-            <input
-              id='configuration-publication-password'
-              type='password'
-              className='page-tools-field-control'
-              value={normalizedSettings.password}
-              onChange={(event) => onChange("password", event.target.value)}
-              placeholder={normalizedSettings.hasPassword ? "Conserver le mot de passe enregistré" : ""}
-              autoComplete='new-password'
-              disabled={disabled || normalizedSettings.clearPassword}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-password'>
+                <span className='page-tools-field-label'>Mot de passe</span>
+                <input
+                  id='configuration-publication-password'
+                  type='password'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.password}
+                  onChange={(event) => onChange("password", event.target.value)}
+                  placeholder={normalizedSettings.hasPassword ? "Conserver le mot de passe enregistré" : ""}
+                  autoComplete='new-password'
+                  disabled={disabled || normalizedSettings.clearPassword}
+                />
+              </label>
 
-          <label className='page-tools-field configuration-publication-clear-password' htmlFor='configuration-publication-clear-password'>
-            <span className='page-tools-field-label'>Secret</span>
-            <span className='configuration-checkbox-row'>
-              <input
-                id='configuration-publication-clear-password'
-                type='checkbox'
-                checked={normalizedSettings.clearPassword}
-                onChange={(event) => onChange("clearPassword", event.target.checked)}
-                disabled={disabled || !normalizedSettings.hasPassword}
-              />
-              <span>Effacer</span>
-            </span>
-          </label>
+              <label className='page-tools-field configuration-publication-clear-password' htmlFor='configuration-publication-clear-password'>
+                <span className='page-tools-field-label'>Secret</span>
+                <span className='configuration-checkbox-row'>
+                  <input
+                    id='configuration-publication-clear-password'
+                    type='checkbox'
+                    checked={normalizedSettings.clearPassword}
+                    onChange={(event) => onChange("clearPassword", event.target.checked)}
+                    disabled={disabled || !normalizedSettings.hasPassword}
+                  />
+                  <span>Effacer</span>
+                </span>
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-public-base-url'>
-            <span className='page-tools-field-label'>URL publique</span>
-            <input
-              id='configuration-publication-public-base-url'
-              type='url'
-              className='page-tools-field-control'
-              value={normalizedSettings.publicBaseUrl}
-              onChange={(event) => onChange("publicBaseUrl", event.target.value)}
-              placeholder='https://tpi26.ch'
-              disabled={disabled}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-public-base-url'>
+                <span className='page-tools-field-label'>URL publique</span>
+                <input
+                  id='configuration-publication-public-base-url'
+                  type='url'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.publicBaseUrl}
+                  onChange={(event) => onChange("publicBaseUrl", event.target.value)}
+                  placeholder='https://tpi26.ch'
+                  disabled={disabled}
+                />
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-public-path'>
-            <span className='page-tools-field-label'>Chemin public</span>
-            <input
-              id='configuration-publication-public-path'
-              className='page-tools-field-control'
-              value={normalizedSettings.publicPath}
-              onChange={(event) => onChange("publicPath", event.target.value)}
-              placeholder='/soutenances-{year}'
-              disabled={disabled}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-remote-dir'>
+                <span className='page-tools-field-label'>Racine FTP</span>
+                <input
+                  id='configuration-publication-remote-dir'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.remoteDir}
+                  onChange={(event) => onChange("remoteDir", event.target.value)}
+                  placeholder='/home/account/domains/example.ch/public_html'
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+          </section>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-remote-dir'>
-            <span className='page-tools-field-label'>Dossier distant</span>
-            <input
-              id='configuration-publication-remote-dir'
-              className='page-tools-field-control'
-              value={normalizedSettings.remoteDir}
-              onChange={(event) => onChange("remoteDir", event.target.value)}
-              placeholder='/home/account/domains/example.ch/public_html'
-              disabled={disabled}
-            />
-          </label>
+          <section className='configuration-settings-subsection configuration-publication-subsection'>
+            <div className='configuration-subsection-head'>
+              <span className='configuration-subsection-title'>Défenses</span>
+            </div>
+            <div className='configuration-card-grid configuration-card-grid--publication-target'>
+              <label className='page-tools-field' htmlFor='configuration-publication-public-path'>
+                <span className='page-tools-field-label'>Chemin défenses</span>
+                <input
+                  id='configuration-publication-public-path'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.publicPath}
+                  onChange={(event) => onChange("publicPath", event.target.value)}
+                  placeholder='/soutenances-{year}'
+                  disabled={disabled}
+                />
+              </label>
 
-          <label className='page-tools-field' htmlFor='configuration-publication-static-remote-dir'>
-            <span className='page-tools-field-label'>Sous-dossier</span>
-            <input
-              id='configuration-publication-static-remote-dir'
-              className='page-tools-field-control'
-              value={normalizedSettings.staticRemoteDir}
-              onChange={(event) => onChange("staticRemoteDir", event.target.value)}
-              placeholder='soutenances-{year}'
-              disabled={disabled}
-            />
-          </label>
+              <label className='page-tools-field' htmlFor='configuration-publication-static-remote-dir'>
+                <span className='page-tools-field-label'>Dossier défenses</span>
+                <input
+                  id='configuration-publication-static-remote-dir'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.staticRemoteDir}
+                  onChange={(event) => onChange("staticRemoteDir", event.target.value)}
+                  placeholder='soutenances-{year}'
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className='configuration-settings-subsection configuration-publication-subsection'>
+            <div className='configuration-subsection-head'>
+              <span className='configuration-subsection-title'>Votes</span>
+            </div>
+            <div className='configuration-card-grid configuration-card-grid--publication-target'>
+              <label className='page-tools-field' htmlFor='configuration-publication-vote-public-path'>
+                <span className='page-tools-field-label'>Chemin votes</span>
+                <input
+                  id='configuration-publication-vote-public-path'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.votePublicPath}
+                  onChange={(event) => onChange("votePublicPath", event.target.value)}
+                  placeholder='/votes-{year}'
+                  disabled={disabled}
+                />
+              </label>
+
+              <label className='page-tools-field' htmlFor='configuration-publication-vote-remote-dir'>
+                <span className='page-tools-field-label'>Dossier votes</span>
+                <input
+                  id='configuration-publication-vote-remote-dir'
+                  className='page-tools-field-control'
+                  value={normalizedSettings.voteRemoteDir}
+                  onChange={(event) => onChange("voteRemoteDir", event.target.value)}
+                  placeholder='votes-{year}'
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+          </section>
         </div>
 
         <p className='configuration-field-hint'>

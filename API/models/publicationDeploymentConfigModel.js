@@ -41,11 +41,19 @@ const publicationDeploymentConfigSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  voteRemoteDir: {
+    type: String,
+    default: ''
+  },
   publicBaseUrl: {
     type: String,
     default: 'https://tpi26.ch'
   },
   publicPath: {
+    type: String,
+    default: ''
+  },
+  votePublicPath: {
     type: String,
     default: ''
   },

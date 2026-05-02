@@ -15,6 +15,7 @@ const staticVotePublicationService = require('../services/staticVotePublicationS
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
 const { getSharedEmailSettingsIfAvailable } = require('../services/planningCatalogService')
+const planningConfigService = require('../services/planningConfigService')
 const publicationDeploymentConfigService = require('../services/publicationDeploymentConfigService')
 const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
 const { buildDefensePublicPath } = require('../utils/publicRoutes')
@@ -87,6 +88,27 @@ function normalizeSoutenanceLinkTarget(rawValue) {
 
 function normalizeVoteLinkTarget(rawValue) {
   return rawValue === 'static' || rawValue === 'publication' ? 'static' : 'app'
+}
+
+async function getAccessLinkSettingsForYear(year) {
+  const config = await planningConfigService.getPlanningConfigIfAvailable(year)
+  return planningConfigService.normalizeAccessLinkSettings(config?.accessLinkSettings)
+}
+
+async function resolveAccessLinkTargets(year, body = {}) {
+  const settings = await getAccessLinkSettingsForYear(year)
+  const requestedVoteLinkTarget = compactText(body?.voteLinkTarget)
+  const requestedSoutenanceLinkTarget = compactText(body?.soutenanceLinkTarget)
+
+  return {
+    settings,
+    voteLinkTarget: normalizeVoteLinkTarget(
+      requestedVoteLinkTarget || settings.defaultVoteLinkTarget
+    ),
+    soutenanceLinkTarget: normalizeSoutenanceLinkTarget(
+      requestedSoutenanceLinkTarget || settings.defaultSoutenanceLinkTarget
+    )
+  }
 }
 
 function buildSoutenancePublicationLinkTarget(rawPublicUrl) {
@@ -1365,8 +1387,10 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
     const baseUrl = getFrontendBaseUrl(req)
-    const voteLinkTarget = normalizeVoteLinkTarget(req.body?.voteLinkTarget)
-    const soutenanceLinkTarget = normalizeSoutenanceLinkTarget(req.body?.soutenanceLinkTarget)
+    const {
+      voteLinkTarget,
+      soutenanceLinkTarget
+    } = await resolveAccessLinkTargets(year, req.body)
     const votePublicationTarget = voteLinkTarget === 'static'
       ? await staticVotePublicationService.getStaticVoteLinkTarget(
         year,
@@ -1742,6 +1766,104 @@ router.post(
 
       console.error('Erreur rollback publication workflow:', error)
       return res.status(500).json({ error: 'Erreur lors du rollback de publication.' })
+    }
+  }
+)
+
+router.post(
+  '/:year/publication/deactivate',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const workflow = await workflowService.getWorkflowYearState(year)
+      if (workflow.state !== 'published') {
+        return res.status(409).json({
+          error: 'Desactivation possible uniquement en etat published.',
+          details: {
+            year,
+            state: workflow.state,
+            requiredState: 'published'
+          }
+        })
+      }
+
+      const snapshot = await workflowService.hasActivePlanningSnapshot(year)
+      if (!snapshot) {
+        return res.status(409).json({
+          error: 'Impossible de revenir aux votes sans snapshot de planification actif.',
+          details: {
+            year,
+            reason: 'missing_planning_snapshot'
+          }
+        })
+      }
+
+      const deactivationResult = await publishedSoutenanceService.deactivatePublication(year)
+      const voteCampaignResult = deactivationResult.reopenedDirectPublicationCount > 0
+        ? await votingCampaignService.startVotesCampaign(
+          year,
+          `${req.protocol}://${req.get('host')}`,
+          { skipEmails: true }
+        )
+        : null
+      const transitionResult = await workflowService.transitionWorkflowYear({
+        year,
+        targetState: 'voting_open',
+        user: req.user,
+        allowReopenVotesFromPublication: true
+      })
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.deactivate',
+        user: req.user,
+        payload: {
+          ...deactivationResult,
+          voteCampaign: voteCampaignResult,
+          targetState: transitionResult?.workflow?.state || 'voting_open'
+        },
+        success: true
+      })
+
+      return res.status(200).json({
+        success: true,
+        year,
+        workflowState: transitionResult?.workflow?.state || 'voting_open',
+        workflow: transitionResult?.workflow || null,
+        voteCampaign: voteCampaignResult,
+        ...deactivationResult,
+        message: 'Publication des defenses desactivee. La campagne est revenue aux votes.'
+      })
+    } catch (error) {
+      if (error instanceof workflowService.WorkflowTransitionError) {
+        await workflowService.safeAuditTransitionFailure({
+          year,
+          user: req.user,
+          targetState: 'voting_open',
+          error
+        })
+
+        return res.status(error.statusCode || 409).json({
+          error: error.message,
+          details: error.details
+        })
+      }
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.deactivate',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+
+      console.error('Erreur desactivation publication workflow:', error)
+      return res.status(500).json({ error: 'Erreur lors de la desactivation de la publication.' })
     }
   }
 )

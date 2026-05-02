@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import PageToolbar from '../shared/PageToolbar'
 import { YEARS_CONFIG } from '../../config/appConfig'
 import {
+  planningConfigService,
   planningCatalogService,
   workflowPlanningService
 } from '../../services/planningService'
@@ -25,6 +26,10 @@ const DEFAULT_EMAIL_SETTINGS = {
 }
 const DEFAULT_PUBLICATION_SETTINGS = {
   publicBaseUrl: 'https://tpi26.ch'
+}
+const DEFAULT_ACCESS_LINK_SETTINGS = {
+  defaultVoteLinkTarget: 'app',
+  defaultSoutenanceLinkTarget: 'app'
 }
 
 function formatRoleLabel(role) {
@@ -127,6 +132,28 @@ function normalizePublicationSettings(value = {}) {
   return {
     publicBaseUrl: normalizePublicBaseUrl(
       source.publicBaseUrl || source.staticPublicBaseUrl || source.publicSiteBaseUrl || source.domain
+    )
+  }
+}
+
+function normalizeVoteLinkTarget(value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget) {
+  const normalized = String(value || fallback || '').trim().toLowerCase()
+  return normalized === 'static' || normalized === 'publication' ? 'static' : 'app'
+}
+
+function normalizeSoutenanceLinkTarget(value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget) {
+  return String(value || fallback || '').trim().toLowerCase() === 'publication' ? 'publication' : 'app'
+}
+
+function normalizeAccessLinkSettings(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+
+  return {
+    defaultVoteLinkTarget: normalizeVoteLinkTarget(
+      source.defaultVoteLinkTarget ?? source.voteLinkTarget ?? source.voteTarget
+    ),
+    defaultSoutenanceLinkTarget: normalizeSoutenanceLinkTarget(
+      source.defaultSoutenanceLinkTarget ?? source.soutenanceLinkTarget ?? source.publicationLinkTarget
     )
   }
 }
@@ -629,6 +656,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const [selectedPublicationVersion, setSelectedPublicationVersion] = useState('active')
   const [emailSettings, setEmailSettings] = useState(DEFAULT_EMAIL_SETTINGS)
   const [publicationSettings, setPublicationSettings] = useState(DEFAULT_PUBLICATION_SETTINGS)
+  const [accessLinkSettings, setAccessLinkSettings] = useState(DEFAULT_ACCESS_LINK_SETTINGS)
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const [usePublicationSiteLinks, setUsePublicationSiteLinks] = useState(false)
@@ -674,25 +702,37 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     let isCancelled = false
 
-    const loadStaticPublicationStatus = async () => {
-      try {
-        const [status, voteStatus] = await Promise.all([
-          workflowPlanningService.getStaticPublicationStatus(selectedYear),
-          workflowPlanningService.getStaticVotePublicationStatus(selectedYear)
-        ])
-        if (!isCancelled) {
-          setStaticPublicationInfo(status || null)
-          setStaticVotePublicationInfo(voteStatus || null)
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setStaticPublicationInfo(null)
-          setStaticVotePublicationInfo(null)
-        }
+    const loadYearLinkDefaults = async () => {
+      const [statusResult, voteStatusResult, configResult] = await Promise.allSettled([
+        workflowPlanningService.getStaticPublicationStatus(selectedYear),
+        workflowPlanningService.getStaticVotePublicationStatus(selectedYear),
+        planningConfigService.getByYear(selectedYear)
+      ])
+
+      if (isCancelled) {
+        return
       }
+
+      const status = statusResult.status === 'fulfilled' ? statusResult.value || null : null
+      const voteStatus = voteStatusResult.status === 'fulfilled' ? voteStatusResult.value || null : null
+      const normalizedLinkSettings = normalizeAccessLinkSettings(
+        configResult.status === 'fulfilled' ? configResult.value?.accessLinkSettings : null
+      )
+
+      setStaticPublicationInfo(status)
+      setStaticVotePublicationInfo(voteStatus)
+      setAccessLinkSettings(normalizedLinkSettings)
+      setUsePublicationSiteLinks(
+        normalizedLinkSettings.defaultSoutenanceLinkTarget === 'publication' &&
+        Boolean(typeof status?.publicUrl === 'string' && status.publicUrl.trim())
+      )
+      setUseVotePublicationSiteLinks(
+        normalizedLinkSettings.defaultVoteLinkTarget === 'static' &&
+        Boolean(typeof voteStatus?.publicUrl === 'string' && voteStatus.publicUrl.trim())
+      )
     }
 
-    loadStaticPublicationStatus()
+    loadYearLinkDefaults()
 
     return () => {
       isCancelled = true
@@ -1048,12 +1088,18 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     ? 'Remplacer les liens d’accès admin déjà générés.'
     : 'Générer les liens d’accès.'
   const isBusy = isPreviewLoading || isGenerating
+  const publicationDefaultHint = accessLinkSettings.defaultSoutenanceLinkTarget === 'publication'
+    ? ' Cible par défaut configurée.'
+    : ''
+  const votePublicationDefaultHint = accessLinkSettings.defaultVoteLinkTarget === 'static'
+    ? ' Cible par défaut configurée.'
+    : ''
   const publicationSiteLinksTitle = canUsePublicationSiteLinks
-    ? `Générer les liens de défense vers ${staticPublicationPublicUrl}.`
-    : 'URL publique de publication indisponible. Vérifiez la configuration et la génération statique.'
+    ? `Générer les liens de défense vers ${staticPublicationPublicUrl}.${publicationDefaultHint}`
+    : `URL publique de publication indisponible. Vérifiez la configuration et la génération statique.${publicationDefaultHint}`
   const votePublicationSiteLinksTitle = canUseVotePublicationSiteLinks
-    ? `Générer les liens de vote vers ${staticVotePublicationPublicUrl}.`
-    : 'URL publique de vote statique indisponible. Générez la publication vote avant de cibler le mini-site.'
+    ? `Générer les liens de vote vers ${staticVotePublicationPublicUrl}.${votePublicationDefaultHint}`
+    : `URL publique de vote statique indisponible. Générez la publication vote avant de cibler le mini-site.${votePublicationDefaultHint}`
   const handleShowSuggestedPublication = () => {
     if (!suggestedPublicationWithLinks?.version) {
       return

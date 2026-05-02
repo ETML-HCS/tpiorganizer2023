@@ -259,6 +259,7 @@ function normalizeVoteLinkTarget(value) {
 async function resolveVoteMagicLinkTarget(year, baseUrl, options = {}) {
   const configuredTarget = normalizeVoteLinkTarget(
     options.voteLinkTarget ||
+    options.accessLinkSettings?.defaultVoteLinkTarget ||
     process.env.STATIC_VOTE_LINK_TARGET ||
     process.env.VOTE_LINK_TARGET
   )
@@ -451,7 +452,10 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
   if (!skipEmails && emailTargetsByPersonId.size > 0) {
     const digestTargets = []
-    const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, options)
+    const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, {
+      ...options,
+      accessLinkSettings: planningConfig?.accessLinkSettings
+    })
 
     for (const target of emailTargetsByPersonId.values()) {
       const link = await magicLinkV2Service.createVoteMagicLink({
@@ -577,7 +581,10 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
   }
 
   const digestTargets = []
-  const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, options)
+  const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, {
+    ...options,
+    accessLinkSettings: planningConfig?.accessLinkSettings
+  })
   for (const target of targetsByPersonId.values()) {
     const link = await magicLinkV2Service.createVoteMagicLink({
       year,

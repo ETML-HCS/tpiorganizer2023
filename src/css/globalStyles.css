@@ -1261,21 +1261,55 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   gap: 10px;
 }
 
+#tools.planning-tools .planning-workflow-static-stack {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
 #tools.planning-tools .planning-static-publication-copy {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, auto) minmax(128px, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 4px;
   max-width: none;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
+  position: relative;
 }
 
-#tools.planning-tools .planning-static-publication-copy strong {
+#tools.planning-tools .planning-static-publication-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#tools.planning-tools .planning-static-publication-head strong {
   color: #0f172a;
   font-size: 0.78rem;
   line-height: 1.15;
+  white-space: nowrap;
+}
+
+#tools.planning-tools .planning-static-publication-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 118px;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #tools.planning-tools .planning-static-publication-copy p {
@@ -1283,6 +1317,10 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   color: #475569;
   font-size: 0.72rem;
   line-height: 1.28;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #tools.planning-tools .planning-static-publication-status {
@@ -1293,28 +1331,67 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   font-weight: 700;
   line-height: 1.2;
   overflow-wrap: anywhere;
+  position: absolute;
+  z-index: 12;
+  left: 10px;
+  top: calc(100% + 6px);
+  width: min(460px, calc(100vw - 48px));
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 #tools.planning-tools .planning-static-publication-status span {
   min-width: 0;
 }
 
+#tools.planning-tools .planning-static-publication-status .planning-static-publication-status-label {
+  color: #0f172a;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+#tools.planning-tools .planning-static-publication-copy:hover .planning-static-publication-status,
+#tools.planning-tools .planning-static-publication-status:focus,
+#tools.planning-tools .planning-static-publication-copy:focus-within .planning-static-publication-status {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+#tools.planning-tools .planning-static-publication-status:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+#tools.planning-tools .planning-static-publication-chip--success,
 #tools.planning-tools .planning-static-publication-status--success {
   color: #047857;
 }
 
+#tools.planning-tools .planning-static-publication-chip--error,
 #tools.planning-tools .planning-static-publication-status--error {
   color: #b91c1c;
 }
 
+#tools.planning-tools .planning-static-publication-chip--pending,
 #tools.planning-tools .planning-static-publication-status--pending {
   color: #0369a1;
 }
 
+#tools.planning-tools .planning-static-publication-chip--ready,
 #tools.planning-tools .planning-static-publication-status--ready {
   color: #b45309;
 }
 
+#tools.planning-tools .planning-static-publication-chip--idle,
 #tools.planning-tools .planning-static-publication-status--idle {
   color: #64748b;
 }
@@ -2820,6 +2897,14 @@ label.icon-button:not(.icon-button--with-badge) {
   #tools.planning-tools .planning-workflow-section-static {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  #tools.planning-tools .planning-static-publication-copy {
+    grid-template-columns: 1fr;
+  }
+
+  #tools.planning-tools .planning-static-publication-copy p {
+    white-space: normal;
   }
 
   #tools.planning-tools .planning-workflow-section-actions {

@@ -684,6 +684,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [workflowActionLoading, setWorkflowActionLoading] = useState(false)
   const [pendingWorkflowAction, setPendingWorkflowAction] = useState("")
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
+  const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
+  const staticVoteAutoSyncYearsRef = useRef(new Set())
   const [pendingYearChange, setPendingYearChange] = useState(null)
   const [isReplacingPlanningYear, setIsReplacingPlanningYear] = useState(false)
   const [isDeleteAllRoomsDialogOpen, setIsDeleteAllRoomsDialogOpen] = useState(false)
@@ -1359,6 +1361,90 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     refreshStaticPublicationStatus(selectedYear).catch(console.error)
   }, [refreshStaticPublicationStatus, selectedYear])
 
+  const refreshStaticVotePublicationStatus = useCallback(async (year) => {
+    if (typeof workflowPlanningService.getStaticVotePublicationStatus !== "function") {
+      return null
+    }
+
+    try {
+      const status = await workflowPlanningService.getStaticVotePublicationStatus(year)
+      setStaticVotePublicationInfo(status || null)
+      return status
+    } catch (error) {
+      console.warn("Erreur chargement mini-site vote:", error?.status, error?.message)
+      setStaticVotePublicationInfo(null)
+      return null
+    }
+  }, [])
+
+  const applyStaticVoteSyncResult = useCallback((result, extra = {}) => {
+    const failedCount = Number(result?.failedCount || 0)
+
+    setStaticVotePublicationInfo((previousInfo) => ({
+      ...(previousInfo || {}),
+      ...extra,
+      lastSyncAt: new Date().toISOString(),
+      lastSyncStatus: failedCount > 0 ? "warning" : "success",
+      lastSyncMessage: extra.lastSyncMessage || "Synchronisation votes web effectuée.",
+      lastSyncReceivedCount: Number(result?.receivedCount || 0),
+      lastSyncImportedCount: Number(result?.importedCount || 0),
+      lastSyncFailedCount: failedCount
+    }))
+  }, [])
+
+  const syncStaticVotePublicationSilently = useCallback(async (year, status = null) => {
+    if (typeof workflowPlanningService.syncStaticVotePublication !== "function") {
+      return null
+    }
+
+    try {
+      const result = await workflowPlanningService.syncStaticVotePublication(year)
+      applyStaticVoteSyncResult(result, {
+        ...(status || {}),
+        lastSyncMessage: "Synchronisation automatique au chargement."
+      })
+      return result
+    } catch (error) {
+      console.warn("Synchronisation automatique mini-site vote indisponible:", error?.status, error?.message)
+      setStaticVotePublicationInfo((previousInfo) => ({
+        ...(previousInfo || {}),
+        ...(status || {}),
+        lastSyncAt: new Date().toISOString(),
+        lastSyncStatus: "error",
+        lastSyncMessage: error?.data?.error || error?.message || "Synchronisation automatique indisponible."
+      }))
+      return null
+    }
+  }, [applyStaticVoteSyncResult])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadStaticVotePublicationStatus = async () => {
+      const status = await refreshStaticVotePublicationStatus(selectedYear)
+
+      if (isCancelled) {
+        return
+      }
+
+      const yearKey = String(selectedYear)
+      if (
+        status?.available === true &&
+        status?.syncSecretConfigured === true &&
+        !staticVoteAutoSyncYearsRef.current.has(yearKey)
+      ) {
+        staticVoteAutoSyncYearsRef.current.add(yearKey)
+        await syncStaticVotePublicationSilently(selectedYear, status)
+      }
+    }
+
+    loadStaticVotePublicationStatus().catch(console.error)
+
+    return () => {
+      isCancelled = true
+    }
+  }, [refreshStaticVotePublicationStatus, selectedYear, syncStaticVotePublicationSilently])
+
   const executeWorkflowAction = async ({
     actionKey,
     confirmMessage = "",
@@ -1635,6 +1721,33 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     })
   }
 
+  const handleDeactivatePublication = async () => {
+    const result = await executeWorkflowAction({
+      actionKey: "deactivatePublication",
+      confirmMessage: "Desactiver la publication des defenses et revenir aux votes ? Les liens de defense publies seront revoques.",
+      run: () => workflowPlanningService.deactivatePublication(selectedYear),
+      successMessage: (result) => {
+        const reopenedCount = Number(result?.reopenedDirectPublicationCount || 0)
+        const voteSuffix = reopenedCount > 0
+          ? ` ${result?.voteCampaign?.tpiCount || reopenedCount} TPI remis en vote sans email automatique.`
+          : ''
+
+        return `Publication desactivee: ${result?.deactivatedPublicationCount || 0} version(s), ${result?.revokedSoutenanceLinks || 0} lien(s) revoque(s).${voteSuffix}`
+      },
+      onSuccess: (result) => {
+        const nextWorkflowState = result?.workflowState || result?.workflow?.state
+        if (nextWorkflowState) {
+          setWorkflowState(nextWorkflowState)
+        }
+      }
+    })
+
+    const nextWorkflowState = result?.workflowState || result?.workflow?.state
+    if (nextWorkflowState) {
+      setWorkflowState(nextWorkflowState)
+    }
+  }
+
   const handleSendSoutenanceLinks = async () => {
     await executeWorkflowAction({
       actionKey: "sendLinks",
@@ -1695,6 +1808,71 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           lastPublishStatus: "error",
           lastPublishMessage: message || "Erreur lors de la publication statique par FTP.",
           lastPublishAt: new Date().toISOString()
+        }))
+      }
+    })
+  }
+
+  const handleGenerateStaticVotePublication = async () => {
+    await executeWorkflowAction({
+      actionKey: "staticVoteGenerate",
+      run: () => workflowPlanningService.generateStaticVotePublication(selectedYear),
+      successMessage: (result) =>
+        `Mini-site vote généré: ${result?.groupCount || 0} vote(s), ${result?.accessLinkCount || 0} lien(s).`,
+      onSuccess: (result) => {
+        setStaticVotePublicationInfo(result || null)
+      }
+    })
+  }
+
+  const handlePublishStaticVotePublication = async () => {
+    const publicationTargetLabel = formatPublicationConfirmTarget(staticVotePublicationInfo?.publicUrl)
+
+    await executeWorkflowAction({
+      actionKey: "staticVotePublish",
+      confirmMessage: `Publier le mini-site vote généré sur ${publicationTargetLabel} par FTP ?`,
+      run: () => workflowPlanningService.publishStaticVotePublication(selectedYear),
+      successMessage: (result) =>
+        `Mini-site vote publié${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,
+      onSuccess: (result) => {
+        const publishedAt = result?.publishedAt || new Date().toISOString()
+        setStaticVotePublicationInfo((previousInfo) => ({
+          ...(previousInfo || {}),
+          ...(result || {}),
+          available: true,
+          lastPublishStatus: "success",
+          lastPublishMessage: "Publication FTP vote réussie.",
+          lastPublishAt: publishedAt
+        }))
+      },
+      onError: (message) => {
+        setStaticVotePublicationInfo((previousInfo) => ({
+          ...(previousInfo || {}),
+          lastPublishStatus: "error",
+          lastPublishMessage: message || "Erreur lors de la publication FTP du mini-site vote.",
+          lastPublishAt: new Date().toISOString()
+        }))
+      }
+    })
+  }
+
+  const handleSyncStaticVotePublication = async () => {
+    await executeWorkflowAction({
+      actionKey: "staticVoteSync",
+      run: () => workflowPlanningService.syncStaticVotePublication(selectedYear),
+      successMessage: (result) =>
+        `Votes web synchronisés: ${result?.importedCount || 0}/${result?.receivedCount || 0} importé(s), ${result?.failedCount || 0} erreur(s).`,
+      onSuccess: (result) => {
+        applyStaticVoteSyncResult(result, {
+          lastSyncMessage: "Synchronisation manuelle votes web effectuée."
+        })
+      },
+      onError: (message) => {
+        setStaticVotePublicationInfo((previousInfo) => ({
+          ...(previousInfo || {}),
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: "error",
+          lastSyncMessage: message || "Erreur lors de la synchronisation votes web."
         }))
       }
     })
@@ -2380,11 +2558,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           onRemindVotes={handleRemindVotes}
           onCloseVotes={handleCloseVotes}
           onPublishDefinitive={handlePublishDefinitive}
+          onDeactivatePublication={handleDeactivatePublication}
           onSendSoutenanceLinks={handleSendSoutenanceLinks}
           onGenerateStaticPublication={handleGenerateStaticPublication}
           onPreviewStaticPublication={handlePreviewStaticPublication}
           onPublishStaticPublication={handlePublishStaticPublication}
           staticPublicationInfo={staticPublicationInfo}
+          onGenerateStaticVotePublication={handleGenerateStaticVotePublication}
+          onPublishStaticVotePublication={handlePublishStaticVotePublication}
+          onSyncStaticVotePublication={handleSyncStaticVotePublication}
+          staticVotePublicationInfo={staticVotePublicationInfo}
           onOpenVotesTracking={handleOpenVoteTracking}
           onOpenSoutenances={() => {
             const normalizedYear = Number.parseInt(selectedYear, 10)

@@ -544,6 +544,17 @@
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
+.configuration-publication-layout {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.configuration-card-grid--publication-target {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+
 .configuration-card-grid--workflow,
 .configuration-card-grid--access-links {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -561,7 +572,7 @@
 }
 
 .configuration-card-grid--access-link-group {
-  grid-template-columns: repeat(2, minmax(126px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
   align-items: end;
 }
 

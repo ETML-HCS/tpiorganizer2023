@@ -31,6 +31,8 @@ const DEFAULT_WORKFLOW_SETTINGS = {
   voteReminderCooldownHours: 24
 }
 const DEFAULT_ACCESS_LINK_SETTINGS = {
+  defaultVoteLinkTarget: 'app',
+  defaultSoutenanceLinkTarget: 'app',
   voteLinkValidityHours: 24 * 7,
   voteLinkMaxUses: 20,
   soutenanceLinkValidityHours: 24 * 4,
@@ -274,6 +276,15 @@ function normalizeBooleanOption(source, fallback) {
   return true
 }
 
+function normalizeVoteLinkTarget(value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget) {
+  const normalized = compactText(value || fallback).toLowerCase()
+  return normalized === 'static' || normalized === 'publication' ? 'static' : 'app'
+}
+
+function normalizeSoutenanceLinkTarget(value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget) {
+  return compactText(value || fallback).toLowerCase() === 'publication' ? 'publication' : 'app'
+}
+
 function normalizeWorkflowSettings(value = {}, fallback = DEFAULT_WORKFLOW_SETTINGS) {
   const source = value && typeof value === 'object' ? value : {}
   const fallbackSource = fallback && typeof fallback === 'object'
@@ -329,6 +340,14 @@ function normalizeAccessLinkSettings(value = {}, fallback = DEFAULT_ACCESS_LINK_
     : DEFAULT_ACCESS_LINK_SETTINGS
 
   return {
+    defaultVoteLinkTarget: normalizeVoteLinkTarget(
+      source.defaultVoteLinkTarget ?? source.voteLinkTarget ?? source.voteTarget,
+      fallbackSource.defaultVoteLinkTarget ?? DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget
+    ),
+    defaultSoutenanceLinkTarget: normalizeSoutenanceLinkTarget(
+      source.defaultSoutenanceLinkTarget ?? source.soutenanceLinkTarget ?? source.publicationLinkTarget,
+      fallbackSource.defaultSoutenanceLinkTarget ?? DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget
+    ),
     voteLinkValidityHours: normalizeBoundedInteger(
       source.voteLinkValidityHours ?? source.voteValidityHours ?? source.voteExpiryHours,
       fallbackSource.voteLinkValidityHours ?? DEFAULT_ACCESS_LINK_SETTINGS.voteLinkValidityHours,

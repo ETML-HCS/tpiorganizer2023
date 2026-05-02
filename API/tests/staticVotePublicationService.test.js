@@ -31,6 +31,7 @@ const STATIC_VOTE_ENV_KEYS = [
   'FTP_PORT',
   'FTP_PROTOCOL',
   'FTP_REMOTE_DIR',
+  'FTP_VOTE_REMOTE_DIR',
   'FTP_STATIC_VOTE_PUBLIC_PATH',
   'FTP_STATIC_VOTE_REMOTE_DIR',
   'FTP_USER',
@@ -43,6 +44,7 @@ const STATIC_VOTE_ENV_KEYS = [
   'STATIC_VOTE_PUBLIC_BASE_URL',
   'STATIC_VOTE_PUBLIC_PATH',
   'STATIC_VOTE_SYNC_SECRET',
+  'STATIC_VOTE_SYNC_TIMEOUT_MS',
   'STATIC_VOTE_SYNC_URL'
 ]
 
@@ -89,6 +91,22 @@ test('normalizeVotePublicPath and normalizeVoteRemoteDir keep votes isolated fro
     const status = await getStaticVotePublicationStatus(2026)
     assert.equal(status.publicUrl, 'https://tpi26.ch/votes-2026/')
     assert.equal(status.remoteDir, '/home/account/domains/tpi26.ch/public_html/votes-2026')
+    assert.equal(normalizeVotePublicPath(2026, { votePublicPath: '/planning-vote-{year}' }), '/planning-vote-2026')
+    assert.equal(normalizeVotePublicPath(2026, { votePublicationPublicPath: '/planning-vote-{year}' }), '/planning-vote-2026')
+    assert.equal(
+      normalizeVoteRemoteDir(2026, {
+        remoteDir: '/home/account/domains/tpi26.ch/public_html',
+        voteRemoteDir: 'planning-vote-{year}'
+      }),
+      '/home/account/domains/tpi26.ch/public_html/planning-vote-2026'
+    )
+    assert.equal(
+      normalizeVoteRemoteDir(2026, {
+        remoteDir: '/home/account/domains/tpi26.ch/public_html',
+        votePublicationRemoteDir: 'planning-vote-{year}'
+      }),
+      '/home/account/domains/tpi26.ch/public_html/planning-vote-2026'
+    )
   })
 })
 
@@ -98,6 +116,74 @@ test('getStaticVoteLinkTarget builds magic-link targets for the vote mini-site',
   assert.deepEqual(target, {
     baseUrl: 'https://tpi26.ch',
     redirectPath: '/votes-2026/'
+  })
+})
+
+test('getStaticVoteLinkTarget appends the vote path when only a site domain is provided', async () => {
+  const target = await getStaticVoteLinkTarget(2026, 'tpi26.ch')
+
+  assert.deepEqual(target, {
+    baseUrl: 'https://tpi26.ch',
+    redirectPath: '/votes-2026/'
+  })
+})
+
+test('getStaticVoteLinkTarget uses the deployment domain when no explicit vote URL is provided', async () => {
+  const target = await getStaticVoteLinkTarget(2026, '', {
+    publicBaseUrl: 'publication.example.ch/',
+    votePublicPath: '/planning-vote-{year}'
+  })
+
+  assert.deepEqual(target, {
+    baseUrl: 'https://publication.example.ch',
+    redirectPath: '/planning-vote-2026/'
+  })
+})
+
+test('getStaticVoteLinkTarget supports a local static vote target without an explicit path', async () => {
+  const target = await getStaticVoteLinkTarget(2026, 'http://localhost:5173')
+
+  assert.deepEqual(target, {
+    baseUrl: 'http://localhost:5173',
+    redirectPath: '/votes-2026/'
+  })
+})
+
+test('getStaticVoteLinkTarget uses a local configured base URL when no explicit vote URL is provided', async () => {
+  await withVoteEnv({
+    STATIC_VOTE_PUBLIC_BASE_URL: 'http://localhost:5001'
+  }, async () => {
+    const target = await getStaticVoteLinkTarget(2026)
+
+    assert.deepEqual(target, {
+      baseUrl: 'http://localhost:5001',
+      redirectPath: '/votes-2026/'
+    })
+  })
+})
+
+test('getStaticVotePublicationStatus separates site and local sync secret configuration', async (t) => {
+  const publicationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'static-vote-status-'))
+  const outputDir = path.join(publicationRoot, 'votes', '2026')
+
+  t.after(() => fs.rmSync(publicationRoot, { recursive: true, force: true }))
+
+  await fs.promises.mkdir(outputDir, { recursive: true })
+  await fs.promises.writeFile(path.join(outputDir, 'index.php'), '<?php echo "ok";', 'utf8')
+  await fs.promises.writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify({
+    year: 2026,
+    syncSecretConfigured: true
+  }), 'utf8')
+
+  await withVoteEnv({
+    STATIC_VOTE_PUBLICATION_DIR: publicationRoot,
+    STATIC_VOTE_SYNC_SECRET: ''
+  }, async () => {
+    const status = await getStaticVotePublicationStatus(2026)
+
+    assert.equal(status.available, true)
+    assert.equal(status.siteSyncSecretConfigured, true)
+    assert.equal(status.syncSecretConfigured, false)
   })
 })
 
@@ -322,6 +408,10 @@ test('buildStaticVotePhp gates the vote UI with token hashes and writes JSONL su
   assert.match(php, /staticVoteFilteredGroups/)
   assert.match(php, /scopeTpiId/)
   assert.match(php, /Vote deja transmis pour ce TPI/)
+  assert.match(php, /staticVoteSubmittedTpiIds\(string \$tokenHash, string \$campaignId\)/)
+  assert.match(php, /staticVoteSubmittedTpiIds\(\s*\$staticVoteTokenHash,\s*staticVoteText/)
+  assert.match(php, /staticVoteAppendUniqueRecord/)
+  assert.match(php, /votes\.lock/)
   assert.match(php, /staticVoteHandleSubmit/)
   assert.match(php, /votes\.jsonl/)
   assert.match(php, /window\.__STATIC_VOTE_BOOTSTRAP__/)
@@ -347,6 +437,7 @@ test('fetchStaticVoteRecords calls remote sync.php with X-Sync-Secret', async ()
   }, async () => {
     let receivedUrl = ''
     let receivedHeaders = null
+    let receivedSignal = null
 
     const result = await fetchStaticVoteRecords({
       year: 2026,
@@ -354,6 +445,7 @@ test('fetchStaticVoteRecords calls remote sync.php with X-Sync-Secret', async ()
       fetchImpl: async (url, options) => {
         receivedUrl = url
         receivedHeaders = options.headers
+        receivedSignal = options.signal
         return {
           ok: true,
           status: 200,
@@ -367,7 +459,34 @@ test('fetchStaticVoteRecords calls remote sync.php with X-Sync-Secret', async ()
 
     assert.equal(receivedUrl, 'https://tpi26.ch/votes-2026/sync.php')
     assert.equal(receivedHeaders['X-Sync-Secret'], 'sync-secret')
+    assert.equal(typeof receivedSignal?.aborted, 'boolean')
     assert.equal(result.records.length, 1)
+  })
+})
+
+test('fetchStaticVoteRecords aborts when the remote sync endpoint times out', async () => {
+  await withVoteEnv({
+    STATIC_VOTE_SYNC_SECRET: 'sync-secret',
+    STATIC_VOTE_SYNC_TIMEOUT_MS: '1'
+  }, async () => {
+    await assert.rejects(
+      fetchStaticVoteRecords({
+        year: 2026,
+        remoteUrl: 'https://tpi26.ch/votes-2026/sync.php',
+        fetchImpl: async (_url, options) => new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const error = new Error('aborted')
+            error.name = 'AbortError'
+            reject(error)
+          })
+        })
+      }),
+      (error) => {
+        assert.equal(error.statusCode, 504)
+        assert.match(error.message, /expiree/)
+        return true
+      }
+    )
   })
 })
 

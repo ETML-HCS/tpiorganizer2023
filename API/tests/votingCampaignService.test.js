@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const emailService = require('../services/emailService')
 const magicLinkV2Service = require('../services/magicLinkV2Service')
+const staticVotePublicationService = require('../services/staticVotePublicationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const Vote = require('../models/voteModel')
 const schedulingService = require('../services/schedulingService')
@@ -353,6 +354,14 @@ test('startVotesCampaign sends one vote link per stakeholder for all their TPI',
     assert.equal(voteUpdates.length, 6)
     assert.equal(savedTpis.length, 2)
 
+    assert.equal(
+      createdVoteLinks.every((link) => link.baseUrl === 'https://example.test'),
+      true
+    )
+    assert.equal(
+      createdVoteLinks.every((link) => link.redirectPath === '/planning/2026'),
+      true
+    )
     assert.equal(createdVoteLinks.every((link) => link.role === null), true)
     assert.equal(
       createdVoteLinks.every((link) => link.scope?.kind === 'stakeholder_votes'),
@@ -384,6 +393,105 @@ test('startVotesCampaign sends one vote link per stakeholder for all their TPI',
     )
     assert.equal(result.details[0].emailsSent, 3)
     assert.equal(result.details[1].emailsSent, 3)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('startVotesCampaign uses the configured static vote target by default', async () => {
+  const createdVoteLinks = []
+  const tpi = {
+    _id: 'planning-1',
+    status: 'pending_slots',
+    reference: 'TPI-2026-001',
+    sujet: 'Sujet',
+    candidat: { _id: 'candidate-1', firstName: 'Cand', lastName: 'Test' },
+    proposedSlots: [
+      {
+        slot: {
+          _id: 'slot-1',
+          date: new Date('2026-06-10T08:00:00.000Z'),
+          period: 'AM',
+          startTime: '08:00',
+          endTime: '08:45',
+          room: { name: 'A101' }
+        }
+      }
+    ],
+    expert1: {
+      _id: 'person-alice',
+      firstName: 'Alice',
+      lastName: 'Expert',
+      email: 'alice@example.com',
+      sendEmails: true
+    },
+    expert2: {
+      _id: 'person-bob',
+      firstName: 'Bob',
+      lastName: 'Expert',
+      email: 'bob@example.com',
+      sendEmails: true
+    },
+    chefProjet: {
+      _id: 'person-carla',
+      firstName: 'Carla',
+      lastName: 'Boss',
+      email: 'carla@example.com',
+      sendEmails: true
+    },
+    save: async () => {}
+  }
+
+  const query = {
+    populate() {
+      return this
+    },
+    then(resolve, reject) {
+      return Promise.resolve([tpi]).then(resolve, reject)
+    }
+  }
+
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches({
+    getPlanningConfig: async () => ({
+      accessLinkSettings: {
+        defaultVoteLinkTarget: 'static',
+        voteLinkValidityHours: 168,
+        voteLinkMaxUses: 20
+      }
+    })
+  })
+  const restore = [
+    restoreService,
+    patchMethod(TpiPlanning, 'find', () => query),
+    patchMethod(Vote, 'findOneAndUpdate', async () => ({ _id: 'vote-1' })),
+    patchMethod(staticVotePublicationService, 'getStaticVoteLinkTarget', async () => ({
+      baseUrl: 'https://tpi26.ch',
+      redirectPath: '/votes-2026/'
+    })),
+    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (params) => {
+      createdVoteLinks.push(params)
+      return {
+        url: `https://tpi26.ch/votes-2026/?ml=${params.person._id}`,
+        expiresAt: new Date('2026-05-01T12:00:00.000Z')
+      }
+    }),
+    patchMethod(emailService, 'sendVoteDigestRequests', async (targets) => {
+      return targets.map((target) => ({
+        email: target.email,
+        success: true
+      }))
+    })
+  ]
+
+  try {
+    const result = await service.startVotesCampaign(2026, 'https://example.test')
+
+    assert.equal(result.totalEmails, 3)
+    assert.equal(createdVoteLinks.length, 3)
+    assert.equal(createdVoteLinks.every((link) => link.baseUrl === 'https://tpi26.ch'), true)
+    assert.equal(createdVoteLinks.every((link) => link.redirectPath === '/votes-2026/'), true)
   } finally {
     while (restore.length > 0) {
       restore.pop()()

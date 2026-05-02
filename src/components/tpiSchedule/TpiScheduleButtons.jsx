@@ -73,11 +73,16 @@ const TpiScheduleButtons = ({
   onRemindVotes,
   onCloseVotes,
   onPublishDefinitive,
+  onDeactivatePublication = null,
   onSendSoutenanceLinks,
   onGenerateStaticPublication = null,
   onPreviewStaticPublication = null,
   onPublishStaticPublication = null,
   staticPublicationInfo = null,
+  onGenerateStaticVotePublication = null,
+  onPublishStaticVotePublication = null,
+  onSyncStaticVotePublication = null,
+  staticVotePublicationInfo = null,
   onOpenVotesTracking,
   onOpenSoutenances,
   roomsCount = 0,
@@ -219,6 +224,9 @@ const TpiScheduleButtons = ({
     : isPlanningState
       ? "Publier sans votes"
       : "Publier définitif"
+  const deactivatePublicationLabel = isActionRunning("deactivatePublication")
+    ? "Retour votes..."
+    : "Revenir aux votes"
   const sendLinksLabel = isActionRunning("sendLinks") ? "Envoi..." : "Envoyer liens"
   const openSoutenancesLabel = "Ouvrir Défenses"
   const generateStaticPublicationLabel = isActionRunning("staticGenerate")
@@ -232,6 +240,19 @@ const TpiScheduleButtons = ({
   const publishStaticPublicationLabel = isActionRunning("staticPublish")
     ? "Publication FTP..."
     : `Publier sur ${staticPublicationTargetLabel}`
+  const staticVotePublicationPublicUrl = typeof staticVotePublicationInfo?.publicUrl === "string"
+    ? staticVotePublicationInfo.publicUrl
+    : ""
+  const staticVotePublicationTargetLabel = formatPublicationTargetLabel(staticVotePublicationPublicUrl)
+  const generateStaticVotePublicationLabel = isActionRunning("staticVoteGenerate")
+    ? "Génération vote..."
+    : "Générer vote web"
+  const publishStaticVotePublicationLabel = isActionRunning("staticVotePublish")
+    ? "Publication vote..."
+    : `Publier vote sur ${staticVotePublicationTargetLabel}`
+  const syncStaticVotePublicationLabel = isActionRunning("staticVoteSync")
+    ? "Sync vote..."
+    : "Sync vote web"
   const workflowActionLabels = {
     autoPlan: "Automatisation",
     validate: "Vérification",
@@ -241,9 +262,13 @@ const TpiScheduleButtons = ({
     remindVotes: "Relance des votes",
     closeVotes: "Clôture des votes",
     publish: "Publication",
+    deactivatePublication: "Desactivation publication",
     sendLinks: "Envoi des liens",
     staticGenerate: "Génération page statique",
-    staticPublish: "Publication FTP"
+    staticPublish: "Publication FTP",
+    staticVoteGenerate: "Génération mini-site vote",
+    staticVotePublish: "Publication mini-site vote",
+    staticVoteSync: "Synchronisation votes web"
   }
 
   const validationIssueDetails = []
@@ -386,6 +411,156 @@ const TpiScheduleButtons = ({
       : "URL cible"
     staticPublicationStatusItems.push(`${urlLabel}: ${staticPublicationPublicUrl}`)
   }
+  const staticPublicationStatusSummary = isActionRunning("staticGenerate")
+    ? "Génération..."
+    : isActionRunning("staticPublish")
+      ? "Publication..."
+      : staticPublicationLastPublishStatus === "error"
+        ? "FTP échoué"
+        : staticPublicationPublishedAtLabel || staticPublicationLastPublishStatus === "success"
+          ? "Publié"
+          : staticPublicationAvailable
+            ? "Prêt FTP"
+            : "À générer"
+
+  const staticVotePublicationGeneratedAt = staticVotePublicationInfo?.generatedAt
+    ? new Date(staticVotePublicationInfo.generatedAt)
+    : null
+  const staticVotePublicationGeneratedAtLabel =
+    staticVotePublicationGeneratedAt && !Number.isNaN(staticVotePublicationGeneratedAt.getTime())
+      ? staticVotePublicationGeneratedAt.toLocaleString("fr-CH")
+      : ""
+  const staticVotePublicationAvailable = staticVotePublicationInfo?.available === true
+  const staticVotePublicationPublishedAt = staticVotePublicationInfo?.publishedAt
+    ? new Date(staticVotePublicationInfo.publishedAt)
+    : null
+  const staticVotePublicationPublishedAtLabel =
+    staticVotePublicationPublishedAt && !Number.isNaN(staticVotePublicationPublishedAt.getTime())
+      ? staticVotePublicationPublishedAt.toLocaleString("fr-CH")
+      : ""
+  const staticVotePublicationLastPublishAt = staticVotePublicationInfo?.lastPublishAt
+    ? new Date(staticVotePublicationInfo.lastPublishAt)
+    : null
+  const staticVotePublicationLastPublishAtLabel =
+    staticVotePublicationLastPublishAt && !Number.isNaN(staticVotePublicationLastPublishAt.getTime())
+      ? staticVotePublicationLastPublishAt.toLocaleString("fr-CH")
+      : ""
+  const staticVotePublicationLastSyncAt = staticVotePublicationInfo?.lastSyncAt
+    ? new Date(staticVotePublicationInfo.lastSyncAt)
+    : null
+  const staticVotePublicationLastSyncAtLabel =
+    staticVotePublicationLastSyncAt && !Number.isNaN(staticVotePublicationLastSyncAt.getTime())
+      ? staticVotePublicationLastSyncAt.toLocaleString("fr-CH")
+      : ""
+  const staticVotePublicationLastPublishStatus = String(staticVotePublicationInfo?.lastPublishStatus || "")
+  const staticVotePublicationLastPublishMessage = typeof staticVotePublicationInfo?.lastPublishMessage === "string"
+    ? staticVotePublicationInfo.lastPublishMessage.trim()
+    : ""
+  const staticVotePublicationLastSyncStatus = String(staticVotePublicationInfo?.lastSyncStatus || "")
+  const staticVotePublicationLastSyncMessage = typeof staticVotePublicationInfo?.lastSyncMessage === "string"
+    ? staticVotePublicationInfo.lastSyncMessage.trim()
+    : ""
+  const staticVotePublicationLastSyncImportedCount = Number(staticVotePublicationInfo?.lastSyncImportedCount || 0)
+  const staticVotePublicationLastSyncReceivedCount = Number(staticVotePublicationInfo?.lastSyncReceivedCount || 0)
+  const staticVotePublicationLastSyncFailedCount = Number(staticVotePublicationInfo?.lastSyncFailedCount || 0)
+  const staticVoteSyncSecretConfigured = staticVotePublicationInfo?.syncSecretConfigured === true
+  const staticVoteSiteSyncSecretConfigured = staticVotePublicationInfo?.siteSyncSecretConfigured === true
+  const canPublishStaticVotePublication =
+    staticVotePublicationAvailable && typeof onPublishStaticVotePublication === "function"
+  const canSyncStaticVotePublication =
+    staticVoteSyncSecretConfigured && typeof onSyncStaticVotePublication === "function"
+  const canOpenStaticVoteAccessPreview = typeof onOpenVoteAccessPreview === "function"
+  const staticVotePublicationStatusTone = isActionRunning("staticVoteGenerate") || isActionRunning("staticVotePublish") || isActionRunning("staticVoteSync")
+    ? "pending"
+    : staticVotePublicationLastPublishStatus === "error" || staticVotePublicationLastSyncStatus === "error"
+      ? "error"
+      : staticVotePublicationPublishedAtLabel || staticVotePublicationLastPublishStatus === "success" || staticVotePublicationLastSyncStatus === "success"
+        ? "success"
+        : staticVotePublicationAvailable
+          ? "ready"
+          : "idle"
+  const staticVotePublicationStatusItems = []
+
+  if (isActionRunning("staticVoteGenerate")) {
+    staticVotePublicationStatusItems.push("Génération locale vote en cours...")
+  } else if (staticVotePublicationGeneratedAtLabel) {
+    staticVotePublicationStatusItems.push(`Dernière génération vote: ${staticVotePublicationGeneratedAtLabel}`)
+  } else if (staticVotePublicationInfo) {
+    staticVotePublicationStatusItems.push("Aucune génération vote locale disponible.")
+  } else {
+    staticVotePublicationStatusItems.push("Statut vote non chargé.")
+  }
+
+  if (isActionRunning("staticVotePublish")) {
+    staticVotePublicationStatusItems.push("Publication FTP vote en cours...")
+  } else if (staticVotePublicationLastPublishStatus === "error") {
+    const failedAt = staticVotePublicationLastPublishAtLabel
+      ? ` (${staticVotePublicationLastPublishAtLabel})`
+      : ""
+    const errorMessage = staticVotePublicationLastPublishMessage || "erreur inconnue"
+    staticVotePublicationStatusItems.push(`Publication FTP vote échouée${failedAt}: ${errorMessage}`)
+
+    if (staticVotePublicationPublishedAtLabel) {
+      staticVotePublicationStatusItems.push(`Dernière réussite FTP vote: ${staticVotePublicationPublishedAtLabel}`)
+    }
+  } else if (staticVotePublicationPublishedAtLabel) {
+    staticVotePublicationStatusItems.push(`Publication FTP vote réussie: ${staticVotePublicationPublishedAtLabel}`)
+  } else if (staticVotePublicationLastPublishStatus === "success" && staticVotePublicationLastPublishAtLabel) {
+    staticVotePublicationStatusItems.push(`Publication FTP vote réussie: ${staticVotePublicationLastPublishAtLabel}`)
+  } else if (staticVotePublicationAvailable) {
+    staticVotePublicationStatusItems.push("Publication FTP vote: en attente.")
+  }
+
+  if (isActionRunning("staticVoteSync")) {
+    staticVotePublicationStatusItems.push("Synchronisation votes web en cours...")
+  } else if (staticVotePublicationLastSyncAtLabel) {
+    const syncPrefix = staticVotePublicationLastSyncStatus === "error"
+      ? "Synchronisation vote échouée"
+      : "Dernière synchronisation vote"
+    const syncSummary = staticVotePublicationLastSyncReceivedCount > 0 || staticVotePublicationLastSyncImportedCount > 0 || staticVotePublicationLastSyncFailedCount > 0
+      ? `: ${staticVotePublicationLastSyncImportedCount}/${staticVotePublicationLastSyncReceivedCount} importé(s), ${staticVotePublicationLastSyncFailedCount} erreur(s)`
+      : ""
+    const syncMessage = staticVotePublicationLastSyncMessage
+      ? ` - ${staticVotePublicationLastSyncMessage}`
+      : ""
+    staticVotePublicationStatusItems.push(`${syncPrefix}: ${staticVotePublicationLastSyncAtLabel}${syncSummary}${syncMessage}`)
+  }
+
+  if (staticVotePublicationInfo) {
+    staticVotePublicationStatusItems.push(
+      staticVoteSyncSecretConfigured
+        ? "Secret sync local configuré."
+        : "Secret sync local manquant."
+    )
+
+    if (staticVoteSiteSyncSecretConfigured) {
+      staticVotePublicationStatusItems.push("Secret sync inclus dans le site généré.")
+    }
+  }
+
+  if (staticVotePublicationAvailable && staticVotePublicationPublicUrl) {
+    const urlLabel = staticVotePublicationPublishedAtLabel || staticVotePublicationLastPublishStatus === "success"
+      ? "URL vote publique"
+      : "URL vote cible"
+    staticVotePublicationStatusItems.push(`${urlLabel}: ${staticVotePublicationPublicUrl}`)
+  }
+  const staticVotePublicationStatusSummary = isActionRunning("staticVoteGenerate")
+    ? "Génération..."
+    : isActionRunning("staticVotePublish")
+      ? "Publication..."
+      : isActionRunning("staticVoteSync")
+        ? "Sync..."
+        : staticVotePublicationLastPublishStatus === "error"
+          ? "FTP échoué"
+          : staticVotePublicationLastSyncStatus === "error"
+            ? "Sync échouée"
+            : staticVotePublicationLastSyncStatus === "success"
+              ? "Sync OK"
+              : staticVotePublicationPublishedAtLabel || staticVotePublicationLastPublishStatus === "success"
+                ? "Publié"
+                : staticVotePublicationAvailable
+                  ? "Prêt FTP"
+                  : "À générer"
 
   useEffect(() => {
     const nextActiveWorkflowTab =
@@ -1334,6 +1509,26 @@ const TpiScheduleButtons = ({
 
                     <button
                       type="button"
+                      className="planning-workflow-btn neutral"
+                      onClick={onDeactivatePublication}
+                      disabled={workflowActionLoading || !isPublishedState || !onDeactivatePublication}
+                      title={
+                        isPublishedState
+                          ? "Desactiver la publication des defenses, revoquer les liens de defense et revenir a la campagne de votes."
+                          : "Disponible uniquement apres publication des defenses."
+                      }
+                      aria-label={deactivatePublicationLabel}
+                    >
+                      <IconButtonContent
+                        label={deactivatePublicationLabel}
+                        icon={BanIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+
+                    <button
+                      type="button"
                       className="planning-workflow-btn open"
                       onClick={onOpenSoutenances}
                       disabled={workflowActionLoading}
@@ -1353,82 +1548,200 @@ const TpiScheduleButtons = ({
 
               {activeWorkflowTab === "static-publication" ? (
                 <section
-                  className="planning-workflow-section planning-workflow-section-static"
+                  className="planning-workflow-static-stack"
                   id="planning-workflow-panel-static-publication"
                   role="tabpanel"
                 >
-                  <div className="planning-static-publication-copy">
-                    <strong>Page publique statique</strong>
-                    <p>
-                      Génère une page HTML autonome pour les soutenances, vérifie le rendu localement,
-                      puis publie le dossier prêt à consulter sur {staticPublicationTargetLabel} par FTP.
-                    </p>
-                    <div
-                      className={`planning-static-publication-status planning-static-publication-status--${staticPublicationStatusTone}`}
-                      role="status"
-                      aria-live="polite"
-                    >
-                      {staticPublicationStatusItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
+                  <div className="planning-workflow-section planning-workflow-section-static">
+                    <div className="planning-static-publication-copy">
+                      <div className="planning-static-publication-head">
+                        <strong>Page publique statique</strong>
+                        <span
+                          className={`planning-static-publication-chip planning-static-publication-chip--${staticPublicationStatusTone}`}
+                        >
+                          {staticPublicationStatusSummary}
+                        </span>
+                      </div>
+                      <p>
+                        Génère une page HTML autonome pour les soutenances, vérifie le rendu localement,
+                        puis publie le dossier prêt à consulter sur {staticPublicationTargetLabel} par FTP.
+                      </p>
+                      <div
+                        className={`planning-static-publication-status planning-static-publication-status--${staticPublicationStatusTone}`}
+                        role="status"
+                        aria-live="polite"
+                        aria-label={staticPublicationStatusItems.join(". ")}
+                        tabIndex={0}
+                      >
+                        <span className="planning-static-publication-status-label">
+                          Détails
+                        </span>
+                        {staticPublicationStatusItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="planning-workflow-section-actions">
+                      <button
+                        type="button"
+                        className="planning-workflow-btn primary"
+                        onClick={onGenerateStaticPublication}
+                        disabled={workflowActionLoading || !onGenerateStaticPublication}
+                        title="Générer le dossier HTML statique depuis les défenses publiées."
+                        aria-label={generateStaticPublicationLabel}
+                      >
+                        <IconButtonContent
+                          label={generateStaticPublicationLabel}
+                          icon={DownloadIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="planning-workflow-btn neutral"
+                        onClick={onPreviewStaticPublication}
+                        disabled={workflowActionLoading || !canPreviewStaticPublication}
+                        title={
+                          staticPublicationAvailable
+                            ? "Ouvrir la page statique générée en prévisualisation."
+                            : "Génère la page statique avant la prévisualisation."
+                        }
+                        aria-label={previewStaticPublicationLabel}
+                      >
+                        <IconButtonContent
+                          label={previewStaticPublicationLabel}
+                          icon={SearchIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="planning-workflow-btn success"
+                        onClick={onPublishStaticPublication}
+                        disabled={workflowActionLoading || !canPublishStaticPublication}
+                        title={
+                          staticPublicationAvailable
+                            ? `Publier le dossier généré sur ${staticPublicationTargetLabel} via FTP.`
+                            : "Génère la page statique avant la publication FTP."
+                        }
+                        aria-label={publishStaticPublicationLabel}
+                      >
+                        <IconButtonContent
+                          label={publishStaticPublicationLabel}
+                          icon={SendIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
                     </div>
                   </div>
-                  <div className="planning-workflow-section-actions">
-                    <button
-                      type="button"
-                      className="planning-workflow-btn primary"
-                      onClick={onGenerateStaticPublication}
-                      disabled={workflowActionLoading || !onGenerateStaticPublication}
-                      title="Générer le dossier HTML statique depuis les défenses publiées."
-                      aria-label={generateStaticPublicationLabel}
-                    >
-                      <IconButtonContent
-                        label={generateStaticPublicationLabel}
-                        icon={DownloadIcon}
-                        showLabel
-                        iconClassName="planning-button-icon"
-                      />
-                    </button>
 
-                    <button
-                      type="button"
-                      className="planning-workflow-btn neutral"
-                      onClick={onPreviewStaticPublication}
-                      disabled={workflowActionLoading || !canPreviewStaticPublication}
-                      title={
-                        staticPublicationAvailable
-                          ? "Ouvrir la page statique générée en prévisualisation."
-                          : "Génère la page statique avant la prévisualisation."
-                      }
-                      aria-label={previewStaticPublicationLabel}
-                    >
-                      <IconButtonContent
-                        label={previewStaticPublicationLabel}
-                        icon={SearchIcon}
-                        showLabel
-                        iconClassName="planning-button-icon"
-                      />
-                    </button>
+                  <div className="planning-workflow-section planning-workflow-section-static planning-workflow-section-static-vote">
+                    <div className="planning-static-publication-copy">
+                      <div className="planning-static-publication-head">
+                        <strong>Mini-site vote</strong>
+                        <span
+                          className={`planning-static-publication-chip planning-static-publication-chip--${staticVotePublicationStatusTone}`}
+                        >
+                          {staticVotePublicationStatusSummary}
+                        </span>
+                      </div>
+                      <p>
+                        Publie uniquement les formulaires PHP accessibles par liens personnels.
+                        Le suivi reste dans l'application et la synchronisation se lance au chargement.
+                      </p>
+                      <div
+                        className={`planning-static-publication-status planning-static-publication-status--${staticVotePublicationStatusTone}`}
+                        role="status"
+                        aria-live="polite"
+                        aria-label={staticVotePublicationStatusItems.join(". ")}
+                        tabIndex={0}
+                      >
+                        <span className="planning-static-publication-status-label">
+                          Détails
+                        </span>
+                        {staticVotePublicationStatusItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="planning-workflow-section-actions">
+                      <button
+                        type="button"
+                        className="planning-workflow-btn primary"
+                        onClick={onGenerateStaticVotePublication}
+                        disabled={workflowActionLoading || !onGenerateStaticVotePublication}
+                        title="Générer localement le mini-site PHP de vote avec les liens personnels."
+                        aria-label={generateStaticVotePublicationLabel}
+                      >
+                        <IconButtonContent
+                          label={generateStaticVotePublicationLabel}
+                          icon={VoteIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
 
-                    <button
-                      type="button"
-                      className="planning-workflow-btn success"
-                      onClick={onPublishStaticPublication}
-                      disabled={workflowActionLoading || !canPublishStaticPublication}
-                      title={
-                        staticPublicationAvailable
-                          ? `Publier le dossier généré sur ${staticPublicationTargetLabel} via FTP.`
-                          : "Génère la page statique avant la publication FTP."
-                      }
-                      aria-label={publishStaticPublicationLabel}
-                    >
-                      <IconButtonContent
-                        label={publishStaticPublicationLabel}
-                        icon={SendIcon}
-                        showLabel
-                        iconClassName="planning-button-icon"
-                      />
-                    </button>
+                      <button
+                        type="button"
+                        className="planning-workflow-btn open"
+                        onClick={onOpenVoteAccessPreview}
+                        disabled={workflowActionLoading || !canOpenStaticVoteAccessPreview}
+                        title="Ouvrir l'aperçu des liens personnels de vote."
+                        aria-label="Liens vote"
+                      >
+                        <IconButtonContent
+                          label="Liens vote"
+                          icon={SearchIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="planning-workflow-btn success"
+                        onClick={onPublishStaticVotePublication}
+                        disabled={workflowActionLoading || !canPublishStaticVotePublication}
+                        title={
+                          staticVotePublicationAvailable
+                            ? `Publier le dossier vote généré sur ${staticVotePublicationTargetLabel} via FTP.`
+                            : "Génère le mini-site vote avant la publication FTP."
+                        }
+                        aria-label={publishStaticVotePublicationLabel}
+                      >
+                        <IconButtonContent
+                          label={publishStaticVotePublicationLabel}
+                          icon={SendIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="planning-workflow-btn neutral"
+                        onClick={onSyncStaticVotePublication}
+                        disabled={workflowActionLoading || !canSyncStaticVotePublication}
+                        title={
+                          staticVoteSyncSecretConfigured
+                            ? "Importer les réponses JSONL stockées sur le mini-site vote."
+                            : "Configure STATIC_VOTE_SYNC_SECRET avant de synchroniser."
+                        }
+                        aria-label={syncStaticVotePublicationLabel}
+                      >
+                        <IconButtonContent
+                          label={syncStaticVotePublicationLabel}
+                          icon={RefreshIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+                    </div>
                   </div>
                 </section>
               ) : null}

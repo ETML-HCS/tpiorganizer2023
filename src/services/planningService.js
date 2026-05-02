@@ -528,6 +528,10 @@ export const workflowPlanningService = {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/publish`, {})
   },
 
+  deactivatePublication: async (year) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/deactivate`, {})
+  },
+
   sendPublicationLinks: async (year) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/publication/send-links`, {})
   },

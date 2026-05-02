@@ -1,7 +1,9 @@
 const { createCustomTpiRoomModel } = require('../models/tpiRoomsModels')
 const PublicationVersion = require('../models/publicationVersionModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
+const Slot = require('../models/slotModel')
 const TpiModelsYear = require('../models/tpiModels')
+const { MagicLink } = require('../models/magicLinkModel')
 const { getSharedPlanningCatalog } = require('./planningCatalogService')
 const { getPlanningConfig } = require('./planningConfigService')
 const { inferTpiClassMode } = require('./roomClassCompatibilityService')
@@ -759,6 +761,142 @@ async function rollbackPublicationVersion(year, version) {
   }
 }
 
+function getProposedSlotIds(tpi) {
+  return (Array.isArray(tpi?.proposedSlots) ? tpi.proposedSlots : [])
+    .map((entry) => entry?.slot)
+    .filter(Boolean)
+}
+
+function isLatestConfirmationFromDirectPublication(tpi) {
+  const confirmationActions = new Set([
+    'slot_confirmed',
+    'slot_confirmed_direct_publication',
+    'slot_moved_from_vote_proposal'
+  ])
+  const latestConfirmation = (Array.isArray(tpi?.history) ? tpi.history : [])
+    .filter((entry) => confirmationActions.has(entry?.action))
+    .sort((left, right) => {
+      const leftTime = left?.at ? new Date(left.at).getTime() : 0
+      const rightTime = right?.at ? new Date(right.at).getTime() : 0
+      return rightTime - leftTime
+    })[0]
+
+  return latestConfirmation?.action === 'slot_confirmed_direct_publication'
+}
+
+async function reopenDirectPublicationTpisForVotes(year) {
+  const normalizedYear = parseInt(year, 10)
+  const directPublicationTpis = await TpiPlanning.find({
+    year: normalizedYear,
+    status: 'confirmed',
+    confirmedSlot: { $ne: null },
+    'history.action': 'slot_confirmed_direct_publication'
+  }).select('proposedSlots confirmedSlot status soutenanceDateTime soutenanceRoom votingSession history')
+  let reopenedCount = 0
+
+  for (const tpi of directPublicationTpis) {
+    if (!isLatestConfirmationFromDirectPublication(tpi)) {
+      continue
+    }
+
+    const proposedSlotIds = getProposedSlotIds(tpi)
+
+    if (proposedSlotIds.length === 0) {
+      continue
+    }
+
+    await Slot.updateMany(
+      {
+        _id: { $in: proposedSlotIds },
+        $or: [
+          { assignedTpi: tpi._id },
+          { assignedTpi: null },
+          { assignedTpi: { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          status: 'proposed',
+          assignedTpi: null,
+          assignments: {},
+          updatedAt: new Date()
+        }
+      }
+    )
+
+    tpi.status = 'pending_slots'
+    tpi.confirmedSlot = null
+    tpi.soutenanceDateTime = null
+    tpi.soutenanceRoom = ''
+    tpi.votingSession = undefined
+    tpi.history.push({
+      action: 'direct_publication_reopened_for_votes',
+      at: new Date(),
+      details: {
+        source: 'publication_deactivation'
+      }
+    })
+    await tpi.save()
+    reopenedCount += 1
+  }
+
+  return reopenedCount
+}
+
+async function deactivatePublication(year) {
+  const normalizedYear = parseInt(year, 10)
+  const deactivatedAt = new Date()
+  const activeVersions = await PublicationVersion.find({
+    year: normalizedYear,
+    isActive: true
+  })
+    .select('version')
+    .lean()
+  const deactivatedVersions = activeVersions
+    .map((entry) => Number.parseInt(entry?.version, 10))
+    .filter((version) => Number.isInteger(version))
+
+  const publicationResult = await PublicationVersion.updateMany(
+    { year: normalizedYear, isActive: true },
+    {
+      $set: {
+        isActive: false,
+        updatedAt: deactivatedAt
+      }
+    }
+  )
+
+  try {
+    await syncLegacyPublishedRooms(normalizedYear, [])
+  } catch (error) {
+    console.error('Erreur nettoyage collection legacy défenses:', error)
+  }
+
+  const revokedLinksResult = await MagicLink.updateMany(
+    {
+      year: normalizedYear,
+      type: 'soutenance',
+      revokedAt: null,
+      'scope.kind': 'published_soutenances'
+    },
+    {
+      $set: {
+        revokedAt: deactivatedAt,
+        updatedAt: deactivatedAt
+      }
+    }
+  )
+  const reopenedDirectPublicationCount = await reopenDirectPublicationTpisForVotes(normalizedYear)
+
+  return {
+    deactivatedPublicationCount: publicationResult.modifiedCount || 0,
+    deactivatedVersions,
+    revokedSoutenanceLinks: revokedLinksResult.modifiedCount || 0,
+    reopenedDirectPublicationCount,
+    deactivatedAt
+  }
+}
+
 async function listPublishedSoutenances(year, options = {}) {
   const normalizedYear = parseInt(year, 10)
   const requestedVersion = Number.isInteger(options.version)
@@ -902,6 +1040,8 @@ module.exports = {
   getActivePublicationVersion,
   getPublicationVersion,
   listPublicationVersions,
+  deactivatePublication,
+  reopenDirectPublicationTpisForVotes,
   rollbackPublicationVersion,
   updatePublishedSoutenanceOffers,
   updatePublishedSoutenanceOffersByLegacyId
