@@ -1,0 +1,1 @@
+var e=(e,t=`info`,n=3e3)=>{let r=document.createElement(`div`);switch(r.innerText=e,t){case`success`:r.className=`notification success show`;break;case`error`:r.className=`notification error show`;break;default:r.className=`notification info show`;break}document.body.appendChild(r),setTimeout(()=>{r.classList.remove(`show`),document.body.removeChild(r)},n)};export{e as t};
