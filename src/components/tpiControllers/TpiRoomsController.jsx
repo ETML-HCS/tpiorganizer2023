@@ -1,28 +1,17 @@
-import axios from 'axios'
-import { API_URL } from '../../config/appConfig'
-import { soutenancesService } from '../../services/apiService'
-
-const apiUrl = API_URL
-
-const saveTpiRoomUrl = `${apiUrl}/api/save-tpi-rooms`
+import apiService, { soutenancesService } from '../../services/apiService'
 
 export const transmitToDatabase = async data => {
   const currentYear = data.date.substring(0, 4)
-  const url = `${saveTpiRoomUrl}/${currentYear}`
 
   try {
-    const response = await axios.post(url, data)
-
-    if (response.status === 200) {
-      return true
-    } else {
-      return false
-    }
+    const response = await apiService.post(`/api/save-tpi-rooms/${currentYear}`, data)
+    return Boolean(response)
   } catch (error) {
     console.error(
       'Erreur lors de la transmission des données à la base de données :',
       error
     )
+    return false
   }
 }
 
