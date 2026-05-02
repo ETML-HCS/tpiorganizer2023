@@ -3,7 +3,10 @@ import { useLocation } from 'react-router-dom'
 
 import PageToolbar from '../shared/PageToolbar'
 import { YEARS_CONFIG } from '../../config/appConfig'
-import { workflowPlanningService } from '../../services/planningService'
+import {
+  planningCatalogService,
+  workflowPlanningService
+} from '../../services/planningService'
 
 import '../../css/genToken/genToken.css'
 
@@ -14,6 +17,12 @@ const LINK_TYPE_FILTERS = [
 ]
 
 const LINK_TYPE_FILTER_VALUES = new Set(LINK_TYPE_FILTERS.map((filter) => filter.value))
+const DEFAULT_EMAIL_SETTINGS = {
+  senderName: 'TPI Organizer',
+  senderEmail: '',
+  replyToEmail: '',
+  defaultDeliveryMode: 'outlook'
+}
 
 function formatRoleLabel(role) {
   if (role === 'expert1') {
@@ -72,6 +81,159 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+function normalizeEmailSettings(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+  const defaultDeliveryMode = String(source.defaultDeliveryMode || DEFAULT_EMAIL_SETTINGS.defaultDeliveryMode).trim()
+
+  return {
+    senderName: String(source.senderName || DEFAULT_EMAIL_SETTINGS.senderName).trim() || DEFAULT_EMAIL_SETTINGS.senderName,
+    senderEmail: String(source.senderEmail || '').trim().toLowerCase(),
+    replyToEmail: String(source.replyToEmail || '').trim().toLowerCase(),
+    defaultDeliveryMode: defaultDeliveryMode === 'automatic' ? 'automatic' : 'outlook'
+  }
+}
+
+function getPublicationVersionRequest(value) {
+  const parsed = Number.parseInt(String(value || ''), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function formatPublicationVersionLabel(versionEntry) {
+  if (!versionEntry?.version) {
+    return 'Publication active'
+  }
+
+  return `Publication v${versionEntry.version}${versionEntry.isActive ? ' · active' : ''}`
+}
+
+function buildPublicationVersionOptions(context = {}) {
+  const availableVersions = Array.isArray(context?.availableVersions)
+    ? context.availableVersions
+    : []
+  const options = availableVersions
+    .filter((entry) => Number.isInteger(Number(entry?.version)) && Number(entry.version) > 0)
+    .map((entry) => ({
+      value: String(entry.version),
+      label: formatPublicationVersionLabel(entry),
+      isActive: entry.isActive === true
+    }))
+
+  if (options.length > 0) {
+    return [
+      { value: 'active', label: 'Publication active' },
+      ...options
+    ]
+  }
+
+  if (context?.publicationVersion) {
+    return [
+      { value: 'active', label: 'Publication active' },
+      { value: String(context.publicationVersion), label: `Publication v${context.publicationVersion}` }
+    ]
+  }
+
+  return [{ value: 'active', label: 'Publication active' }]
+}
+
+function getInvitationLinkVersion(link) {
+  const parsed = Number.parseInt(String(link?.publicationVersion || ''), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function buildInvitationSubject(year, publicationVersion) {
+  return `Horaire des défenses TPI ${year}${publicationVersion ? ` - v${publicationVersion}` : ''}`
+}
+
+function buildInvitationBody({ person, link, year, emailSettings }) {
+  const recipientName = person?.name || ''
+  const publicationVersion = getInvitationLinkVersion(link)
+  const expiry = link?.expiresAt ? formatDateTime(link.expiresAt) : ''
+  const contactEmail = emailSettings.replyToEmail || emailSettings.senderEmail
+  const senderName = emailSettings.senderName || DEFAULT_EMAIL_SETTINGS.senderName
+
+  return [
+    `Bonjour${recipientName ? ` ${recipientName}` : ''},`,
+    '',
+    `L'horaire des défenses TPI ${year} est disponible.`,
+    '',
+    'Vous pouvez le consulter avec votre lien personnel :',
+    link.url,
+    '',
+    'Ce lien est personnel et ne doit pas être transmis.',
+    publicationVersion ? `Version publiée : v${publicationVersion}` : null,
+    expiry ? `Validité : ${expiry}` : null,
+    contactEmail ? `Pour toute question : ${contactEmail}` : null,
+    '',
+    'Meilleures salutations',
+    senderName
+  ].filter((line) => line !== null).join('\n')
+}
+
+function buildMailtoUrl({ to, subject, body }) {
+  const params = new URLSearchParams({
+    subject,
+    body
+  })
+
+  return `mailto:${encodeURIComponent(to)}?${params.toString()}`
+}
+
+function buildInvitationDraft({ entry, link, year, emailSettings }) {
+  const person = entry?.person || {}
+  const to = String(person.email || '').trim()
+  const publicationVersion = getInvitationLinkVersion(link)
+  const subject = buildInvitationSubject(year, publicationVersion)
+  const body = buildInvitationBody({
+    person,
+    link,
+    year,
+    emailSettings
+  })
+
+  return {
+    key: `${person.id || to}-${publicationVersion || 'publication'}-${link.url}`,
+    to,
+    name: person.name || to,
+    publicationVersion,
+    subject,
+    body,
+    mailto: buildMailtoUrl({ to, subject, body })
+  }
+}
+
+function buildInvitationDrafts(people, options = {}) {
+  const selectedPublicationVersion = getPublicationVersionRequest(options.selectedPublicationVersion)
+  const year = options.year
+  const emailSettings = normalizeEmailSettings(options.emailSettings)
+  const drafts = []
+
+  for (const entry of Array.isArray(people) ? people : []) {
+    for (const link of Array.isArray(entry?.soutenanceLinks) ? entry.soutenanceLinks : []) {
+      if (!link?.url) {
+        continue
+      }
+
+      const linkPublicationVersion = getInvitationLinkVersion(link)
+      if (selectedPublicationVersion && linkPublicationVersion !== selectedPublicationVersion) {
+        continue
+      }
+
+      const draft = buildInvitationDraft({
+        entry,
+        link,
+        year,
+        emailSettings
+      })
+
+      if (draft.to) {
+        drafts.push(draft)
+      }
+    }
+  }
+
+  return drafts
 }
 
 async function copyToClipboard(value) {
@@ -137,8 +299,25 @@ function buildVoteLinkDetails(link) {
   }))
 }
 
-const LinkRow = ({ label, subtitle, badges = [], details = [], url, expiresAt, onCopy, onOpen }) => {
+const LinkRow = ({
+  label,
+  subtitle,
+  badges = [],
+  details = [],
+  url,
+  expiresAt,
+  generated = false,
+  recoverable = true,
+  onCopy,
+  onOpen,
+  onEmail = null
+}) => {
   const hasUrl = typeof url === 'string' && url.length > 0
+  const placeholderLabel = generated
+    ? recoverable === false
+      ? 'Lien généré avant persistance'
+      : 'Lien généré sans URL récupérable'
+    : 'Lien non généré'
 
   return (
     <article className='token-access-link-row'>
@@ -185,7 +364,7 @@ const LinkRow = ({ label, subtitle, badges = [], details = [], url, expiresAt, o
           </a>
         ) : (
           <span className='token-access-link-url is-placeholder'>
-            Lien non généré
+            {placeholderLabel}
           </span>
         )}
 
@@ -215,12 +394,24 @@ const LinkRow = ({ label, subtitle, badges = [], details = [], url, expiresAt, o
         >
           Ouvrir
         </button>
+        {onEmail ? (
+          <button
+            type='button'
+            className='token-access-btn secondary'
+            onClick={hasUrl ? onEmail : undefined}
+            disabled={!hasUrl}
+            title={hasUrl ? 'Préparer un email Outlook pour ce lien.' : 'Lien à générer'}
+            aria-label={`Préparer un email ${label}`}
+          >
+            Email
+          </button>
+        ) : null}
       </div>
     </article>
   )
 }
 
-const PersonCard = ({ entry, onCopy, onOpen }) => {
+const PersonCard = ({ entry, onCopy, onOpen, onEmailSoutenance }) => {
   const roleLabels = Array.isArray(entry?.person?.roles)
     ? entry.person.roles.map((role) => formatRoleLabel(role))
     : []
@@ -278,8 +469,11 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
                 details={buildVoteLinkDetails(link)}
                 url={link.url}
                 expiresAt={link.expiresAt}
+                generated={link.generated === true}
+                recoverable={link.recoverable !== false}
                 onCopy={() => onCopy(link.url)}
                 onOpen={() => onOpen(link.url)}
+                onEmail={() => onEmailSoutenance(entry, link)}
               />
             ))}
           </div>
@@ -309,6 +503,8 @@ const PersonCard = ({ entry, onCopy, onOpen }) => {
                 ].filter(Boolean)}
                 url={link.url}
                 expiresAt={link.expiresAt}
+                generated={link.generated === true}
+                recoverable={link.recoverable !== false}
                 onCopy={() => onCopy(link.url)}
                 onOpen={() => onOpen(link.url)}
               />
@@ -329,8 +525,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const requestedYear = Number.parseInt(queryParams.get('year') || '', 10)
   const requestedLinkType = queryParams.get('type')
-  const shouldAutoGenerate = queryParams.get('auto') === '1'
-  const autoGeneratedRef = useRef(false)
+  const accessLinkRequestIdRef = useRef(0)
   const [selectedYear, setSelectedYear] = useState(() => (
     YEARS_CONFIG.isSupportedYear(requestedYear)
       ? requestedYear
@@ -347,11 +542,43 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const [isGenerating, setIsGenerating] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [selectedPublicationVersion, setSelectedPublicationVersion] = useState('active')
+  const [emailSettings, setEmailSettings] = useState(DEFAULT_EMAIL_SETTINGS)
+  const [prepareWithOutlook, setPrepareWithOutlook] = useState(true)
+  const [invitationDrafts, setInvitationDrafts] = useState([])
 
   const availableYears = useMemo(
     () => YEARS_CONFIG.getAvailableYears().slice().reverse(),
     []
   )
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadEmailSettings = async () => {
+      try {
+        const catalog = await planningCatalogService.getGlobal()
+        if (isCancelled) {
+          return
+        }
+
+        const normalizedSettings = normalizeEmailSettings(catalog?.emailSettings)
+        setEmailSettings(normalizedSettings)
+        setPrepareWithOutlook(normalizedSettings.defaultDeliveryMode !== 'automatic')
+      } catch (error) {
+        if (!isCancelled) {
+          setEmailSettings(DEFAULT_EMAIL_SETTINGS)
+          setPrepareWithOutlook(true)
+        }
+      }
+    }
+
+    loadEmailSettings()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (YEARS_CONFIG.isSupportedYear(requestedYear)) {
@@ -366,8 +593,13 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   }, [requestedLinkType])
 
   useEffect(() => {
-    autoGeneratedRef.current = false
-  }, [requestedYear, requestedLinkType, shouldAutoGenerate])
+    setInvitationDrafts([])
+  }, [selectedPublicationVersion])
+
+  useEffect(() => {
+    setSelectedPublicationVersion('active')
+    setInvitationDrafts([])
+  }, [selectedYear])
 
   const filteredPeople = useMemo(() => {
     const people = Array.isArray(previewPayload?.people) ? previewPayload.people : []
@@ -417,22 +649,38 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     })
   }, [linkTypeFilter, previewPayload?.people, searchQuery])
 
-  const handleGeneratePreview = useCallback(async () => {
+  const loadAccessLinksPreview = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++accessLinkRequestIdRef.current
     setIsPreviewLoading(true)
     setErrorMessage('')
-    setSuccessMessage('')
+    if (!silent) {
+      setSuccessMessage('')
+    }
+    setInvitationDrafts([])
 
     try {
+      const publicationVersion = getPublicationVersionRequest(selectedPublicationVersion)
       const preview = await workflowPlanningService.previewAccessLinks(
         selectedYear,
-        window.location.origin
+        window.location.origin,
+        publicationVersion ? { publicationVersion } : {}
       )
 
+      if (requestId !== accessLinkRequestIdRef.current) {
+        return
+      }
+
       setPreviewPayload(preview)
-      setSuccessMessage(
-        `Aperçu préparé: ${preview?.summary?.peopleCount || 0} personne(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense.`
-      )
+      if (!silent) {
+        setSuccessMessage(
+          `Aperçu préparé: ${preview?.summary?.peopleCount || 0} personne(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense, ${preview?.summary?.generatedLinkCount || 0} disponible(s).`
+        )
+      }
     } catch (error) {
+      if (requestId !== accessLinkRequestIdRef.current) {
+        return
+      }
+
       setPreviewPayload(null)
       setErrorMessage(
         error?.data?.error || error?.message || 'Impossible de préparer l’aperçu des liens d’accès.'
@@ -440,44 +688,51 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsPreviewLoading(false)
     }
-  }, [selectedYear])
+  }, [selectedPublicationVersion, selectedYear])
+
+  const handleGeneratePreview = useCallback(async () => {
+    await loadAccessLinksPreview({ silent: false })
+  }, [loadAccessLinksPreview])
 
   const handleGenerateLinks = useCallback(async () => {
+    const requestId = ++accessLinkRequestIdRef.current
     setIsGenerating(true)
     setErrorMessage('')
     setSuccessMessage('')
+    setInvitationDrafts([])
 
     try {
+      const publicationVersion = getPublicationVersionRequest(selectedPublicationVersion)
       const result = await workflowPlanningService.generateAccessLinks(
         selectedYear,
-        window.location.origin
+        window.location.origin,
+        publicationVersion ? { publicationVersion } : {}
       )
+
+      if (requestId !== accessLinkRequestIdRef.current) {
+        return
+      }
 
       setPreviewPayload(result)
       setSuccessMessage(
         `${result?.summary?.peopleCount || 0} personne(s) préparée(s), ${result?.summary?.voteLinkCount || 0} lien(s) vote, ${result?.summary?.soutenanceLinkCount || 0} lien(s) défense généré(s).`
       )
     } catch (error) {
+      if (requestId !== accessLinkRequestIdRef.current) {
+        return
+      }
+
       setErrorMessage(
         error?.data?.error || error?.message || 'Impossible de générer les liens d’accès.'
       )
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedYear])
+  }, [selectedPublicationVersion, selectedYear])
 
   useEffect(() => {
-    if (!shouldAutoGenerate || autoGeneratedRef.current) {
-      return
-    }
-
-    if (YEARS_CONFIG.isSupportedYear(requestedYear) && selectedYear !== requestedYear) {
-      return
-    }
-
-    autoGeneratedRef.current = true
-    handleGeneratePreview()
-  }, [handleGeneratePreview, requestedYear, selectedYear, shouldAutoGenerate])
+    loadAccessLinksPreview({ silent: true })
+  }, [loadAccessLinksPreview])
 
   const handleCopy = async (url) => {
     try {
@@ -493,10 +748,118 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
+  const openOutlookDraft = (draft) => {
+    if (!draft?.mailto) {
+      return
+    }
+
+    window.location.href = draft.mailto
+  }
+
+  const handlePrepareOutlookInvitations = () => {
+    if (!prepareWithOutlook) {
+      setErrorMessage("L'envoi automatique n'est pas activé pour le moment. Cochez Outlook pour préparer les messages.")
+      setSuccessMessage('')
+      return
+    }
+
+    if (!previewPayload?.summary?.soutenanceGeneratedLinkCount) {
+      setErrorMessage("Aucun lien de défense disponible. Générez les liens d'accès avant de préparer les emails.")
+      setSuccessMessage('')
+      return
+    }
+
+    if (!isPublicationSelectionSynced) {
+      setErrorMessage("La publication sélectionnée ne correspond pas aux liens affichés. Préparez l'aperçu ou régénérez les liens pour cette publication.")
+      setSuccessMessage('')
+      return
+    }
+
+    const drafts = buildInvitationDrafts(filteredPeople, {
+      year: selectedYear,
+      selectedPublicationVersion: selectedPublicationVersionValue,
+      emailSettings
+    })
+
+    if (drafts.length === 0) {
+      setInvitationDrafts([])
+      setErrorMessage("Aucun lien de défense généré ne correspond au filtre actuel.")
+      setSuccessMessage('')
+      return
+    }
+
+    setInvitationDrafts(drafts)
+    setErrorMessage('')
+    setSuccessMessage(
+      `${drafts.length} invitation${drafts.length > 1 ? 's' : ''} Outlook préparée${drafts.length > 1 ? 's' : ''}. Le premier brouillon va s'ouvrir.`
+    )
+    openOutlookDraft(drafts[0])
+  }
+
+  const handlePrepareSingleOutlookInvitation = (entry, link) => {
+    if (!prepareWithOutlook) {
+      setErrorMessage("L'envoi automatique n'est pas activé pour le moment. Cochez Outlook pour préparer les messages.")
+      setSuccessMessage('')
+      return
+    }
+
+    if (!link?.url) {
+      setErrorMessage("Générez ce lien avant de préparer l'email.")
+      setSuccessMessage('')
+      return
+    }
+
+    const draft = buildInvitationDraft({
+      entry,
+      link,
+      year: selectedYear,
+      emailSettings
+    })
+
+    if (!draft.to) {
+      setErrorMessage("Impossible de préparer l'email: destinataire manquant.")
+      setSuccessMessage('')
+      return
+    }
+
+    setInvitationDrafts([draft])
+    setErrorMessage('')
+    setSuccessMessage(`Invitation Outlook préparée pour ${draft.name}.`)
+    openOutlookDraft(draft)
+  }
+
   const previewSummary = previewPayload?.summary || null
   const previewContexts = previewPayload?.contexts || {}
   const workflowLabel = formatWorkflowLabel(previewPayload?.workflowState)
   const publicationVersion = previewContexts?.soutenance?.publicationVersion
+  const publicationVersionOptions = buildPublicationVersionOptions(previewContexts?.soutenance)
+  const selectedPublicationVersionValue = publicationVersionOptions.some((option) => option.value === selectedPublicationVersion)
+    ? selectedPublicationVersion
+    : 'active'
+  const selectedPublicationRequest = getPublicationVersionRequest(selectedPublicationVersionValue)
+  const currentPublicationVersion = getPublicationVersionRequest(previewContexts?.soutenance?.publicationVersion)
+  const currentRequestedPublicationVersion = getPublicationVersionRequest(previewContexts?.soutenance?.requestedPublicationVersion)
+  const activePublicationVersion = getPublicationVersionRequest(
+    publicationVersionOptions.find((option) => option.isActive)?.value
+  )
+  const isPublicationSelectionSynced = !previewPayload
+    ? true
+    : selectedPublicationRequest
+      ? currentPublicationVersion === selectedPublicationRequest
+      : currentRequestedPublicationVersion === null ||
+        (activePublicationVersion !== null && currentPublicationVersion === activePublicationVersion)
+  const hasGeneratedSoutenanceLinks = Boolean(previewPayload?.summary?.soutenanceGeneratedLinkCount)
+  const prepareEmailsTitle = !isPublicationSelectionSynced
+    ? "Préparez ou générez les liens pour la publication sélectionnée."
+    : !hasGeneratedSoutenanceLinks
+      ? "Générez les liens de défense avant de préparer les emails."
+      : prepareWithOutlook
+        ? 'Préparer les invitations Outlook pour les liens de défense filtrés.'
+        : "L'envoi automatique est désactivé pour le moment."
+  const generateLinksLabel = previewPayload?.hasGeneratedLinks ? 'Regénérer les liens' : 'Générer les liens'
+  const generateLinksTitle = previewPayload?.hasGeneratedLinks
+    ? 'Remplacer les liens d’accès admin déjà générés.'
+    : 'Générer les liens d’accès.'
   const isBusy = isPreviewLoading || isGenerating
 
   return (
@@ -515,7 +878,11 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
             </span>
             {previewPayload ? (
               <span className='page-tools-chip'>
-                {previewPayload.linksGenerated ? 'Liens générés' : 'Aperçu seul'}
+                {previewPayload.linksGenerated
+                  ? 'Liens générés'
+                  : previewPayload.hasGeneratedLinks
+                    ? 'Liens partiels'
+                    : 'Aperçu seul'}
               </span>
             ) : null}
           </div>
@@ -569,6 +936,23 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
             </select>
           </label>
 
+          <label className='page-tools-field' htmlFor='publication-version-filter'>
+            <span className='page-tools-field-label'>Publication</span>
+            <select
+              id='publication-version-filter'
+              className='page-tools-field-control'
+              value={selectedPublicationVersionValue}
+              onChange={(event) => setSelectedPublicationVersion(event.target.value)}
+              disabled={isBusy}
+            >
+              {publicationVersionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div className='page-tools-field page-tools-field-action'>
             <button
               type='button'
@@ -588,16 +972,47 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
               className='page-tools-action-btn primary'
               onClick={handleGenerateLinks}
               disabled={isBusy}
-              title={isGenerating ? 'Génération des liens en cours.' : 'Générer les liens d’accès.'}
-              aria-label={isGenerating ? 'Génération des liens en cours.' : 'Générer les liens d’accès.'}
+              title={isGenerating ? 'Génération des liens en cours.' : generateLinksTitle}
+              aria-label={isGenerating ? 'Génération des liens en cours.' : generateLinksTitle}
             >
-              {isGenerating ? 'Génération...' : 'Générer les liens'}
+              {isGenerating ? 'Génération...' : generateLinksLabel}
+            </button>
+          </div>
+
+          <label className='page-tools-field token-access-mail-checkbox' htmlFor='prepare-with-outlook'>
+            <span className='page-tools-field-label'>Email</span>
+            <span className='token-access-checkbox-row'>
+              <input
+                id='prepare-with-outlook'
+                type='checkbox'
+                checked={prepareWithOutlook}
+                onChange={(event) => setPrepareWithOutlook(event.target.checked)}
+              />
+              <span>Outlook manuel</span>
+            </span>
+          </label>
+
+          <div className='page-tools-field page-tools-field-action'>
+            <button
+              type='button'
+              className='page-tools-action-btn secondary'
+              onClick={handlePrepareOutlookInvitations}
+              disabled={
+                isBusy ||
+                !hasGeneratedSoutenanceLinks ||
+                !prepareWithOutlook ||
+                !isPublicationSelectionSynced
+              }
+              title={prepareEmailsTitle}
+              aria-label='Préparer invitations Outlook'
+            >
+              Préparer emails
             </button>
           </div>
         </div>
 
         <div className='token-access-toolbar-note'>
-          L’aperçu ne crée aucun lien. La génération remplace les liens admin précédents.
+          L’aperçu recharge les liens déjà générés quand ils sont encore valides. La génération remplace les liens admin précédents. L’envoi automatique reste désactivé: le mode Outlook prépare seulement des brouillons.
         </div>
       </PageToolbar>
 
@@ -612,6 +1027,12 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
           {successMessage ? (
             <div className='token-generator-success' role='status'>
               {successMessage}
+            </div>
+          ) : null}
+
+          {previewSummary?.unrecoverableGeneratedLinkCount > 0 ? (
+            <div className='token-generator-alert' role='status'>
+              {previewSummary.unrecoverableGeneratedLinkCount} lien(s) généré(s) avant la persistance ne peuvent pas être reconstruits. Régénérez une fois pour les rendre relisibles.
             </div>
           ) : null}
 
@@ -633,17 +1054,58 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
               </article>
 
               <article className='token-access-summary-card'>
+                <span>Disponibles</span>
+                <strong>{previewSummary.generatedLinkCount || 0}</strong>
+              </article>
+
+              <article className='token-access-summary-card'>
                 <span>Votes en attente</span>
                 <strong>{previewContexts?.vote?.tpiCount || 0} TPI</strong>
               </article>
             </div>
           ) : null}
 
+          {invitationDrafts.length > 0 ? (
+            <section className='token-access-draft-panel' aria-label='Invitations Outlook préparées'>
+              <div className='token-access-draft-head'>
+                <div>
+                  <h3>Invitations Outlook</h3>
+                  <p>
+                    Ouvrez les brouillons un par un, puis vérifiez et envoyez depuis Outlook.
+                  </p>
+                </div>
+                <span>{invitationDrafts.length}</span>
+              </div>
+
+              <div className='token-access-draft-list'>
+                {invitationDrafts.map((draft) => (
+                  <article key={draft.key} className='token-access-draft-row'>
+                    <div className='token-access-draft-copy'>
+                      <strong>{draft.name}</strong>
+                      <span>{draft.to}</span>
+                      <small>{draft.subject}</small>
+                    </div>
+                    <button
+                      type='button'
+                      className='token-access-btn secondary'
+                      onClick={() => openOutlookDraft(draft)}
+                      aria-label={`Ouvrir l'email Outlook pour ${draft.name}`}
+                    >
+                      Ouvrir Outlook
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {!previewSummary ? (
             <div className='token-generator-empty-state'>
-              <h3>Aucun aperçu préparé</h3>
+              <h3>{isPreviewLoading ? 'Chargement des liens' : 'Aucun aperçu préparé'}</h3>
               <p>
-                Choisissez une année, puis préparez l’aperçu.
+                {isPreviewLoading
+                  ? 'Lecture des liens déjà générés pour cette année.'
+                  : 'Choisissez une année, puis préparez l’aperçu.'}
               </p>
             </div>
           ) : filteredPeople.length === 0 ? (
@@ -661,6 +1123,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                   entry={entry}
                   onCopy={handleCopy}
                   onOpen={handleOpen}
+                  onEmailSoutenance={handlePrepareSingleOutlookInvitation}
                 />
               ))}
             </div>

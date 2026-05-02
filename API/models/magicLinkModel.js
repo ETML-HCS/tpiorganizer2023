@@ -9,6 +9,11 @@ const magicLinkSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
+  rawToken: {
+    type: String,
+    default: '',
+    select: false
+  },
   type: {
     type: String,
     enum: MAGIC_LINK_TYPES,

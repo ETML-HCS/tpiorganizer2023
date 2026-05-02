@@ -116,6 +116,9 @@ test('buildAccessLinkPreview groups vote and défense links by person', async ()
         }
       },
       getActivePublication: async () => publication,
+      listPublicationVersions: async () => [
+        { version: 3, isActive: true, publishedAt: '2026-05-01T12:00:00Z', source: { roomsCount: 1 } }
+      ],
       magicLinks: {
         async createVoteMagicLink() {
           throw new Error('Preview should not create vote links')
@@ -135,6 +138,10 @@ test('buildAccessLinkPreview groups vote and défense links by person', async ()
   assert.equal(preview.contexts.vote.tpiCount, 2)
   assert.equal(preview.contexts.vote.linkCount, 4)
   assert.equal(preview.contexts.soutenance.publicationVersion, 3)
+  assert.deepEqual(
+    preview.contexts.soutenance.availableVersions.map((entry) => entry.version),
+    [3]
+  )
 
   const alice = preview.people.find((entry) => entry.person.id === 'p1')
   const eva = preview.people.find((entry) => entry.person.id === 'p5')
@@ -212,6 +219,9 @@ test('buildAccessLinkPreview generates links and revokes previous admin links wh
         }
       },
       getActivePublication: async () => publication,
+      listPublicationVersions: async () => [
+        { version: 3, isActive: true, publishedAt: '2026-05-01T12:00:00Z', source: { roomsCount: 1 } }
+      ],
       magicLinks: {
         async revokeActiveMagicLinks(params) {
           revokeCalls.push(params)
@@ -262,6 +272,12 @@ test('buildAccessLinkPreview generates links and revokes previous admin links wh
       .every((call) => call.excludeIds.length === 1 && call.excludeIds[0].startsWith('new-soutenance-link-')),
     true
   )
+  assert.equal(
+    revokeCalls
+      .filter((call) => call.type === 'soutenance')
+      .every((call) => call.scope?.publicationVersion === 3),
+    true
+  )
   assert.equal(voteCreateCalls[0].scope.source, 'admin_access_generated')
   assert.equal(soutenanceCreateCalls[0].scope.source, 'admin_access_generated')
 
@@ -270,4 +286,171 @@ test('buildAccessLinkPreview generates links and revokes previous admin links wh
   assert.equal(alice.voteLinks[0].generated, true)
   assert.match(alice.soutenanceLinks[0].url, /defenses\/2026\?ml=soutenance-token/)
   assert.equal(alice.soutenanceLinks[0].generated, true)
+})
+
+test('buildAccessLinkPreview recharges les liens admin existants sans regenerer', async () => {
+  const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
+  const candidate = createPerson('p2', 'Eva', 'Candidate', 'eva@example.com', ['candidat'])
+  const tpis = [
+    {
+      _id: 'tpi-1',
+      reference: 'TPI-2026-001',
+      sujet: 'Sujet 1',
+      status: 'voting',
+      candidat: candidate
+    }
+  ]
+  const votes = [
+    { tpiPlanning: 'tpi-1', voter: expert, voterRole: 'expert1' }
+  ]
+  const publication = {
+    version: 3,
+    rooms: [
+      {
+        tpiDatas: [
+          {
+            candidatPersonId: candidate._id,
+            expert1: { personId: expert._id }
+          }
+        ]
+      }
+    ]
+  }
+  const reusableCalls = []
+
+  const preview = await buildAccessLinkPreview({
+    year: 2026,
+    baseUrl: 'http://localhost:3000',
+    dependencies: {
+      TpiPlanningModel: {
+        find() {
+          return createQuery(tpis)
+        }
+      },
+      VoteModel: {
+        find() {
+          return createQuery(votes)
+        }
+      },
+      PersonModel: {
+        find() {
+          return createQuery([expert, candidate])
+        }
+      },
+      getActivePublication: async () => publication,
+      listPublicationVersions: async () => [
+        { version: 3, isActive: true, publishedAt: '2026-05-01T12:00:00Z', source: { roomsCount: 1 } }
+      ],
+      magicLinks: {
+        async findReusableMagicLink(params) {
+          reusableCalls.push(params)
+          const personId = params.person?._id || 'unknown'
+          const path = params.type === 'vote' ? '/planning/2026' : '/defenses/2026'
+          const token = `${params.type}-stored-${personId}`
+
+          return {
+            id: `link-${params.type}-${personId}`,
+            token,
+            redirectPath: path,
+            url: `http://localhost:3000${path}?ml=${token}`,
+            expiresAt: new Date('2026-06-01T12:00:00Z'),
+            type: params.type,
+            generated: true,
+            recoverable: true
+          }
+        },
+        async createVoteMagicLink() {
+          throw new Error('Preview should reuse vote links')
+        },
+        async createSoutenanceMagicLink() {
+          throw new Error('Preview should reuse soutenance links')
+        }
+      }
+    }
+  })
+
+  assert.equal(preview.linksGenerated, true)
+  assert.equal(preview.hasGeneratedLinks, true)
+  assert.equal(preview.summary.generatedLinkCount, 3)
+  assert.equal(preview.summary.pendingLinkCount, 0)
+  assert.equal(reusableCalls.length, 3)
+  assert.deepEqual(
+    reusableCalls.map((call) => call.type).sort(),
+    ['soutenance', 'soutenance', 'vote']
+  )
+  assert.equal(reusableCalls[0].sources.includes('admin_access_generated'), true)
+
+  const alice = preview.people.find((entry) => entry.person.id === expert._id)
+  const eva = preview.people.find((entry) => entry.person.id === candidate._id)
+
+  assert.match(alice.voteLinks[0].url, /planning\/2026\?ml=vote-stored-p1/)
+  assert.match(alice.soutenanceLinks[0].url, /defenses\/2026\?ml=soutenance-stored-p1/)
+  assert.match(eva.soutenanceLinks[0].url, /defenses\/2026\?ml=soutenance-stored-p2/)
+})
+
+test('buildAccessLinkPreview cible une version de publication explicite', async () => {
+  const candidate = createPerson('p2', 'Eva', 'Candidate', 'eva@example.com', ['candidat'])
+  let requestedVersion = null
+
+  const preview = await buildAccessLinkPreview({
+    year: 2026,
+    baseUrl: 'http://localhost:3000',
+    publicationVersion: 2,
+    dependencies: {
+      TpiPlanningModel: {
+        find() {
+          return createQuery([])
+        }
+      },
+      VoteModel: {
+        find() {
+          return createQuery([])
+        }
+      },
+      PersonModel: {
+        find() {
+          return createQuery([candidate])
+        }
+      },
+      getActivePublication: async () => {
+        throw new Error('Version explicite: la publication active ne doit pas être utilisée')
+      },
+      getPublication: async (_year, version) => {
+        requestedVersion = version
+        return {
+          version,
+          rooms: [
+            {
+              tpiDatas: [
+                {
+                  candidatPersonId: candidate._id
+                }
+              ]
+            }
+          ]
+        }
+      },
+      listPublicationVersions: async () => [
+        { version: 3, isActive: true, publishedAt: '2026-05-03T12:00:00Z', source: { roomsCount: 2 } },
+        { version: 2, isActive: false, publishedAt: '2026-05-02T12:00:00Z', source: { roomsCount: 1 } }
+      ],
+      magicLinks: {
+        async createVoteMagicLink() {
+          throw new Error('Aucun lien de vote attendu')
+        },
+        async createSoutenanceMagicLink() {
+          throw new Error('Preview should not create soutenance links')
+        }
+      }
+    }
+  })
+
+  assert.equal(requestedVersion, 2)
+  assert.equal(preview.contexts.soutenance.publicationVersion, 2)
+  assert.equal(preview.contexts.soutenance.requestedPublicationVersion, 2)
+  assert.deepEqual(
+    preview.contexts.soutenance.availableVersions.map((entry) => entry.version),
+    [3, 2]
+  )
+  assert.equal(preview.people[0].soutenanceLinks[0].publicationVersion, 2)
 })
