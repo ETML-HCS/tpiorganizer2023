@@ -55,6 +55,7 @@ export const getAuthScopeForEndpoint = (endpoint = "") => {
   if (
     path === "/api/auth/login" ||
     path.startsWith("/api/planning/auth/") ||
+    path.startsWith("/api/planning/resolution-proposals/public/") ||
     path.startsWith("/api/magic-link/")
   ) {
     return "public"

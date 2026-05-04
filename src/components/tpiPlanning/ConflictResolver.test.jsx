@@ -105,7 +105,10 @@ describe('ConflictResolver', () => {
     fireEvent.click(screen.getByRole('button', { name: /Renvoyer les demandes de vote/i }))
 
     await waitFor(() => {
-      expect(tpiPlanningService.resendVotes).toHaveBeenCalledWith('507f1f77bcf86cd799439011')
+      expect(tpiPlanningService.resendVotes).toHaveBeenCalledWith(
+        '507f1f77bcf86cd799439011',
+        { fromArbitrage: true }
+      )
     })
 
     await waitFor(() => {

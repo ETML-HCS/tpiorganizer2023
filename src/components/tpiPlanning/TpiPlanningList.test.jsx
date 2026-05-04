@@ -55,8 +55,8 @@ describe('TpiPlanningList', () => {
     expect(screen.getByText('À corriger')).toBeInTheDocument()
     expect(screen.getByText(/2 anomalies/i)).toBeInTheDocument()
     expect(screen.getByText(/Aucune date de défense configuree pour cette classe\./i)).toBeInTheDocument()
-    expect(screen.getByText('TPI-2026-001').closest('tr')).toHaveClass('has-validation-issues')
-    expect(screen.getByText('TPI-2026-002').closest('tr')).not.toHaveClass('has-validation-issues')
+    expect(screen.getByTestId('tpi-row-tpi-1')).toHaveClass('has-validation-issues')
+    expect(screen.getByTestId('tpi-row-tpi-2')).not.toHaveClass('has-validation-issues')
   })
 
   test("affiche l'aperçu des créneaux avec les informations de classe", () => {

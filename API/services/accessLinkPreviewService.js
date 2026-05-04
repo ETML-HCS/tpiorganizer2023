@@ -1,7 +1,11 @@
 const Person = require('../models/personModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
+const {
+  ResolutionProposal
+} = require('../models/resolutionProposalModel')
 const magicLinkV2Service = require('./magicLinkV2Service')
+const resolutionProposalService = require('./resolutionProposalService')
 const {
   getActivePublicationVersion,
   getPublicationVersion,
@@ -21,6 +25,14 @@ const ADMIN_STATIC_VOTE_ACCESS_REVOKE_SOURCES = [
   'admin_static_vote_access_preview',
   ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE
 ]
+
+function compactText(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim()
+}
 
 function normalizeVoteLinkTarget(value) {
   return value === 'static' || value === 'publication' ? 'static' : 'app'
@@ -97,7 +109,7 @@ function formatRoleLabel(role) {
 function buildPersonSnapshot(person) {
   return {
     id: person?._id ? String(person._id) : '',
-    name: formatPersonName(person),
+    name: formatPersonName(person) || compactText(person?.name || person?.fullName),
     email: typeof person?.email === 'string' ? person.email : '',
     roles: Array.isArray(person?.roles) ? person.roles : [],
     site: typeof person?.site === 'string' ? person.site : ''
@@ -115,7 +127,8 @@ function ensurePersonEntry(map, person) {
     map.set(personId, {
       person: buildPersonSnapshot(person),
       voteLinks: [],
-      soutenanceLinks: []
+      soutenanceLinks: [],
+      arbitrageLinks: []
     })
   }
 
@@ -177,6 +190,19 @@ function sortSoutenanceLinks(links = []) {
   })
 }
 
+function sortArbitrageLinks(links = []) {
+  return [...links].sort((left, right) => {
+    const leftCreatedAt = left?.createdAt ? new Date(left.createdAt).getTime() : 0
+    const rightCreatedAt = right?.createdAt ? new Date(right.createdAt).getTime() : 0
+
+    if (leftCreatedAt !== rightCreatedAt) {
+      return rightCreatedAt - leftCreatedAt
+    }
+
+    return String(left?.reference || '').localeCompare(String(right?.reference || ''))
+  })
+}
+
 function normalizePublicationVersions(versions = []) {
   return (Array.isArray(versions) ? versions : [])
     .map((entry) => {
@@ -194,6 +220,11 @@ function normalizePublicationVersions(versions = []) {
           : null,
         generatedLinkCount: 0,
         recoverableGeneratedLinkCount: 0,
+        totalGeneratedLinkCount: 0,
+        unrecoverableGeneratedLinkCount: 0,
+        expiredGeneratedLinkCount: 0,
+        revokedGeneratedLinkCount: 0,
+        exhaustedGeneratedLinkCount: 0,
         generatedLinkEarliestExpiry: null,
         generatedLinkLatestExpiry: null
       }
@@ -214,6 +245,11 @@ function buildPublicationLinkStatsMap(stats = []) {
     map.set(version, {
       generatedLinkCount: Number(entry?.generatedLinkCount || 0),
       recoverableGeneratedLinkCount: Number(entry?.recoverableGeneratedLinkCount || 0),
+      totalGeneratedLinkCount: Number(entry?.totalGeneratedLinkCount || 0),
+      unrecoverableGeneratedLinkCount: Number(entry?.unrecoverableGeneratedLinkCount || 0),
+      expiredGeneratedLinkCount: Number(entry?.expiredGeneratedLinkCount || 0),
+      revokedGeneratedLinkCount: Number(entry?.revokedGeneratedLinkCount || 0),
+      exhaustedGeneratedLinkCount: Number(entry?.exhaustedGeneratedLinkCount || 0),
       generatedLinkEarliestExpiry: entry?.earliestExpiry || null,
       generatedLinkLatestExpiry: entry?.latestExpiry || null
     })
@@ -236,10 +272,15 @@ async function getSoutenancePublicationLinkStats(year, magicLinks, sources = [AD
 }
 
 function applyPublicationLinkStats(versions = [], statsByVersion = new Map()) {
-  return versions.map((entry) => ({
-    ...entry,
-    ...(statsByVersion.get(entry.version) || {})
-  }))
+  return versions
+    .map((entry) => ({
+      ...entry,
+      ...(statsByVersion.get(entry.version) || {})
+    }))
+    .filter((entry) =>
+      entry.isActive === true ||
+      Number(entry.recoverableGeneratedLinkCount || 0) > 0
+    )
 }
 
 function buildPendingLink({ redirectPath }) {
@@ -249,6 +290,60 @@ function buildPendingLink({ redirectPath }) {
     token: null,
     url: null,
     generated: false
+  }
+}
+
+function getLinkAvailabilityStatus(link = {}) {
+  if (link.availabilityStatus) {
+    return link.availabilityStatus
+  }
+
+  if (link.url) {
+    return 'available'
+  }
+
+  if (link.generated === true && link.recoverable === false) {
+    return 'unrecoverable'
+  }
+
+  return link.generated === true ? 'unavailable' : 'missing'
+}
+
+function createLinkAvailabilityCounters() {
+  return {
+    unavailableGeneratedLinkCount: 0,
+    unrecoverableGeneratedLinkCount: 0,
+    expiredGeneratedLinkCount: 0,
+    revokedGeneratedLinkCount: 0,
+    exhaustedGeneratedLinkCount: 0
+  }
+}
+
+function updateLinkAvailabilityCounters(counters, link = {}) {
+  if (link.generated !== true || link.url) {
+    return
+  }
+
+  const status = getLinkAvailabilityStatus(link)
+  counters.unavailableGeneratedLinkCount += 1
+
+  if (status === 'expired') {
+    counters.expiredGeneratedLinkCount += 1
+  } else if (status === 'revoked') {
+    counters.revokedGeneratedLinkCount += 1
+  } else if (status === 'exhausted') {
+    counters.exhaustedGeneratedLinkCount += 1
+  } else if (status === 'unrecoverable' || link.recoverable === false) {
+    counters.unrecoverableGeneratedLinkCount += 1
+  }
+}
+
+function copyLinkStatusFields(link = {}) {
+  return {
+    availabilityStatus: getLinkAvailabilityStatus(link),
+    revokedAt: link.revokedAt || null,
+    maxUses: Number.isFinite(Number(link.maxUses)) ? Number(link.maxUses) : null,
+    usageCount: Number.isFinite(Number(link.usageCount)) ? Number(link.usageCount) : null
   }
 }
 
@@ -266,6 +361,29 @@ async function findReusableAdminAccessLink({
   }
 
   return await magicLinks.findReusableMagicLink({
+    year,
+    type,
+    person,
+    scope,
+    sources,
+    baseUrl
+  })
+}
+
+async function findLatestAdminAccessLinkStatus({
+  magicLinks,
+  year,
+  type,
+  person,
+  scope = {},
+  baseUrl,
+  sources = [ADMIN_ACCESS_LINK_SOURCE]
+}) {
+  if (typeof magicLinks.findLatestMagicLinkStatus !== 'function') {
+    return null
+  }
+
+  return await magicLinks.findLatestMagicLinkStatus({
     year,
     type,
     person,
@@ -352,7 +470,24 @@ async function buildVoteAccessLink({
       sources: getVoteAccessRevokeSources(normalizedTarget)
     })
 
-    return existingLink || buildPendingLink({ redirectPath: resolvedRedirectPath })
+    if (existingLink) {
+      return existingLink
+    }
+
+    const latestLinkStatus = await findLatestAdminAccessLinkStatus({
+      magicLinks,
+      year,
+      type: 'vote',
+      person,
+      scope: {
+        year,
+        kind: 'stakeholder_votes'
+      },
+      baseUrl,
+      sources: getVoteAccessRevokeSources(normalizedTarget)
+    })
+
+    return latestLinkStatus || buildPendingLink({ redirectPath: resolvedRedirectPath })
   }
 
   const link = await magicLinks.createVoteMagicLink({
@@ -416,7 +551,23 @@ async function buildSoutenanceAccessLink({
       sources: [source]
     })
 
-    return existingLink || buildPendingLink({ redirectPath: resolvedRedirectPath })
+    if (existingLink) {
+      return existingLink
+    }
+
+    const latestLinkStatus = await findLatestAdminAccessLinkStatus({
+      magicLinks,
+      year,
+      type: 'soutenance',
+      person,
+      scope: {
+        publicationVersion: scopedPublicationVersion
+      },
+      baseUrl,
+      sources: [source]
+    })
+
+    return latestLinkStatus || buildPendingLink({ redirectPath: resolvedRedirectPath })
   }
 
   const link = await magicLinks.createSoutenanceMagicLink({
@@ -514,7 +665,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
   let linkCount = 0
   let generatedLinkCount = 0
   let availableLinkCount = 0
-  let unrecoverableGeneratedLinkCount = 0
+  const availabilityCounters = createLinkAvailabilityCounters()
 
   for (const item of groupedPendingVotes.values()) {
     if (!item?.voter?.email || item.tpisById.size === 0) {
@@ -559,7 +710,8 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       token: link.token,
       url: link.url,
       generated: link.generated === true,
-      recoverable: link.recoverable !== false
+      recoverable: link.recoverable !== false,
+      ...copyLinkStatusFields(link)
     })
 
     uniqueRecipients.add(String(item.voter._id))
@@ -573,9 +725,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     if (link.url) {
       availableLinkCount += 1
     }
-    if (link.generated === true && !link.url) {
-      unrecoverableGeneratedLinkCount += 1
-    }
+    updateLinkAvailabilityCounters(availabilityCounters, link)
   }
 
   return {
@@ -583,7 +733,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     generatedLinkCount,
     availableLinkCount,
     pendingLinkCount: Math.max(linkCount - availableLinkCount, 0),
-    unrecoverableGeneratedLinkCount,
+    ...availabilityCounters,
     recipientCount: uniqueRecipients.size,
     tpiCount: uniqueTpis.size,
     linkTarget: normalizedVoteLinkTarget,
@@ -674,7 +824,7 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
   let linkCount = 0
   let generatedLinkCount = 0
   let availableLinkCount = 0
-  let unrecoverableGeneratedLinkCount = 0
+  const availabilityCounters = createLinkAvailabilityCounters()
   const linkedRecipientIds = new Set()
 
   for (const recipient of recipients || []) {
@@ -706,7 +856,8 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
       token: link.token,
       url: link.url,
       generated: link.generated === true,
-      recoverable: link.recoverable !== false
+      recoverable: link.recoverable !== false,
+      ...copyLinkStatusFields(link)
     })
 
     linkedRecipientIds.add(String(recipient._id))
@@ -717,9 +868,7 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     if (link.url) {
       availableLinkCount += 1
     }
-    if (link.generated === true && !link.url) {
-      unrecoverableGeneratedLinkCount += 1
-    }
+    updateLinkAvailabilityCounters(availabilityCounters, link)
   }
 
   return {
@@ -727,12 +876,144 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     generatedLinkCount,
     availableLinkCount,
     pendingLinkCount: Math.max(linkCount - availableLinkCount, 0),
-    unrecoverableGeneratedLinkCount,
+    ...availabilityCounters,
     recipientCount: linkedRecipientIds.size,
     publicationVersion: publicationVersion.version || null,
     requestedPublicationVersion: normalizedRequestedVersion,
     availableVersions,
     roomsCount: Array.isArray(publicationVersion.rooms) ? publicationVersion.rooms.length : 0
+  }
+}
+
+function buildArbitragePersonSnapshot(recipient) {
+  const personId = compactText(recipient?.personId || recipient?.person)
+
+  if (!personId) {
+    return null
+  }
+
+  return {
+    _id: personId,
+    name: compactText(recipient?.name),
+    email: compactText(recipient?.email),
+    roles: recipient?.role ? [recipient.role] : [],
+    site: ''
+  }
+}
+
+function getArbitrageLinkAvailabilityStatus(proposal, recipient) {
+  if (!recipient?.publicUrl) {
+    return 'unrecoverable'
+  }
+
+  if (proposal?.status === 'expired') {
+    return 'expired'
+  }
+
+  if (proposal?.status === 'cancelled' || proposal?.status === 'failed') {
+    return 'unavailable'
+  }
+
+  return 'available'
+}
+
+async function buildResolutionProposalLinkPreview(year, peopleMap, dependencies = {}) {
+  const { ResolutionProposalModel } = dependencies
+
+  if (!ResolutionProposalModel || typeof ResolutionProposalModel.find !== 'function') {
+    return {
+      linkCount: 0,
+      generatedLinkCount: 0,
+      pendingResponseCount: 0,
+      acceptedResponseCount: 0,
+      rejectedResponseCount: 0,
+      recipientCount: 0,
+      proposalCount: 0
+    }
+  }
+
+  const proposals = await ResolutionProposalModel.find({ year })
+    .sort({ createdAt: -1 })
+
+  const recipientIds = new Set()
+  const proposalIds = new Set()
+  let linkCount = 0
+  let generatedLinkCount = 0
+  let pendingResponseCount = 0
+  let acceptedResponseCount = 0
+  let rejectedResponseCount = 0
+
+  for (const rawProposal of Array.isArray(proposals) ? proposals : []) {
+    const proposal = resolutionProposalService.serializeProposal(rawProposal)
+
+    if (!proposal?.id) {
+      continue
+    }
+
+    proposalIds.add(proposal.id)
+
+    for (const recipient of Array.isArray(proposal.recipients) ? proposal.recipients : []) {
+      const person = buildArbitragePersonSnapshot(recipient)
+      const entry = ensurePersonEntry(peopleMap, person)
+
+      if (!entry) {
+        continue
+      }
+
+      const responseStatus = compactText(recipient.responseStatus) || 'pending'
+      const publicUrl = compactText(recipient.publicUrl)
+
+      entry.arbitrageLinks.push({
+        type: 'arbitrage',
+        proposalId: proposal.id,
+        tpiId: proposal.tpiId,
+        reference: proposal.tpiReference,
+        subject: proposal.subject,
+        candidateName: proposal.candidateName,
+        role: recipient.role,
+        roleLabel: recipient.roleLabel,
+        status: proposal.status,
+        responseStatus,
+        responseReason: recipient.responseReason,
+        alternativeProposal: recipient.alternativeProposal,
+        proposedSlotId: proposal.proposedSlotId,
+        proposedSlotLabel: proposal.proposedSlotLabel,
+        message: proposal.message,
+        devMode: proposal.devMode === true,
+        deliveryStatus: recipient.deliveryStatus,
+        deliveryError: recipient.deliveryError,
+        sentAt: recipient.sentAt || proposal.sentAt,
+        createdAt: proposal.createdAt,
+        expiresAt: proposal.expiresAt,
+        url: publicUrl || null,
+        generated: true,
+        recoverable: Boolean(publicUrl),
+        availabilityStatus: getArbitrageLinkAvailabilityStatus(proposal, recipient)
+      })
+
+      recipientIds.add(person._id)
+      linkCount += 1
+      if (publicUrl) {
+        generatedLinkCount += 1
+      }
+      if (responseStatus === 'accepted') {
+        acceptedResponseCount += 1
+      } else if (responseStatus === 'rejected') {
+        rejectedResponseCount += 1
+      } else {
+        pendingResponseCount += 1
+      }
+    }
+  }
+
+  return {
+    linkCount,
+    generatedLinkCount,
+    pendingResponseCount,
+    acceptedResponseCount,
+    rejectedResponseCount,
+    recipientCount: recipientIds.size,
+    proposalCount: proposalIds.size
   }
 }
 
@@ -755,10 +1036,12 @@ async function buildAccessLinkPreview({
     ? soutenanceBaseUrl.trim()
     : baseUrl
   const peopleMap = new Map()
+  const hasInjectedDependencies = Object.keys(dependencies || {}).length > 0
   const resolvedDependencies = {
     PersonModel: dependencies.PersonModel || Person,
     TpiPlanningModel: dependencies.TpiPlanningModel || TpiPlanning,
     VoteModel: dependencies.VoteModel || Vote,
+    ResolutionProposalModel: dependencies.ResolutionProposalModel || (hasInjectedDependencies ? null : ResolutionProposal),
     magicLinks: dependencies.magicLinks || magicLinkV2Service,
     getActivePublication: dependencies.getActivePublication || getActivePublicationVersion,
     getPublication: dependencies.getPublication || getPublicationVersion,
@@ -790,18 +1073,36 @@ async function buildAccessLinkPreview({
     peopleMap,
     resolvedDependencies
   )
+  const arbitragePreview = await buildResolutionProposalLinkPreview(
+    normalizedYear,
+    peopleMap,
+    resolvedDependencies
+  )
 
   const people = sortPeople(Array.from(peopleMap.values()))
     .map((entry) => ({
       ...entry,
       voteLinks: sortVoteLinks(entry.voteLinks),
-      soutenanceLinks: sortSoutenanceLinks(entry.soutenanceLinks)
+      soutenanceLinks: sortSoutenanceLinks(entry.soutenanceLinks),
+      arbitrageLinks: sortArbitrageLinks(entry.arbitrageLinks)
     }))
   const totalLinkCount = (votePreview.linkCount || 0) + (soutenancePreview.linkCount || 0)
   const availableLinkCount = (votePreview.availableLinkCount || 0) + (soutenancePreview.availableLinkCount || 0)
   const unrecoverableGeneratedLinkCount =
     (votePreview.unrecoverableGeneratedLinkCount || 0) +
     (soutenancePreview.unrecoverableGeneratedLinkCount || 0)
+  const unavailableGeneratedLinkCount =
+    (votePreview.unavailableGeneratedLinkCount || 0) +
+    (soutenancePreview.unavailableGeneratedLinkCount || 0)
+  const expiredGeneratedLinkCount =
+    (votePreview.expiredGeneratedLinkCount || 0) +
+    (soutenancePreview.expiredGeneratedLinkCount || 0)
+  const revokedGeneratedLinkCount =
+    (votePreview.revokedGeneratedLinkCount || 0) +
+    (soutenancePreview.revokedGeneratedLinkCount || 0)
+  const exhaustedGeneratedLinkCount =
+    (votePreview.exhaustedGeneratedLinkCount || 0) +
+    (soutenancePreview.exhaustedGeneratedLinkCount || 0)
 
   return {
     year: normalizedYear,
@@ -816,9 +1117,20 @@ async function buildAccessLinkPreview({
       soutenancePeopleCount: soutenancePreview.recipientCount,
       soutenanceLinkCount: soutenancePreview.linkCount,
       soutenanceGeneratedLinkCount: soutenancePreview.availableLinkCount || 0,
+      arbitragePeopleCount: arbitragePreview.recipientCount,
+      arbitrageProposalCount: arbitragePreview.proposalCount,
+      arbitrageLinkCount: arbitragePreview.linkCount,
+      arbitrageGeneratedLinkCount: arbitragePreview.generatedLinkCount,
+      arbitragePendingResponseCount: arbitragePreview.pendingResponseCount,
+      arbitrageAcceptedResponseCount: arbitragePreview.acceptedResponseCount,
+      arbitrageRejectedResponseCount: arbitragePreview.rejectedResponseCount,
       generatedLinkCount: availableLinkCount,
       pendingLinkCount: Math.max(totalLinkCount - availableLinkCount, 0),
-      unrecoverableGeneratedLinkCount
+      unavailableGeneratedLinkCount,
+      unrecoverableGeneratedLinkCount,
+      expiredGeneratedLinkCount,
+      revokedGeneratedLinkCount,
+      exhaustedGeneratedLinkCount
     },
     contexts: {
       vote: {
@@ -830,7 +1142,11 @@ async function buildAccessLinkPreview({
         linkCount: votePreview.linkCount,
         generatedLinkCount: votePreview.availableLinkCount || 0,
         pendingLinkCount: votePreview.pendingLinkCount || 0,
-        unrecoverableGeneratedLinkCount: votePreview.unrecoverableGeneratedLinkCount || 0
+        unavailableGeneratedLinkCount: votePreview.unavailableGeneratedLinkCount || 0,
+        unrecoverableGeneratedLinkCount: votePreview.unrecoverableGeneratedLinkCount || 0,
+        expiredGeneratedLinkCount: votePreview.expiredGeneratedLinkCount || 0,
+        revokedGeneratedLinkCount: votePreview.revokedGeneratedLinkCount || 0,
+        exhaustedGeneratedLinkCount: votePreview.exhaustedGeneratedLinkCount || 0
       },
       soutenance: {
         linkTarget: normalizedSoutenanceLinkTarget,
@@ -844,7 +1160,20 @@ async function buildAccessLinkPreview({
         linkCount: soutenancePreview.linkCount,
         generatedLinkCount: soutenancePreview.availableLinkCount || 0,
         pendingLinkCount: soutenancePreview.pendingLinkCount || 0,
-        unrecoverableGeneratedLinkCount: soutenancePreview.unrecoverableGeneratedLinkCount || 0
+        unavailableGeneratedLinkCount: soutenancePreview.unavailableGeneratedLinkCount || 0,
+        unrecoverableGeneratedLinkCount: soutenancePreview.unrecoverableGeneratedLinkCount || 0,
+        expiredGeneratedLinkCount: soutenancePreview.expiredGeneratedLinkCount || 0,
+        revokedGeneratedLinkCount: soutenancePreview.revokedGeneratedLinkCount || 0,
+        exhaustedGeneratedLinkCount: soutenancePreview.exhaustedGeneratedLinkCount || 0
+      },
+      arbitrage: {
+        proposalCount: arbitragePreview.proposalCount,
+        recipientCount: arbitragePreview.recipientCount,
+        linkCount: arbitragePreview.linkCount,
+        generatedLinkCount: arbitragePreview.generatedLinkCount,
+        pendingResponseCount: arbitragePreview.pendingResponseCount,
+        acceptedResponseCount: arbitragePreview.acceptedResponseCount,
+        rejectedResponseCount: arbitragePreview.rejectedResponseCount
       }
     },
     people

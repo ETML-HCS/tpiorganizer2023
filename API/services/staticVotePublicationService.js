@@ -2,13 +2,30 @@ const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 const mongoose = require('mongoose')
+const zlib = require('zlib')
 
 const { rootDir } = require('../config/loadEnv')
+const Slot = require('../models/slotModel')
 const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
 const { MagicLink } = require('../models/magicLinkModel')
+const { ResolutionProposal } = require('../models/resolutionProposalModel')
 const schedulingService = require('./schedulingService')
+const {
+  getPlanningConfigIfAvailable,
+  normalizeWorkflowSettings
+} = require('./planningConfigService')
 const { getSharedPublicationSettingsIfAvailable } = require('./planningCatalogService')
+const {
+  buildConfiguredSlotProposalOptions,
+  buildProposalOptionDisplay,
+  buildSlotQueueKey,
+  buildVoteProposalContext,
+  filterSlotDocumentsForVoteProposal
+} = require('./voteProposalOptionsService')
+const {
+  ensureConfiguredWindowSlotDocuments
+} = require('./voteProposalWindowSlotService')
 const {
   getPublicationDeploymentConfigIfAvailable
 } = require('./publicationDeploymentConfigService')
@@ -159,6 +176,10 @@ function getPhpIndexPath(year) {
 
 function getSyncPhpPath(year) {
   return path.join(getOutputDir(year), 'sync.php')
+}
+
+function getArbitragePhpPath(year) {
+  return path.join(getOutputDir(year), 'arbitrage.php')
 }
 
 function getDeniedIndexPath(year) {
@@ -336,8 +357,53 @@ async function getStaticVoteLinkTarget(year, explicitPublicUrl = '', deploymentC
   return target
 }
 
+function encodeBase64Url(buffer) {
+  return Buffer.from(buffer)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
+function createStaticVoteArbitrageToken(payload = {}, explicitSecret = '') {
+  const secret = compactText(explicitSecret || getArbitrageSecret())
+
+  if (!secret) {
+    const error = new Error('STATIC_VOTE_ARBITRAGE_SECRET ou STATIC_VOTE_SYNC_SECRET requis pour générer un lien arbitrage mini-site.')
+    error.statusCode = 409
+    throw error
+  }
+
+  const normalizedPayload = {
+    ...payload,
+    kind: 'resolution_proposal',
+    version: 1
+  }
+  const compressed = zlib.deflateRawSync(Buffer.from(JSON.stringify(normalizedPayload), 'utf8'))
+  const body = encodeBase64Url(compressed)
+  const signature = encodeBase64Url(crypto.createHmac('sha256', secret).update(body).digest())
+
+  return `svra.${body}.${signature}`
+}
+
+function buildStaticVoteArbitrageUrl(publicUrl, year, token) {
+  const normalizedYear = parseYear(year)
+  const baseUrl = compactText(publicUrl) || getDefaultStaticVotePublicPath(normalizedYear)
+  const url = new URL('arbitrage.php', `${baseUrl.replace(/\/+$/, '')}/`)
+  url.searchParams.set('token', compactText(token))
+  return url.toString()
+}
+
 function getSyncSecret() {
   return compactText(process.env.STATIC_VOTE_SYNC_SECRET)
+}
+
+function getArbitrageSecret() {
+  return compactText(process.env.STATIC_VOTE_ARBITRAGE_SECRET || getSyncSecret())
+}
+
+function canBuildStaticVoteArbitrageLinks() {
+  return Boolean(getArbitrageSecret())
 }
 
 function getSyncTimeoutMs(value = null) {
@@ -345,6 +411,267 @@ function getSyncTimeoutMs(value = null) {
     value ?? process.env.STATIC_VOTE_SYNC_TIMEOUT_MS,
     DEFAULT_STATIC_VOTE_SYNC_TIMEOUT_MS
   )
+}
+
+function toPublicVoteSettings(planningConfig = {}) {
+  const settings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
+  return {
+    maxProposalsPerTpi: settings.maxVoteProposals,
+    allowSpecialRequest: settings.allowSpecialVoteRequest
+  }
+}
+
+function buildDateRangeFilters(dateKeys = []) {
+  return (Array.isArray(dateKeys) ? dateKeys : [])
+    .map((dateKey) => {
+      const start = new Date(`${dateKey}T00:00:00.000Z`)
+      if (Number.isNaN(start.getTime())) {
+        return null
+      }
+
+      return {
+        date: {
+          $gte: start,
+          $lt: new Date(start.getTime() + 24 * 60 * 60 * 1000)
+        }
+      }
+    })
+    .filter(Boolean)
+}
+
+function normalizePlanningLookup(value) {
+  return compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
+}
+
+function isSlotSiteCompatibleWithTpi(slot, tpi) {
+  const tpiSite = normalizePlanningLookup(tpi?.site || tpi?.lieu?.site)
+
+  if (!tpiSite) {
+    return true
+  }
+
+  const slotSite = normalizePlanningLookup(slot?.room?.site || slot?.roomSite)
+  return !slotSite || slotSite === tpiSite
+}
+
+function hasUsefulQueueKey(value) {
+  return compactText(value).replace(/\|/g, '').length > 0
+}
+
+function buildStaticSlotSortKey(slot) {
+  const date = new Date(slot?.date || 0).getTime()
+  return [
+    Number.isFinite(date) ? String(date) : '0',
+    compactText(slot?.period),
+    compactText(slot?.startTime),
+    compactText(slot?.room?.name || slot?.roomName)
+  ].join('|')
+}
+
+function getProposalOptionRank(option) {
+  if (option?.source === 'existing_vote') {
+    return 0
+  }
+
+  if (option?.availabilityStatus === 'available' || option?.source === 'planning_option') {
+    return 1
+  }
+
+  if (option?.availabilityStatus === 'planning_window' || option?.source === 'planning_config_window') {
+    return 2
+  }
+
+  return 3
+}
+
+function getProposalOptionScore(option) {
+  const score = Number(option?.score)
+  return Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY
+}
+
+function isBetterProposalWindowOption(candidate, current) {
+  if (!current) {
+    return true
+  }
+
+  const candidateRank = getProposalOptionRank(candidate)
+  const currentRank = getProposalOptionRank(current)
+  if (candidateRank !== currentRank) {
+    return candidateRank < currentRank
+  }
+
+  const candidateScore = getProposalOptionScore(candidate)
+  const currentScore = getProposalOptionScore(current)
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore
+  }
+
+  return buildStaticSlotSortKey(candidate?.slot).localeCompare(buildStaticSlotSortKey(current?.slot)) < 0
+}
+
+function addProposalOptionByWindow(optionsByWindowKey, option) {
+  const queueKey = option?.queueKey || buildSlotQueueKey(option?.slot)
+
+  if (!hasUsefulQueueKey(queueKey)) {
+    return false
+  }
+
+  const normalizedOption = {
+    ...option,
+    queueKey
+  }
+  const current = optionsByWindowKey.get(queueKey)
+
+  if (isBetterProposalWindowOption(normalizedOption, current)) {
+    optionsByWindowKey.set(queueKey, normalizedOption)
+    return true
+  }
+
+  return false
+}
+
+function getSlotCapacityPeriodKey(slot) {
+  if (Number.isInteger(Number(slot?.period))) {
+    return `P${Number(slot.period)}`
+  }
+
+  return [
+    slot?.startTime || '',
+    slot?.endTime || ''
+  ].join('-')
+}
+
+function getOptionFallbackCapacity(option) {
+  const capacity = Number(option?.display?.windowCapacity)
+  return Number.isFinite(capacity) && capacity > 0 ? Math.floor(capacity) : null
+}
+
+function getOptionQueueCapacity(option, capacityPeriodsByQueueKey = new Map()) {
+  const fromSlots = capacityPeriodsByQueueKey.get(option?.queueKey)?.size
+  if (Number.isInteger(fromSlots) && fromSlots > 0) {
+    return fromSlots
+  }
+
+  return getOptionFallbackCapacity(option)
+}
+
+function withQueueData(option, count, capacity = null) {
+  const normalizedCount = Math.max(0, Math.floor(Number(count) || 0))
+  const normalizedCapacity = Number.isFinite(Number(capacity)) && Number(capacity) > 0
+    ? Math.floor(Number(capacity))
+    : null
+
+  return {
+    ...option,
+    queue: {
+      count: normalizedCount,
+      capacity: normalizedCapacity,
+      nextPosition: normalizedCount + 1,
+      source: 'votes'
+    }
+  }
+}
+
+async function attachVoteQueueCountsToProposalOptions(options = [], tpi = {}) {
+  const normalizedOptions = Array.isArray(options) ? options : []
+  if (normalizedOptions.length === 0 || mongoose.connection?.readyState !== 1) {
+    return normalizedOptions
+  }
+
+  const optionQueueKeys = new Set()
+  const optionDateKeys = new Set()
+
+  for (const option of normalizedOptions) {
+    const queueKey = option.queueKey || buildSlotQueueKey(option.slot)
+    option.queueKey = queueKey
+
+    if (hasUsefulQueueKey(queueKey)) {
+      optionQueueKeys.add(queueKey)
+    }
+
+    const dateKey = toIsoDate(option.slot?.date)
+    if (dateKey) {
+      optionDateKeys.add(dateKey)
+    }
+  }
+
+  if (optionQueueKeys.size === 0 || optionDateKeys.size === 0) {
+    return normalizedOptions.map((option) => withQueueData(option, 0, getOptionFallbackCapacity(option)))
+  }
+
+  const relatedSlotDocuments = await Slot.find({
+    year: tpi.year,
+    $or: buildDateRangeFilters(Array.from(optionDateKeys))
+  })
+    .select('date period startTime endTime room')
+    .lean()
+
+  const queueKeyBySlotId = new Map()
+  const capacityPeriodsByQueueKey = new Map()
+  const relatedSlotIds = []
+
+  for (const slotDocument of relatedSlotDocuments) {
+    if (!isSlotSiteCompatibleWithTpi(slotDocument, tpi)) {
+      continue
+    }
+
+    const queueKey = buildSlotQueueKey(slotDocument)
+    if (!optionQueueKeys.has(queueKey)) {
+      continue
+    }
+
+    if (!capacityPeriodsByQueueKey.has(queueKey)) {
+      capacityPeriodsByQueueKey.set(queueKey, new Set())
+    }
+    capacityPeriodsByQueueKey.get(queueKey).add(getSlotCapacityPeriodKey(slotDocument))
+
+    const slotId = toIdString(slotDocument)
+    if (!slotId) {
+      continue
+    }
+
+    relatedSlotIds.push(slotDocument._id)
+    queueKeyBySlotId.set(slotId, queueKey)
+  }
+
+  if (relatedSlotIds.length === 0) {
+    return normalizedOptions.map((option) =>
+      withQueueData(option, 0, getOptionQueueCapacity(option, capacityPeriodsByQueueKey))
+    )
+  }
+
+  const positiveVotes = await Vote.find({
+    slot: { $in: relatedSlotIds },
+    decision: { $in: ['accepted', 'preferred'] }
+  })
+    .select('slot voter')
+    .lean()
+
+  const votersByQueueKey = new Map()
+  for (const vote of positiveVotes) {
+    const queueKey = queueKeyBySlotId.get(toIdString(vote.slot))
+    const voterId = toIdString(vote.voter)
+
+    if (!queueKey || !voterId) {
+      continue
+    }
+
+    if (!votersByQueueKey.has(queueKey)) {
+      votersByQueueKey.set(queueKey, new Set())
+    }
+
+    votersByQueueKey.get(queueKey).add(voterId)
+  }
+
+  return normalizedOptions.map((option) => {
+    const count = votersByQueueKey.get(option.queueKey)?.size || 0
+
+    return withQueueData(option, count, getOptionQueueCapacity(option, capacityPeriodsByQueueKey))
+  })
 }
 
 function getSlotIdFromProposedSlot(proposedSlot) {
@@ -373,6 +700,12 @@ function buildSlotPayload(slot) {
     period: Number.parseInt(String(slot?.period || ''), 10) || null,
     startTime,
     endTime,
+    room: roomName || roomSite
+      ? {
+          name: roomName,
+          site: roomSite
+        }
+      : null,
     roomName,
     roomSite,
     label: [
@@ -458,15 +791,198 @@ function sortVoteSlots(slots = [], tpi) {
   })
 }
 
+async function buildStaticVoteProposalOptionsForTpi(tpi, groupedSlots = [], planningConfig = null) {
+  const tpiId = toIdString(tpi)
+  let resolvedPlanningConfig = planningConfig
+
+  if (!resolvedPlanningConfig && mongoose.connection?.readyState === 1) {
+    try {
+      resolvedPlanningConfig = await getPlanningConfigIfAvailable(tpi?.year)
+    } catch (error) {
+      console.warn(`Configuration de vote statique indisponible pour ${tpi?.year}:`, error?.message || error)
+    }
+  }
+
+  const voteSettings = toPublicVoteSettings(resolvedPlanningConfig || {})
+  const proposalContext = resolvedPlanningConfig
+    ? buildVoteProposalContext(tpi, resolvedPlanningConfig)
+    : {
+        candidateClass: compactText(tpi?.classe),
+        candidateClassLabel: compactText(tpi?.classe),
+        classCode: '',
+        isMatu: false,
+        allowedDateKeys: [],
+        allowedDateLabels: [],
+        source: 'planning_slots'
+      }
+
+  if (!tpiId) {
+    return {
+      options: [],
+      context: proposalContext,
+      settings: voteSettings
+    }
+  }
+
+  const fixedSlotId = getFixedSlotIdFromTpi(tpi)
+  const optionsByWindowKey = new Map()
+  const existingSlotIds = new Set()
+
+  for (const groupedSlot of Array.isArray(groupedSlots) ? groupedSlots : []) {
+    const slotId = compactText(groupedSlot?.slotId || groupedSlot?.slot?.id || groupedSlot?.slot?._id)
+
+    if (!slotId || slotId === fixedSlotId) {
+      continue
+    }
+
+    existingSlotIds.add(slotId)
+    addProposalOptionByWindow(optionsByWindowKey, {
+      slotId,
+      voteId: groupedSlot.voteId ? String(groupedSlot.voteId) : null,
+      slot: groupedSlot.slot,
+      source: 'existing_vote',
+      queueKey: buildSlotQueueKey(groupedSlot.slot),
+      score: null,
+      reason: '',
+      display: buildProposalOptionDisplay(groupedSlot.slot, resolvedPlanningConfig || {}, tpi),
+      availabilityStatus: 'existing_vote'
+    })
+  }
+
+  if (mongoose.connection?.readyState === 1) {
+    try {
+      const availableSlots = await schedulingService.findAvailableSlotsForTpi(tpiId)
+      const availableSlotIds = (Array.isArray(availableSlots) ? availableSlots : [])
+        .map((slotInfo) => slotInfo.slot)
+        .filter(Boolean)
+
+      if (availableSlotIds.length > 0) {
+        const slotDocuments = await Slot.find({ _id: { $in: availableSlotIds } })
+          .select('date period startTime endTime room status')
+          .lean()
+        const filteredSlotDocuments = filterSlotDocumentsForVoteProposal(slotDocuments, proposalContext)
+        const slotById = new Map(
+          filteredSlotDocuments.map((slotDocument) => [toIdString(slotDocument), slotDocument])
+        )
+
+        for (const slotInfo of availableSlots) {
+          const slotId = compactText(slotInfo?.slot)
+          if (!slotId || slotId === fixedSlotId) {
+            continue
+          }
+
+          const slotDocument = slotById.get(slotId)
+          if (!slotDocument || !isSlotSiteCompatibleWithTpi(slotDocument, tpi)) {
+            continue
+          }
+
+          existingSlotIds.add(slotId)
+          addProposalOptionByWindow(optionsByWindowKey, {
+            slotId,
+            voteId: null,
+            slot: buildSlotPayload(slotDocument),
+            source: 'planning_option',
+            queueKey: buildSlotQueueKey(slotDocument),
+            score: Number.isFinite(Number(slotInfo.score)) ? Number(slotInfo.score) : null,
+            reason: compactText(slotInfo.reason),
+            display: buildProposalOptionDisplay(slotDocument, resolvedPlanningConfig || {}, tpi),
+            availabilityStatus: 'available'
+          })
+        }
+      }
+    } catch (error) {
+      console.warn(`Options de vote statique indisponibles pour ${tpi?.reference || tpiId}:`, error?.message || error)
+    }
+
+    try {
+      const shouldLoadConfiguredWindows =
+        (Array.isArray(proposalContext.allowedDateKeys) && proposalContext.allowedDateKeys.length > 0) ||
+        optionsByWindowKey.size === 0
+
+      if (shouldLoadConfiguredWindows) {
+        const dateRangeFilters = buildDateRangeFilters(proposalContext.allowedDateKeys)
+        const configuredSlotQuery = {
+          year: tpi.year,
+          status: { $in: ['available', 'proposed', 'pending_votes', 'confirmed'] }
+        }
+
+        if (dateRangeFilters.length > 0) {
+          configuredSlotQuery.$or = dateRangeFilters
+        }
+
+        const configuredSlotDocuments = await Slot.find(configuredSlotQuery)
+          .select('date period startTime endTime room status assignedTpi config')
+          .sort({ date: 1, period: 1, 'room.name': 1 })
+          .lean()
+        const siteCompatibleSlotDocuments = (Array.isArray(configuredSlotDocuments) ? configuredSlotDocuments : [])
+          .filter((slotDocument) => isSlotSiteCompatibleWithTpi(slotDocument, tpi))
+        const proposalSlotDocuments = await ensureConfiguredWindowSlotDocuments(siteCompatibleSlotDocuments, {
+          planningConfig: resolvedPlanningConfig || {},
+          proposalContext,
+          tpi,
+          year: tpi.year
+        })
+        const configuredOptions = buildConfiguredSlotProposalOptions(proposalSlotDocuments, {
+          fixedSlotId,
+          existingSlotIds,
+          planningConfig: resolvedPlanningConfig || {},
+          proposalContext,
+          tpi,
+          source: 'planning_config_window'
+        })
+
+        for (const option of configuredOptions) {
+          if (!option?.slotId || option.slotId === fixedSlotId) {
+            continue
+          }
+
+          addProposalOptionByWindow(optionsByWindowKey, {
+            ...option,
+            slot: buildSlotPayload(option.slot)
+          })
+        }
+      }
+    } catch (error) {
+      console.warn(`Demi-journées de vote statique indisponibles pour ${tpi?.reference || tpiId}:`, error?.message || error)
+    }
+  }
+
+  const options = Array.from(optionsByWindowKey.values())
+    .sort((left, right) => {
+      const leftKey = left.queueKey || buildSlotQueueKey(left.slot)
+      const rightKey = right.queueKey || buildSlotQueueKey(right.slot)
+
+      if (leftKey !== rightKey) {
+        return leftKey.localeCompare(rightKey)
+      }
+
+      return buildStaticSlotSortKey(left.slot).localeCompare(buildStaticSlotSortKey(right.slot))
+    })
+  const optionsWithQueue = await attachVoteQueueCountsToProposalOptions(options, tpi)
+
+  return {
+    options: optionsWithQueue,
+    context: proposalContext,
+    settings: voteSettings
+  }
+}
+
 async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toISOString()) {
   const normalizedYear = parseYear(year)
+  let planningConfig = null
+  try {
+    planningConfig = await getPlanningConfigIfAvailable(normalizedYear)
+  } catch (error) {
+    console.warn(`Configuration de vote statique ${normalizedYear} indisponible:`, error?.message || error)
+  }
+  const defaultVoteSettings = toPublicVoteSettings(planningConfig || {})
   const tpis = await TpiPlanning.find({
     year: normalizedYear,
     status: { $in: VOTE_TPI_STATUSES }
   })
     .populate('candidat', 'firstName lastName name fullName')
     .populate('proposedSlots.slot', 'date period startTime endTime room status')
-    .select('reference sujet year status candidat proposedSlots')
+    .select('reference sujet year status candidat classe site proposedSlots')
     .sort({ reference: 1 })
 
   if (!Array.isArray(tpis) || tpis.length === 0) {
@@ -512,12 +1028,16 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
           reference: compactText(tpi.reference),
           subject: compactText(tpi.sujet),
           candidateName: formatPersonName(tpi.candidat),
+          classe: compactText(tpi.classe),
+          site: compactText(tpi.site),
           status: compactText(tpi.status)
         },
         fixedVoteId: '',
         fixedSlotId: '',
         fixedSlot: null,
         proposalOptions: [],
+        proposalContext: null,
+        voteSettings: defaultVoteSettings,
         slots: []
       })
     }
@@ -542,6 +1062,8 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
       continue
     }
 
+    const proposalData = await buildStaticVoteProposalOptionsForTpi(tpi, sortedSlots, planningConfig)
+
     groups.push({
       personId: group.personId,
       personName: group.personName,
@@ -550,14 +1072,9 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
       fixedVoteId: fixedEntry.voteId,
       fixedSlotId: fixedEntry.slotId,
       fixedSlot: fixedEntry.slot,
-      proposalOptions: sortedSlots
-        .filter((slot) => slot.slotId !== fixedEntry.slotId)
-        .map((slot) => ({
-          voteId: slot.voteId,
-          slotId: slot.slotId,
-          slot: slot.slot,
-          source: 'existing_vote'
-        }))
+      proposalOptions: proposalData.options,
+      proposalContext: proposalData.context,
+      voteSettings: proposalData.settings
     })
   }
 
@@ -585,15 +1102,54 @@ function buildStaticVoteUnavailableHtml(year, title = 'Vote non disponible', mes
   <meta name="robots" content="noindex,nofollow">
   <title>${escapeHtml(title)} ${normalizedYear}</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, Arial, sans-serif; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f6f7f9; color: #172033; }
-    main { width: min(520px, calc(100vw - 32px)); background: #fff; border: 1px solid #d8dee8; border-radius: 8px; padding: 28px; box-shadow: 0 20px 60px rgba(23, 32, 51, .08); }
-    h1 { margin: 0 0 10px; font-size: 1.45rem; }
-    p { margin: 0; color: #526071; line-height: 1.55; }
+    :root {
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      --ink: #172033;
+      --muted: #526071;
+      --line: #d8dee8;
+      --panel: #fff;
+      --page: #f4f6f8;
+      --accent: #0f766e;
+      --accent-soft: #e7f5f1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #eef4f2 0, var(--page) 220px);
+      color: var(--ink);
+    }
+    main {
+      width: min(560px, calc(100vw - 32px));
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 24px 70px rgba(23, 32, 51, .10);
+    }
+    .vote-unavailable-kicker {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    h1 { margin: 16px 0 10px; font-size: 1.55rem; letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); line-height: 1.55; }
   </style>
 </head>
 <body>
   <main>
+    <span class="vote-unavailable-kicker">Votes planning ${normalizedYear}</span>
     <h1>${escapeHtml(title)}</h1>
     <p>${escapeHtml(message)}</p>
   </main>
@@ -614,54 +1170,500 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
   <style>
     :root {
       color-scheme: light;
-      font-family: Inter, Arial, sans-serif;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
       --ink: #172033;
-      --muted: #617084;
-      --line: #d8dee8;
+      --muted: #526071;
+      --line: #d7dee8;
       --panel: #fff;
-      --page: #f6f7f9;
+      --page: #f4f6f8;
+      --soft: #eef3f5;
       --accent: #0f766e;
+      --accent-strong: #0b5e57;
+      --accent-soft: #e7f5f1;
+      --warning: #8a5a00;
+      --warning-soft: #fff7e6;
       --danger: #b42318;
+      --danger-soft: #fff1f0;
+      --shadow: 0 18px 50px rgba(23, 32, 51, .08);
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--page); color: var(--ink); }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #eef4f2 0, #f7f8fa 230px, var(--page) 100%);
+      color: var(--ink);
+    }
     button, input, textarea { font: inherit; }
-    .vote-shell { width: min(1080px, calc(100vw - 32px)); margin: 0 auto; padding: 24px 0 40px; }
-    .vote-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding: 10px 0 22px; }
-    .vote-header h1 { margin: 0; font-size: clamp(1.45rem, 3vw, 2rem); letter-spacing: 0; }
-    .vote-header p { margin: 6px 0 0; color: var(--muted); }
-    .vote-meta { text-align: right; color: var(--muted); font-size: .92rem; }
-    .vote-list { display: grid; gap: 14px; }
-    .vote-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; box-shadow: 0 10px 30px rgba(23, 32, 51, .06); }
-    .vote-card.is-submitted { border-color: rgba(15, 118, 110, .45); }
-    .vote-card-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 14px; }
-    .vote-card h2 { margin: 0; font-size: 1.12rem; letter-spacing: 0; }
-    .vote-card p { margin: 4px 0 0; color: var(--muted); }
-    .vote-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border-radius: 999px; background: #edf7f5; color: #0b5e57; font-size: .85rem; white-space: nowrap; }
-    .vote-section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
-    .vote-slot { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
-    .vote-slot strong { font-size: .98rem; }
-    .vote-slot span { color: var(--muted); font-size: .92rem; }
-    .vote-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
-    .vote-mode label, .vote-proposal label, .vote-special label { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff; cursor: pointer; }
-    .vote-mode strong, .vote-proposal strong { display: block; }
-    .vote-mode span, .vote-proposal span { display: block; color: var(--muted); font-size: .9rem; margin-top: 2px; }
-    .vote-proposals { display: grid; gap: 10px; margin-top: 10px; }
-    .vote-special { display: grid; gap: 10px; margin-top: 12px; }
-    .vote-special-fields { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr); gap: 10px; margin-top: 8px; }
-    .vote-special-fields input, .vote-special-fields textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; color: var(--ink); }
-    .vote-special-fields textarea { min-height: 78px; resize: vertical; }
-    .vote-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 16px; }
-    .vote-status { color: var(--muted); font-size: .92rem; }
+    button { -webkit-tap-highlight-color: transparent; }
+    .vote-shell {
+      width: min(1120px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 16px 0 28px;
+    }
+    .vote-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+      gap: 12px;
+      align-items: stretch;
+      margin-bottom: 10px;
+      padding: 13px;
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid rgba(215, 222, 232, .95);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .vote-kicker {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .vote-header h1 { margin: 7px 0 4px; font-size: 1.58rem; line-height: 1.08; letter-spacing: 0; }
+    .vote-header p { margin: 0; color: var(--muted); line-height: 1.35; }
+    .vote-summary {
+      display: grid;
+      align-content: center;
+      gap: 6px;
+      padding: 10px;
+      background: #f8faf9;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .vote-summary strong { font-size: 1.12rem; letter-spacing: 0; }
+    .vote-summary span, .vote-summary small { color: var(--muted); line-height: 1.35; }
+    .vote-progress {
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #dde5eb;
+    }
+    .vote-progress span {
+      display: block;
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width .18s ease;
+    }
+    .vote-list { display: grid; gap: 8px; }
+    .vote-card {
+      display: grid;
+      gap: 9px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 12px 34px rgba(23, 32, 51, .055);
+    }
+    .vote-card.is-submitted {
+      border-color: rgba(15, 118, 110, .42);
+      background: linear-gradient(180deg, #fff 0, #f8fcfb 100%);
+    }
+    .vote-card.is-sent-compact {
+      gap: 0;
+      padding: 10px;
+    }
+    .vote-card.is-just-sent {
+      animation: voteSentIn .32s ease-out;
+    }
+    .vote-sent {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 9px;
+      align-items: start;
+    }
+    .vote-sent-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      justify-self: end;
+      min-width: 36px;
+      min-height: 28px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .vote-sent strong {
+      display: block;
+      font-size: .96rem;
+      line-height: 1.25;
+    }
+    .vote-sent p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.35;
+    }
+    @keyframes voteSentIn {
+      from {
+        opacity: .35;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vote-card.is-just-sent { animation: none; }
+    }
+    .vote-card-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .vote-reference {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--accent-strong);
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .vote-card h2 { margin: 0; font-size: 1.08rem; line-height: 1.25; letter-spacing: 0; }
+    .vote-card p { margin: 4px 0 0; color: var(--muted); line-height: 1.42; }
+    .vote-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-size: .84rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .vote-chip.is-submitted {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+    .vote-section {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+    }
+    .vote-section h3 {
+      margin: 0 0 5px;
+      font-size: .78rem;
+      color: var(--ink);
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+    .vote-slot {
+      display: grid;
+      gap: 5px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+    .vote-slot.is-fixed {
+      border-color: rgba(15, 118, 110, .35);
+      background: #f8fcfb;
+    }
+    .vote-slot strong { font-size: 1rem; line-height: 1.35; }
+    .vote-slot-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .vote-slot-meta span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: .82rem;
+    }
+    .vote-mode {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .vote-choice,
+    .vote-proposal,
+    .vote-special-toggle {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .vote-choice:hover,
+    .vote-proposal:hover,
+    .vote-special-toggle:hover {
+      border-color: rgba(15, 118, 110, .42);
+    }
+    .vote-choice.is-selected,
+    .vote-proposal.is-selected,
+    .vote-special-toggle.is-selected,
+    .vote-only-availability.is-selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px rgba(15, 118, 110, .16);
+    }
+    .vote-proposal.vote-load-easy { border-left: 4px solid #16a34a; }
+    .vote-proposal.vote-load-medium { border-left: 4px solid #d97706; }
+    .vote-proposal.vote-load-busy { border-left: 4px solid #dc2626; }
+    .vote-choice.is-disabled,
+    .vote-proposal.is-disabled,
+    .vote-special-toggle.is-disabled,
+    .vote-only-availability.is-disabled {
+      cursor: default;
+      opacity: .58;
+    }
+    .vote-choice input,
+    .vote-proposal input,
+    .vote-special-toggle input {
+      margin-top: 2px;
+      accent-color: var(--accent);
+    }
+    .vote-choice strong,
+    .vote-proposal strong,
+    .vote-special-toggle strong {
+      display: block;
+      font-size: .9rem;
+      line-height: 1.3;
+    }
+    .vote-proposal span span {
+      display: block;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.3;
+      margin-top: 1px;
+    }
+    .vote-proposal-meta {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }
+    .vote-proposal .vote-proposal-meta span {
+      display: inline-flex;
+      margin-top: 0;
+    }
+    .vote-load-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 17px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 700;
+    }
+    .vote-load-chip.vote-load-easy {
+      color: #166534;
+      background: #dcfce7;
+    }
+    .vote-load-chip.vote-load-medium {
+      color: #92400e;
+      background: #fef3c7;
+    }
+    .vote-load-chip.vote-load-busy {
+      color: #991b1b;
+      background: #fee2e2;
+    }
+    .vote-proposals { display: grid; gap: 6px; }
+    .vote-proposal-day {
+      display: grid;
+      grid-template-columns: minmax(135px, .75fr) minmax(0, 2.8fr);
+      gap: 6px;
+      align-items: stretch;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+    .vote-proposal-day h4 {
+      margin: 0;
+      align-self: center;
+      font-size: .84rem;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+    .vote-proposal-periods {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 5px;
+    }
+    .vote-proposal-periods .vote-proposal,
+    .vote-proposal-periods .vote-only-availability {
+      min-height: 34px;
+      align-items: center;
+      padding: 6px 7px;
+    }
+    .vote-only-availability {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      border: 1px solid rgba(138, 90, 0, .28);
+      border-radius: 8px;
+      padding: 6px 7px;
+      background: var(--warning-soft);
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .vote-only-availability:hover { border-color: rgba(138, 90, 0, .48); }
+    .vote-only-availability.is-selected {
+      border-color: var(--warning);
+      background: #fff1c2;
+      box-shadow: inset 0 0 0 1px rgba(138, 90, 0, .14);
+    }
+    .vote-only-availability.is-disabled {
+      cursor: default;
+      opacity: .58;
+    }
+    .vote-only-availability input {
+      margin-top: 2px;
+      accent-color: var(--warning);
+    }
+    .vote-only-availability strong {
+      display: block;
+      font-size: .84rem;
+      line-height: 1.3;
+    }
+    .vote-proposal-context {
+      margin: -1px 0 5px;
+      color: var(--muted);
+      font-size: .8rem;
+      line-height: 1.35;
+    }
+    .vote-proposal-count {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 21px;
+      margin-bottom: 5px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 700;
+    }
+    .vote-empty-note {
+      margin: 0;
+      padding: 8px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: #fbfcfe;
+    }
+    .vote-remark {
+      display: grid;
+      gap: 6px;
+      margin-top: 0;
+    }
+    .vote-remark label {
+      color: var(--ink);
+      font-size: .9rem;
+      font-weight: 700;
+    }
+    .vote-remark textarea {
+      width: 100%;
+      min-height: 48px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 9px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .vote-special {
+      display: grid;
+      gap: 6px;
+    }
+    .vote-special-fields {
+      display: grid;
+      grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
+      gap: 6px;
+    }
+    .vote-special-fields input,
+    .vote-special-fields textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 9px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .vote-special-fields textarea { min-height: 52px; resize: vertical; }
+    .vote-special-fields input:focus,
+    .vote-special-fields textarea:focus,
+    .vote-remark textarea:focus,
+    .vote-submit:focus-visible {
+      outline: 3px solid rgba(15, 118, 110, .22);
+      outline-offset: 2px;
+    }
+    .vote-actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+    }
+    .vote-status { color: var(--muted); font-size: .92rem; line-height: 1.4; }
     .vote-status.is-error { color: var(--danger); }
-    .vote-status.is-success { color: var(--accent); }
-    .vote-submit { border: 0; border-radius: 8px; background: var(--accent); color: white; padding: 10px 14px; cursor: pointer; }
-    .vote-submit:disabled { opacity: .55; cursor: default; }
-    .vote-empty { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 24px; color: var(--muted); }
-    @media (max-width: 720px) {
-      .vote-header, .vote-card-header, .vote-actions { display: grid; text-align: left; }
-      .vote-meta { text-align: left; }
-      .vote-mode, .vote-special-fields { grid-template-columns: 1fr; }
+    .vote-status.is-success { color: var(--accent-strong); font-weight: 700; }
+    .vote-submit {
+      min-height: 36px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      padding: 8px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(15, 118, 110, .20);
+    }
+    .vote-submit:hover:not(:disabled) { background: var(--accent-strong); }
+    .vote-submit:disabled { opacity: .58; cursor: default; box-shadow: none; }
+    .vote-empty {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      color: var(--muted);
+      box-shadow: var(--shadow);
+    }
+    @media (max-width: 780px) {
+      .vote-shell { width: min(100vw - 20px, 1120px); padding: 12px 0 24px; }
+      .vote-header { grid-template-columns: 1fr; padding: 12px; }
+      .vote-header h1 { font-size: 1.42rem; }
+      .vote-card-header,
+      .vote-actions {
+        display: grid;
+        justify-items: stretch;
+      }
+      .vote-chip { justify-self: start; }
+      .vote-mode,
+      .vote-special-fields { grid-template-columns: 1fr; }
+      .vote-proposal-day,
+      .vote-proposal-periods { grid-template-columns: 1fr; }
+      .vote-submit { width: 100%; }
     }
   </style>
 </head>
@@ -669,13 +1671,16 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
   <div class="vote-shell">
     <header class="vote-header">
       <div>
+        <span class="vote-kicker">Lien personnel</span>
         <h1>Votes planning ${normalizedYear}</h1>
-        <p id="vote-viewer">Lien personnel en verification.</p>
+        <p id="vote-viewer">V&eacute;rification du lien personnel.</p>
       </div>
-      <div class="vote-meta">
-        <div>Campagne ${escapeHtml(campaignId || '')}</div>
-        <div>Genere le ${escapeHtml(generatedAt || '')}</div>
-      </div>
+      <aside class="vote-summary" aria-label="Resume des votes">
+        <strong id="vote-count">0 / 0 r&eacute;ponses</strong>
+        <span id="vote-progress-text">Chargement des votes.</span>
+        <div class="vote-progress" aria-hidden="true"><span id="vote-progress-fill"></span></div>
+        <small>Campagne ${escapeHtml(campaignId || '')}</small>
+      </aside>
     </header>
     <main id="vote-root" class="vote-list" aria-live="polite"></main>
   </div>
@@ -687,14 +1692,75 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       var submittedTpiIds = new Set(Array.isArray(bootstrap.submittedTpiIds) ? bootstrap.submittedTpiIds : []);
       var root = document.getElementById('vote-root');
       var viewer = document.getElementById('vote-viewer');
+      var countLabel = document.getElementById('vote-count');
+      var progressText = document.getElementById('vote-progress-text');
+      var progressFill = document.getElementById('vote-progress-fill');
+      var DEFAULT_MAX_PROPOSALS = 3;
 
       function escapeText(value) {
         return String(value == null ? '' : value);
       }
 
+      function createTextElement(tagName, className, text) {
+        var node = document.createElement(tagName);
+        if (className) {
+          node.className = className;
+        }
+        node.textContent = escapeText(text);
+        return node;
+      }
+
+      function pluralize(count, singular, plural) {
+        return count > 1 ? plural : singular;
+      }
+
+      function getGroupTpiId(group) {
+        return group && group.tpi ? String(group.tpi.id || '') : '';
+      }
+
+      function getTpiCandidateName(group) {
+        return group && group.tpi && group.tpi.candidateName
+          ? group.tpi.candidateName
+          : 'ce candidat';
+      }
+
+      function isSubmitted(group) {
+        var tpiId = getGroupTpiId(group);
+        return tpiId ? submittedTpiIds.has(tpiId) : false;
+      }
+
       function setViewer() {
         var name = bootstrap.viewer && bootstrap.viewer.name ? bootstrap.viewer.name : '';
-        viewer.textContent = name ? 'Connecte: ' + name : 'Lien personnel valide.';
+        viewer.textContent = name
+          ? 'Connecté: ' + name
+          : 'Lien personnel valide.';
+      }
+
+      function updateSummary() {
+        var total = groups.length;
+        var completed = groups.reduce(function (count, group) {
+          return count + (isSubmitted(group) ? 1 : 0);
+        }, 0);
+        var remaining = Math.max(total - completed, 0);
+        var percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        if (countLabel) {
+          countLabel.textContent = total > 0
+            ? completed + ' / ' + total + ' ' + pluralize(total, 'réponse', 'réponses')
+            : 'Aucun vote';
+        }
+
+        if (progressText) {
+          progressText.textContent = total === 0
+            ? 'Aucun vote ouvert pour ce lien.'
+            : remaining === 0
+              ? 'Toutes les réponses sont transmises.'
+              : remaining + ' ' + pluralize(remaining, 'réponse restante', 'réponses restantes') + '.';
+        }
+
+        if (progressFill) {
+          progressFill.style.width = percent + '%';
+        }
       }
 
       function buildSubmitUrl() {
@@ -703,18 +1769,208 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         return url.toString();
       }
 
-      function createSlotNode(slot) {
+      function createSlotNode(slot, variant) {
         var node = document.createElement('div');
-        node.className = 'vote-slot';
-        var title = document.createElement('strong');
-        title.textContent = escapeText(slot && slot.label ? slot.label : 'Creneau');
-        var meta = document.createElement('span');
-        meta.textContent = [
-          slot && slot.roomSite ? slot.roomSite : '',
-          slot && slot.period ? 'Periode ' + slot.period : ''
-        ].filter(Boolean).join(' | ');
-        node.append(title, meta);
+        node.className = 'vote-slot' + (variant ? ' ' + variant : '');
+
+        var title = createTextElement(
+          'strong',
+          '',
+          slot && slot.dateLabel ? slot.dateLabel : (slot && slot.label ? slot.label : 'Créneau')
+        );
+        var meta = document.createElement('div');
+        meta.className = 'vote-slot-meta';
+
+        [
+          slot && slot.startTime && slot.endTime ? slot.startTime + ' - ' + slot.endTime : '',
+          slot && slot.roomName ? slot.roomName : '',
+          slot && slot.period ? 'Période ' + slot.period : ''
+        ].filter(Boolean).forEach(function (item) {
+          meta.append(createTextElement('span', '', item));
+        });
+
+        node.append(title);
+        if (meta.children.length) {
+          node.append(meta);
+        }
         return node;
+      }
+
+      function getMaxProposals(group) {
+        var value = group && group.voteSettings
+          ? Number.parseInt(String(group.voteSettings.maxProposalsPerTpi || ''), 10)
+          : DEFAULT_MAX_PROPOSALS;
+
+        return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_PROPOSALS;
+      }
+
+      function isSpecialRequestAllowed(group) {
+        return !(group && group.voteSettings && group.voteSettings.allowSpecialRequest === false);
+      }
+
+      function formatProposalContext(group) {
+        var context = group && group.proposalContext ? group.proposalContext : {};
+        var classLabel = context.candidateClassLabel || (group && group.tpi ? group.tpi.classe : '');
+        var labels = Array.isArray(context.allowedDateLabels) ? context.allowedDateLabels.filter(Boolean) : [];
+
+        if (labels.length > 0) {
+          return (classLabel ? classLabel + ': ' : '') + labels.join(', ');
+        }
+
+        if (classLabel) {
+          return 'Options ' + classLabel;
+        }
+
+        return 'Demi-journées disponibles';
+      }
+
+      function getProposalDateLabel(option) {
+        var slot = option && option.slot ? option.slot : {};
+        return slot.dateLabel || slot.label || 'Date possible';
+      }
+
+      function getProposalDateKey(option) {
+        var slot = option && option.slot ? option.slot : {};
+        return slot.date || getProposalDateLabel(option);
+      }
+
+      function normalizeProposalPeriodKey(option) {
+        var display = option && option.display ? option.display : {};
+        var slot = option && option.slot ? option.slot : {};
+        var rawPeriod = String(display.windowPeriod || display.periodLabel || slot.period || '').toLowerCase();
+
+        if (rawPeriod.indexOf('pm') !== -1 || rawPeriod.indexOf('après') !== -1 || rawPeriod.indexOf('apres') !== -1) {
+          return 'PM';
+        }
+
+        if (rawPeriod.indexOf('am') !== -1 || rawPeriod.indexOf('matin') !== -1) {
+          return 'AM';
+        }
+
+        var startMatch = String(slot.startTime || '').match(/^(\d{1,2})(?::(\d{2}))?/);
+        if (startMatch) {
+          var hour = Number.parseInt(startMatch[1], 10);
+          if (Number.isFinite(hour)) {
+            return hour < 12 ? 'AM' : 'PM';
+          }
+        }
+
+        var numericPeriod = Number.parseInt(String(slot.period || ''), 10);
+        if (Number.isFinite(numericPeriod)) {
+          return numericPeriod <= 4 ? 'AM' : 'PM';
+        }
+
+        return 'AM';
+      }
+
+      function getProposalPeriodShortLabel(option) {
+        return normalizeProposalPeriodKey(option) === 'PM' ? 'Après-midi' : 'Matin';
+      }
+
+      function getProposalPeriodLabel(option) {
+        var display = option && option.display ? option.display : {};
+        var slot = option && option.slot ? option.slot : {};
+        var period = display.periodLabel || (display.windowPeriod === 'PM' ? 'Après-midi' : '');
+        var timeRange = display.timeRangeLabel || (
+          slot.startTime && slot.endTime ? slot.startTime + ' - ' + slot.endTime : ''
+        );
+        var details = [
+          period || (slot.period ? 'Période ' + slot.period : ''),
+          timeRange
+        ].filter(Boolean).join(' | ');
+
+        return details || 'Demi-journée';
+      }
+
+      function getProposalQueueLabel(option) {
+        var queue = option && option.queue ? option.queue : {};
+        var count = Number(queue.count);
+        if (!Number.isFinite(count) || count < 0) {
+          return '';
+        }
+
+        var capacity = Number(queue.capacity);
+        return Number.isFinite(capacity) && capacity > 0
+          ? Math.floor(count) + '/' + Math.floor(capacity)
+          : String(Math.floor(count));
+      }
+
+      function getProposalLoadInfo(option) {
+        var queue = option && option.queue ? option.queue : {};
+        var count = Number(queue.count);
+        var capacity = Number(queue.capacity);
+
+        if (!Number.isFinite(count) || count < 0) {
+          return { tone: 'neutral', label: '', title: '' };
+        }
+
+        var normalizedCount = Math.floor(count);
+        var normalizedCapacity = Number.isFinite(capacity) && capacity > 0 ? Math.floor(capacity) : null;
+        var ratio = normalizedCapacity ? normalizedCount / normalizedCapacity : 0;
+
+        if (normalizedCapacity && ratio >= .8) {
+          return {
+            tone: 'busy',
+            label: 'Chargé',
+            title: 'Plus difficile à organiser: beaucoup de préférences pointent déjà vers cette demi-journée.'
+          };
+        }
+
+        if (normalizedCapacity && ratio >= .5) {
+          return {
+            tone: 'medium',
+            label: 'À coordonner',
+            title: 'Organisation possible, mais la demi-journée demande déjà un peu de coordination.'
+          };
+        }
+
+        if (normalizedCount > 0 || normalizedCapacity) {
+          return {
+            tone: 'easy',
+            label: 'Souple',
+            title: 'Demi-journée plutôt simple à exploiter pour l’instant.'
+          };
+        }
+
+        return { tone: 'neutral', label: '', title: '' };
+      }
+
+      function buildProposalDayGroups(options) {
+        var groupsByDay = new Map();
+
+        (Array.isArray(options) ? options : []).forEach(function (option) {
+          var dayKey = getProposalDateKey(option);
+          if (!dayKey) {
+            return;
+          }
+
+          if (!groupsByDay.has(dayKey)) {
+            groupsByDay.set(dayKey, {
+              dayKey: dayKey,
+              label: getProposalDateLabel(option),
+              options: {}
+            });
+          }
+
+          var group = groupsByDay.get(dayKey);
+          var periodKey = normalizeProposalPeriodKey(option);
+          if (!group.options[periodKey]) {
+            group.options[periodKey] = option;
+          }
+        });
+
+        return Array.from(groupsByDay.values());
+      }
+
+      function updateProposalCounter(card) {
+        var counter = card.querySelector('[data-proposal-count]');
+        if (!counter) {
+          return;
+        }
+
+        var selectedCount = card.querySelectorAll('input[data-proposal-slot]:checked').length;
+        var maxProposals = Number.parseInt(card.dataset.maxProposals || String(DEFAULT_MAX_PROPOSALS), 10);
+        counter.textContent = selectedCount + '/' + maxProposals + ' demi-journées';
       }
 
       function getCardState(card) {
@@ -722,13 +1978,28 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var mode = modeInput ? modeInput.value : '';
         var proposedSlotIds = Array.from(card.querySelectorAll('input[data-proposal-slot]:checked'))
           .map(function (input) { return input.value; });
+        var onlyAvailabilitySlotIds = [];
+        Array.from(card.querySelectorAll('input[data-only-availability]:checked'))
+          .forEach(function (input) {
+            var dayKey = input.dataset.dayKey || '';
+            Array.from(card.querySelectorAll('input[data-proposal-slot]:checked'))
+              .filter(function (slotInput) { return (slotInput.dataset.dayKey || '') === dayKey; })
+              .forEach(function (slotInput) {
+                if (slotInput.value && onlyAvailabilitySlotIds.indexOf(slotInput.value) === -1) {
+                  onlyAvailabilitySlotIds.push(slotInput.value);
+                }
+              });
+          });
         var specialEnabled = Boolean(card.querySelector('input[data-special-enabled]:checked'));
         var reason = card.querySelector('[data-special-reason]');
         var date = card.querySelector('[data-special-date]');
+        var remark = card.querySelector('[data-vote-remark]');
 
         return {
           mode: mode,
           proposedSlotIds: proposedSlotIds,
+          onlyAvailabilitySlotIds: onlyAvailabilitySlotIds,
+          remark: remark ? remark.value.trim() : '',
           specialRequest: specialEnabled ? {
             reason: reason ? reason.value.trim() : '',
             requestedDate: date ? date.value : ''
@@ -738,31 +2009,195 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
 
       function setStatus(card, text, kind) {
         var status = card.querySelector('[data-status]');
+        if (!status) {
+          return;
+        }
         status.textContent = text || '';
         status.className = 'vote-status' + (kind ? ' is-' + kind : '');
       }
 
+      function clearProposalState(card) {
+        Array.from(card.querySelectorAll('input[data-proposal-slot], input[data-special-enabled], input[data-only-availability]'))
+          .forEach(function (input) {
+            input.checked = false;
+          });
+
+        Array.from(card.querySelectorAll('[data-special-date], [data-special-reason]'))
+          .forEach(function (field) {
+            field.value = '';
+          });
+      }
+
+      function clearProposalFields(card) {
+        Array.from(card.querySelectorAll('input[data-proposal-slot], input[data-only-availability]'))
+          .forEach(function (input) {
+            input.checked = false;
+          });
+      }
+
+      function updateChoiceClasses(card) {
+        var specialFields = card.querySelector('[data-special-fields]');
+        var specialInput = card.querySelector('input[data-special-enabled]');
+        var specialEnabled = Boolean(specialInput && specialInput.checked);
+        var checkedOnlyInputs = Array.from(card.querySelectorAll('input[data-only-availability]:checked'));
+        var activeOnlyInput = checkedOnlyInputs.length > 0 ? checkedOnlyInputs[checkedOnlyInputs.length - 1] : null;
+        var activeOnlyDayKey = activeOnlyInput ? activeOnlyInput.dataset.dayKey || '' : '';
+
+        if (specialEnabled) {
+          clearProposalFields(card);
+        }
+
+        Array.from(card.querySelectorAll('input[data-only-availability]'))
+          .forEach(function (input) {
+            if (input !== activeOnlyInput) {
+              input.checked = false;
+            }
+          });
+
+        if (activeOnlyDayKey) {
+          Array.from(card.querySelectorAll('input[data-proposal-slot]'))
+            .forEach(function (input) {
+              if ((input.dataset.dayKey || '') !== activeOnlyDayKey) {
+                input.checked = false;
+              }
+            });
+        }
+
+        Array.from(card.querySelectorAll('input[data-proposal-slot]'))
+          .forEach(function (input) {
+            var disabledByExclusive = Boolean(activeOnlyDayKey) && (input.dataset.dayKey || '') !== activeOnlyDayKey;
+            input.disabled = specialEnabled || disabledByExclusive;
+            if (specialEnabled || disabledByExclusive) {
+              input.checked = false;
+            }
+          });
+
+        Array.from(card.querySelectorAll('input[data-only-availability]'))
+          .forEach(function (input) {
+            var dayKey = input.dataset.dayKey || '';
+            var selectedInDay = Array.from(card.querySelectorAll('input[data-proposal-slot]:checked'))
+              .some(function (slotInput) { return (slotInput.dataset.dayKey || '') === dayKey; });
+            var disabledByExclusive = Boolean(activeOnlyDayKey) && dayKey !== activeOnlyDayKey;
+            input.disabled = specialEnabled || disabledByExclusive || !selectedInDay;
+            if (input.disabled) {
+              input.checked = false;
+            }
+          });
+
+        if (activeOnlyInput && !activeOnlyInput.checked) {
+          activeOnlyDayKey = '';
+        }
+
+        Array.from(card.querySelectorAll('input[data-proposal-slot]'))
+          .forEach(function (input) {
+            var disabledByExclusive = Boolean(activeOnlyDayKey) && (input.dataset.dayKey || '') !== activeOnlyDayKey;
+            input.disabled = specialEnabled || disabledByExclusive;
+          });
+
+        Array.from(card.querySelectorAll('.vote-choice, .vote-proposal, .vote-special-toggle, .vote-only-availability'))
+          .forEach(function (label) {
+            var input = label.querySelector('input');
+            label.classList.toggle('is-selected', Boolean(input && input.checked));
+            label.classList.toggle('is-disabled', !input || Boolean(input.disabled));
+          });
+
+        if (specialFields) {
+          specialFields.hidden = !specialEnabled;
+        }
+        updateProposalCounter(card);
+      }
+
+      function syncModeState(card) {
+        var state = getCardState(card);
+        var proposalArea = card.querySelector('[data-proposal-area]');
+        var specialArea = card.querySelector('[data-special-area]');
+        var showProposal = state.mode === 'proposal';
+
+        if (proposalArea) {
+          proposalArea.hidden = !showProposal;
+        }
+        if (specialArea) {
+          specialArea.hidden = !showProposal;
+        }
+        if (!showProposal) {
+          clearProposalState(card);
+        }
+      }
+
+      function collapseSubmittedCard(card, group, justSubmitted) {
+        card.className = 'vote-card is-submitted is-sent-compact' + (justSubmitted ? ' is-just-sent' : '');
+        card.setAttribute('aria-disabled', 'true');
+        card.textContent = '';
+
+        var sent = document.createElement('section');
+        sent.className = 'vote-sent';
+        sent.setAttribute('role', 'status');
+        var badge = createTextElement('span', 'vote-sent-badge', 'OK');
+        var copy = document.createElement('div');
+        copy.append(
+          createTextElement('strong', '', 'Réponse transmise'),
+          createTextElement(
+            'p',
+            '',
+            'Vos informations pour le TPI de ' + getTpiCandidateName(group) +
+              ' ont été transmises. Il n’est plus possible de les modifier.'
+          )
+        );
+        sent.append(copy, badge);
+        card.append(sent);
+      }
+
+      function isAlreadySubmittedError(response, data) {
+        if (!response || response.status !== 409) {
+          return false;
+        }
+
+        var message = String(data && data.error ? data.error : '').toLowerCase();
+        return message.indexOf('deja transmis') !== -1 || message.indexOf('déjà transmis') !== -1;
+      }
+
       async function submitGroup(card, group) {
+        if (card.classList.contains('is-submitted')) {
+          return;
+        }
+
         var state = getCardState(card);
 
         if (state.mode !== 'ok' && state.mode !== 'proposal') {
-          setStatus(card, 'Choisissez OK ou Proposition.', 'error');
+          setStatus(card, 'Choisissez une réponse avant de transmettre.', 'error');
           return;
         }
 
         if (state.mode === 'proposal' && state.proposedSlotIds.length === 0 && !state.specialRequest) {
-          setStatus(card, 'Choisissez un creneau alternatif ou une demande speciale.', 'error');
+          setStatus(card, 'Choisissez une date proposée ou une demande spéciale hors liste.', 'error');
+          return;
+        }
+
+        var maxProposals = Number.parseInt(card.dataset.maxProposals || String(DEFAULT_MAX_PROPOSALS), 10);
+        if (state.mode === 'proposal' && state.proposedSlotIds.length > maxProposals) {
+          setStatus(card, 'Maximum ' + maxProposals + ' demi-journée' + (maxProposals > 1 ? 's' : '') + ' par réponse.', 'error');
+          return;
+        }
+
+        if (state.mode === 'proposal' && state.specialRequest && state.proposedSlotIds.length > 0) {
+          setStatus(card, 'La demande spéciale hors liste remplace les dates proposées.', 'error');
+          return;
+        }
+
+        if (state.onlyAvailabilitySlotIds.length > 0 && state.onlyAvailabilitySlotIds.some(function (slotId) { return state.proposedSlotIds.indexOf(slotId) === -1; })) {
+          setStatus(card, 'La seule disponibilité doit correspondre à une demi-journée cochée.', 'error');
           return;
         }
 
         if (state.specialRequest && (!state.specialRequest.reason || !state.specialRequest.requestedDate)) {
-          setStatus(card, 'La demande speciale exige une date et une raison.', 'error');
+          setStatus(card, 'La demande spéciale hors liste exige une date et une raison.', 'error');
           return;
         }
 
         var submitButton = card.querySelector('button[type="submit"]');
         submitButton.disabled = true;
-        setStatus(card, 'Envoi en cours...', '');
+        submitButton.textContent = 'Transmission...';
+        setStatus(card, 'Transmission en cours...', '');
 
         try {
           var response = await fetch(buildSubmitUrl(), {
@@ -773,115 +2208,271 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
               tpiId: group.tpi.id,
               fixedVoteId: group.fixedVoteId,
               mode: state.mode,
-              proposedSlotIds: state.mode === 'proposal' ? state.proposedSlotIds : [],
+              proposedSlotIds: state.mode === 'proposal' && !state.specialRequest ? state.proposedSlotIds : [],
+              onlyAvailabilitySlotIds: state.mode === 'proposal' && !state.specialRequest ? state.onlyAvailabilitySlotIds : [],
+              remark: state.remark,
               specialRequest: state.mode === 'proposal' ? state.specialRequest : null
             })
           });
           var data = await response.json().catch(function () { return {}; });
 
-          if (!response.ok || data.success !== true) {
-            throw new Error(data.error || 'Reponse refusee.');
+          if (isAlreadySubmittedError(response, data)) {
+            submittedTpiIds.add(getGroupTpiId(group));
+            collapseSubmittedCard(card, group, true);
+            updateSummary();
+            return;
           }
 
-          submittedTpiIds.add(group.tpi.id);
-          card.classList.add('is-submitted');
-          setStatus(card, 'Vote enregistre.', 'success');
+          if (!response.ok || data.success !== true) {
+            throw new Error(data.error || 'Réponse refusée.');
+          }
+
+          submittedTpiIds.add(getGroupTpiId(group));
+          collapseSubmittedCard(card, group, true);
+          updateSummary();
         } catch (error) {
           submitButton.disabled = false;
-          setStatus(card, error && error.message ? error.message : 'Erreur lors de l envoi.', 'error');
+          submitButton.textContent = 'Envoyer';
+          setStatus(card, error && error.message ? error.message : 'Erreur lors de la transmission.', 'error');
         }
+      }
+
+      function createModeChoice(card, value, title, description) {
+        var label = document.createElement('label');
+        label.className = 'vote-choice';
+        label.title = description;
+        var input = document.createElement('input');
+        input.type = 'radio';
+        input.name = card.dataset.groupName + '-mode';
+        input.value = value;
+        var copy = document.createElement('span');
+        copy.append(createTextElement('strong', '', title));
+        label.append(input, copy);
+        return label;
+      }
+
+      function createProposalPeriodOption(option, dayKey) {
+        var loadInfo = getProposalLoadInfo(option);
+        var queueLabel = getProposalQueueLabel(option);
+        var label = document.createElement('label');
+        label.className = 'vote-proposal' + (loadInfo.label ? ' vote-load-' + loadInfo.tone : '');
+        label.title = [getProposalPeriodLabel(option), loadInfo.title].filter(Boolean).join('\\n');
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.dataset.proposalSlot = 'true';
+        input.dataset.dayKey = dayKey;
+        input.value = escapeText(option && option.slotId ? option.slotId : '');
+        var copy = document.createElement('span');
+        copy.append(createTextElement('strong', '', getProposalPeriodShortLabel(option)));
+        if (loadInfo.label || queueLabel) {
+          var meta = document.createElement('span');
+          meta.className = 'vote-proposal-meta';
+          if (loadInfo.label) {
+            meta.append(createTextElement('span', 'vote-load-chip vote-load-' + loadInfo.tone, loadInfo.label));
+          }
+          if (queueLabel) {
+            meta.append(createTextElement('span', '', queueLabel));
+          }
+          copy.append(meta);
+        }
+        label.append(input, copy);
+        return label;
+      }
+
+      function createMissingProposalPeriod(label) {
+        var node = document.createElement('span');
+        node.className = 'vote-proposal is-disabled';
+        node.title = label + ' non publié';
+        node.append(createTextElement('strong', '', '—'));
+        return node;
+      }
+
+      function createProposalDayOptionGroup(dayGroup) {
+        var row = document.createElement('article');
+        row.className = 'vote-proposal-day';
+        var title = document.createElement('h4');
+        title.textContent = dayGroup.label || 'Date possible';
+        var periods = document.createElement('div');
+        periods.className = 'vote-proposal-periods';
+
+        ['AM', 'PM'].forEach(function (periodKey) {
+          if (dayGroup.options[periodKey]) {
+            periods.append(createProposalPeriodOption(dayGroup.options[periodKey], dayGroup.dayKey));
+          } else {
+            periods.append(createMissingProposalPeriod(periodKey === 'PM' ? 'Après-midi' : 'Matin'));
+          }
+        });
+
+        var onlyLabel = document.createElement('label');
+        onlyLabel.className = 'vote-only-availability';
+        onlyLabel.title = 'À cocher si les périodes choisies ce jour sont vos seules disponibilités.';
+        var onlyInput = document.createElement('input');
+        onlyInput.type = 'checkbox';
+        onlyInput.dataset.onlyAvailability = 'true';
+        onlyInput.dataset.dayKey = dayGroup.dayKey;
+        var onlyCopy = document.createElement('span');
+        onlyCopy.append(createTextElement('strong', '', 'Seule dispo'));
+        onlyLabel.append(onlyInput, onlyCopy);
+        periods.append(onlyLabel);
+        row.append(title, periods);
+        return row;
       }
 
       function renderGroup(group, index) {
         var card = document.createElement('form');
         card.className = 'vote-card';
         card.dataset.groupName = 'vote-' + index;
+        card.dataset.maxProposals = String(getMaxProposals(group));
 
-        if (submittedTpiIds.has(group.tpi.id)) {
-          card.classList.add('is-submitted');
+        if (isSubmitted(group)) {
+          collapseSubmittedCard(card, group, false);
+          return card;
         }
 
         var header = document.createElement('div');
         header.className = 'vote-card-header';
         var titleBlock = document.createElement('div');
+        titleBlock.append(createTextElement('span', 'vote-reference', group.tpi && group.tpi.reference ? group.tpi.reference : 'TPI'));
         var title = document.createElement('h2');
-        title.textContent = [group.tpi.reference, group.tpi.candidateName].filter(Boolean).join(' - ');
+        title.textContent = group.tpi && group.tpi.candidateName ? group.tpi.candidateName : 'Candidat non renseigné';
         var subject = document.createElement('p');
-        subject.textContent = group.tpi.subject || 'Sujet non renseigne';
+        subject.textContent = group.tpi && group.tpi.subject ? group.tpi.subject : 'Sujet non renseigné';
         titleBlock.append(title, subject);
         var chip = document.createElement('span');
         chip.className = 'vote-chip';
-        chip.textContent = submittedTpiIds.has(group.tpi.id) ? 'Deja transmis' : 'A repondre';
+        chip.dataset.chip = 'true';
+        chip.textContent = 'À répondre';
         header.append(titleBlock, chip);
 
         var fixedSection = document.createElement('section');
         fixedSection.className = 'vote-section';
         var fixedTitle = document.createElement('h3');
-        fixedTitle.textContent = 'Date fixee';
-        fixedSection.append(fixedTitle, createSlotNode(group.fixedSlot));
+        fixedTitle.textContent = 'Date';
+        fixedSection.append(fixedTitle, createSlotNode(group.fixedSlot, 'is-fixed'));
+
+        var decisionSection = document.createElement('section');
+        decisionSection.className = 'vote-section';
+        var decisionTitle = document.createElement('h3');
+        decisionTitle.textContent = 'Réponse';
 
         var mode = document.createElement('div');
         mode.className = 'vote-mode';
-        mode.innerHTML =
-          '<label><input type="radio" name="' + card.dataset.groupName + '-mode" value="ok"><span><strong>OK</strong><span>Je valide la date fixee.</span></span></label>' +
-          '<label><input type="radio" name="' + card.dataset.groupName + '-mode" value="proposal"><span><strong>Proposition</strong><span>Je propose un autre creneau.</span></span></label>';
+        mode.append(
+          createModeChoice(card, 'ok', 'Valider', 'La date proposée me convient.'),
+          createModeChoice(card, 'proposal', 'Proposer', 'Je demande un autre créneau.')
+        );
+        decisionSection.append(decisionTitle, mode);
 
         var proposalSection = document.createElement('section');
-        proposalSection.className = 'vote-section';
+        proposalSection.className = 'vote-section vote-details';
+        proposalSection.dataset.proposalArea = 'true';
+        proposalSection.hidden = true;
         var proposalTitle = document.createElement('h3');
-        proposalTitle.textContent = 'Alternatives';
+        proposalTitle.textContent = 'Options';
+        var proposalContext = document.createElement('p');
+        proposalContext.className = 'vote-proposal-context';
+        proposalContext.textContent = formatProposalContext(group);
+        proposalContext.title = 'Demi-journées ouvertes pour ce TPI.';
+        var proposalCount = document.createElement('span');
+        proposalCount.className = 'vote-proposal-count';
+        proposalCount.dataset.proposalCount = 'true';
         var proposalList = document.createElement('div');
         proposalList.className = 'vote-proposals';
-        (group.proposalOptions || []).forEach(function (option) {
-          var label = document.createElement('label');
-          label.className = 'vote-proposal';
-          label.innerHTML = '<input type="checkbox" data-proposal-slot value="' + escapeText(option.slotId) + '">';
-          var span = document.createElement('span');
-          var strong = document.createElement('strong');
-          strong.textContent = option.slot && option.slot.label ? option.slot.label : 'Creneau alternatif';
-          var small = document.createElement('span');
-          small.textContent = option.slot && option.slot.roomSite ? option.slot.roomSite : '';
-          span.append(strong, small);
-          label.append(span);
-          proposalList.append(label);
+        buildProposalDayGroups(group.proposalOptions || []).forEach(function (dayGroup) {
+          proposalList.append(createProposalDayOptionGroup(dayGroup));
         });
         if (!proposalList.children.length) {
           var emptyProposal = document.createElement('p');
-          emptyProposal.textContent = 'Aucun creneau alternatif publie.';
+          emptyProposal.className = 'vote-empty-note';
+          emptyProposal.textContent = 'Aucune option publiée.';
+          emptyProposal.title = 'Utilisez une demande hors liste si nécessaire.';
           proposalList.append(emptyProposal);
         }
-        proposalSection.append(proposalTitle, proposalList);
+        proposalSection.append(proposalTitle, proposalContext, proposalCount, proposalList);
 
         var special = document.createElement('section');
-        special.className = 'vote-section vote-special';
-        special.innerHTML =
-          '<label><input type="checkbox" data-special-enabled><span><strong>Demande speciale</strong><span>Date hors liste ou contrainte a signaler.</span></span></label>' +
-          '<div class="vote-special-fields"><input type="date" data-special-date><textarea data-special-reason placeholder="Raison"></textarea></div>';
+        special.className = 'vote-section vote-special vote-details';
+        special.dataset.specialArea = 'true';
+        special.hidden = true;
+        var specialLabel = document.createElement('label');
+        specialLabel.className = 'vote-special-toggle';
+        specialLabel.title = 'Demande spéciale hors liste: remplace les dates proposées.';
+        var specialInput = document.createElement('input');
+        specialInput.type = 'checkbox';
+        specialInput.dataset.specialEnabled = 'true';
+        var specialCopy = document.createElement('span');
+        specialCopy.append(createTextElement('strong', '', 'Hors liste'));
+        specialLabel.append(specialInput, specialCopy);
+        var specialFields = document.createElement('div');
+        specialFields.className = 'vote-special-fields';
+        specialFields.dataset.specialFields = 'true';
+        specialFields.hidden = true;
+        var specialDate = document.createElement('input');
+        specialDate.type = 'date';
+        specialDate.dataset.specialDate = 'true';
+        specialDate.setAttribute('aria-label', 'Date souhaitée');
+        var specialReason = document.createElement('textarea');
+        specialReason.dataset.specialReason = 'true';
+        specialReason.placeholder = 'Contrainte ou raison';
+        specialReason.setAttribute('aria-label', 'Contrainte ou raison');
+        specialFields.append(specialDate, specialReason);
+        special.append(specialLabel, specialFields);
+
+        var remark = document.createElement('div');
+        remark.className = 'vote-remark';
+        var remarkLabel = createTextElement('label', '', 'Remarque');
+        remarkLabel.title = 'Message général optionnel pour l’administration.';
+        var remarkId = card.dataset.groupName + '-remark';
+        remarkLabel.setAttribute('for', remarkId);
+        var remarkField = document.createElement('textarea');
+        remarkField.id = remarkId;
+        remarkField.dataset.voteRemark = 'true';
+        remarkField.placeholder = 'Optionnel';
+        remarkField.setAttribute('aria-label', 'Remarque générale optionnelle');
+        remark.append(remarkLabel, remarkField);
 
         var actions = document.createElement('div');
         actions.className = 'vote-actions';
         var status = document.createElement('span');
         status.dataset.status = 'true';
         status.className = 'vote-status';
-        status.textContent = submittedTpiIds.has(group.tpi.id) ? 'Vote deja transmis.' : '';
+        status.setAttribute('role', 'status');
+        status.textContent = '';
         var button = document.createElement('button');
         button.className = 'vote-submit';
         button.type = 'submit';
         button.textContent = 'Envoyer';
-        button.disabled = submittedTpiIds.has(group.tpi.id);
+        button.disabled = false;
         actions.append(status, button);
 
-        card.append(header, fixedSection, mode, proposalSection, special, actions);
+        if (isSpecialRequestAllowed(group)) {
+          card.append(header, fixedSection, decisionSection, proposalSection, special, remark, actions);
+        } else {
+          card.append(header, fixedSection, decisionSection, proposalSection, remark, actions);
+        }
+        card.addEventListener('change', function () {
+          if (card.classList.contains('is-submitted')) {
+            return;
+          }
+          syncModeState(card);
+          updateChoiceClasses(card);
+          if (card.querySelector('[data-status].is-error')) {
+            setStatus(card, '', '');
+          }
+        });
         card.addEventListener('submit', function (event) {
           event.preventDefault();
           submitGroup(card, group);
         });
+        syncModeState(card);
+        updateChoiceClasses(card);
 
         return card;
       }
 
       function render() {
         setViewer();
+        updateSummary();
         root.textContent = '';
 
         if (!groups.length) {
@@ -895,6 +2486,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         groups.forEach(function (group, index) {
           root.append(renderGroup(group, index));
         });
+        updateSummary();
       }
 
       render();
@@ -1211,11 +2803,24 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         staticVoteJson(403, ['success' => false, 'error' => 'Vote hors scope du lien.']);
     }
 
+    $voteSettings = isset($group['voteSettings']) && is_array($group['voteSettings'])
+        ? $group['voteSettings']
+        : [];
+    $maxProposals = isset($voteSettings['maxProposalsPerTpi']) ? (int) $voteSettings['maxProposalsPerTpi'] : 3;
+    if ($maxProposals < 1) {
+        $maxProposals = 3;
+    }
+    $allowSpecialRequest = !isset($voteSettings['allowSpecialRequest']) || $voteSettings['allowSpecialRequest'] !== false;
+
     $rawProposedSlotIds = isset($body['proposedSlotIds']) && is_array($body['proposedSlotIds'])
         ? $body['proposedSlotIds']
         : [];
+    $rawOnlyAvailabilitySlotIds = isset($body['onlyAvailabilitySlotIds']) && is_array($body['onlyAvailabilitySlotIds'])
+        ? $body['onlyAvailabilitySlotIds']
+        : [];
     $allowedProposalSlotIds = staticVoteAllowedProposalSlotIds($group);
     $proposedSlotIds = [];
+    $onlyAvailabilitySlotIds = [];
 
     foreach ($rawProposedSlotIds as $slotId) {
         $slotId = staticVoteText($slotId);
@@ -1232,23 +2837,73 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         }
     }
 
+    foreach ($rawOnlyAvailabilitySlotIds as $slotId) {
+        $slotId = staticVoteText($slotId);
+        if ($slotId === '') {
+            continue;
+        }
+
+        if (!isset($allowedProposalSlotIds[$slotId])) {
+            staticVoteJson(400, ['success' => false, 'error' => 'Seule disponibilite invalide.']);
+        }
+
+        if (!in_array($slotId, $onlyAvailabilitySlotIds, true)) {
+            $onlyAvailabilitySlotIds[] = $slotId;
+        }
+    }
+
     $specialRequest = isset($body['specialRequest']) && is_array($body['specialRequest'])
         ? $body['specialRequest']
         : null;
     $specialReason = $specialRequest ? staticVoteText($specialRequest['reason'] ?? '') : '';
     $specialDate = $specialRequest ? staticVoteText($specialRequest['requestedDate'] ?? '') : '';
     $hasSpecialRequest = $specialReason !== '' || $specialDate !== '';
+    $hardConstraint = isset($body['hardConstraint']) && $body['hardConstraint'] === true;
+    $remark = staticVoteText($body['remark'] ?? '');
+    if (strlen($remark) > 2000) {
+        $remark = substr($remark, 0, 2000);
+    }
 
-    if ($mode === 'ok' && (count($proposedSlotIds) > 0 || $hasSpecialRequest)) {
+    if ($mode === 'ok' && (count($proposedSlotIds) > 0 || $hasSpecialRequest || $hardConstraint)) {
         staticVoteJson(400, ['success' => false, 'error' => 'Le mode OK ne permet pas de proposition.']);
     }
 
-    if ($mode === 'proposal' && count($proposedSlotIds) === 0 && !$hasSpecialRequest) {
+    if (count($proposedSlotIds) > $maxProposals) {
+        staticVoteJson(400, ['success' => false, 'error' => 'Trop de demi-journees proposees.']);
+    }
+
+    if ($hasSpecialRequest && !$allowSpecialRequest) {
+        staticVoteJson(400, ['success' => false, 'error' => 'La demande hors liste est desactivee pour cette annee.']);
+    }
+
+    if ($hardConstraint && count($proposedSlotIds) > 0) {
+        staticVoteJson(400, ['success' => false, 'error' => 'Ce choix indique qu aucune date proposee n est possible.']);
+    }
+
+    if ($hardConstraint && $hasSpecialRequest) {
+        staticVoteJson(400, ['success' => false, 'error' => 'La contrainte dure ne peut pas etre combinee avec une demande speciale.']);
+    }
+
+    if ($hasSpecialRequest && count($proposedSlotIds) > 0) {
+        staticVoteJson(400, ['success' => false, 'error' => 'La demande speciale hors liste remplace les dates proposees.']);
+    }
+
+    foreach ($onlyAvailabilitySlotIds as $slotId) {
+        if (!in_array($slotId, $proposedSlotIds, true)) {
+            staticVoteJson(400, ['success' => false, 'error' => 'La seule disponibilite doit correspondre a une demi-journee cochee.']);
+        }
+    }
+
+    if ($mode === 'proposal' && count($proposedSlotIds) === 0 && !$hasSpecialRequest && !$hardConstraint) {
         staticVoteJson(400, ['success' => false, 'error' => 'Choisissez un creneau ou une demande speciale.']);
     }
 
     if ($hasSpecialRequest && ($specialReason === '' || $specialDate === '')) {
         staticVoteJson(400, ['success' => false, 'error' => 'Demande speciale incomplete.']);
+    }
+
+    if ($mode === 'ok') {
+        $onlyAvailabilitySlotIds = [];
     }
 
     $existingSubmission = staticVoteFindExistingSubmission($tokenHash, $campaignId, $tpiId);
@@ -1271,6 +2926,9 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         'fixedVoteId' => $fixedVoteId,
         'mode' => $mode,
         'proposedSlotIds' => $proposedSlotIds,
+        'onlyAvailabilitySlotIds' => $onlyAvailabilitySlotIds,
+        'hardConstraint' => $hardConstraint,
+        'remark' => $remark,
         'specialRequest' => $hasSpecialRequest ? [
             'reason' => $specialReason,
             'requestedDate' => $specialDate,
@@ -1344,6 +3002,281 @@ $staticVoteBootstrap = '<script>window.__STATIC_VOTE_BOOTSTRAP__=' .
   )}`
 }
 
+function buildStaticVoteArbitragePhp({ year, tokenSecret }) {
+  const normalizedYear = parseYear(year)
+
+  return `<?php
+declare(strict_types=1);
+
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow');
+
+$staticVoteArbitrageSecret = json_decode(<<<'STATIC_VOTE_ARBITRAGE_SECRET_JSON'
+${serializeJsonForPhp(compactText(tokenSecret))}
+STATIC_VOTE_ARBITRAGE_SECRET_JSON, true);
+
+function arbitrageText($value): string
+{
+    if ($value === null) {
+        return '';
+    }
+
+    if (is_scalar($value)) {
+        return trim((string) $value);
+    }
+
+    return '';
+}
+
+function arbitrageEscape($value): string
+{
+    return htmlspecialchars(arbitrageText($value), ENT_QUOTES, 'UTF-8');
+}
+
+function arbitrageBase64UrlDecode(string $value): string
+{
+    $base64 = strtr($value, '-_', '+/');
+    $padding = strlen($base64) % 4;
+    if ($padding > 0) {
+        $base64 .= str_repeat('=', 4 - $padding);
+    }
+
+    $decoded = base64_decode($base64, true);
+    return is_string($decoded) ? $decoded : '';
+}
+
+function arbitrageUnavailable(int $statusCode, string $title, string $message): void
+{
+    http_response_code($statusCode);
+    header('Content-Type: text/html; charset=utf-8');
+    $safeTitle = arbitrageEscape($title);
+    $safeMessage = arbitrageEscape($message);
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#172033;font-family:Inter,Arial,sans-serif}main{width:min(560px,calc(100vw - 32px));background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;box-shadow:0 20px 60px rgba(23,32,51,.08)}h1{margin:0 0 10px;font-size:1.45rem}p{margin:0;color:#526071;line-height:1.55}</style></head><body><main><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p></main></body></html>';
+    exit;
+}
+
+function arbitrageDataDir(): string
+{
+    $dir = __DIR__ . DIRECTORY_SEPARATOR . 'data';
+
+    if (!is_dir($dir)) {
+        mkdir($dir, 0750, true);
+    }
+
+    $htaccess = $dir . DIRECTORY_SEPARATOR . '.htaccess';
+    if (!file_exists($htaccess)) {
+        file_put_contents($htaccess, "Require all denied\\nDeny from all\\n");
+    }
+
+    return $dir;
+}
+
+function arbitrageRecordsPath(): string
+{
+    return arbitrageDataDir() . DIRECTORY_SEPARATOR . 'arbitrages.jsonl';
+}
+
+function arbitrageReadRecords(): array
+{
+    $path = arbitrageRecordsPath();
+
+    if (!file_exists($path)) {
+        return [];
+    }
+
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!is_array($lines)) {
+        return [];
+    }
+
+    $records = [];
+    foreach ($lines as $line) {
+        $record = json_decode($line, true);
+        if (is_array($record)) {
+            $records[] = $record;
+        }
+    }
+
+    return $records;
+}
+
+function arbitrageFindExistingRecord(string $tokenHash): ?array
+{
+    foreach (arbitrageReadRecords() as $record) {
+        if (arbitrageText($record['tokenHash'] ?? '') === $tokenHash) {
+            return $record;
+        }
+    }
+
+    return null;
+}
+
+function arbitrageAppendRecord(array $record, string $tokenHash): ?array
+{
+    $dir = arbitrageDataDir();
+    $lockPath = $dir . DIRECTORY_SEPARATOR . 'arbitrages.lock';
+    $lockHandle = fopen($lockPath, 'c');
+
+    if ($lockHandle === false) {
+        arbitrageUnavailable(500, 'Enregistrement impossible', 'Le verrouillage de la réponse a échoué.');
+    }
+
+    if (!flock($lockHandle, LOCK_EX)) {
+        fclose($lockHandle);
+        arbitrageUnavailable(500, 'Enregistrement impossible', 'Le verrouillage de la réponse a échoué.');
+    }
+
+    $existing = arbitrageFindExistingRecord($tokenHash);
+    if ($existing !== null) {
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+        return $existing;
+    }
+
+    $encoded = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $written = is_string($encoded) && $encoded !== ''
+        ? file_put_contents(arbitrageRecordsPath(), $encoded . PHP_EOL, FILE_APPEND)
+        : false;
+
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
+
+    if ($written === false) {
+        arbitrageUnavailable(500, 'Enregistrement impossible', 'La réponse n’a pas pu être sauvegardée.');
+    }
+
+    return null;
+}
+
+function arbitrageDecodeToken(string $token, string $secret): array
+{
+    $parts = explode('.', $token);
+    if (count($parts) !== 3 || $parts[0] !== 'svra') {
+        return [];
+    }
+
+    $body = $parts[1];
+    $signature = arbitrageBase64UrlDecode($parts[2]);
+    $expected = hash_hmac('sha256', $body, $secret, true);
+    if ($signature === '' || !hash_equals($expected, $signature)) {
+        return [];
+    }
+
+    $compressed = arbitrageBase64UrlDecode($body);
+    $json = $compressed !== '' ? gzinflate($compressed) : false;
+    if (!is_string($json)) {
+        return [];
+    }
+
+    $payload = json_decode($json, true);
+    return is_array($payload) ? $payload : [];
+}
+
+function arbitrageRender(array $proposal, string $tokenHash, ?array $existing = null, string $error = ''): void
+{
+    header('Content-Type: text/html; charset=utf-8');
+    $alreadySubmitted = is_array($existing);
+    $decision = $alreadySubmitted ? arbitrageText($existing['decision'] ?? '') : '';
+    $statusLabel = $decision === 'accepted'
+        ? 'Accord confirmé'
+        : ($decision === 'rejected' ? 'Refus transmis' : 'Réponse attendue');
+    $reference = arbitrageEscape($proposal['tpiReference'] ?? 'TPI');
+    $candidate = arbitrageEscape($proposal['candidateName'] ?? '');
+    $subject = arbitrageEscape($proposal['subject'] ?? '');
+    $slot = arbitrageEscape($proposal['proposedSlotLabel'] ?? '');
+    $message = arbitrageEscape($proposal['message'] ?? '');
+    $name = arbitrageEscape($proposal['recipientName'] ?? ($proposal['name'] ?? ''));
+    $role = arbitrageEscape($proposal['roleLabel'] ?? '');
+    $safeError = arbitrageEscape($error);
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Arbitrage TPI ${normalizedYear}</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f4f6f8;--line:#d8dee8;--muted:#526071;--accent:#0f766e;--danger:#b42318}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(180deg,#eef4f2 0,#f7f8fa 230px,#f4f6f8 100%)}main{width:min(760px,calc(100vw - 28px));margin:0 auto;padding:18px 0 34px}.panel{display:grid;gap:16px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px;box-shadow:0 18px 50px rgba(23,32,51,.08)}.kicker{display:inline-flex;width:fit-content;min-height:26px;align-items:center;padding:3px 10px;border-radius:999px;background:#e7f5f1;color:#0b5e57;font-weight:800;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}h1{margin:0;font-size:1.45rem;letter-spacing:0}.meta{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px}.row span:first-child{color:var(--muted);font-weight:700}.message{padding:12px;border-left:4px solid var(--accent);background:#f8fcfb;color:#243044;line-height:1.5}.alert{padding:12px;border-radius:8px;border:1px solid #fecaca;background:#fff1f0;color:var(--danger);font-weight:700}.success{padding:12px;border-radius:8px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-weight:800}.choices{display:grid;gap:8px}.choice{display:flex;gap:8px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fff}.choice input{margin-top:3px;accent-color:var(--accent)}textarea{width:100%;min-height:82px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}button{min-height:40px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:800;padding:9px 14px;cursor:pointer}button:hover{background:#0b5e57}.muted{color:var(--muted);line-height:1.45}@media(max-width:620px){.row{grid-template-columns:1fr}}</style></head><body><main><section class="panel"><span class="kicker">Arbitrage TPI ${normalizedYear}</span><h1>' . $reference . '</h1>';
+    if ($name !== '' || $role !== '') {
+        echo '<p class="muted">' . trim($name . ($role !== '' ? ' · ' . $role : '')) . '</p>';
+    }
+    echo '<div class="meta"><div class="row"><span>Candidat</span><strong>' . $candidate . '</strong></div><div class="row"><span>Sujet</span><span>' . $subject . '</span></div><div class="row"><span>Créneau proposé</span><strong>' . $slot . '</strong></div></div>';
+    if ($message !== '') {
+        echo '<div class="message">' . nl2br($message) . '</div>';
+    }
+    if ($safeError !== '') {
+        echo '<div class="alert">' . $safeError . '</div>';
+    }
+    if ($alreadySubmitted) {
+        echo '<div class="success">' . arbitrageEscape($statusLabel) . '</div>';
+        if (arbitrageText($existing['reason'] ?? '') !== '') {
+            echo '<p class="muted"><strong>Raison:</strong> ' . arbitrageEscape($existing['reason']) . '</p>';
+        }
+        if (arbitrageText($existing['alternativeProposal'] ?? '') !== '') {
+            echo '<p class="muted"><strong>Proposition:</strong> ' . arbitrageEscape($existing['alternativeProposal']) . '</p>';
+        }
+        echo '</section></main></body></html>';
+        return;
+    }
+    echo '<form method="post"><div class="choices"><label class="choice"><input type="radio" name="decision" value="accepted" required><span><strong>J’accepte le créneau proposé</strong><br><span class="muted">L’administration pourra confirmer le TPI sur ce créneau.</span></span></label><label class="choice"><input type="radio" name="decision" value="rejected" required><span><strong>Je refuse ce créneau</strong><br><span class="muted">Une raison est requise. Vous pouvez ajouter une proposition.</span></span></label></div><p><label><strong>Raison du refus</strong><textarea name="reason" placeholder="Obligatoire si refus"></textarea></label></p><p><label><strong>Proposition éventuelle</strong><textarea name="alternativeProposal" placeholder="Créneau ou contrainte à considérer"></textarea></label></p><button type="submit">Transmettre ma réponse</button></form></section></main></body></html>';
+}
+
+if (!is_string($staticVoteArbitrageSecret) || trim($staticVoteArbitrageSecret) === '') {
+    arbitrageUnavailable(503, 'Arbitrage indisponible', 'Le mini-site n’est pas configuré pour recevoir les arbitrages.');
+}
+
+$arbitrageToken = isset($_GET['token']) && is_string($_GET['token']) ? trim($_GET['token']) : '';
+if ($arbitrageToken === '' || strlen($arbitrageToken) > 6000) {
+    arbitrageUnavailable(403, 'Lien requis', 'Cette page nécessite un lien personnel d’arbitrage.');
+}
+
+$arbitragePayload = arbitrageDecodeToken($arbitrageToken, trim($staticVoteArbitrageSecret));
+if ($arbitragePayload === [] || (int)($arbitragePayload['year'] ?? 0) !== ${normalizedYear}) {
+    arbitrageUnavailable(403, 'Lien invalide', 'Ce lien d’arbitrage est invalide ou ne correspond pas à cette année.');
+}
+
+$expiresAt = isset($arbitragePayload['expiresAt']) && is_string($arbitragePayload['expiresAt'])
+    ? strtotime($arbitragePayload['expiresAt'])
+    : false;
+if ($expiresAt !== false && $expiresAt <= time()) {
+    arbitrageUnavailable(410, 'Lien expiré', 'Cette proposition d’arbitrage a expiré.');
+}
+
+$tokenHash = hash('sha256', $arbitrageToken);
+$existingRecord = arbitrageFindExistingRecord($tokenHash);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $existingRecord === null) {
+    $decision = strtolower(arbitrageText($_POST['decision'] ?? ''));
+    $reason = arbitrageText($_POST['reason'] ?? '');
+    $alternativeProposal = arbitrageText($_POST['alternativeProposal'] ?? '');
+
+    if ($decision !== 'accepted' && $decision !== 'rejected') {
+        arbitrageRender($arbitragePayload, $tokenHash, null, 'Réponse invalide.');
+        exit;
+    }
+
+    if ($decision === 'rejected' && $reason === '') {
+        arbitrageRender($arbitragePayload, $tokenHash, null, 'Une raison est requise en cas de refus.');
+        exit;
+    }
+
+    $record = [
+        'id' => hash('sha256', $tokenHash . '|' . microtime(true)),
+        'source' => 'static_vote_arbitrage_php',
+        'year' => ${normalizedYear},
+        'tokenHash' => $tokenHash,
+        'tpiId' => arbitrageText($arbitragePayload['tpiId'] ?? ''),
+        'personId' => arbitrageText($arbitragePayload['personId'] ?? ''),
+        'role' => arbitrageText($arbitragePayload['role'] ?? ''),
+        'decision' => $decision,
+        'reason' => substr($reason, 0, 2000),
+        'alternativeProposal' => substr($alternativeProposal, 0, 2000),
+        'submittedAt' => gmdate('c'),
+    ];
+
+    $existingRecord = arbitrageAppendRecord($record, $tokenHash);
+    if ($existingRecord === null) {
+        $existingRecord = $record;
+    }
+}
+
+arbitrageRender($arbitragePayload, $tokenHash, $existingRecord);
+`
+}
+
 function buildStaticVoteSyncPhp({ year, syncSecret }) {
   const normalizedYear = parseYear(year)
 
@@ -1396,18 +3329,36 @@ if (file_exists($recordsPath)) {
     }
 }
 
+$arbitrageRecordsPath = __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'arbitrages.jsonl';
+$arbitrageRecords = [];
+
+if (file_exists($arbitrageRecordsPath)) {
+    $lines = file($arbitrageRecordsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (is_array($lines)) {
+        foreach ($lines as $line) {
+            $record = json_decode($line, true);
+            if (is_array($record) && (int)($record['year'] ?? 0) === ${normalizedYear}) {
+                $arbitrageRecords[] = $record;
+            }
+        }
+    }
+}
+
 staticVoteSyncRespond(200, [
     'success' => true,
     'year' => ${normalizedYear},
     'records' => $records,
-    'count' => count($records),
+    'arbitrageRecords' => $arbitrageRecords,
+    'count' => count($records) + count($arbitrageRecords),
+    'voteCount' => count($records),
+    'arbitrageCount' => count($arbitrageRecords),
 ]);
 `
 }
 
 function buildStaticVoteHtaccess() {
   return `Options -Indexes
-<FilesMatch "^(votes\\.jsonl)$">
+<FilesMatch "^(votes\\.jsonl|arbitrages\\.jsonl)$">
   Require all denied
   Deny from all
 </FilesMatch>
@@ -1419,6 +3370,7 @@ async function writeStaticVoteAccessFiles({ year, html, campaignPayload }) {
   const normalizedYear = parseYear(year)
   const accessLinks = await listStaticVoteAccessLinks(normalizedYear)
   const syncSecret = getSyncSecret()
+  const arbitrageSecret = getArbitrageSecret()
 
   await fs.promises.writeFile(
     getPhpIndexPath(normalizedYear),
@@ -1439,6 +3391,14 @@ async function writeStaticVoteAccessFiles({ year, html, campaignPayload }) {
     'utf8'
   )
   await fs.promises.writeFile(
+    getArbitragePhpPath(normalizedYear),
+    buildStaticVoteArbitragePhp({
+      year: normalizedYear,
+      tokenSecret: arbitrageSecret
+    }),
+    'utf8'
+  )
+  await fs.promises.writeFile(
     getDeniedIndexPath(normalizedYear),
     buildStaticVoteUnavailableHtml(normalizedYear),
     'utf8'
@@ -1451,6 +3411,7 @@ async function writeStaticVoteAccessFiles({ year, html, campaignPayload }) {
 
   return {
     accessLinkCount: accessLinks.length,
+    arbitrageConfigured: Boolean(arbitrageSecret),
     syncSecretConfigured: Boolean(syncSecret)
   }
 }
@@ -1459,8 +3420,10 @@ async function getStaticVotePublicationStatus(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
   const resolvedDeploymentConfig = deploymentConfig || await getPublicationDeploymentConfigIfAvailable()
   const phpIndexPath = getPhpIndexPath(normalizedYear)
+  const arbitragePhpPath = getArbitragePhpPath(normalizedYear)
   const manifestPath = getManifestPath(normalizedYear)
   const available = fs.existsSync(phpIndexPath)
+  const arbitrageAvailable = fs.existsSync(arbitragePhpPath)
   let manifest = {}
 
   if (available && fs.existsSync(manifestPath)) {
@@ -1478,6 +3441,8 @@ async function getStaticVotePublicationStatus(year, deploymentConfig = null) {
     indexPath: getIndexPath(normalizedYear),
     phpIndexPath,
     syncPhpPath: getSyncPhpPath(normalizedYear),
+    arbitragePhpPath,
+    arbitrageAvailable,
     deniedIndexPath: getDeniedIndexPath(normalizedYear),
     htaccessPath: getHtaccessPath(normalizedYear),
     manifestPath,
@@ -1491,6 +3456,7 @@ async function getStaticVotePublicationStatus(year, deploymentConfig = null) {
     voterCount: Number(manifest.voterCount || 0),
     groupCount: Number(manifest.groupCount || 0),
     accessLinkCount: Number(manifest.accessLinkCount || 0),
+    arbitrageConfigured: Boolean(manifest.arbitrageConfigured),
     siteSyncSecretConfigured: Boolean(manifest.syncSecretConfigured),
     syncSecretConfigured: Boolean(getSyncSecret())
   }
@@ -1525,6 +3491,7 @@ async function generateStaticVotesSite(year) {
     voterCount: countUnique(campaignPayload.groups.map((group) => group.personId)),
     groupCount: campaignPayload.groups.length,
     accessLinkCount: accessFiles.accessLinkCount,
+    arbitrageConfigured: accessFiles.arbitrageConfigured,
     syncSecretConfigured: accessFiles.syncSecretConfigured,
     previewPath: getPreviewPath(normalizedYear),
     publicUrl,
@@ -1540,9 +3507,11 @@ async function generateStaticVotesSite(year) {
     indexPath: getIndexPath(normalizedYear),
     phpIndexPath: getPhpIndexPath(normalizedYear),
     syncPhpPath: getSyncPhpPath(normalizedYear),
+    arbitragePhpPath: getArbitragePhpPath(normalizedYear),
     deniedIndexPath: getDeniedIndexPath(normalizedYear),
     htaccessPath: getHtaccessPath(normalizedYear),
     manifestPath: getManifestPath(normalizedYear),
+    arbitrageAvailable: true,
     ...manifest
   }
 }
@@ -1583,6 +3552,7 @@ async function publishStaticVotesSite(year) {
     voterCount: status.voterCount || 0,
     groupCount: status.groupCount || 0,
     accessLinkCount: accessFiles.accessLinkCount,
+    arbitrageConfigured: accessFiles.arbitrageConfigured,
     syncSecretConfigured: accessFiles.syncSecretConfigured,
     previewPath: getPreviewPath(normalizedYear),
     publicUrl: await getPublicUrl(normalizedYear, deploymentConfig),
@@ -1597,6 +3567,7 @@ async function publishStaticVotesSite(year) {
     await ftpClient.uploadFile(status.deniedIndexPath, 'index.html')
     await ftpClient.uploadFile(status.phpIndexPath, 'index.php')
     await ftpClient.uploadFile(status.syncPhpPath, 'sync.php')
+    await ftpClient.uploadFile(status.arbitragePhpPath, 'arbitrage.php')
     await ftpClient.uploadFile(status.htaccessPath, '.htaccess')
     await fs.promises.writeFile(status.manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
     await ftpClient.uploadFile(status.manifestPath, 'manifest.json')
@@ -1639,6 +3610,11 @@ function normalizeStaticVoteRecord(record = {}) {
     proposedSlotIds: Array.isArray(record.proposedSlotIds)
       ? [...new Set(record.proposedSlotIds.map(normalizeObjectId).filter(Boolean))]
       : [],
+    onlyAvailabilitySlotIds: Array.isArray(record.onlyAvailabilitySlotIds)
+      ? [...new Set(record.onlyAvailabilitySlotIds.map(normalizeObjectId).filter(Boolean))]
+      : [],
+    hardConstraint: record.hardConstraint === true,
+    remark: compactText(record.remark).slice(0, 2000),
     specialRequest,
     submittedAt: toDateOrNull(record.submittedAt) || new Date(),
     tokenHash: compactText(record.tokenHash)
@@ -1654,6 +3630,8 @@ function normalizeStaticVoteRecord(record = {}) {
 
   if (normalized.mode === 'ok') {
     normalized.proposedSlotIds = []
+    normalized.onlyAvailabilitySlotIds = []
+    normalized.hardConstraint = false
     normalized.specialRequest = null
     return normalized
   }
@@ -1665,7 +3643,23 @@ function normalizeStaticVoteRecord(record = {}) {
     return null
   }
 
-  if (normalized.proposedSlotIds.length === 0 && !hasSpecialReason) {
+  if (normalized.hardConstraint && normalized.proposedSlotIds.length > 0) {
+    return null
+  }
+
+  if (normalized.hardConstraint && (hasSpecialReason || hasSpecialDate)) {
+    return null
+  }
+
+  if ((hasSpecialReason || hasSpecialDate) && normalized.proposedSlotIds.length > 0) {
+    return null
+  }
+
+  if (normalized.onlyAvailabilitySlotIds.some((slotId) => !normalized.proposedSlotIds.includes(slotId))) {
+    return null
+  }
+
+  if (normalized.proposedSlotIds.length === 0 && !hasSpecialReason && !normalized.hardConstraint) {
     return null
   }
 
@@ -1750,7 +3744,7 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
   const existingVotes = await Vote.find({
     tpiPlanning: tpi._id,
     voter: record.personId
-  }).select('tpiPlanning slot voter voterRole decision comment availabilityException specialRequestReason specialRequestDate priority magicLinkUsed')
+  }).select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority magicLinkUsed')
 
   if (!Array.isArray(existingVotes) || existingVotes.length === 0) {
     return {
@@ -1790,6 +3784,16 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
       .filter((slotId) => slotId && slotId !== fixedSlotId)
   )
 
+  const needsAdditionalProposalOptions = record.proposedSlotIds.some((slotId) => !allowedProposalSlotIds.has(slotId))
+  if (needsAdditionalProposalOptions) {
+    const additionalProposalData = await buildStaticVoteProposalOptionsForTpi(tpi, [])
+    for (const option of Array.isArray(additionalProposalData.options) ? additionalProposalData.options : []) {
+      if (option?.slotId && option.slotId !== fixedSlotId) {
+        allowedProposalSlotIds.add(option.slotId)
+      }
+    }
+  }
+
   for (const slotId of record.proposedSlotIds) {
     if (!allowedProposalSlotIds.has(slotId)) {
       return {
@@ -1802,11 +3806,20 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
   }
 
   const proposalSelectionSet = new Set(record.proposedSlotIds)
+  const onlyAvailabilitySelectionSet = new Set(record.onlyAvailabilitySlotIds)
   const fixedDecision = record.mode === 'ok' ? 'accepted' : 'rejected'
   const hasSpecialRequest = Boolean(record.specialRequest?.reason || record.specialRequest?.requestedDate)
+  const remark = compactText(record.remark)
+  const hasOnlyAvailability = Array.isArray(record.onlyAvailabilitySlotIds) && record.onlyAvailabilitySlotIds.length > 0
   const fixedComment = record.mode === 'proposal'
-    ? (hasSpecialRequest ? record.specialRequest.reason : 'Proposition de creneaux alternatifs')
-    : ''
+    ? [
+        record.hardConstraint ? 'Aucune date proposée ne convient.' : '',
+        hasSpecialRequest ? record.specialRequest.reason : '',
+        hasOnlyAvailability ? 'Seule disponibilité signalée.' : '',
+        !hasSpecialRequest && !record.hardConstraint && !hasOnlyAvailability && !remark ? 'Proposition de creneaux alternatifs' : '',
+        remark
+      ].filter(Boolean).join(' ')
+    : remark
   const sharedSpecialReason = hasSpecialRequest ? record.specialRequest.reason : ''
   const sharedSpecialDate = hasSpecialRequest ? record.specialRequest.requestedDate : null
 
@@ -1814,14 +3827,20 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
     const slotId = toIdString(vote.slot)
     const isFixedSlot = slotId === fixedSlotId
     const isSelectedProposal = proposalSelectionSet.has(slotId)
+    const isOnlyAvailabilitySlot = onlyAvailabilitySelectionSet.has(slotId)
 
     vote.decision = isFixedSlot
       ? fixedDecision
       : isSelectedProposal
         ? 'preferred'
         : 'rejected'
-    vote.comment = isFixedSlot ? fixedComment : ''
+    vote.comment = isFixedSlot
+      ? fixedComment
+      : isOnlyAvailabilitySlot
+        ? 'Seule disponibilité signalée.'
+        : ''
     vote.availabilityException = hasSpecialRequest
+    vote.hardConstraint = Boolean(record.hardConstraint === true || isOnlyAvailabilitySlot)
     vote.specialRequestReason = sharedSpecialReason
     vote.specialRequestDate = sharedSpecialDate
     vote.priority = isSelectedProposal
@@ -1843,8 +3862,9 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
       voter: record.personId,
       voterRole: fixedVote.voterRole,
       decision: 'preferred',
-      comment: '',
+      comment: onlyAvailabilitySelectionSet.has(slotId) ? 'Seule disponibilité signalée.' : '',
       availabilityException: hasSpecialRequest,
+      hardConstraint: onlyAvailabilitySelectionSet.has(slotId),
       specialRequestReason: sharedSpecialReason,
       specialRequestDate: sharedSpecialDate,
       priority: record.proposedSlotIds.indexOf(slotId) + 1,
@@ -1868,6 +3888,149 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
     tpiId: record.tpiId,
     personId: record.personId,
     validation
+  }
+}
+
+function normalizeStaticVoteArbitrageRecord(record = {}) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    return null
+  }
+
+  const decision = compactText(record.decision).toLowerCase()
+  const normalized = {
+    id: compactText(record.id),
+    year: parseYear(record.year),
+    tokenHash: compactText(record.tokenHash),
+    tpiId: normalizeObjectId(record.tpiId),
+    personId: normalizeObjectId(record.personId),
+    role: compactText(record.role),
+    decision,
+    reason: compactText(record.reason).slice(0, 2000),
+    alternativeProposal: compactText(record.alternativeProposal).slice(0, 2000),
+    submittedAt: toDateOrNull(record.submittedAt) || new Date()
+  }
+
+  if (!normalized.id || !normalized.tokenHash || !['accepted', 'rejected'].includes(decision)) {
+    return null
+  }
+
+  if (decision === 'rejected' && !normalized.reason) {
+    return null
+  }
+
+  return normalized
+}
+
+function computeResolutionProposalStatusFromRecipients(proposal) {
+  if (!proposal) {
+    return 'sent'
+  }
+
+  if (proposal.status === 'cancelled' || proposal.status === 'failed') {
+    return proposal.status
+  }
+
+  const expiresAt = proposal.expiresAt ? new Date(proposal.expiresAt) : null
+  const recipients = Array.isArray(proposal.recipients) ? proposal.recipients : []
+  const rejectedCount = recipients.filter((recipient) => recipient.responseStatus === 'rejected').length
+  const acceptedCount = recipients.filter((recipient) => recipient.responseStatus === 'accepted').length
+  const respondedCount = rejectedCount + acceptedCount
+
+  if (rejectedCount > 0) {
+    return 'rejected'
+  }
+
+  if (recipients.length > 0 && acceptedCount === recipients.length) {
+    return 'accepted'
+  }
+
+  if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt <= new Date()) {
+    return 'expired'
+  }
+
+  return respondedCount > 0 ? 'partial' : 'sent'
+}
+
+async function importStaticVoteArbitrageRecord(rawRecord, expectedYear) {
+  let record
+
+  try {
+    record = normalizeStaticVoteArbitrageRecord(rawRecord)
+  } catch (error) {
+    return {
+      imported: false,
+      skipped: true,
+      reason: 'invalid_arbitrage_record'
+    }
+  }
+
+  if (!record || Number(record.year) !== Number(expectedYear)) {
+    return {
+      imported: false,
+      skipped: true,
+      reason: 'invalid_arbitrage_record'
+    }
+  }
+
+  const proposal = await ResolutionProposal.findOne({ 'recipients.tokenHash': record.tokenHash })
+
+  if (!proposal) {
+    return {
+      imported: false,
+      skipped: false,
+      reason: 'proposal_not_found',
+      recordId: record.id
+    }
+  }
+
+  const recipient = (Array.isArray(proposal.recipients) ? proposal.recipients : [])
+    .find((item) => item.tokenHash === record.tokenHash)
+
+  if (!recipient) {
+    return {
+      imported: false,
+      skipped: false,
+      reason: 'recipient_not_found',
+      recordId: record.id
+    }
+  }
+
+  const currentStatus = compactText(recipient.responseStatus)
+  if (['accepted', 'rejected'].includes(currentStatus)) {
+    if (currentStatus === record.decision) {
+      return {
+        imported: false,
+        skipped: true,
+        reason: 'already_imported',
+        recordId: record.id,
+        proposalId: toIdString(proposal)
+      }
+    }
+
+    return {
+      imported: false,
+      skipped: false,
+      reason: 'response_conflict',
+      recordId: record.id,
+      proposalId: toIdString(proposal)
+    }
+  }
+
+  recipient.responseStatus = record.decision
+  recipient.responseReason = record.decision === 'rejected' ? record.reason : ''
+  recipient.alternativeProposal = record.decision === 'rejected' ? record.alternativeProposal : ''
+  recipient.respondedAt = record.submittedAt
+  proposal.status = computeResolutionProposalStatusFromRecipients(proposal)
+  await proposal.save()
+
+  return {
+    imported: true,
+    skipped: false,
+    recordId: record.id,
+    proposalId: toIdString(proposal),
+    tpiId: toIdString(proposal.tpiPlanning),
+    personId: toIdString(recipient.person),
+    decision: record.decision
   }
 }
 
@@ -1950,7 +4113,8 @@ async function fetchStaticVoteRecords({
 
   return {
     sourceUrl: resolvedUrl,
-    records: Array.isArray(body.records) ? body.records : []
+    records: Array.isArray(body.records) ? body.records : [],
+    arbitrageRecords: Array.isArray(body.arbitrageRecords) ? body.arbitrageRecords : []
   }
 }
 
@@ -1971,9 +4135,16 @@ async function syncStaticVoteResponses({
   })
 
   const results = []
+  const arbitrageResults = []
   let importedCount = 0
   let skippedCount = 0
   let failedCount = 0
+  let voteImportedCount = 0
+  let voteSkippedCount = 0
+  let voteFailedCount = 0
+  let arbitrageImportedCount = 0
+  let arbitrageSkippedCount = 0
+  let arbitrageFailedCount = 0
 
   for (const record of remote.records) {
     try {
@@ -1982,13 +4153,17 @@ async function syncStaticVoteResponses({
 
       if (result.imported) {
         importedCount += 1
+        voteImportedCount += 1
       } else if (result.skipped) {
         skippedCount += 1
+        voteSkippedCount += 1
       } else {
         failedCount += 1
+        voteFailedCount += 1
       }
     } catch (error) {
       failedCount += 1
+      voteFailedCount += 1
       results.push({
         imported: false,
         skipped: false,
@@ -1997,32 +4172,73 @@ async function syncStaticVoteResponses({
     }
   }
 
+  for (const record of remote.arbitrageRecords) {
+    try {
+      const result = await importStaticVoteArbitrageRecord(record, normalizedYear)
+      arbitrageResults.push(result)
+
+      if (result.imported) {
+        importedCount += 1
+        arbitrageImportedCount += 1
+      } else if (result.skipped) {
+        skippedCount += 1
+        arbitrageSkippedCount += 1
+      } else {
+        failedCount += 1
+        arbitrageFailedCount += 1
+      }
+    } catch (error) {
+      failedCount += 1
+      arbitrageFailedCount += 1
+      arbitrageResults.push({
+        imported: false,
+        skipped: false,
+        reason: error?.message || 'arbitrage_import_failed'
+      })
+    }
+  }
+
   return {
     success: failedCount === 0,
     year: normalizedYear,
     sourceUrl: remote.sourceUrl,
-    receivedCount: remote.records.length,
+    receivedCount: remote.records.length + remote.arbitrageRecords.length,
+    voteReceivedCount: remote.records.length,
+    arbitrageReceivedCount: remote.arbitrageRecords.length,
     importedCount,
     skippedCount,
     failedCount,
-    results
+    voteImportedCount,
+    voteSkippedCount,
+    voteFailedCount,
+    arbitrageImportedCount,
+    arbitrageSkippedCount,
+    arbitrageFailedCount,
+    results,
+    arbitrageResults
   }
 }
 
 module.exports = {
   STATIC_VOTE_BOOTSTRAP_PLACEHOLDER,
+  buildStaticVoteArbitragePhp,
   buildStaticVoteCampaignPayload,
   buildStaticVoteHtml,
   buildStaticVoteHtaccess,
   buildStaticVotePhp,
   buildStaticVoteSyncPhp,
   buildStaticVoteUnavailableHtml,
+  buildStaticVoteArbitrageUrl,
+  canBuildStaticVoteArbitrageLinks,
+  createStaticVoteArbitrageToken,
   fetchStaticVoteRecords,
   generateStaticVotesSite,
+  getArbitragePhpPath,
   getIndexPath,
   getPublicUrl,
   getStaticVotePublicationStatus,
   getStaticVoteLinkTarget,
+  importStaticVoteArbitrageRecord,
   importStaticVoteRecord,
   listStaticVoteAccessLinks,
   normalizeVotePublicPath,

@@ -940,8 +940,13 @@ router.post(
 
       const baseUrl = `${req.protocol}://${req.get('host')}`
       const startVoteOptions = { skipEmails }
+      const fromArbitrage = parseBoolean(req.body?.fromArbitrage, false)
       const requestedVoteLinkTarget = compactText(req.body?.voteLinkTarget)
       const requestedVotePublicUrl = compactText(req.body?.votePublicUrl || req.body?.staticVotePublicUrl)
+
+      if (fromArbitrage) {
+        startVoteOptions.fromArbitrage = true
+      }
 
       if (requestedVoteLinkTarget) {
         startVoteOptions.voteLinkTarget = requestedVoteLinkTarget
@@ -2236,7 +2241,10 @@ router.post(
         user: req.user,
         payload: {
           receivedCount: result.receivedCount,
+          voteReceivedCount: result.voteReceivedCount,
+          arbitrageReceivedCount: result.arbitrageReceivedCount,
           importedCount: result.importedCount,
+          arbitrageImportedCount: result.arbitrageImportedCount,
           skippedCount: result.skippedCount,
           failedCount: result.failedCount,
           sourceUrl: result.sourceUrl

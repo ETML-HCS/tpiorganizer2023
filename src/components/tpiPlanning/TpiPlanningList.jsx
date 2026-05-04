@@ -415,9 +415,6 @@ const TpiPlanningList = ({
                     ? plannedSlotDate.toLocaleDateString('fr-CH')
                     : ""
                   const plannedRoom = compactText(plannedSlot?.room?.name)
-                  const proposedSlots = Array.isArray(tpi.proposedSlots)
-                    ? tpi.proposedSlots.filter((ps) => Boolean(ps?.slot))
-                    : []
                   const acceptedVotes = Number(tpi.voteStats?.acceptedVotes || 0) + Number(tpi.voteStats?.preferredVotes || 0)
                   const pendingVotes = Number(tpi.voteStats?.pendingVotes || 0)
                   const rejectedVotes = Number(tpi.voteStats?.rejectedVotes || 0)
@@ -437,6 +434,7 @@ const TpiPlanningList = ({
                     status-${normalizedStatus}
                     ${hasValidationIssues ? 'has-validation-issues' : ''}
                   `}
+                  data-testid={`tpi-row-${tpi._id}`}
                   onClick={() => onSelectTpi(tpi)}
                 >
                   <td className="cell-reference">
@@ -594,7 +592,7 @@ const TpiPlanningList = ({
                           aria-label="Résoudre le conflit"
                         >
                           <WrenchIcon />
-                          <span>Forcer</span>
+                          <span>Résoudre</span>
                         </button>
                       )}
                       {!isTpiActionable(tpi) ? (

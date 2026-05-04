@@ -40,17 +40,19 @@ const TpiSchedule = lazy(() => import("./components/tpiSchedule/TpiSchedule"))
 const TpiManagement = lazy(() => import("./components/tpiManagement/TpiManagement"))
 const TpiTracker = lazy(() => import("./components/tpiTracker/TpiTracker"))
 const TpiSoutenance = lazy(() => import("./components/tpiSoutenance/TpiSoutenance"))
-const TokenGenerator = lazy(() => import("./components/genToken/GenToken"))
+const TokenGenerator = lazy(() => import("./components/genToken/genToken"))
 const LoginPage = lazy(() => import("./components/LoginPage"))
 const TpiEval = lazy(() => import("./components/tpiEval/TpiEval"))
 const PartiesPrenantes = lazy(() => import("./components/partiesPrenantes/PartiesPrenantes"))
 const PlanningConfiguration = lazy(() => import("./components/planningConfiguration/PlanningConfiguration"))
 const TpiDetailPage = lazy(() => import("./components/tpiDetail/TpiDetailPage"))
 const PlanningDashboard = lazy(() => import("./components/tpiPlanning/PlanningDashboard"))
+const ResolutionProposalPage = lazy(() => import("./components/tpiPlanning/ResolutionProposalPage"))
 
 // Chemins exclus de l'en-tête
 const HEADER_EXCLUDED_PATHS = ['/', '/login']
 const SOUTENANCE_PATH_REGEX = /^\/(?:defenses?|soutenance(?:s)?)\/\d{4}$/i
+const RESOLUTION_PROPOSAL_PATH_REGEX = /^\/(?:(?:arbitrage|propose)-\d{4}|propose\/\d{4})\/[^/]+$/i
 const SOUTENANCE_ROUTE_ALIASES = [
   ROUTES.SOUTENANCES_LEGACY,
   ROUTES.SOUTENANCES_LEGACY_LOWER,
@@ -378,7 +380,8 @@ const Layout = ({ isAuthenticated, login, logout }) => {
   // Fonction mémorisée pour déterminer si l'en-tête doit être affiché
   const shouldShowHeader = useMemo(() => {
     return !HEADER_EXCLUDED_PATHS.includes(location.pathname) &&
-           !SOUTENANCE_PATH_REGEX.test(location.pathname)
+           !SOUTENANCE_PATH_REGEX.test(location.pathname) &&
+           !RESOLUTION_PROPOSAL_PATH_REGEX.test(location.pathname)
   }, [location.pathname])
 
   const isToolbarCollapsed = useMemo(() => {
@@ -775,6 +778,22 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 isArrowUp={isArrowUp}
               />
             }
+          />
+          {YEARS_CONFIG.getAvailableYears().map((proposalYear) => (
+            <Fragment key={`arbitrage-links-${proposalYear}`}>
+              <Route
+                path={`/arbitrage-${proposalYear}/:token`}
+                element={<ResolutionProposalPage year={proposalYear} />}
+              />
+              <Route
+                path={`/propose-${proposalYear}/:token`}
+                element={<ResolutionProposalPage year={proposalYear} />}
+              />
+            </Fragment>
+          ))}
+          <Route
+            path='/propose/:year/:token'
+            element={<ResolutionProposalPage />}
           />
           <Route
             path={ROUTES.SOUTENANCES}

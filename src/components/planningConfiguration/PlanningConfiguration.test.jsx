@@ -34,6 +34,8 @@ const mockCatalog = {
   emailSettings: {
     senderName: 'TPI Organizer',
     senderEmail: '',
+    senderArbitrageName: '',
+    senderArbitrageEmail: '',
     replyToEmail: '',
     defaultDeliveryMode: 'outlook'
   },
@@ -980,6 +982,12 @@ describe('PlanningConfiguration', () => {
     fireEvent.change(within(emailCard).getByLabelText('Email expéditeur'), {
       target: { value: 'TPI@EXAMPLE.CH' }
     })
+    fireEvent.change(within(emailCard).getByLabelText('Nom arbitrage'), {
+      target: { value: 'Arbitrage TPI' }
+    })
+    fireEvent.change(within(emailCard).getByLabelText('Email arbitrage'), {
+      target: { value: 'ARBITRAGE@EXAMPLE.CH' }
+    })
     fireEvent.change(within(emailCard).getByLabelText('Réponse à'), {
       target: { value: 'SUPPORT@EXAMPLE.CH' }
     })
@@ -997,6 +1005,8 @@ describe('PlanningConfiguration', () => {
         emailSettings: {
           senderName: 'Commission TPI',
           senderEmail: 'tpi@example.ch',
+          senderArbitrageName: 'Arbitrage TPI',
+          senderArbitrageEmail: 'arbitrage@example.ch',
           replyToEmail: 'support@example.ch',
           defaultDeliveryMode: 'automatic'
         }

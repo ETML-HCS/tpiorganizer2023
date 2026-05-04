@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import PlanningCalendar from './PlanningCalendar'
 import { schedulingService } from '../../services/planningService'
 
@@ -131,8 +131,7 @@ describe('PlanningCalendar', () => {
       />
     )
 
-    const rowHeader = screen.getAllByText('A101')[0].closest('.row-header')
-    expect(rowHeader).not.toBeNull()
+    const rowHeader = screen.getByTestId('planning-room-header-A101-matin')
     expect(within(rowHeader).getByText('ETML')).toBeInTheDocument()
     expect(rowHeader.style.getPropertyValue('--planning-room-accent')).toBe('#14532D')
   })

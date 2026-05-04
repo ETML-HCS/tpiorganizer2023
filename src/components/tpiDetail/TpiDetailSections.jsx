@@ -628,10 +628,6 @@ const TpiDetailSections = ({
   className = '',
   variant = 'full'
 }) => {
-  if (!dossier) {
-    return null
-  }
-
   const legacyTpi = dossier?.legacy?.data || null
   const planningTpi = dossier?.planning?.data || null
   const voteSummary = dossier?.planning?.voteSummary || {}
@@ -804,9 +800,10 @@ const TpiDetailSections = ({
     !hasSite ||
     !hasCompany ||
     !hasDepositLink
-  const [comparisonFilter, setComparisonFilter] = useState(
-    comparisonAttentionCount > 0 ? 'attention' : 'all'
-  )
+  const [comparisonFilter, setComparisonFilter] = useState('auto')
+  const effectiveComparisonFilter = comparisonFilter === 'auto'
+    ? comparisonAttentionCount > 0 ? 'attention' : 'all'
+    : comparisonFilter
   const isPanelVariant = variant === 'panel'
   const shouldRenderSummaryGrid = showSummary && !showOverview
   const showDirectActionsSection =
@@ -819,16 +816,16 @@ const TpiDetailSections = ({
   const showVotesTable = !isPanelVariant
   const showIssuesSection = mergedIssues.length > 0
   const filteredComparisonRows = useMemo(() => {
-    if (comparisonFilter === 'attention') {
+    if (effectiveComparisonFilter === 'attention') {
       return comparisonRows.filter((row) => row.status !== 'aligned')
     }
 
-    if (comparisonFilter === 'aligned') {
+    if (effectiveComparisonFilter === 'aligned') {
       return comparisonRows.filter((row) => row.status === 'aligned')
     }
 
     return comparisonRows
-  }, [comparisonFilter, comparisonRows])
+  }, [effectiveComparisonFilter, comparisonRows])
 
   const handleQuickEditCancel = () => {
     quickEditFormRef.current?.reset()
@@ -964,6 +961,10 @@ const TpiDetailSections = ({
       )}
     </CollapsibleSection>
   )
+
+  if (!dossier) {
+    return null
+  }
 
   return (
     <div className={`tpi-detail-sections ${className}`.trim()}>
@@ -1237,8 +1238,8 @@ const TpiDetailSections = ({
                   <div className='tpi-detail-filter-strip' role='group' aria-label='Filtrer la lecture croisée'>
                     <button
                       type='button'
-                      className={comparisonFilter === 'attention' ? 'active' : ''}
-                      aria-pressed={comparisonFilter === 'attention'}
+                      className={effectiveComparisonFilter === 'attention' ? 'active' : ''}
+                      aria-pressed={effectiveComparisonFilter === 'attention'}
                       onClick={() => setComparisonFilter('attention')}
                     >
                       À corriger
@@ -1246,8 +1247,8 @@ const TpiDetailSections = ({
                     </button>
                     <button
                       type='button'
-                      className={comparisonFilter === 'all' ? 'active' : ''}
-                      aria-pressed={comparisonFilter === 'all'}
+                      className={effectiveComparisonFilter === 'all' ? 'active' : ''}
+                      aria-pressed={effectiveComparisonFilter === 'all'}
                       onClick={() => setComparisonFilter('all')}
                     >
                       Tous
@@ -1255,8 +1256,8 @@ const TpiDetailSections = ({
                     </button>
                     <button
                       type='button'
-                      className={comparisonFilter === 'aligned' ? 'active' : ''}
-                      aria-pressed={comparisonFilter === 'aligned'}
+                      className={effectiveComparisonFilter === 'aligned' ? 'active' : ''}
+                      aria-pressed={effectiveComparisonFilter === 'aligned'}
                       onClick={() => setComparisonFilter('aligned')}
                     >
                       Alignés

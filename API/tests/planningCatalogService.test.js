@@ -15,6 +15,8 @@ test('buildDefaultPlanningCatalog retourne un catalogue partage vide et reutilis
   assert.deepEqual(catalog.emailSettings, {
     senderName: 'TPI Organizer',
     senderEmail: '',
+    senderArbitrageName: '',
+    senderArbitrageEmail: '',
     replyToEmail: '',
     defaultDeliveryMode: 'outlook'
   })
@@ -29,6 +31,8 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
     emailSettings: {
       senderName: 'Commission TPI',
       senderEmail: ' TPI@EXAMPLE.CH ',
+      senderArbitrageName: ' Arbitrage TPI ',
+      senderArbitrageEmail: ' ARBITRAGE@EXAMPLE.CH ',
       replyToEmail: ' SUPPORT@EXAMPLE.CH ',
       defaultDeliveryMode: 'automatic'
     },
@@ -102,6 +106,8 @@ test('normalizeStoredCatalog conserve les sites, les adresses, les salles et les
   assert.deepEqual(catalog.emailSettings, {
     senderName: 'Commission TPI',
     senderEmail: 'tpi@example.ch',
+    senderArbitrageName: 'Arbitrage TPI',
+    senderArbitrageEmail: 'arbitrage@example.ch',
     replyToEmail: 'support@example.ch',
     defaultDeliveryMode: 'automatic'
   })

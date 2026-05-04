@@ -32,6 +32,8 @@ const DEFAULT_STAKEHOLDER_ICONS = {
 const DEFAULT_EMAIL_SETTINGS = {
   senderName: 'TPI Organizer',
   senderEmail: '',
+  senderArbitrageName: '',
+  senderArbitrageEmail: '',
   replyToEmail: '',
   defaultDeliveryMode: 'outlook'
 }
@@ -160,6 +162,8 @@ function normalizeEmailSettings(value = {}, fallback = DEFAULT_EMAIL_SETTINGS) {
   return {
     senderName: compactText(source.senderName ?? fallbackSource.senderName),
     senderEmail: compactText(source.senderEmail ?? fallbackSource.senderEmail).toLowerCase(),
+    senderArbitrageName: compactText(source.senderArbitrageName ?? fallbackSource.senderArbitrageName),
+    senderArbitrageEmail: compactText(source.senderArbitrageEmail ?? fallbackSource.senderArbitrageEmail).toLowerCase(),
     replyToEmail: compactText(source.replyToEmail ?? fallbackSource.replyToEmail).toLowerCase(),
     defaultDeliveryMode: EMAIL_DELIVERY_MODES.has(defaultDeliveryMode)
       ? defaultDeliveryMode

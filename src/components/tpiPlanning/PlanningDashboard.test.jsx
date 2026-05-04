@@ -42,7 +42,7 @@ jest.mock('./VotingPanel', () => () => <div>Votes</div>)
 jest.mock('./ConflictResolver', () => ({ focusTpiId }) => (
   <div>
     Conflits
-    {focusTpiId ? <span>Focus forçage {focusTpiId}</span> : null}
+    {focusTpiId ? <span>Focus résolution {focusTpiId}</span> : null}
   </div>
 ))
 jest.mock('./ImportPanel', () => () => <div>Import</div>)
@@ -228,6 +228,13 @@ describe('PlanningDashboard', () => {
       added: true,
       voter: { name: 'Carla Expert' }
     })
+    jest.spyOn(planningServices.resolutionProposalService, 'create').mockResolvedValue({
+      success: true,
+      proposal: {
+        id: 'resolution-proposal-1',
+        status: 'sent'
+      }
+    })
     jest.spyOn(planningServices.slotService, 'getCalendar').mockResolvedValue([])
     jest.spyOn(planningServices.workflowPlanningService, 'getYearState').mockResolvedValue({ state: 'planning' })
     jest.spyOn(planningServices.workflowPlanningService, 'getActiveSnapshot').mockResolvedValue(null)
@@ -300,7 +307,7 @@ describe('PlanningDashboard', () => {
     expect(screen.getByText(/votes/i, { selector: 'h4' })).toBeInTheDocument()
     expect(screen.queryByText(/lecture croisée gestiontpi \/ planning/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/navigation interne de la fiche/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /ouvrir la fiche/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
+    expect(screen.getByRole('link', { name: /fiche complète/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
   })
 
   test('synchronise automatiquement les votes du mini-site au chargement admin', async () => {
@@ -340,7 +347,7 @@ describe('PlanningDashboard', () => {
 
     expect(await screen.findByDisplayValue('TPI-2026-001')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /tpi-2026-001/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /ouvrir la fiche/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
+    expect(screen.getByRole('link', { name: /fiche complète/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
     expect(screen.getByText(/focus actif: TPI-2026-001/i)).toBeInTheDocument()
   })
 
@@ -387,7 +394,7 @@ describe('PlanningDashboard', () => {
       children: <LocationDisplay />
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: /aperçu des liens vote/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /voir liens vote/i }))
 
     await waitFor(() => {
       expect(screen.getByTestId('location-display')).toHaveTextContent(
@@ -469,8 +476,9 @@ describe('PlanningDashboard', () => {
               slot: {
                 _id: 'slot-alt',
                 date: '2026-06-11T08:00:00.000Z',
-                startTime: '13:00',
-                endTime: '17:00',
+                period: 'apres-midi',
+                startTime: '',
+                endTime: '',
                 room: { name: 'B202' }
               },
               positiveCount: 1,
@@ -500,26 +508,26 @@ describe('PlanningDashboard', () => {
     renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /tous les tpi/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /réponses reçues/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /à relancer/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /prêts à clore/i })).toBeInTheDocument()
     expect(screen.getByText(/1 TPI visible · 0 complets · 1 réponse manquante/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /relancer non-repondants/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /relancer sans réponse/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /à relancer/i })).toBeInTheDocument()
     expect(screen.getByText('TPI-2026-042')).toBeInTheDocument()
-    expect(screen.getByText(/manque: chef de projet/i)).toBeInTheDocument()
-    expect(screen.getByText(/créneaux votés/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/manque: chef de projet/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/réponse de expert 2/i)).toBeInTheDocument()
     expect(screen.getAllByText(/proposition/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/11\.06\.2026 · 13:00-17:00 · B202/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/propositions reçues/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/11\.06\.2026 · après-midi · B202/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/11\.06\.2026 · 13:00-17:00 · B202/i)).not.toBeInTheDocument()
     expect(screen.getAllByText('Expert 2').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Carla Expert').length).toBeGreaterThan(0)
     expect(screen.queryByText(new RegExp(String.fromCodePoint(0x1f538), 'i'))).not.toBeInTheDocument()
     expect(screen.queryByText(/Choix 1/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Perso\. 13\.06\.2026 · Indisponible le matin/i)).toBeInTheDocument()
+    expect(screen.getByText(/Demande spécifique 13\.06\.2026 · Indisponible le matin/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', {
-      name: /ajouter 11\.06\.2026 .* b202 aux dates idéales de carla expert/i
+      name: /enregistrer 11\.06\.2026 .* après-midi .* b202 comme date idéale de carla expert/i
     }))
 
     await waitFor(() => {
@@ -527,26 +535,377 @@ describe('PlanningDashboard', () => {
     })
 
     fireEvent.click(screen.getByRole('button', {
-      name: /simuler le déplacement de tpi-2026-042 vers 11\.06\.2026 .* b202/i
+      name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026 .* après-midi .* b202/i
     }))
 
-    expect(await screen.findByRole('dialog', { name: /simulation déplacement/i })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: /test de déplacement/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/11\.06\.2026 · après-midi · B202/i).length).toBeGreaterThan(0)
     expect(planningServices.tpiPlanningService.simulateMoveToSlot).toHaveBeenCalledWith(
       'planning-vote-1',
       'slot-alt'
     )
     expect(await screen.findByText(/déplacement possible sans conflit détecté/i)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /déplacer et confirmer/i }))
+    const safeMoveButton = screen.getByRole('button', {
+      name: /confirmer déplacement sans conflit détecté pour tpi-2026-042/i
+    })
+    expect(safeMoveButton).toHaveClass('is-safe')
+    expect(safeMoveButton).toHaveAttribute('title', 'Pas de conflit détecté: déplacement simplifié.')
+
+    fireEvent.click(safeMoveButton)
 
     await waitFor(() => {
       expect(window.confirm).toHaveBeenCalled()
+    })
+    await waitFor(() => {
       expect(planningServices.tpiPlanningService.moveToSlot).toHaveBeenCalledWith(
         'planning-vote-1',
         'slot-alt',
         expect.stringMatching(/Carla Expert/i)
       )
     })
+  })
+
+  test('masque les TPI sans réponse dans le cockpit de votes', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi(),
+      buildVoteProposalTpi({
+        _id: 'planning-vote-empty',
+        reference: 'TPI-2026-099',
+        voteRoleStatus: {
+          expert1: { decision: 'pending', responseMode: 'pending' },
+          expert2: { decision: 'pending', responseMode: 'pending' },
+          chef_projet: { decision: 'pending', responseMode: 'pending' }
+        },
+        voteStats: {
+          totalVotes: 3,
+          pendingVotes: 3,
+          acceptedVotes: 0,
+          preferredVotes: 0,
+          rejectedVotes: 0,
+          respondedVotes: 0
+        },
+        voteDecision: {
+          slots: [
+            {
+              slotId: 'slot-empty-fixed',
+              isFixed: true,
+              slot: {
+                _id: 'slot-empty-fixed',
+                date: '2026-06-12T08:00:00.000Z',
+                startTime: '08:00',
+                endTime: '12:00',
+                room: { name: 'C303' }
+              },
+              positiveCount: 0,
+              rejectedCount: 0,
+              pendingCount: 3,
+              respondedCount: 0,
+              roleDecisions: [
+                { role: 'expert1', decision: 'pending', voterName: 'Bob Expert' },
+                { role: 'expert2', decision: 'pending', voterName: 'Carla Expert' },
+                { role: 'chef_projet', decision: 'pending', voterName: 'Diane Boss' }
+              ]
+            }
+          ]
+        }
+      })
+    ])
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
+    expect(screen.getByText('TPI-2026-042')).toBeInTheDocument()
+    expect(screen.queryByText('TPI-2026-099')).not.toBeInTheDocument()
+    expect(screen.getByText(/1\/1 TPI avec réponse/i)).toBeInTheDocument()
+  })
+
+  test('garde une file filtrée vide quand aucun TPI avec réponse ne correspond', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi({
+        _id: 'planning-vote-ready',
+        reference: 'TPI-2026-READY',
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: { decision: 'accepted', responseMode: 'ok' },
+          chef_projet: { decision: 'accepted', responseMode: 'ok' }
+        },
+        voteStats: {
+          totalVotes: 3,
+          pendingVotes: 0,
+          acceptedVotes: 3,
+          preferredVotes: 0,
+          rejectedVotes: 0,
+          respondedVotes: 3
+        }
+      })
+    ])
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    expect(await screen.findByText('TPI-2026-READY')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /à relancer/i }))
+
+    expect(screen.queryByText('TPI-2026-READY')).not.toBeInTheDocument()
+    expect(screen.getByText(/aucune réponse dans cette file/i)).toBeInTheDocument()
+  })
+
+  test('affiche les commentaires seule disponibilité et contrainte dure dans le suivi des votes', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi({
+        voteStats: {
+          totalVotes: 3,
+          pendingVotes: 0,
+          acceptedVotes: 1,
+          preferredVotes: 1,
+          rejectedVotes: 1,
+          respondedVotes: 3
+        },
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: { decision: 'rejected', responseMode: 'proposal', hardConstraint: true },
+          chef_projet: { decision: 'preferred', responseMode: 'proposal', alternativeCount: 1 }
+        },
+        voteDecision: {
+          slots: [
+            {
+              slotId: 'slot-fixed',
+              isFixed: true,
+              slot: {
+                _id: 'slot-fixed',
+                date: '2026-06-10T08:00:00.000Z',
+                startTime: '08:00',
+                endTime: '12:00',
+                room: { name: 'A101' }
+              },
+              positiveCount: 1,
+              rejectedCount: 1,
+              pendingCount: 0,
+              respondedCount: 2,
+              roleDecisions: [
+                { role: 'expert1', decision: 'accepted', voterName: 'Bob Expert' },
+                {
+                  role: 'expert2',
+                  decision: 'rejected',
+                  voterName: 'Carla Expert',
+                  hardConstraint: true,
+                  comment: 'Aucune date proposée ne convient.'
+                },
+                {
+                  role: 'chef_projet',
+                  decision: 'rejected',
+                  voterName: 'Diane Boss',
+                  comment: 'Seule disponibilité signalée. Préférence à confirmer.'
+                }
+              ]
+            },
+            {
+              slotId: 'slot-alt',
+              isFixed: false,
+              slot: {
+                _id: 'slot-alt',
+                date: '2026-06-11T08:00:00.000Z',
+                startTime: '13:00',
+                endTime: '17:00',
+                room: { name: 'B202' }
+              },
+              positiveCount: 1,
+              rejectedCount: 0,
+              pendingCount: 2,
+              respondedCount: 1,
+              roleDecisions: [
+                { role: 'expert1', decision: 'pending', voterName: 'Bob Expert' },
+                { role: 'expert2', decision: 'rejected', voterName: 'Carla Expert' },
+                {
+                  role: 'chef_projet',
+                  decision: 'preferred',
+                  voteId: 'vote-alt-chef',
+                  voterName: 'Diane Boss',
+                  priority: 1
+                }
+              ]
+            }
+          ]
+        }
+      })
+    ])
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
+    expect(screen.getByText(/1 contrainte/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Contrainte dure/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Aucune date proposée ne convient\./i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /vérifier contraintes/i }))
+
+    expect(await screen.findByText(/1 TPI avec contrainte dure/i)).toBeInTheDocument()
+    expect(screen.getByText(/2 signalements à traiter/i)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', {
+      name: /afficher tpi-2026-042 pour traiter la contrainte/i
+    }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Contrainte dure: Carla Expert sur 10\.06\.2026 · Matin · A101: Aucune date proposée ne convient\./i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Contrainte dure: Diane Boss sur 11\.06\.2026 · Après-midi · B202: Seule disponibilité signalée\. Préférence à confirmer\./i).length).toBeGreaterThan(0)
+    expect(toast.warning).toHaveBeenCalledWith(
+      expect.stringMatching(/1 TPI avec contrainte dure \(2 signalements\)/i),
+      expect.objectContaining({ position: 'top-center' })
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: /chef de projet/i }))
+
+    expect(screen.queryByText(/Demande spécifique Seule disponibilité signalée\. Préférence à confirmer\./i)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/^Seule disponibilité$/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Seule disponibilité signalée\. Préférence à confirmer\./i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', {
+      name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026/i
+    })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', {
+      name: /enregistrer 11\.06\.2026 .* comme date idéale de diane boss/i
+    })).not.toBeInTheDocument()
+  })
+
+  test('vérifie aussi les contraintes dures portées par le statut du rôle', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi({
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: {
+            decision: 'rejected',
+            responseMode: 'proposal',
+            hardConstraint: true,
+            voterName: 'Carla Expert',
+            specialRequestReason: 'Indisponible toute la semaine'
+          },
+          chef_projet: { decision: 'pending', responseMode: 'pending' }
+        },
+        voteStats: {
+          totalVotes: 3,
+          pendingVotes: 1,
+          acceptedVotes: 1,
+          preferredVotes: 0,
+          rejectedVotes: 1,
+          respondedVotes: 2
+        }
+      })
+    ])
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', { name: /vérifier contraintes/i }))
+
+    expect(await screen.findByText(/1 TPI avec contrainte dure/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Contrainte dure: Carla Expert: Indisponible toute la semaine/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Meilleur créneau sans contrainte dure: 11\.06\.2026 · Après-midi · B202 \(1\/3\)\./i)).toBeInTheDocument()
+  })
+
+  test('transmet une proposition d arbitrage depuis un dossier bloquant', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi({
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: {
+            decision: 'rejected',
+            responseMode: 'proposal',
+            hardConstraint: true,
+            voterName: 'Carla Expert',
+            specialRequestReason: 'Indisponible toute la semaine'
+          },
+          chef_projet: { decision: 'pending', responseMode: 'pending' }
+        }
+      })
+    ])
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /transmettre une proposition d.arbitrage pour tpi-2026-042/i
+    }))
+
+    expect(await screen.findByRole('dialog', { name: /informer les parties prenantes/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /transmettre la proposition d.arbitrage pour tpi-2026-042/i }))
+
+    await waitFor(() => {
+      expect(planningServices.resolutionProposalService.create).toHaveBeenCalledWith(
+        'planning-vote-1',
+        expect.objectContaining({
+          slotId: 'slot-alt',
+          recipientRoles: ['chef_projet'],
+          baseUrl: 'http://localhost'
+        })
+      )
+    })
+    expect(toast.success).toHaveBeenCalledWith('TPI-2026-042: proposition transmise.')
+  })
+
+  test('génère les liens DEV sans fermer la modale d arbitrage', async () => {
+    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi({
+        voteRoleStatus: {
+          expert1: { decision: 'accepted', responseMode: 'ok' },
+          expert2: {
+            decision: 'rejected',
+            responseMode: 'proposal',
+            hardConstraint: true,
+            voterName: 'Carla Expert',
+            specialRequestReason: 'Indisponible toute la semaine'
+          },
+          chef_projet: { decision: 'pending', responseMode: 'pending' }
+        }
+      })
+    ])
+    planningServices.resolutionProposalService.create.mockResolvedValueOnce({
+      success: true,
+      proposal: {
+        id: 'resolution-proposal-dev',
+        status: 'sent',
+        devMode: true,
+        devLinks: [
+          {
+            role: 'expert1',
+            roleLabel: 'Expert 1',
+            name: 'Bob Expert',
+            url: 'http://localhost/arbitrage-2026/dev-expert1'
+          },
+          {
+            role: 'expert2',
+            roleLabel: 'Expert 2',
+            name: 'Carla Expert',
+            url: 'http://localhost/arbitrage-2026/dev-expert2'
+          }
+        ]
+      }
+    })
+
+    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /transmettre une proposition d.arbitrage pour tpi-2026-042/i
+    }))
+
+    expect(await screen.findByRole('checkbox', { name: /mode dev/i })).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: /transmettre la proposition d.arbitrage pour tpi-2026-042/i }))
+
+    await waitFor(() => {
+      expect(planningServices.resolutionProposalService.create).toHaveBeenCalledWith(
+        'planning-vote-1',
+        expect.objectContaining({
+          devMode: true
+        })
+      )
+    })
+    expect(await screen.findByText(/liens de test/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /expert 1 bob expert/i })).toHaveAttribute(
+      'href',
+      'http://localhost/arbitrage-2026/dev-expert1'
+    )
+    expect(toast.success).toHaveBeenCalledWith('TPI-2026-042: liens DEV générés, aucun email envoyé.')
   })
 
   test('affiche le blocage quand un déplacement proposé crée un conflit', async () => {
@@ -569,17 +928,23 @@ describe('PlanningDashboard', () => {
     renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
-      name: /simuler le déplacement de tpi-2026-042 vers 11\.06\.2026 .* b202/i
+      name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026 .* après-midi .* b202/i
     }))
 
-    expect(await screen.findByRole('dialog', { name: /simulation déplacement/i })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: /test de déplacement/i })).toBeInTheDocument()
     expect(await screen.findByText(/déplacement bloqué/i)).toBeInTheDocument()
     expect(await screen.findByText(/Diane Boss est déjà engagé sur ce créneau/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /déplacer et confirmer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /confirmer déplacement/i })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /ouvrir le forçage/i }))
+    const blockedMoveButton = screen.getByRole('button', {
+      name: /résoudre manuellement le déplacement de tpi-2026-042/i
+    })
+    expect(blockedMoveButton).toHaveClass('is-blocked')
+    expect(blockedMoveButton).toHaveAttribute('title', 'Conflit détecté: résolution manuelle nécessaire.')
 
-    expect(await screen.findByText(/focus forçage planning-vote-1/i)).toBeInTheDocument()
+    fireEvent.click(blockedMoveButton)
+
+    expect(await screen.findByText(/focus résolution planning-vote-1/i)).toBeInTheDocument()
     expect(planningServices.tpiPlanningService.moveToSlot).not.toHaveBeenCalled()
   })
 
@@ -591,20 +956,20 @@ describe('PlanningDashboard', () => {
     renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
-      name: /simuler le déplacement de tpi-2026-042 vers 11\.06\.2026 .* b202/i
+      name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026 .* après-midi .* b202/i
     }))
 
-    fireEvent.click(await screen.findByRole('button', { name: /déplacer et confirmer/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /confirmer déplacement/i }))
 
     await waitFor(() => {
       expect(confirmSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Déplacer et confirmer TPI-2026-042 vers 11\.06\.2026/i)
+        expect.stringMatching(/Confirmer le déplacement de TPI-2026-042 vers 11\.06\.2026/i)
       )
     })
     expect(planningServices.tpiPlanningService.moveToSlot).not.toHaveBeenCalled()
   })
 
-  test('signale une proposition déjà présente dans les dates idéales', async () => {
+  test('signale une préférence déjà présente dans les dates idéales', async () => {
     planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
     planningServices.tpiPlanningService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
     planningServices.voteService.addProposalToPreferences.mockResolvedValueOnce({
@@ -616,19 +981,19 @@ describe('PlanningDashboard', () => {
     renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
-      name: /ajouter 11\.06\.2026 .* b202 aux dates idéales de carla expert/i
+      name: /enregistrer 11\.06\.2026 .* b202 comme date idéale de carla expert/i
     }))
 
     await waitFor(() => {
       expect(planningServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
     })
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith('Carla Expert: proposition déjà présente dans les dates idéales.')
+      expect(toast.success).toHaveBeenCalledWith('Carla Expert: préférence déjà présente dans ses dates idéales.')
     })
-    expect(await screen.findByText(/Carla Expert: proposition déjà présente dans les dates idéales/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Carla Expert: préférence déjà présente dans ses dates idéales/i)).toBeInTheDocument()
   })
 
-  test('ouvre le forçage depuis une ligne de vote à traiter', async () => {
+  test('ouvre la résolution depuis une ligne de vote à traiter', async () => {
     planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
     planningServices.tpiPlanningService.getByYear.mockResolvedValue([
       {
@@ -701,10 +1066,12 @@ describe('PlanningDashboard', () => {
 
     renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
 
-    fireEvent.click(await screen.findByRole('button', { name: /forcer un créneau pour tpi-2026-077/i }))
+    fireEvent.click(await screen.findByRole('button', {
+      name: /résoudre le créneau manuel de tpi-2026-077 depuis la file/i
+    }))
 
-    expect(await screen.findByRole('heading', { name: /créneaux à forcer/i })).toBeInTheDocument()
-    expect(screen.getByText(/focus forçage planning-manual-1/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /créneaux à résoudre/i })).toBeInTheDocument()
+    expect(screen.getByText(/focus résolution planning-manual-1/i)).toBeInTheDocument()
   })
 
   test('permet de confirmer directement un créneau depuis le détail des votes admin', async () => {

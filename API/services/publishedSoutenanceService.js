@@ -330,7 +330,58 @@ function normalizeViewerName(name) {
   return String(name || '').trim().toLowerCase()
 }
 
+function normalizeViewerRole(value) {
+  const normalized = compactText(value).toLowerCase()
+
+  if (normalized === 'candidate') {
+    return 'candidat'
+  }
+
+  if (normalized === 'boss') {
+    return 'chef_projet'
+  }
+
+  return normalized
+}
+
+function matchViewerParticipant(participantPersonId, participantName, viewer) {
+  const personId = compactText(viewer?.personId)
+  const viewerName = normalizeViewerName(viewer?.name)
+
+  if (personId && participantPersonId && String(participantPersonId) === personId) {
+    return true
+  }
+
+  return !!viewerName && normalizeViewerName(participantName).includes(viewerName)
+}
+
 function doesTpiDataMatchViewer(tpiData, viewer = {}) {
+  const normalizedRole = normalizeViewerRole(viewer?.role)
+
+  if (normalizedRole) {
+    if (!viewer.personId && !viewer.name) {
+      return false
+    }
+
+    if (normalizedRole === 'candidat') {
+      return matchViewerParticipant(tpiData?.candidatPersonId, tpiData?.candidat, viewer)
+    }
+
+    if (normalizedRole === 'expert1') {
+      return matchViewerParticipant(tpiData?.expert1?.personId, tpiData?.expert1?.name, viewer)
+    }
+
+    if (normalizedRole === 'expert2') {
+      return matchViewerParticipant(tpiData?.expert2?.personId, tpiData?.expert2?.name, viewer)
+    }
+
+    if (normalizedRole === 'chef_projet') {
+      return matchViewerParticipant(tpiData?.boss?.personId, tpiData?.boss?.name, viewer)
+    }
+
+    return false
+  }
+
   if (!viewer.personId && !viewer.name) {
     return true
   }
@@ -364,7 +415,7 @@ function doesTpiDataMatchViewer(tpiData, viewer = {}) {
 }
 
 function filterPublishedRooms(rooms, viewer = {}) {
-  if (!viewer.personId && !viewer.name) {
+  if (!viewer.personId && !viewer.name && !viewer.role) {
     return cloneRooms(rooms)
   }
 
@@ -915,7 +966,8 @@ async function listPublishedSoutenances(year, options = {}) {
     const scheduledRooms = enrichPublishedRoomsScheduleConfig(activeVersion.rooms, planningConfig)
     return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledRooms, appearance), {
       personId: options.viewerPersonId || null,
-      name: options.viewerName || null
+      name: options.viewerName || null,
+      role: options.viewerRole || null
     })
   }
 
@@ -925,7 +977,8 @@ async function listPublishedSoutenances(year, options = {}) {
   const scheduledLegacyRooms = enrichPublishedRoomsScheduleConfig(legacyRooms, planningConfig)
   return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledLegacyRooms, appearance), {
     personId: options.viewerPersonId || null,
-    name: options.viewerName || null
+    name: options.viewerName || null,
+    role: options.viewerRole || null
   })
 }
 

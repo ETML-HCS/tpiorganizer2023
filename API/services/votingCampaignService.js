@@ -111,6 +111,7 @@ function ensureVoteEmailTarget(targetsByPersonId, year, person) {
       personName: getDisplayName(person),
       year,
       deadlines: [],
+      roles: new Set(),
       tpisById: new Map()
     })
   }
@@ -178,6 +179,7 @@ function addTpiToVoteEmailTarget(targetsByPersonId, {
 
   if (role) {
     entry.roleLabels.add(toRoleLabel(role))
+    target.roles.add(role)
   }
 }
 
@@ -189,6 +191,22 @@ function formatEarliestDeadline(deadlines = [], fallbackDate = null) {
 
   const deadline = validDates[0] || fallbackDate
   return deadline ? new Date(deadline).toLocaleDateString('fr-CH') : ''
+}
+
+function getVoteTargetSendPriority(target) {
+  if (!target?.roles || typeof target.roles.has !== 'function') {
+    return 2
+  }
+
+  if (target.roles.has('chef_projet')) {
+    return 0
+  }
+
+  if (target.roles.has('expert1') || target.roles.has('expert2')) {
+    return 1
+  }
+
+  return 2
 }
 
 function finalizeVoteEmailTarget(target, link) {
@@ -212,9 +230,9 @@ function finalizeVoteEmailTarget(target, link) {
 
 function buildTpiVoters(tpi) {
   const rawVoters = [
+    { person: tpi.chefProjet, role: 'chef_projet' },
     { person: tpi.expert1, role: 'expert1' },
-    { person: tpi.expert2, role: 'expert2' },
-    { person: tpi.chefProjet, role: 'chef_projet' }
+    { person: tpi.expert2, role: 'expert2' }
   ]
 
   return rawVoters.filter(voter => canReceiveAutomaticEmail(voter.person))
@@ -352,6 +370,10 @@ async function ensureVotesForTpi(tpi) {
             voterRole: voter.role,
             decision: 'pending',
             comment: '',
+            availabilityException: false,
+            hardConstraint: false,
+            specialRequestReason: '',
+            specialRequestDate: null,
             votedAt: null,
             magicLinkUsed: null
           },
@@ -378,9 +400,15 @@ async function ensureVotesForTpi(tpi) {
 
 async function startVotesCampaign(year, baseUrl, options = {}) {
   const skipEmails = options?.skipEmails === true
+  const fromArbitrage = options?.fromArbitrage === true
   const { planningConfig, tpis } = await loadVotingTpisForYear(year)
   const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
   const emailTargetsByPersonId = new Map()
+  const emailSettings = await getSharedEmailSettingsIfAvailable()
+  const emailOptions = {
+    emailSettings,
+    fromArbitrage
+  }
 
   let totalEmails = 0
   let successfulEmails = 0
@@ -457,7 +485,19 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
       accessLinkSettings: planningConfig?.accessLinkSettings
     })
 
-    for (const target of emailTargetsByPersonId.values()) {
+    const sortedTargets = Array.from(emailTargetsByPersonId.values())
+      .sort((left, right) => {
+        const leftPriority = getVoteTargetSendPriority(left)
+        const rightPriority = getVoteTargetSendPriority(right)
+
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority
+        }
+
+        return String(left.email || '').localeCompare(String(right.email || ''))
+      })
+
+    for (const target of sortedTargets) {
       const link = await magicLinkV2Service.createVoteMagicLink({
         year,
         person: target.person,
@@ -477,8 +517,7 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
       })
     }
 
-    const emailSettings = await getSharedEmailSettingsIfAvailable()
-    const mailResults = await emailService.sendVoteDigestRequests(digestTargets, { emailSettings })
+    const mailResults = await emailService.sendVoteDigestRequests(digestTargets, emailOptions)
     const resultByEmail = new Map(mailResults.map((result) => [result.email, result]))
     totalEmails = mailResults.length
     successfulEmails = mailResults.filter(result => result.success).length
@@ -718,8 +757,12 @@ async function closeVotesCampaign(year) {
 }
 
 function listSoutenanceRecipientsFromTpi(tpi) {
-  return [tpi.candidat, tpi.expert1, tpi.expert2, tpi.chefProjet]
-    .filter(Boolean)
+  return [
+    { person: tpi.candidat, role: 'candidat' },
+    { person: tpi.expert1, role: 'expert1' },
+    { person: tpi.expert2, role: 'expert2' },
+    { person: tpi.chefProjet, role: 'chef_projet' }
+  ].filter((entry) => Boolean(entry.person))
 }
 
 async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = null) {
@@ -730,24 +773,29 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
       status: 'confirmed',
       confirmedSlot: { $ne: null }
     })
-      .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
-      .select('reference candidat expert1 expert2 chefProjet site')
+    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
+    .select('reference candidat expert1 expert2 chefProjet site')
   ])
   const confirmedTpis = filterPlanifiableTpis(rawConfirmedTpis, planningConfig)
 
-  const recipientsById = new Map()
+  const recipientsByPersonRoleKey = new Map()
 
   for (const tpi of confirmedTpis) {
     const participants = listSoutenanceRecipientsFromTpi(tpi)
 
-    for (const person of participants) {
+    for (const participant of participants) {
+      const person = participant.person
+      const role = participant.role
       if (!person?._id || !canReceiveAutomaticEmail(person)) {
         continue
       }
 
-      const key = String(person._id)
-      if (!recipientsById.has(key)) {
-        recipientsById.set(key, person)
+      const key = `${String(person._id)}|${role}`
+      if (!recipientsByPersonRoleKey.has(key)) {
+        recipientsByPersonRoleKey.set(key, {
+          person,
+          role
+        })
       }
     }
   }
@@ -760,13 +808,14 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
   const scopedPublicationVersion = activePublication?.version || null
   const emailSettings = await getSharedEmailSettingsIfAvailable()
 
-  for (const person of recipientsById.values()) {
+  for (const { person, role } of recipientsByPersonRoleKey.values()) {
     const link = await magicLinkV2Service.createSoutenanceMagicLink({
       year,
       person,
       scope: {
         kind: 'published_soutenances',
-        publicationVersion: scopedPublicationVersion
+        publicationVersion: scopedPublicationVersion,
+        viewerRole: role
       },
       accessLinkSettings: planningConfig?.accessLinkSettings,
       baseUrl
@@ -786,7 +835,7 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
   }
 
   return {
-    recipientsCount: recipientsById.size,
+    recipientsCount: recipientsByPersonRoleKey.size,
     publicationVersion: scopedPublicationVersion,
     emailsSent,
     emailsSucceeded,

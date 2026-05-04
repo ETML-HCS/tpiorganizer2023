@@ -24,6 +24,10 @@ function buildStartVotesBody(legacyRooms = null, options = {}) {
     body.skipEmails = true
   }
 
+  if (options.fromArbitrage === true) {
+    body.fromArbitrage = true
+  }
+
   if (options.voteLinkTarget) {
     body.voteLinkTarget = options.voteLinkTarget
   }
@@ -256,8 +260,27 @@ export const tpiPlanningService = {
   /**
    * Renvoyer les demandes de vote d'un TPI
    */
-  resendVotes: async (tpiId) => {
-    return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/resend-votes`, {})
+  resendVotes: async (tpiId, options = {}) => {
+    return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/resend-votes`, {
+      fromArbitrage: options.fromArbitrage === true
+    })
+  }
+}
+
+/**
+ * Service de gestion des propositions d'arbitrage
+ */
+export const resolutionProposalService = {
+  create: async (tpiId, payload = {}) => {
+    return await apiService.post(`${PLANNING_BASE_URL}/tpi/${tpiId}/resolution-proposals`, payload)
+  },
+
+  getPublic: async (token) => {
+    return await apiService.get(`${PLANNING_BASE_URL}/resolution-proposals/public/${encodeURIComponent(token)}`)
+  },
+
+  respondPublic: async (token, payload = {}) => {
+    return await apiService.post(`${PLANNING_BASE_URL}/resolution-proposals/public/${encodeURIComponent(token)}/respond`, payload)
   }
 }
 
@@ -611,6 +634,7 @@ const planningService = {
   persons: personService,
   slots: slotService,
   tpiPlanning: tpiPlanningService,
+  resolutionProposals: resolutionProposalService,
   votes: voteService,
   scheduling: schedulingService,
   workflow: workflowPlanningService,

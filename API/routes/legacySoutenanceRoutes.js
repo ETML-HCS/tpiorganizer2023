@@ -95,6 +95,7 @@ async function resolveSoutenanceViewer(magicLinkToken, year) {
   return {
     viewerPersonId: resolved.link.personId ? String(resolved.link.personId) : null,
     viewerName: resolved.link.personName || null,
+    viewerRole: resolved.link.scope?.viewerRole || resolved.link.scope?.role || null,
     publicationVersion: resolved.link.scope?.publicationVersion || null
   }
 }

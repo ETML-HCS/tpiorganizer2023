@@ -55,6 +55,9 @@ const voteSchema = new Schema({
   // Exception de disponibilité signalée par le votant
   availabilityException: { type: Boolean, default: false },
 
+  // Contrainte dure: aucune date compatible pour cette personne
+  hardConstraint: { type: Boolean, default: false },
+
   // Demande spéciale libre associée à une réponse de vote
   specialRequestReason: { type: String, default: '' },
   specialRequestDate: { type: Date, default: null },
@@ -109,9 +112,12 @@ voteSchema.statics.findUnanimousSlot = async function(tpiPlanningId) {
       acceptedCount: {
         $sum: { $cond: [{ $in: ['$decision', ['accepted', 'preferred']] }, 1, 0] }
       },
+      hardConstraintCount: {
+        $sum: { $cond: ['$hardConstraint', 1, 0] }
+      },
       totalVotes: { $sum: 1 }
     }},
-    { $match: { acceptedCount: 3, totalVotes: 3 } },
+    { $match: { acceptedCount: 3, totalVotes: 3, hardConstraintCount: 0 } },
     { $sort: { acceptedCount: -1 } },
     { $limit: 1 }
   ]

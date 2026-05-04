@@ -69,11 +69,32 @@ function buildConfiguredSender(emailSettings = {}) {
   return `${quoteDisplayName(settings.senderName)} <${senderEmail}>`
 }
 
-function buildMailOptions({ to, emailContent, emailSettings = {} }) {
+function buildArbitrageSender(emailSettings = {}) {
+  const settings = normalizeEmailSettings(emailSettings)
+  const arbitrageEmail = sanitizeEmailAddress(
+    process.env.SMTP_FROM_ARBITRAGE ||
+    settings.senderArbitrageEmail
+  )
+  const arbitrageName = sanitizeHeaderText(
+    process.env.SMTP_FROM_NAME_ARBITRAGE ||
+    settings.senderArbitrageName ||
+    settings.senderName
+  ) || 'TPI Organizer'
+
+  if (!arbitrageEmail) {
+    return buildConfiguredSender(settings)
+  }
+
+  return `${quoteDisplayName(arbitrageName)} <${arbitrageEmail}>`
+}
+
+function buildMailOptions({ to, emailContent, emailSettings = {}, fromArbitrage = false }) {
   const settings = normalizeEmailSettings(emailSettings)
   const replyToEmail = sanitizeEmailAddress(settings.replyToEmail)
   const mailOptions = {
-    from: buildConfiguredSender(settings),
+    from: fromArbitrage
+      ? buildArbitrageSender(settings)
+      : buildConfiguredSender(settings),
     to,
     subject: emailContent.subject,
     text: emailContent.text,
@@ -331,6 +352,70 @@ const emailTemplates = {
   }),
 
   /**
+   * Email d'arbitrage: l'administration propose une solution à confirmer.
+   */
+  resolutionProposal: (data) => ({
+    subject: `[${data.brandName || 'TPI Organizer'}] Proposition d'arbitrage - ${data.tpiReference}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+          .header { background: #334155; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+          .box { background: white; padding: 14px; margin: 12px 0; border-left: 4px solid #2563eb; }
+          .deadline { color: #dc2626; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${data.brandName || 'TPI Organizer'} - Proposition d'arbitrage</h1>
+          </div>
+          <div class="content">
+            <p>Bonjour ${data.recipientName},</p>
+            <p>Une contrainte bloque la planification du TPI ci-dessous. L'administration vous propose une solution à confirmer.</p>
+
+            <div class="box">
+              <p><strong>${data.tpiReference}</strong> - ${data.candidateName || 'Candidat non renseigné'}<br>
+              <em>${data.tpiSubject || 'Sujet non défini'} · ${data.roleLabel || 'Partie prenante'}</em></p>
+              <p><strong>Créneau proposé:</strong><br>${data.proposedSlotLabel}</p>
+              ${data.adminMessage ? `<p><strong>Message:</strong><br>${data.adminMessage}</p>` : ''}
+            </div>
+
+            <p style="text-align: center;">
+              <a href="${data.magicLinkUrl}" class="button">Répondre à la proposition</a>
+            </p>
+            <p class="deadline">Réponse souhaitée avant le ${data.deadline || 'délai indiqué'}.</p>
+            <p><small>Ce lien est personnel. En cas de refus, vous pourrez indiquer la raison et une proposition éventuelle.</small></p>
+          </div>
+          <div class="footer">
+            <p>${data.emailFooterSignature || 'ETML / CFPV - TPI Organizer'}</p>
+            <p>${data.autoReplyNotice || 'Ce message est automatique, merci de ne pas y répondre.'}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+      ${data.brandName || 'TPI Organizer'} - Proposition d'arbitrage
+
+      Bonjour ${data.recipientName},
+
+      Une contrainte bloque la planification du TPI ${data.tpiReference} - ${data.candidateName || 'Candidat non renseigné'}.
+
+      Créneau proposé: ${data.proposedSlotLabel}
+      ${data.adminMessage ? `Message: ${data.adminMessage}` : ''}
+
+      Répondre à la proposition: ${data.magicLinkUrl}
+      Réponse souhaitée avant le ${data.deadline || 'délai indiqué'}.
+    `
+  }),
+
+  /**
    * Email de rappel de vote
    */
   voteReminder: (data) => ({
@@ -572,7 +657,8 @@ async function sendEmail(to, template, data, options = {}) {
   const mailOptions = buildMailOptions({
     to,
     emailContent,
-    emailSettings: options.emailSettings || templateData?.emailSettings
+    emailSettings: options.emailSettings || templateData?.emailSettings,
+    fromArbitrage: options.fromArbitrage === true
   })
   
   try {

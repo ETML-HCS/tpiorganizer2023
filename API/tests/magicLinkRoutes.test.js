@@ -314,6 +314,69 @@ test('findReusableMagicLink reconstruit une URL depuis un token persiste', async
   }
 })
 
+test('findLatestMagicLinkStatus expose un lien expiré sans reconstruire son URL', async () => {
+  const { MagicLink } = require('../models/magicLinkModel')
+  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const originalFindOne = MagicLink.findOne
+  const calls = []
+
+  MagicLink.findOne = (query) => {
+    calls.push({ query })
+
+    return {
+      select(selection) {
+        calls[calls.length - 1].selection = selection
+        return this
+      },
+      sort(sortOrder) {
+        calls[calls.length - 1].sortOrder = sortOrder
+        return this
+      },
+      lean() {
+        return Promise.resolve({
+          _id: 'expired-link',
+          rawToken: 'expired-token',
+          type: 'soutenance',
+          redirectPath: '/defenses/2026',
+          expiresAt: new Date('2026-05-01T12:00:00Z'),
+          maxUses: 60,
+          usageCount: 4,
+          revokedAt: null
+        })
+      }
+    }
+  }
+
+  try {
+    const link = await magicLinkV2Service.findLatestMagicLinkStatus({
+      year: '2026',
+      type: 'soutenance',
+      person: {
+        _id: 'person-1',
+        email: 'alice@example.com'
+      },
+      scope: {
+        publicationVersion: 3
+      },
+      sources: ['admin_access_generated'],
+      baseUrl: 'http://localhost:3000'
+    })
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].query.revokedAt, undefined)
+    assert.equal(calls[0].query.expiresAt, undefined)
+    assert.match(calls[0].selection, /\+rawToken/)
+    assert.equal(link.id, 'expired-link')
+    assert.equal(link.token, null)
+    assert.equal(link.url, null)
+    assert.equal(link.generated, true)
+    assert.equal(link.recoverable, true)
+    assert.equal(link.availabilityStatus, 'expired')
+  } finally {
+    MagicLink.findOne = originalFindOne
+  }
+})
+
 test('GET /api/magic-link/resolve rejects missing token', async () => {
   const { app, restoreEnv } = loadTestApp({
     NODE_ENV: 'development',

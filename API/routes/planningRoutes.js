@@ -35,8 +35,13 @@ const {
   filterSlotDocumentsForVoteProposal
 } = require('../services/voteProposalOptionsService')
 const {
+  ensureConfiguredWindowSlotDocuments
+} = require('../services/voteProposalWindowSlotService')
+const {
   toPlanningTpiResponseObject
 } = require('../services/planningTpiResponseService')
+const resolutionProposalService = require('../services/resolutionProposalService')
+const staticVotePublicationService = require('../services/staticVotePublicationService')
 const {
   getSharedEmailSettingsIfAvailable,
   getSharedPlanningCatalog,
@@ -56,6 +61,28 @@ const ALLOWED_VOTE_RESPONSE_MODES = new Set(['ok', 'proposal'])
 const INDICATIVE_QUEUE_VOTE_DECISIONS = ['accepted', 'preferred']
 const VOTE_REQUIRED_ROLES = ['expert1', 'expert2', 'chef_projet']
 
+function parseBoolean(rawValue, fallbackValue = false) {
+  if (typeof rawValue === 'boolean') {
+    return rawValue
+  }
+
+  if (typeof rawValue === 'string') {
+    const normalized = rawValue.trim().toLowerCase()
+    if (normalized === 'true') {
+      return true
+    }
+    if (normalized === 'false') {
+      return false
+    }
+  }
+
+  return fallbackValue
+}
+
+function canReceiveAutomaticEmail(recipient) {
+  return Boolean(recipient?.email) && recipient?.sendEmails !== false
+}
+
 function getRouteErrorResponse(error, fallbackMessage) {
   const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500
 
@@ -66,6 +93,60 @@ function getRouteErrorResponse(error, fallbackMessage) {
         ? (error?.message || fallbackMessage)
         : fallbackMessage
     }
+  }
+}
+
+function sendRouteError(res, error, fallbackMessage) {
+  const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500
+  return res.status(statusCode).json({
+    error: error?.message || fallbackMessage
+  })
+}
+
+function getFrontendBaseUrl(req) {
+  const configured = compactText(
+    req.body?.baseUrl ||
+    req.get('origin') ||
+    `${req.protocol}://${req.get('host')}`
+  )
+
+  return configured.replace(/\/+$/, '')
+}
+
+async function getResolutionProposalLinkOptions(req, year) {
+  const fallbackBaseUrl = getFrontendBaseUrl(req)
+
+  if (!staticVotePublicationService.canBuildStaticVoteArbitrageLinks()) {
+    return {
+      baseUrl: fallbackBaseUrl,
+      linkTarget: 'app'
+    }
+  }
+
+  try {
+    const status = await staticVotePublicationService.getStaticVotePublicationStatus(year)
+    if (status?.available && status?.arbitrageAvailable && status.publicUrl) {
+      return {
+        baseUrl: status.publicUrl,
+        linkTarget: 'staticVote'
+      }
+    }
+
+    if (status?.available && !status?.arbitrageAvailable) {
+      const error = new Error('Le mini-site vote doit être régénéré avant d’envoyer un arbitrage: arbitrage.php est absent.')
+      error.statusCode = 409
+      throw error
+    }
+  } catch (error) {
+    if (error?.statusCode === 409) {
+      throw error
+    }
+    console.warn(`Mini-site vote ${year} indisponible pour arbitrage:`, error?.message || error)
+  }
+
+  return {
+    baseUrl: fallbackBaseUrl,
+    linkTarget: 'app'
   }
 }
 
@@ -650,6 +731,7 @@ function buildVoteResponseMode(roleStatus) {
   if (
     roleStatus.alternativeCount > 0 ||
     roleStatus.availabilityException ||
+    roleStatus.hardConstraint ||
     roleStatus.specialRequestReason ||
     roleStatus.specialRequestDate
   ) {
@@ -665,6 +747,17 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizeVoteCommentText(value) {
+  return compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function isOnlyAvailabilityVoteComment(value) {
+  return normalizeVoteCommentText(value).includes('seule disponibilite signalee')
 }
 
 function toIdString(value) {
@@ -720,6 +813,7 @@ function makePendingSlotRoleDecision(role) {
     comment: '',
     priority: null,
     availabilityException: false,
+    hardConstraint: false,
     specialRequestReason: '',
     specialRequestDate: null
   }
@@ -748,17 +842,20 @@ function countVoteSlotDecisions(roleDecisions) {
   ).length
   const rejectedCount = decisions.filter((entry) => entry.decision === 'rejected').length
   const pendingCount = decisions.filter((entry) => !entry.decision || entry.decision === 'pending').length
+  const hardConstraintCount = decisions.filter((entry) => entry.hardConstraint === true).length
 
   return {
     positiveCount,
     rejectedCount,
     pendingCount,
+    hardConstraintCount,
     respondedCount: decisions.length - pendingCount
   }
 }
 
 function buildAdminVoteDecision(tpi, votes = [], fixedSlotId = '') {
   const slotsById = new Map()
+  const rolesWithOnlyAvailability = new Set()
 
   const addSlot = (slot) => {
     const slotId = toIdString(slot)
@@ -781,12 +878,24 @@ function buildAdminVoteDecision(tpi, votes = [], fixedSlotId = '') {
 
   for (const vote of votes) {
     addSlot(vote.slot)
+
+    const slotId = toIdString(vote.slot)
+    if (slotId && fixedSlotId && slotId === fixedSlotId && isOnlyAvailabilityVoteComment(vote.comment)) {
+      rolesWithOnlyAvailability.add(vote.voterRole)
+    }
   }
 
   for (const vote of votes) {
     const slotId = toIdString(vote.slot)
     const role = vote.voterRole
     const slotEntry = slotsById.get(slotId)
+    const decision = vote.decision || 'pending'
+    const isInferredOnlyAvailability = Boolean(
+      role &&
+      rolesWithOnlyAvailability.has(role) &&
+      slotId !== fixedSlotId &&
+      decision === 'preferred'
+    )
 
     if (!slotEntry || !slotEntry.roleDecisions[role]) {
       continue
@@ -794,13 +903,14 @@ function buildAdminVoteDecision(tpi, votes = [], fixedSlotId = '') {
 
     slotEntry.roleDecisions[role] = {
       role,
-      decision: vote.decision || 'pending',
+      decision,
       voteId: toIdString(vote._id),
       voterName: formatVotePersonName(vote.voter),
       votedAt: vote.votedAt || null,
-      comment: vote.comment || '',
+      comment: vote.comment || (isInferredOnlyAvailability ? 'Seule disponibilité signalée.' : ''),
       priority: Number.isFinite(Number(vote.priority)) ? Number(vote.priority) : null,
       availabilityException: Boolean(vote.availabilityException),
+      hardConstraint: Boolean(vote.hardConstraint || isInferredOnlyAvailability),
       specialRequestReason: vote.specialRequestReason || '',
       specialRequestDate: vote.specialRequestDate || null
     }
@@ -813,6 +923,7 @@ function buildAdminVoteDecision(tpi, votes = [], fixedSlotId = '') {
       ...slotEntry,
       ...counts,
       hasConsensus: counts.positiveCount === 3,
+      hasHardConstraint: counts.hardConstraintCount > 0,
       roleDecisions: VOTE_REQUIRED_ROLES.map((role) => slotEntry.roleDecisions[role])
     }
   })
@@ -953,7 +1064,7 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
     const dateRangeFilters = buildDateRangeFilters(proposalContext.allowedDateKeys)
     const configuredSlotQuery = {
       year: tpi.year,
-      status: { $in: ['available', 'proposed', 'pending_votes'] }
+      status: { $in: ['available', 'proposed', 'pending_votes', 'confirmed'] }
     }
 
     if (dateRangeFilters.length > 0) {
@@ -967,8 +1078,14 @@ async function buildVoteProposalOptionsForTpi(tpi, groupedSlots = []) {
 
     const siteCompatibleSlotDocuments = configuredSlotDocuments
       .filter((slotDocument) => isSlotSiteCompatibleWithTpi(slotDocument, tpi))
+    const proposalSlotDocuments = await ensureConfiguredWindowSlotDocuments(siteCompatibleSlotDocuments, {
+      planningConfig: planningConfig || {},
+      proposalContext,
+      tpi,
+      year: tpi.year
+    })
 
-    const configuredOptions = buildConfiguredSlotProposalOptions(siteCompatibleSlotDocuments, {
+    const configuredOptions = buildConfiguredSlotProposalOptions(proposalSlotDocuments, {
       fixedSlotId,
       existingSlotIds,
       planningConfig: planningConfig || {},
@@ -1520,6 +1637,41 @@ router.get('/slots/:year/calendar', authMiddleware, requireYearParam('year'), as
 })
 
 // ============================================
+// ROUTES PROPOSITIONS D'ARBITRAGE
+// ============================================
+
+router.get('/resolution-proposals/public/:token', async (req, res) => {
+  try {
+    const token = compactText(req.params.token)
+    if (!token) {
+      return res.status(400).json({ error: 'Token requis.' })
+    }
+
+    const proposal = await resolutionProposalService.getPublicResolutionProposal(token)
+    return res.json(proposal)
+  } catch (error) {
+    return sendRouteError(res, error, 'Proposition d’arbitrage indisponible.')
+  }
+})
+
+router.post('/resolution-proposals/public/:token/respond', async (req, res) => {
+  try {
+    const token = compactText(req.params.token)
+    if (!token) {
+      return res.status(400).json({ error: 'Token requis.' })
+    }
+
+    const proposal = await resolutionProposalService.respondToResolutionProposal(token, req.body)
+    return res.json({
+      success: true,
+      proposal
+    })
+  } catch (error) {
+    return sendRouteError(res, error, 'Réponse à la proposition impossible.')
+  }
+})
+
+// ============================================
 // ROUTES TPI PLANNING
 // ============================================
 
@@ -1555,48 +1707,54 @@ router.get('/tpi/:year', authMiddleware, requireYearParam('year'), async (req, r
 
     if (tpis.length > 0) {
       const tpiIds = tpis.map(tpi => tpi._id)
-      const voteStats = await Vote.aggregate([
-        { $match: { tpiPlanning: { $in: tpiIds } } },
-        {
-          $group: {
-            _id: '$tpiPlanning',
-            totalVotes: { $sum: 1 },
-            pendingVotes: {
-              $sum: {
-                $cond: [{ $eq: ['$decision', 'pending'] }, 1, 0]
-              }
-            },
-            acceptedVotes: {
-              $sum: {
-                $cond: [{ $eq: ['$decision', 'accepted'] }, 1, 0]
-              }
-            },
-            preferredVotes: {
-              $sum: {
-                $cond: [{ $eq: ['$decision', 'preferred'] }, 1, 0]
-              }
-            },
-            rejectedVotes: {
-              $sum: {
-                $cond: [{ $eq: ['$decision', 'rejected'] }, 1, 0]
-              }
-            },
-            respondedVotes: {
-              $sum: {
-                $cond: [{ $ne: ['$decision', 'pending'] }, 1, 0]
+      const [
+        voteStats,
+        votesByRole,
+        resolutionProposalsByTpiId
+      ] = await Promise.all([
+        Vote.aggregate([
+          { $match: { tpiPlanning: { $in: tpiIds } } },
+          {
+            $group: {
+              _id: '$tpiPlanning',
+              totalVotes: { $sum: 1 },
+              pendingVotes: {
+                $sum: {
+                  $cond: [{ $eq: ['$decision', 'pending'] }, 1, 0]
+                }
+              },
+              acceptedVotes: {
+                $sum: {
+                  $cond: [{ $eq: ['$decision', 'accepted'] }, 1, 0]
+                }
+              },
+              preferredVotes: {
+                $sum: {
+                  $cond: [{ $eq: ['$decision', 'preferred'] }, 1, 0]
+                }
+              },
+              rejectedVotes: {
+                $sum: {
+                  $cond: [{ $eq: ['$decision', 'rejected'] }, 1, 0]
+                }
+              },
+              respondedVotes: {
+                $sum: {
+                  $cond: [{ $ne: ['$decision', 'pending'] }, 1, 0]
+                }
               }
             }
           }
-        }
+        ]),
+        Vote.find({
+          tpiPlanning: { $in: tpiIds }
+        })
+          .populate('slot', 'date period startTime endTime room')
+          .populate('voter', 'firstName lastName email')
+          .select('tpiPlanning slot voter voterRole decision votedAt comment priority availabilityException hardConstraint specialRequestReason specialRequestDate')
+          .sort({ createdAt: 1 }),
+        resolutionProposalService.listResolutionProposalSummariesForTpis(tpiIds)
       ])
-
-      const votesByRole = await Vote.find({
-        tpiPlanning: { $in: tpiIds }
-      })
-        .populate('slot', 'date period startTime endTime room')
-        .populate('voter', 'firstName lastName email')
-        .select('tpiPlanning slot voter voterRole decision votedAt comment priority availabilityException specialRequestReason specialRequestDate')
-        .sort({ createdAt: 1 })
 
       const statsByTpiId = new Map(
         voteStats.map(stat => [String(stat._id), stat])
@@ -1616,6 +1774,7 @@ router.get('/tpi/:year', authMiddleware, requireYearParam('year'), async (req, r
         votedAt: null,
         comment: '',
         availabilityException: false,
+        hardConstraint: false,
         specialRequestReason: '',
         specialRequestDate: null,
         alternativeCount: 0,
@@ -1661,12 +1820,21 @@ router.get('/tpi/:year', authMiddleware, requireYearParam('year'), async (req, r
         const currentStatus = tpiRoleStatus[role]
         const voteSlotId = vote.slot?._id ? String(vote.slot._id) : String(vote.slot || '')
         const decision = vote.decision || 'pending'
+        const hasOnlyAvailabilityComment = isOnlyAvailabilityVoteComment(vote.comment)
+        currentStatus.hardConstraint = currentStatus.hardConstraint ||
+          Boolean(vote.hardConstraint) ||
+          hasOnlyAvailabilityComment
 
         if (fixedSlotId && voteSlotId === fixedSlotId) {
           currentStatus.decision = decision
           currentStatus.votedAt = vote.votedAt || null
           currentStatus.comment = vote.comment || ''
           currentStatus.availabilityException = Boolean(vote.availabilityException)
+          currentStatus.hardConstraint = Boolean(
+            currentStatus.hardConstraint ||
+            vote.hardConstraint ||
+            hasOnlyAvailabilityComment
+          )
           currentStatus.specialRequestReason = vote.specialRequestReason || ''
           currentStatus.specialRequestDate = vote.specialRequestDate || null
           currentStatus.fixedVoteId = String(vote._id)
@@ -1711,6 +1879,7 @@ router.get('/tpi/:year', authMiddleware, requireYearParam('year'), async (req, r
         }
 
         tpi.voteRoleStatus = roleStatus
+        tpi.resolutionProposals = resolutionProposalsByTpiId.get(String(tpi._id)) || []
         tpi.voteDecision = buildAdminVoteDecision(
           tpi,
           votesByTpiId.get(String(tpi._id)) || [],
@@ -1824,20 +1993,25 @@ router.post('/tpi/:id/propose-slots', authMiddleware, requireObjectIdParam('id',
       
       // Générer les magic links pour chaque votant
       const voters = [
+        { person: tpi.chefProjet, role: 'chef_projet' },
         { person: tpi.expert1, role: 'expert1' },
-        { person: tpi.expert2, role: 'expert2' },
-        { person: tpi.chefProjet, role: 'chef_projet' }
+        { person: tpi.expert2, role: 'expert2' }
       ]
-      
+
       const magicLinks = []
-      
+
       for (const voter of voters) {
+        if (!canReceiveAutomaticEmail(voter.person)) {
+          continue
+        }
+
         const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl, {
           expiresInHours: accessLinkSettings.voteLinkValidityHours
         })
         magicLinks.push({
           ...link,
           email: voter.person.email,
+          personName: `${voter.person.firstName} ${voter.person.lastName}`,
           role: voter.role,
           slots: tpi.proposedSlots.map(ps => ({
             date: ps.slot.date.toLocaleDateString('fr-CH'),
@@ -1848,7 +2022,7 @@ router.post('/tpi/:id/propose-slots', authMiddleware, requireObjectIdParam('id',
           }))
         })
       }
-      
+
       const emailSettings = await getSharedEmailSettingsIfAvailable()
       await emailService.sendVoteRequests(tpi, magicLinks, {
         emailSettings,
@@ -1935,6 +2109,39 @@ router.post('/tpi/:id/move-to-slot/:slotId', authMiddleware, requireObjectIdPara
     }
 
     return res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/planning/tpi/:id/resolution-proposals
+ * Transmet une proposition d'arbitrage aux parties prenantes.
+ */
+router.post('/tpi/:id/resolution-proposals', authMiddleware, requireObjectIdParam('id', 'Identifiant TPI'), requireRole('admin'), async (req, res) => {
+  try {
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
+    const year = Number.parseInt(String(req.body?.year || req.body?.tpiYear || ''), 10)
+    const linkOptions = Number.isInteger(year)
+      ? await getResolutionProposalLinkOptions(req, year)
+      : { baseUrl: getFrontendBaseUrl(req), linkTarget: 'app' }
+    const proposal = await resolutionProposalService.createResolutionProposal({
+      tpiId: req.params.id,
+      slotId: req.body?.slotId,
+      message: req.body?.message,
+      recipientRoles: req.body?.recipientRoles,
+      expiresInHours: req.body?.expiresInHours,
+      baseUrl: linkOptions.baseUrl,
+      linkTarget: linkOptions.linkTarget,
+      createdBy: req.user?.id || req.user?._id || null,
+      emailSettings,
+      devMode: req.body?.devMode === true
+    })
+
+    return res.status(201).json({
+      success: true,
+      proposal
+    })
+  } catch (error) {
+    return sendRouteError(res, error, 'Envoi de la proposition impossible.')
   }
 })
 
@@ -2082,6 +2289,18 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
             .filter(Boolean)
         )]
       : []
+    const onlyAvailabilitySlotIds = Array.isArray(req.body?.onlyAvailabilitySlotIds)
+      ? [...new Set(
+          req.body.onlyAvailabilitySlotIds
+            .filter(value => typeof value === 'string')
+            .map(value => value.trim())
+            .filter(Boolean)
+        )]
+      : []
+    const hardConstraint = req.body?.hardConstraint === true
+    const remark = typeof req.body?.remark === 'string'
+      ? req.body.remark.trim().slice(0, 2000)
+      : ''
     const specialRequest = isPlainObject(req.body?.specialRequest)
       ? req.body.specialRequest
       : null
@@ -2103,6 +2322,10 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       return res.status(400).json({ error: 'proposedSlotIds contient un identifiant invalide.' })
     }
 
+    if (onlyAvailabilitySlotIds.some(slotId => !isValidObjectId(slotId))) {
+      return res.status(400).json({ error: 'onlyAvailabilitySlotIds contient un identifiant invalide.' })
+    }
+
     if (mode === 'ok' && proposedSlotIds.length > 0) {
       return res.status(400).json({ error: 'Le mode OK ne permet pas de proposer d autres créneaux.' })
     }
@@ -2111,15 +2334,47 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       return res.status(400).json({ error: 'La demande spéciale est réservée au mode Proposition.' })
     }
 
+    if (req.body?.hardConstraint !== undefined && typeof req.body.hardConstraint !== 'boolean') {
+      return res.status(400).json({ error: 'hardConstraint doit être un booléen.' })
+    }
+
+    if (hardConstraint && mode !== 'proposal') {
+      return res.status(400).json({ error: 'La contrainte dure est réservée au mode Proposition.' })
+    }
+
+    if (hardConstraint && proposedSlotIds.length > 0) {
+      return res.status(400).json({
+        error: 'Ce choix indique qu aucune date proposée n est possible.'
+      })
+    }
+
+    if (hardConstraint && hasSpecialRequest) {
+      return res.status(400).json({
+        error: 'La contrainte dure ne peut pas être combinée avec une demande spéciale.'
+      })
+    }
+
+    if (hasSpecialRequest && proposedSlotIds.length > 0) {
+      return res.status(400).json({
+        error: 'La demande spéciale hors liste remplace les créneaux proposés.'
+      })
+    }
+
+    if (onlyAvailabilitySlotIds.some(slotId => !proposedSlotIds.includes(slotId))) {
+      return res.status(400).json({
+        error: 'La seule disponibilité doit correspondre à un créneau proposé.'
+      })
+    }
+
     if (hasSpecialRequest && (!specialRequestReason || !specialRequestDate)) {
       return res.status(400).json({
         error: 'La demande spéciale exige une raison libre et une date demandée.'
       })
     }
 
-    if (mode === 'proposal' && proposedSlotIds.length === 0 && !hasSpecialRequest) {
+    if (mode === 'proposal' && proposedSlotIds.length === 0 && !hasSpecialRequest && !hardConstraint) {
       return res.status(400).json({
-        error: 'Choisissez au moins un créneau ou saisissez une demande spéciale.'
+        error: 'Choisissez au moins un créneau, une demande spéciale hors liste ou indiquez qu aucune date proposée ne convient.'
       })
     }
 
@@ -2151,7 +2406,7 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       tpiPlanning: tpi._id,
       voter: voterObjectId
     })
-      .select('tpiPlanning slot voter voterRole decision comment availabilityException specialRequestReason specialRequestDate priority')
+      .select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority')
       .sort({ createdAt: 1 })
 
     if (existingVotes.length === 0) {
@@ -2200,9 +2455,17 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
     }
 
     const proposalSelectionSet = new Set(proposedSlotIds)
+    const onlyAvailabilitySelectionSet = new Set(onlyAvailabilitySlotIds)
     const fixedDecision = mode === 'ok' ? 'accepted' : 'rejected'
+    const hasOnlyAvailability = onlyAvailabilitySlotIds.length > 0
     const fixedComment = mode === 'proposal'
-      ? (hasSpecialRequest ? specialRequestReason : 'Proposition de créneaux alternatifs')
+      ? [
+          hardConstraint ? 'Aucune date proposée ne convient.' : '',
+          hasSpecialRequest ? specialRequestReason : '',
+          hasOnlyAvailability ? 'Seule disponibilité signalée.' : '',
+          !hardConstraint && !hasSpecialRequest && !hasOnlyAvailability && !remark ? 'Proposition de créneaux alternatifs' : '',
+          remark
+        ].filter(Boolean).join(' ')
       : ''
     const voterRole = fixedVote.voterRole
     const sharedSpecialReason = hasSpecialRequest ? specialRequestReason : ''
@@ -2212,14 +2475,20 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       const slotId = String(vote.slot)
       const isFixedSlot = slotId === fixedSlotId
       const isSelectedProposal = proposalSelectionSet.has(slotId)
+      const isOnlyAvailabilitySlot = onlyAvailabilitySelectionSet.has(slotId)
 
       vote.decision = isFixedSlot
         ? fixedDecision
         : isSelectedProposal
           ? 'preferred'
           : 'rejected'
-      vote.comment = isFixedSlot ? fixedComment : ''
+      vote.comment = isFixedSlot
+        ? fixedComment
+        : isOnlyAvailabilitySlot
+          ? 'Seule disponibilité signalée.'
+          : ''
       vote.availabilityException = hasSpecialRequest
+      vote.hardConstraint = Boolean(hardConstraint || isOnlyAvailabilitySlot)
       vote.specialRequestReason = sharedSpecialReason
       vote.specialRequestDate = sharedSpecialDate
       vote.priority = isSelectedProposal
@@ -2241,8 +2510,9 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
         voter: voterObjectId,
         voterRole,
         decision: 'preferred',
-        comment: '',
+        comment: onlyAvailabilitySelectionSet.has(slotId) ? 'Seule disponibilité signalée.' : '',
         availabilityException: hasSpecialRequest,
+        hardConstraint: onlyAvailabilitySelectionSet.has(slotId),
         specialRequestReason: sharedSpecialReason,
         specialRequestDate: sharedSpecialDate,
         priority: proposedSlotIds.indexOf(slotId) + 1,
@@ -2264,6 +2534,7 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       mode,
       proposedCount: proposedSlotIds.length,
       hasSpecialRequest,
+      hasHardConstraint: Boolean(hardConstraint || hasOnlyAvailability),
       validation: validationResult
     })
   } catch (error) {
@@ -2277,7 +2548,7 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
  */
 router.post('/votes/bulk', authMiddleware, async (req, res) => {
   try {
-    const { votes } = req.body // [{ voteId, decision, comment, priority, availabilityException }]
+    const { votes } = req.body // [{ voteId, decision, comment, priority, availabilityException, hardConstraint }]
     const context = getVoteMagicLinkContext(req)
     const voterObjectId = resolveVoteParticipantId(req)
     
@@ -2314,6 +2585,12 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
       if (voteData.availabilityException !== undefined && typeof voteData.availabilityException !== 'boolean') {
         return res.status(400).json({
           error: 'availabilityException doit être un booléen dans la liste des votes'
+        })
+      }
+
+      if (voteData.hardConstraint !== undefined && typeof voteData.hardConstraint !== 'boolean') {
+        return res.status(400).json({
+          error: 'hardConstraint doit être un booléen dans la liste des votes'
         })
       }
     }
@@ -2363,6 +2640,7 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
       vote.decision = voteData.decision
       vote.comment = voteData.comment
       vote.availabilityException = Boolean(voteData.availabilityException)
+      vote.hardConstraint = Boolean(voteData.hardConstraint)
       vote.priority = voteData.priority === undefined
         ? undefined
         : toInteger(voteData.priority)
@@ -2533,6 +2811,13 @@ router.post('/votes/:id', authMiddleware, requireObjectIdParam('id', 'Identifian
       return res.status(400).json({ error: 'availabilityException doit être un booléen' })
     }
 
+    if (
+      req.body?.hardConstraint !== undefined &&
+      typeof req.body.hardConstraint !== 'boolean'
+    ) {
+      return res.status(400).json({ error: 'hardConstraint doit être un booléen' })
+    }
+
     if (!voterObjectId) {
       return res.status(403).json({ error: 'Non autorisé à voter' })
     }
@@ -2573,6 +2858,7 @@ router.post('/votes/:id', authMiddleware, requireObjectIdParam('id', 'Identifian
     vote.decision = decision
     vote.comment = comment
     vote.availabilityException = Boolean(req.body?.availabilityException)
+    vote.hardConstraint = Boolean(req.body?.hardConstraint)
     vote.priority = priority
     vote.votedAt = new Date()
     vote.magicLinkUsed = req.headers.authorization
@@ -2691,41 +2977,45 @@ router.post('/tpi/:id/resend-votes', authMiddleware, requireObjectIdParam('id', 
     
     const baseUrl = `${req.protocol}://${req.get('host')}/api/planning`
     const accessLinkSettings = await getAccessLinkSettingsForYear(tpi.year)
+    const fromArbitrage = parseBoolean(req.body?.fromArbitrage, false)
     
     // Générer les magic links pour chaque votant
     const voters = [
+      { person: tpi.chefProjet, role: 'chef_projet' },
       { person: tpi.expert1, role: 'expert1' },
-      { person: tpi.expert2, role: 'expert2' },
-      { person: tpi.chefProjet, role: 'chef_projet' }
+      { person: tpi.expert2, role: 'expert2' }
     ]
     
     const magicLinks = []
     
     for (const voter of voters) {
-      if (voter.person) {
-        const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl, {
-          expiresInHours: accessLinkSettings.voteLinkValidityHours
-        })
-        magicLinks.push({
-          ...link,
-          email: voter.person.email,
-          personName: `${voter.person.firstName} ${voter.person.lastName}`,
-          role: voter.role,
-          slots: tpi.proposedSlots.map(ps => ({
-            date: ps.slot.date.toLocaleDateString('fr-CH'),
-            period: ps.slot.period,
-            startTime: ps.slot.startTime,
-            endTime: ps.slot.endTime,
-            room: ps.slot.room.name
-          }))
-        })
+      if (!canReceiveAutomaticEmail(voter.person)) {
+        continue
       }
+
+      const link = await magicLinkService.generateMagicLink(voter.person.email, baseUrl, {
+        expiresInHours: accessLinkSettings.voteLinkValidityHours
+      })
+      magicLinks.push({
+        ...link,
+        email: voter.person.email,
+        personName: `${voter.person.firstName} ${voter.person.lastName}`,
+        role: voter.role,
+        slots: tpi.proposedSlots.map(ps => ({
+          date: ps.slot.date.toLocaleDateString('fr-CH'),
+          period: ps.slot.period,
+          startTime: ps.slot.startTime,
+          endTime: ps.slot.endTime,
+          room: ps.slot.room.name
+        }))
+      })
     }
     
     // Envoyer les emails
     const emailSettings = await getSharedEmailSettingsIfAvailable()
     await emailService.sendVoteRequests(tpi, magicLinks, {
       emailSettings,
+      fromArbitrage,
       expiresInHours: accessLinkSettings.voteLinkValidityHours
     })
     

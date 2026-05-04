@@ -393,7 +393,7 @@ const PlanningCalendar = ({
         )}
       </div>
     )
-  }, [draggedTpi, dropTarget, highlightedSlots, tpis, onSelectTpi, handleDragEnter, handleDragLeave, handleDragOver, handleDrop])
+  }, [draggedTpi, dropTarget, highlightedSlots, tpis, onSelectTpi, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, compactText, formatCandidateName])
 
   /**
    * Récupère toutes les salles uniques
@@ -615,6 +615,7 @@ const PlanningCalendar = ({
                   <div key={`${room}-${period.id}`} className="calendar-row">
                     <div
                       className="row-header"
+                      data-testid={`planning-room-header-${room}-${period.id}`}
                       style={roomSiteMeta ? buildRoomAccentStyle(roomSiteMeta.siteColor) : undefined}
                     >
                       <span className="room-name">

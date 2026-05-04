@@ -184,6 +184,65 @@ test('Email service should build mail options from configured sender settings', 
   assert.equal(mailOptions.to, 'expert@example.com')
 })
 
+test('Email service should build arbitrage sender from configured settings', () => {
+  const mailOptions = emailService.buildMailOptions({
+    to: 'expert@example.com',
+    emailContent: {
+      subject: 'Test',
+      text: 'Texte',
+      html: '<p>Texte</p>'
+    },
+    emailSettings: {
+      senderName: 'Secretariat TPI',
+      senderEmail: 'secretariat@example.com',
+      senderArbitrageName: 'Arbitrage TPI',
+      senderArbitrageEmail: 'ARBITRAGE@example.com'
+    },
+    fromArbitrage: true
+  })
+
+  assert.equal(mailOptions.from, '"Arbitrage TPI" <arbitrage@example.com>')
+})
+
+test('Email service should let arbitrage environment sender override catalog settings', () => {
+  const previousArbitrageFrom = process.env.SMTP_FROM_ARBITRAGE
+  const previousArbitrageName = process.env.SMTP_FROM_NAME_ARBITRAGE
+  process.env.SMTP_FROM_ARBITRAGE = 'env-arbitrage@example.com'
+  process.env.SMTP_FROM_NAME_ARBITRAGE = 'Env Arbitrage'
+
+  try {
+    const mailOptions = emailService.buildMailOptions({
+      to: 'expert@example.com',
+      emailContent: {
+        subject: 'Test',
+        text: 'Texte',
+        html: '<p>Texte</p>'
+      },
+      emailSettings: {
+        senderName: 'Secretariat TPI',
+        senderEmail: 'secretariat@example.com',
+        senderArbitrageName: 'Catalog Arbitrage',
+        senderArbitrageEmail: 'catalog-arbitrage@example.com'
+      },
+      fromArbitrage: true
+    })
+
+    assert.equal(mailOptions.from, '"Env Arbitrage" <env-arbitrage@example.com>')
+  } finally {
+    if (previousArbitrageFrom === undefined) {
+      delete process.env.SMTP_FROM_ARBITRAGE
+    } else {
+      process.env.SMTP_FROM_ARBITRAGE = previousArbitrageFrom
+    }
+
+    if (previousArbitrageName === undefined) {
+      delete process.env.SMTP_FROM_NAME_ARBITRAGE
+    } else {
+      process.env.SMTP_FROM_NAME_ARBITRAGE = previousArbitrageName
+    }
+  }
+})
+
 test('Email voteRequest template should use configured link validity label', () => {
   const email = emailService.emailTemplates.voteRequest({
     recipientName: 'Jean Expert',

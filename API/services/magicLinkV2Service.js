@@ -149,6 +149,53 @@ function isMagicLinkStillUsable(link) {
   return maxUses <= 0 || usageCount < maxUses
 }
 
+function getMagicLinkAvailabilityStatus(link, now = new Date()) {
+  if (!link) {
+    return 'missing'
+  }
+
+  if (link.revokedAt) {
+    return 'revoked'
+  }
+
+  const expiresAt = link.expiresAt ? new Date(link.expiresAt) : null
+  if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt <= now) {
+    return 'expired'
+  }
+
+  if (!isMagicLinkStillUsable(link)) {
+    return 'exhausted'
+  }
+
+  return 'available'
+}
+
+function buildStoredMagicLinkResponse(link, baseUrl) {
+  const rawToken = typeof link?.rawToken === 'string'
+    ? link.rawToken.trim()
+    : ''
+  const baseStatus = getMagicLinkAvailabilityStatus(link)
+  const availabilityStatus = baseStatus === 'available' && !rawToken
+    ? 'unrecoverable'
+    : baseStatus
+  const canExposeUrl = availabilityStatus === 'available' && rawToken
+
+  return {
+    id: link?._id ? String(link._id) : '',
+    token: canExposeUrl ? rawToken : null,
+    redirectPath: link?.redirectPath,
+    url: canExposeUrl ? buildMagicLinkUrl(baseUrl, link.redirectPath, rawToken) : null,
+    expiresAt: link?.expiresAt || null,
+    revokedAt: link?.revokedAt || null,
+    maxUses: Number(link?.maxUses || 0),
+    usageCount: Number(link?.usageCount || 0),
+    type: link?.type,
+    generated: true,
+    recoverable: Boolean(rawToken),
+    availabilityStatus
+  }
+}
+
 async function createTypedMagicLink({
   type,
   year,
@@ -385,20 +432,58 @@ async function findReusableMagicLink({
     return null
   }
 
-  const rawToken = typeof reusableLink.rawToken === 'string'
-    ? reusableLink.rawToken.trim()
-    : ''
+  return buildStoredMagicLinkResponse(reusableLink, baseUrl)
+}
 
-  return {
-    id: reusableLink._id ? String(reusableLink._id) : '',
-    token: rawToken || null,
-    redirectPath: reusableLink.redirectPath,
-    url: rawToken ? buildMagicLinkUrl(baseUrl, reusableLink.redirectPath, rawToken) : null,
-    expiresAt: reusableLink.expiresAt,
-    type: reusableLink.type,
-    generated: true,
-    recoverable: Boolean(rawToken)
+async function findLatestMagicLinkStatus({
+  year,
+  type,
+  person = null,
+  recipientEmail = null,
+  scope = {},
+  sources = [],
+  baseUrl
+}) {
+  if (!['vote', 'soutenance'].includes(type)) {
+    throw new Error('Type de magic link invalide.')
   }
+
+  const normalizedYear = Number.parseInt(year, 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour magic link.')
+  }
+
+  if (!baseUrl || typeof baseUrl !== 'string') {
+    throw new Error('baseUrl requis.')
+  }
+
+  const normalizedRecipientEmail = normalizeRecipientEmail(person, recipientEmail)
+  const query = {
+    year: normalizedYear,
+    type
+  }
+
+  if (person?._id) {
+    query.personId = person._id
+  } else if (normalizedRecipientEmail) {
+    query.recipientEmail = normalizedRecipientEmail
+  } else {
+    throw new Error('Personne cible invalide pour magic link.')
+  }
+
+  const normalizedSources = normalizeSourceFilters(sources)
+  if (normalizedSources.length > 0) {
+    query['scope.source'] = { $in: normalizedSources }
+  }
+
+  applyScopeFilters(query, scope)
+
+  const latestLink = await MagicLink.findOne(query)
+    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt revokedAt')
+    .sort({ createdAt: -1 })
+    .lean()
+
+  return latestLink ? buildStoredMagicLinkResponse(latestLink, baseUrl) : null
 }
 
 async function listSoutenancePublicationAccessLinkStats({
@@ -410,11 +495,10 @@ async function listSoutenancePublicationAccessLinkStats({
     throw new Error('Annee invalide pour statistiques magic links.')
   }
 
+  const now = new Date()
   const query = {
     year: normalizedYear,
     type: 'soutenance',
-    revokedAt: null,
-    expiresAt: { $gt: new Date() },
     'scope.kind': 'published_soutenances'
   }
 
@@ -423,27 +507,94 @@ async function listSoutenancePublicationAccessLinkStats({
     query['scope.source'] = { $in: normalizedSources }
   }
 
+  const activeUsableExpression = {
+    $and: [
+      { $eq: ['$revokedAt', null] },
+      { $gt: ['$expiresAt', now] },
+      {
+        $or: [
+          { $lte: ['$maxUses', 0] },
+          { $lt: ['$usageCount', '$maxUses'] }
+        ]
+      }
+    ]
+  }
+  const rawTokenAvailableExpression = {
+    $gt: [
+      { $strLenCP: { $ifNull: ['$rawToken', ''] } },
+      0
+    ]
+  }
+
   const rows = await MagicLink.aggregate([
     { $match: query },
     {
-      $match: {
-        $or: [
-          { maxUses: { $lte: 0 } },
-          { $expr: { $lt: ['$usageCount', '$maxUses'] } }
-        ]
-      }
-    },
-    {
       $group: {
         _id: '$scope.publicationVersion',
-        generatedLinkCount: { $sum: 1 },
+        totalGeneratedLinkCount: { $sum: 1 },
+        generatedLinkCount: {
+          $sum: { $cond: [activeUsableExpression, 1, 0] }
+        },
         recoverableGeneratedLinkCount: {
           $sum: {
             $cond: [
               {
-                $gt: [
-                  { $strLenCP: { $ifNull: ['$rawToken', ''] } },
-                  0
+                $and: [
+                  activeUsableExpression,
+                  rawTokenAvailableExpression
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        unrecoverableGeneratedLinkCount: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  activeUsableExpression,
+                  { $not: [rawTokenAvailableExpression] }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        expiredGeneratedLinkCount: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ['$revokedAt', null] },
+                  { $lte: ['$expiresAt', now] }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        revokedGeneratedLinkCount: {
+          $sum: {
+            $cond: [
+              { $ne: ['$revokedAt', null] },
+              1,
+              0
+            ]
+          }
+        },
+        exhaustedGeneratedLinkCount: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ['$revokedAt', null] },
+                  { $gt: ['$expiresAt', now] },
+                  { $gt: ['$maxUses', 0] },
+                  { $gte: ['$usageCount', '$maxUses'] }
                 ]
               },
               1,
@@ -461,8 +612,13 @@ async function listSoutenancePublicationAccessLinkStats({
   return (rows || [])
     .map((row) => ({
       publicationVersion: Number.parseInt(row?._id, 10),
+      totalGeneratedLinkCount: Number(row?.totalGeneratedLinkCount || 0),
       generatedLinkCount: Number(row?.generatedLinkCount || 0),
       recoverableGeneratedLinkCount: Number(row?.recoverableGeneratedLinkCount || 0),
+      unrecoverableGeneratedLinkCount: Number(row?.unrecoverableGeneratedLinkCount || 0),
+      expiredGeneratedLinkCount: Number(row?.expiredGeneratedLinkCount || 0),
+      revokedGeneratedLinkCount: Number(row?.revokedGeneratedLinkCount || 0),
+      exhaustedGeneratedLinkCount: Number(row?.exhaustedGeneratedLinkCount || 0),
       earliestExpiry: row?.earliestExpiry || null,
       latestExpiry: row?.latestExpiry || null
     }))
@@ -538,6 +694,7 @@ module.exports = {
   createSoutenanceMagicLink,
   revokeActiveMagicLinks,
   findReusableMagicLink,
+  findLatestMagicLinkStatus,
   listSoutenancePublicationAccessLinkStats,
   resolveMagicLink,
   isTokenLooksValid

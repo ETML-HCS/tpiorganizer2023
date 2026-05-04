@@ -6,14 +6,17 @@ const path = require('node:path')
 const mongoose = require('mongoose')
 
 const {
+  buildStaticVoteArbitragePhp,
   buildStaticVoteCampaignPayload,
   buildStaticVoteHtml,
   buildStaticVotePhp,
   buildStaticVoteSyncPhp,
+  createStaticVoteArbitrageToken,
   fetchStaticVoteRecords,
   generateStaticVotesSite,
   getStaticVotePublicationStatus,
   getStaticVoteLinkTarget,
+  importStaticVoteArbitrageRecord,
   importStaticVoteRecord,
   listStaticVoteAccessLinks,
   normalizeVotePublicPath,
@@ -22,6 +25,7 @@ const {
 const TpiPlanning = require('../models/tpiPlanningModel')
 const Vote = require('../models/voteModel')
 const { MagicLink } = require('../models/magicLinkModel')
+const { ResolutionProposal } = require('../models/resolutionProposalModel')
 const schedulingService = require('../services/schedulingService')
 const { makeQueryResult, replaceProperty } = require('./helpers/stubSandbox')
 
@@ -43,6 +47,7 @@ const STATIC_VOTE_ENV_KEYS = [
   'STATIC_VOTE_PUBLICATION_PUBLIC_PATH',
   'STATIC_VOTE_PUBLIC_BASE_URL',
   'STATIC_VOTE_PUBLIC_PATH',
+  'STATIC_VOTE_ARBITRAGE_SECRET',
   'STATIC_VOTE_SYNC_SECRET',
   'STATIC_VOTE_SYNC_TIMEOUT_MS',
   'STATIC_VOTE_SYNC_URL'
@@ -292,6 +297,69 @@ test('buildStaticVoteCampaignPayload groups pending votes by voter and TPI', asy
   }
 })
 
+test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
+  const html = buildStaticVoteHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    campaignId: 'vote-2026-test',
+    groups: [
+      {
+        personId: 'person-1',
+        personName: 'Alice Expert',
+        tpi: {
+          id: 'tpi-1',
+          reference: 'TPI-2026-001',
+          subject: 'Sujet planning',
+          candidateName: 'Cara Candidate'
+        },
+        fixedVoteId: 'vote-fixed',
+        fixedSlotId: 'slot-fixed',
+        fixedSlot: {
+          id: 'slot-fixed',
+          dateLabel: 'mercredi, 10.06.2026',
+          startTime: '08:00',
+          endTime: '09:00',
+          roomName: 'A101',
+          period: 1,
+          label: 'mercredi, 10.06.2026 | 08:00 - 09:00 | A101'
+        },
+        proposalOptions: [
+          {
+            slotId: 'slot-alt',
+            slot: {
+              label: 'jeudi, 11.06.2026 | 09:15 - 10:15 | B202',
+              roomName: 'B202',
+              period: 2
+            }
+          }
+        ]
+      }
+    ]
+  })
+
+  assert.match(html, /class="vote-summary"/)
+  assert.match(html, /dataset\.proposalArea/)
+  assert.match(html, /updateSummary/)
+  assert.match(html, /Envoyer/)
+  assert.match(html, /Options/)
+  assert.match(html, /Remarque/)
+  assert.match(html, /Hors liste/)
+  assert.match(html, /vote-sent/)
+  assert.match(html, /is-just-sent/)
+  assert.match(html, /isAlreadySubmittedError/)
+  assert.match(html, /response\.status !== 409/)
+  assert.match(html, /Vos informations pour le TPI de/)
+  assert.match(html, /Il n’est plus possible de les modifier/)
+  assert.doesNotMatch(html, /Aucune date proposée ne convient/)
+  assert.doesNotMatch(html, /data-hard-constraint/)
+  assert.match(html, /Seule dispo/)
+  assert.match(html, /vote-load-chip/)
+  assert.match(html, /À coordonner/)
+  assert.match(html, /onlyAvailabilitySlotIds/)
+  assert.match(html, /voteSettings/)
+  assert.doesNotMatch(html, /mode\.innerHTML/)
+})
+
 test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote folder', async (t) => {
   const publicationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tpiorganizer-static-votes-'))
   const personId = new mongoose.Types.ObjectId()
@@ -355,12 +423,15 @@ test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote
       assert.equal(result.groupCount, 1)
       assert.equal(result.accessLinkCount, 1)
       assert.equal(result.syncSecretConfigured, true)
+      assert.equal(result.arbitrageConfigured, true)
       assert.equal(fs.existsSync(result.phpIndexPath), true)
       assert.equal(fs.existsSync(result.syncPhpPath), true)
+      assert.equal(fs.existsSync(result.arbitragePhpPath), true)
       assert.equal(fs.existsSync(result.htaccessPath), true)
       assert.equal(fs.existsSync(result.manifestPath), true)
       assert.match(fs.readFileSync(result.phpIndexPath, 'utf8'), /window\.__STATIC_VOTE_BOOTSTRAP__/)
       assert.match(fs.readFileSync(result.syncPhpPath, 'utf8'), /HTTP_X_SYNC_SECRET/)
+      assert.match(fs.readFileSync(result.arbitragePhpPath, 'utf8'), /STATIC_VOTE_ARBITRAGE_SECRET_JSON/)
     } finally {
       while (restore.length > 0) {
         restore.pop()()
@@ -418,6 +489,28 @@ test('buildStaticVotePhp gates the vote UI with token hashes and writes JSONL su
   assert.doesNotMatch(php, /STATIC_VOTE_BOOTSTRAP -->/)
 })
 
+test('buildStaticVoteArbitragePhp verifies signed arbitration tokens and stores responses', () => {
+  const token = createStaticVoteArbitrageToken({
+    year: 2026,
+    tpiReference: 'TPI-2026-001',
+    proposedSlotLabel: '15.06.2026 · Matin',
+    recipientName: 'Alice Expert',
+    roleLabel: 'Expert 1',
+    expiresAt: '2026-06-15T10:00:00.000Z'
+  }, 'arbitrage-secret')
+  const php = buildStaticVoteArbitragePhp({
+    year: 2026,
+    tokenSecret: 'arbitrage-secret'
+  })
+
+  assert.match(token, /^svra\./)
+  assert.match(php, /gzinflate/)
+  assert.match(php, /hash_hmac\('sha256', \$body, \$secret, true\)/)
+  assert.match(php, /arbitrages\.jsonl/)
+  assert.match(php, /Une raison est requise en cas de refus/)
+  assert.match(php, /Transmettre ma réponse/)
+})
+
 test('buildStaticVoteSyncPhp requires the dedicated sync secret', () => {
   const php = buildStaticVoteSyncPhp({
     year: 2026,
@@ -427,6 +520,8 @@ test('buildStaticVoteSyncPhp requires the dedicated sync secret', () => {
   assert.match(php, /HTTP_X_SYNC_SECRET/)
   assert.match(php, /hash_equals\(\$staticVoteSyncSecret, \$providedSecret\)/)
   assert.match(php, /votes\.jsonl/)
+  assert.match(php, /arbitrages\.jsonl/)
+  assert.match(php, /arbitrageRecords/)
   assert.match(php, /'year' => 2026/)
   assert.doesNotMatch(php, /STATIC_VOTE_ACCESS_JSON/)
 })
@@ -451,7 +546,8 @@ test('fetchStaticVoteRecords calls remote sync.php with X-Sync-Secret', async ()
           status: 200,
           json: async () => ({
             success: true,
-            records: [{ id: 'record-1', year: 2026 }]
+            records: [{ id: 'record-1', year: 2026 }],
+            arbitrageRecords: [{ id: 'arbitrage-1', year: 2026 }]
           })
         }
       }
@@ -461,6 +557,7 @@ test('fetchStaticVoteRecords calls remote sync.php with X-Sync-Secret', async ()
     assert.equal(receivedHeaders['X-Sync-Secret'], 'sync-secret')
     assert.equal(typeof receivedSignal?.aborted, 'boolean')
     assert.equal(result.records.length, 1)
+    assert.equal(result.arbitrageRecords.length, 1)
   })
 })
 
@@ -505,7 +602,7 @@ test('importStaticVoteRecord applies a static proposal response idempotently', a
     slot: fixedSlotId,
     voterRole: 'expert1',
     async save() {
-      savedVotes.push({ id: String(this._id), decision: this.decision, magicLinkUsed: this.magicLinkUsed })
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment, hardConstraint: this.hardConstraint, magicLinkUsed: this.magicLinkUsed })
     }
   }
   const altVote = {
@@ -513,7 +610,7 @@ test('importStaticVoteRecord applies a static proposal response idempotently', a
     slot: altSlotId,
     voterRole: 'expert1',
     async save() {
-      savedVotes.push({ id: String(this._id), decision: this.decision, priority: this.priority, magicLinkUsed: this.magicLinkUsed })
+      savedVotes.push({ id: String(this._id), decision: this.decision, hardConstraint: this.hardConstraint, priority: this.priority, magicLinkUsed: this.magicLinkUsed })
     }
   }
   const tpi = {
@@ -547,6 +644,7 @@ test('importStaticVoteRecord applies a static proposal response idempotently', a
       fixedVoteId: String(fixedVoteId),
       mode: 'proposal',
       proposedSlotIds: [String(altSlotId)],
+      remark: 'Préférence forte pour le matin.',
       submittedAt: '2026-05-10T08:00:00.000Z',
       tokenHash: 'c'.repeat(64)
     }, year)
@@ -554,11 +652,224 @@ test('importStaticVoteRecord applies a static proposal response idempotently', a
     assert.equal(result.imported, true)
     assert.equal(savedVotes.length, 2)
     assert.equal(savedVotes.find((vote) => vote.id === String(fixedVoteId)).decision, 'rejected')
+    assert.equal(savedVotes.find((vote) => vote.id === String(fixedVoteId)).comment, 'Préférence forte pour le matin.')
+    assert.equal(savedVotes.find((vote) => vote.id === String(fixedVoteId)).hardConstraint, false)
     assert.equal(savedVotes.find((vote) => vote.id === String(altVoteId)).decision, 'preferred')
+    assert.equal(savedVotes.find((vote) => vote.id === String(altVoteId)).hardConstraint, false)
     assert.equal(savedVotes.find((vote) => vote.id === String(altVoteId)).priority, 1)
     assert.equal(validationInput.decision, 'rejected')
     assert.equal(validationInput.voteId, String(fixedVoteId))
     assert.match(savedVotes[0].magicLinkUsed, /^static-vote:2026:submission-1$/)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteRecord conserve l indication de seule disponibilité', async () => {
+  const year = 2026
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const altSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const altVoteId = new mongoose.Types.ObjectId()
+  const savedVotes = []
+  const fixedVote = {
+    _id: fixedVoteId,
+    slot: fixedSlotId,
+    voterRole: 'expert1',
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment, hardConstraint: this.hardConstraint })
+    }
+  }
+  const altVote = {
+    _id: altVoteId,
+    slot: altSlotId,
+    voterRole: 'expert1',
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment, hardConstraint: this.hardConstraint, priority: this.priority })
+    }
+  }
+  const tpi = {
+    _id: tpiId,
+    year,
+    status: 'voting',
+    expert1: personId,
+    expert2: new mongoose.Types.ObjectId(),
+    chefProjet: new mongoose.Types.ObjectId(),
+    proposedSlots: [
+      { slot: { _id: fixedSlotId } },
+      { slot: { _id: altSlotId } }
+    ]
+  }
+  const restore = [
+    replaceProperty(Vote, 'exists', async () => null),
+    replaceProperty(TpiPlanning, 'findOne', () => makeQueryResult(tpi)),
+    replaceProperty(Vote, 'find', () => makeQueryResult([fixedVote, altVote])),
+    replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async () => ({ success: true }))
+  ]
+
+  try {
+    const result = await importStaticVoteRecord({
+      id: 'submission-only-availability',
+      year,
+      personId: String(personId),
+      tpiId: String(tpiId),
+      fixedVoteId: String(fixedVoteId),
+      mode: 'proposal',
+      proposedSlotIds: [String(altSlotId)],
+      onlyAvailabilitySlotIds: [String(altSlotId)],
+      submittedAt: '2026-05-10T08:00:00.000Z',
+      tokenHash: 'e'.repeat(64)
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.match(savedVotes.find((vote) => vote.id === String(fixedVoteId)).comment, /Seule disponibilité signalée/)
+    assert.equal(savedVotes.find((vote) => vote.id === String(altVoteId)).decision, 'preferred')
+    assert.equal(savedVotes.find((vote) => vote.id === String(altVoteId)).comment, 'Seule disponibilité signalée.')
+    assert.equal(savedVotes.find((vote) => vote.id === String(altVoteId)).hardConstraint, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteRecord conserve une remarque générale en mode OK', async () => {
+  const year = 2026
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const savedVotes = []
+  let validationInput = null
+  const fixedVote = {
+    _id: fixedVoteId,
+    slot: fixedSlotId,
+    voterRole: 'expert1',
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment })
+    }
+  }
+  const tpi = {
+    _id: tpiId,
+    year,
+    status: 'voting',
+    expert1: personId,
+    expert2: new mongoose.Types.ObjectId(),
+    chefProjet: new mongoose.Types.ObjectId(),
+    proposedSlots: [
+      { slot: { _id: fixedSlotId } }
+    ]
+  }
+  const restore = [
+    replaceProperty(Vote, 'exists', async () => null),
+    replaceProperty(TpiPlanning, 'findOne', () => makeQueryResult(tpi)),
+    replaceProperty(Vote, 'find', () => makeQueryResult([fixedVote])),
+    replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async (voteId, decision, comment) => {
+      validationInput = { voteId: String(voteId), decision, comment }
+      return { success: true }
+    })
+  ]
+
+  try {
+    const result = await importStaticVoteRecord({
+      id: 'submission-ok-remark',
+      year,
+      personId: String(personId),
+      tpiId: String(tpiId),
+      fixedVoteId: String(fixedVoteId),
+      mode: 'ok',
+      remark: 'OK pour moi, mais prévenir si changement de salle.',
+      submittedAt: '2026-05-10T08:00:00.000Z',
+      tokenHash: 'f'.repeat(64)
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.equal(savedVotes.length, 1)
+    assert.equal(savedVotes[0].decision, 'accepted')
+    assert.equal(savedVotes[0].comment, 'OK pour moi, mais prévenir si changement de salle.')
+    assert.equal(validationInput.decision, 'accepted')
+    assert.equal(validationInput.comment, 'OK pour moi, mais prévenir si changement de salle.')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteRecord applies a hard constraint response', async () => {
+  const year = 2026
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const altSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const altVoteId = new mongoose.Types.ObjectId()
+  const savedVotes = []
+  let validationInput = null
+  const fixedVote = {
+    _id: fixedVoteId,
+    slot: fixedSlotId,
+    voterRole: 'expert1',
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment, hardConstraint: this.hardConstraint })
+    }
+  }
+  const altVote = {
+    _id: altVoteId,
+    slot: altSlotId,
+    voterRole: 'expert1',
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, hardConstraint: this.hardConstraint })
+    }
+  }
+  const tpi = {
+    _id: tpiId,
+    year,
+    status: 'voting',
+    expert1: personId,
+    expert2: new mongoose.Types.ObjectId(),
+    chefProjet: new mongoose.Types.ObjectId(),
+    proposedSlots: [
+      { slot: { _id: fixedSlotId } },
+      { slot: { _id: altSlotId } }
+    ]
+  }
+  const restore = [
+    replaceProperty(Vote, 'exists', async () => null),
+    replaceProperty(TpiPlanning, 'findOne', () => makeQueryResult(tpi)),
+    replaceProperty(Vote, 'find', () => makeQueryResult([fixedVote, altVote])),
+    replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async (voteId, decision, comment) => {
+      validationInput = { voteId: String(voteId), decision, comment }
+      return { success: true }
+    })
+  ]
+
+  try {
+    const result = await importStaticVoteRecord({
+      id: 'submission-hard',
+      year,
+      personId: String(personId),
+      tpiId: String(tpiId),
+      fixedVoteId: String(fixedVoteId),
+      mode: 'proposal',
+      proposedSlotIds: [],
+      hardConstraint: true,
+      submittedAt: '2026-05-10T08:00:00.000Z',
+      tokenHash: 'd'.repeat(64)
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.equal(savedVotes.length, 2)
+    assert.deepEqual(savedVotes.map((vote) => vote.decision), ['rejected', 'rejected'])
+    assert.equal(savedVotes.find((vote) => vote.id === String(fixedVoteId)).comment, 'Aucune date proposée ne convient.')
+    assert.deepEqual(savedVotes.map((vote) => vote.hardConstraint), [true, true])
+    assert.equal(validationInput.decision, 'rejected')
+    assert.equal(validationInput.voteId, String(fixedVoteId))
+    assert.equal(validationInput.comment, 'Aucune date proposée ne convient.')
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -578,6 +889,47 @@ test('importStaticVoteRecord rejects incomplete proposal payloads', async () => 
     proposedSlotIds: [],
     specialRequest: {
       reason: 'Pas disponible'
+    },
+    submittedAt: '2026-05-10T08:00:00.000Z'
+  }, year)
+
+  assert.equal(result.imported, false)
+  assert.equal(result.skipped, true)
+  assert.equal(result.reason, 'invalid_record')
+})
+
+test('importStaticVoteRecord rejects seule disponibilité hors sélection proposée', async () => {
+  const year = 2026
+  const result = await importStaticVoteRecord({
+    id: 'submission-only-invalid',
+    year,
+    personId: String(new mongoose.Types.ObjectId()),
+    tpiId: String(new mongoose.Types.ObjectId()),
+    fixedVoteId: String(new mongoose.Types.ObjectId()),
+    mode: 'proposal',
+    proposedSlotIds: [String(new mongoose.Types.ObjectId())],
+    onlyAvailabilitySlotIds: [String(new mongoose.Types.ObjectId())],
+    submittedAt: '2026-05-10T08:00:00.000Z'
+  }, year)
+
+  assert.equal(result.imported, false)
+  assert.equal(result.skipped, true)
+  assert.equal(result.reason, 'invalid_record')
+})
+
+test('importStaticVoteRecord refuse une demande hors liste combinée à une date proposée', async () => {
+  const year = 2026
+  const result = await importStaticVoteRecord({
+    id: 'submission-mixed',
+    year,
+    personId: String(new mongoose.Types.ObjectId()),
+    tpiId: String(new mongoose.Types.ObjectId()),
+    fixedVoteId: String(new mongoose.Types.ObjectId()),
+    mode: 'proposal',
+    proposedSlotIds: [String(new mongoose.Types.ObjectId())],
+    specialRequest: {
+      reason: 'Besoin d’une autre date',
+      requestedDate: '2026-06-20'
     },
     submittedAt: '2026-05-10T08:00:00.000Z'
   }, year)
@@ -617,6 +969,61 @@ test('importStaticVoteRecord refuses records for a TPI no longer open for voting
     assert.equal(result.imported, false)
     assert.equal(result.skipped, false)
     assert.equal(result.reason, 'tpi_not_open')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteArbitrageRecord applique une réponse d arbitrage statique', async () => {
+  const year = 2026
+  const tokenHash = 'a'.repeat(64)
+  const proposalId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const personId = new mongoose.Types.ObjectId()
+  const proposal = {
+    _id: proposalId,
+    year,
+    tpiPlanning: tpiId,
+    status: 'sent',
+    recipients: [{
+      role: 'expert1',
+      person: personId,
+      tokenHash,
+      responseStatus: 'pending'
+    }],
+    expiresAt: new Date('2026-06-20T10:00:00.000Z'),
+    saved: false,
+    async save() {
+      this.saved = true
+      return this
+    }
+  }
+  const restore = [
+    replaceProperty(ResolutionProposal, 'findOne', () => makeQueryResult(proposal))
+  ]
+
+  try {
+    const result = await importStaticVoteArbitrageRecord({
+      id: 'arbitrage-1',
+      year,
+      tokenHash,
+      tpiId: String(tpiId),
+      personId: String(personId),
+      role: 'expert1',
+      decision: 'rejected',
+      reason: 'Indisponible',
+      alternativeProposal: 'Matin suivant',
+      submittedAt: '2026-05-10T08:00:00.000Z'
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.equal(proposal.recipients[0].responseStatus, 'rejected')
+    assert.equal(proposal.recipients[0].responseReason, 'Indisponible')
+    assert.equal(proposal.recipients[0].alternativeProposal, 'Matin suivant')
+    assert.equal(proposal.status, 'rejected')
+    assert.equal(proposal.saved, true)
   } finally {
     while (restore.length > 0) {
       restore.pop()()

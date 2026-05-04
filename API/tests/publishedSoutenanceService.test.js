@@ -77,6 +77,42 @@ test('filterPublishedRooms falls back to participant name for legacy rooms', () 
   assert.equal(filtered[0].tpiDatas[0].id, 'room-b_0')
 })
 
+test('filterPublishedRooms applies viewer role when a person has several stakeholder roles', () => {
+  const rooms = [
+    {
+      idRoom: 3,
+      name: 'C301',
+      tpiDatas: [
+        {
+          id: 'room-c_0',
+          candidat: 'Alice Candidate',
+          candidatPersonId: 'candidate-1',
+          expert1: { name: 'Shared Person', personId: 'person-shared' },
+          expert2: { name: 'Expert Two', personId: 'expert-2' },
+          boss: { name: 'Boss One', personId: 'boss-1' }
+        },
+        {
+          id: 'room-c_1',
+          candidat: 'Bob Candidate',
+          candidatPersonId: 'candidate-2',
+          expert1: { name: 'Expert Three', personId: 'expert-3' },
+          expert2: { name: 'Expert Four', personId: 'expert-4' },
+          boss: { name: 'Shared Person', personId: 'person-shared' }
+        }
+      ]
+    }
+  ]
+
+  const filtered = filterPublishedRooms(rooms, {
+    personId: 'person-shared',
+    role: 'chef_projet'
+  })
+
+  assert.equal(filtered.length, 1)
+  assert.equal(filtered[0].tpiDatas.length, 1)
+  assert.equal(filtered[0].tpiDatas[0].id, 'room-c_1')
+})
+
 test('enrichPublishedRoomsAppearance applique la couleur et les SVG configurés', () => {
   const enriched = enrichPublishedRoomsAppearance(
     [

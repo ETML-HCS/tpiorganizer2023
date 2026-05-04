@@ -150,7 +150,9 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
     setResendVotesError(null)
 
     try {
-      const data = await tpiPlanningService.resendVotes(selectedConflict._id)
+      const data = await tpiPlanningService.resendVotes(selectedConflict._id, {
+        fromArbitrage: true
+      })
       
       // Afficher un message de succès
       alert(`Demandes de vote renvoyées avec succès (${data.emailsSent} emails envoyés)`)
@@ -196,7 +198,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
           <span className="empty-icon" aria-hidden="true">
             <CheckIcon />
           </span>
-          <h3>Aucun créneau à forcer</h3>
+          <h3>Aucun créneau à résoudre</h3>
           <p>Les TPI sont encore en vote, déjà confirmés, ou ne nécessitent pas d'intervention.</p>
         </div>
       </div>
@@ -210,10 +212,10 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
           <span className="resolver-title-icon" aria-hidden="true">
             <AlertIcon />
           </span>
-          Créneaux à forcer ({conflicts.length})
+          Créneaux à résoudre ({conflicts.length})
         </h2>
         <p className="resolver-description">
-          Ouvre un TPI, sélectionne le créneau retenu, puis indique pourquoi l'administration force ce choix.
+          Ouvre un TPI, sélectionne le créneau retenu, puis indique pourquoi l'administration arbitre ce choix.
         </p>
       </div>
 
@@ -381,20 +383,20 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
 
                   {/* Section de résolution */}
                   <div className="resolution-section">
-                    <h4>Forçage du créneau</h4>
+                    <h4>Résolution du créneau</h4>
                     
                     {selectedSlot ? (
                       <div className="resolution-form">
                         <div className="selected-slot-preview">
-                          <span>Créneau sélectionné pour forcer l'attribution</span>
+                          <span>Créneau sélectionné pour l'attribution</span>
                         </div>
                         
                         <div className="form-group">
-                          <label>Raison du forçage *</label>
+                          <label>Raison de l'arbitrage *</label>
                           <textarea
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
-                            placeholder="Expliquez pourquoi vous forcez cette attribution (ex: accord téléphonique, contrainte externe, etc.)"
+                            placeholder="Expliquez pourquoi ce créneau est retenu (ex: accord téléphonique, contrainte externe, etc.)"
                             rows={3}
                           />
                         </div>
@@ -422,7 +424,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
                             ) : (
                               <>
                                 <WrenchIcon className="button-icon" />
-                                Forcer ce créneau
+                                Valider ce créneau
                               </>
                             )}
                           </button>
@@ -430,7 +432,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
                       </div>
                     ) : (
                       <div className="select-slot-prompt">
-                        <p>Cliquez sur un créneau ci-dessus pour le sélectionner et forcer l'attribution</p>
+                        <p>Cliquez sur un créneau ci-dessus pour le sélectionner et valider l'attribution</p>
                       </div>
                     )}
                   </div>

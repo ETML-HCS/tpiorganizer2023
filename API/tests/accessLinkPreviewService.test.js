@@ -166,6 +166,104 @@ test('buildAccessLinkPreview groups vote and défense links by person', async ()
   assert.equal(eva.soutenanceLinks[0].generated, false)
 })
 
+test('buildAccessLinkPreview expose les liens arbitrage deja generes', async () => {
+  const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
+  const boss = createPerson('p2', 'Carla', 'Boss', 'carla@example.com', ['chef_projet'])
+  const proposal = {
+    _id: 'proposal-1',
+    year: 2026,
+    tpiPlanning: 'tpi-1',
+    tpiReference: 'TPI-2026-007',
+    candidateName: 'Eva Candidate',
+    subject: 'Sujet arbitrage',
+    proposedSlot: 'slot-1',
+    proposedSlotSnapshot: {
+      label: '15.06.2026 · Matin · A101'
+    },
+    status: 'partial',
+    devMode: true,
+    recipients: [
+      {
+        role: 'expert1',
+        person: expert._id,
+        name: 'Alice Expert',
+        email: expert.email,
+        publicUrl: 'http://localhost:3000/arbitrage-2026/token-a',
+        responseStatus: 'accepted',
+        deliveryStatus: 'skipped'
+      },
+      {
+        role: 'chef_projet',
+        person: boss._id,
+        name: 'Carla Boss',
+        email: boss.email,
+        publicUrl: '',
+        responseStatus: 'pending',
+        deliveryStatus: 'sent'
+      }
+    ],
+    createdAt: new Date('2026-05-02T10:00:00Z'),
+    sentAt: new Date('2026-05-02T10:00:00Z'),
+    expiresAt: new Date('2026-05-09T10:00:00Z')
+  }
+
+  const preview = await buildAccessLinkPreview({
+    year: 2026,
+    baseUrl: 'http://localhost:3000',
+    dependencies: {
+      TpiPlanningModel: {
+        find() {
+          return createQuery([])
+        }
+      },
+      VoteModel: {
+        find() {
+          return createQuery([])
+        }
+      },
+      PersonModel: {
+        find() {
+          return createQuery([])
+        }
+      },
+      ResolutionProposalModel: {
+        find() {
+          return createQuery([proposal])
+        }
+      },
+      getActivePublication: async () => ({ version: null, rooms: [] }),
+      listPublicationVersions: async () => [],
+      magicLinks: {
+        async createVoteMagicLink() {
+          throw new Error('No vote links expected')
+        },
+        async createSoutenanceMagicLink() {
+          throw new Error('No soutenance links expected')
+        }
+      }
+    }
+  })
+
+  assert.equal(preview.summary.peopleCount, 2)
+  assert.equal(preview.summary.arbitrageProposalCount, 1)
+  assert.equal(preview.summary.arbitrageLinkCount, 2)
+  assert.equal(preview.summary.arbitrageGeneratedLinkCount, 1)
+  assert.equal(preview.summary.arbitrageAcceptedResponseCount, 1)
+  assert.equal(preview.summary.arbitragePendingResponseCount, 1)
+  assert.equal(preview.contexts.arbitrage.linkCount, 2)
+
+  const alice = preview.people.find((entry) => entry.person.id === expert._id)
+  const carla = preview.people.find((entry) => entry.person.id === boss._id)
+
+  assert.ok(alice)
+  assert.ok(carla)
+  assert.equal(alice.arbitrageLinks.length, 1)
+  assert.equal(alice.arbitrageLinks[0].url, 'http://localhost:3000/arbitrage-2026/token-a')
+  assert.equal(alice.arbitrageLinks[0].availabilityStatus, 'available')
+  assert.equal(carla.arbitrageLinks[0].recoverable, false)
+  assert.equal(carla.arbitrageLinks[0].availabilityStatus, 'unrecoverable')
+})
+
 test('buildAccessLinkPreview generates links and revokes previous admin links when requested', async () => {
   const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
   const candidate = createPerson('p2', 'Eva', 'Candidate', 'eva@example.com', ['candidat'])
@@ -544,6 +642,81 @@ test('buildAccessLinkPreview recharges les liens admin existants sans regenerer'
   assert.match(eva.soutenanceLinks[0].url, /defenses\/2026\?ml=soutenance-stored-p2/)
 })
 
+test('buildAccessLinkPreview signale un lien expiré au lieu de le marquer non généré', async () => {
+  const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
+  const tpis = [
+    {
+      _id: 'tpi-1',
+      reference: 'TPI-2026-001',
+      sujet: 'Sujet 1',
+      status: 'voting',
+      candidat: null
+    }
+  ]
+  const votes = [
+    { tpiPlanning: 'tpi-1', voter: expert, voterRole: 'expert1' }
+  ]
+  const latestCalls = []
+
+  const preview = await buildAccessLinkPreview({
+    year: 2026,
+    baseUrl: 'http://localhost:3000',
+    dependencies: {
+      TpiPlanningModel: {
+        find() {
+          return createQuery(tpis)
+        }
+      },
+      VoteModel: {
+        find() {
+          return createQuery(votes)
+        }
+      },
+      PersonModel: {
+        find() {
+          return createQuery([])
+        }
+      },
+      getActivePublication: async () => ({ version: null, rooms: [] }),
+      listPublicationVersions: async () => [],
+      magicLinks: {
+        async findReusableMagicLink() {
+          return null
+        },
+        async findLatestMagicLinkStatus(params) {
+          latestCalls.push(params)
+          return {
+            id: 'expired-vote-link',
+            token: null,
+            redirectPath: '/planning/2026',
+            url: null,
+            expiresAt: new Date('2026-05-01T12:00:00Z'),
+            generated: true,
+            recoverable: true,
+            availabilityStatus: 'expired'
+          }
+        },
+        async createVoteMagicLink() {
+          throw new Error('Preview should not create vote links')
+        },
+        async createSoutenanceMagicLink() {
+          throw new Error('No soutenance links expected')
+        }
+      }
+    }
+  })
+
+  assert.equal(latestCalls.length, 1)
+  assert.equal(preview.summary.generatedLinkCount, 0)
+  assert.equal(preview.summary.pendingLinkCount, 1)
+  assert.equal(preview.summary.unavailableGeneratedLinkCount, 1)
+  assert.equal(preview.summary.expiredGeneratedLinkCount, 1)
+  assert.equal(preview.summary.unrecoverableGeneratedLinkCount, 0)
+  assert.equal(preview.people[0].voteLinks[0].generated, true)
+  assert.equal(preview.people[0].voteLinks[0].availabilityStatus, 'expired')
+  assert.equal(preview.people[0].voteLinks[0].url, null)
+})
+
 test('buildAccessLinkPreview expose les liens récupérables des anciennes publications', async () => {
   const candidate = createPerson('p1', 'Eva', 'Candidate', 'eva@example.com', ['candidat'])
   const activePublication = {
@@ -622,8 +795,7 @@ test('buildAccessLinkPreview expose les liens récupérables des anciennes publi
 
   assert.equal(version5.generatedLinkCount, 102)
   assert.equal(version5.recoverableGeneratedLinkCount, 102)
-  assert.equal(version3.generatedLinkCount, 102)
-  assert.equal(version3.recoverableGeneratedLinkCount, 0)
+  assert.equal(version3, undefined)
 })
 
 test('buildAccessLinkPreview cible une version de publication explicite', async () => {
@@ -688,7 +860,7 @@ test('buildAccessLinkPreview cible une version de publication explicite', async 
   assert.equal(preview.contexts.soutenance.requestedPublicationVersion, 2)
   assert.deepEqual(
     preview.contexts.soutenance.availableVersions.map((entry) => entry.version),
-    [3, 2]
+    [3]
   )
   assert.equal(preview.people[0].soutenanceLinks[0].publicationVersion, 2)
 })

@@ -1,6 +1,6 @@
 {
   "name": "tpiorganizer2023",
-  "version": "26.5.2",
+  "version": "26.5.4",
   "private": true,
   "dependencies": {
     "bcryptjs": "^3.0.3",

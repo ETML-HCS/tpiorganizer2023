@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 
 const {
   buildConfiguredSlotProposalOptions,
+  buildMissingConfiguredWindowSlotDocuments,
   buildSlotQueueKey,
   buildVoteProposalContext,
   filterSlotDocumentsForVoteProposal
@@ -90,6 +91,102 @@ test('filterSlotDocumentsForVoteProposal limite les créneaux aux dates autoris�
   )
 
   assert.deepEqual(filteredSlots.map((slot) => slot._id), ['slot-2'])
+})
+
+test('buildMissingConfiguredWindowSlotDocuments complète les demi-journées manquantes sur les dates de défense', () => {
+  const missingSlots = buildMissingConfiguredWindowSlotDocuments(
+    [
+      {
+        _id: 'slot-morning',
+        year: 2026,
+        date: '2026-06-10T08:00:00.000Z',
+        period: 1,
+        startTime: '08:00',
+        endTime: '09:00',
+        status: 'proposed',
+        room: { name: 'A01', site: 'VENNES', capacity: 1 }
+      },
+      {
+        _id: 'slot-outside-defense',
+        year: 2026,
+        date: '2026-06-11T08:00:00.000Z',
+        period: 1,
+        startTime: '08:00',
+        endTime: '09:00',
+        status: 'proposed',
+        room: { name: 'A01', site: 'VENNES', capacity: 1 }
+      }
+    ],
+    {
+      proposalContext: { allowedDateKeys: ['2026-06-10'] },
+      planningConfig: {
+        year: 2026,
+        siteConfigs: [
+          {
+            siteCode: 'VENNES',
+            firstTpiStartTime: '08:00',
+            tpiTimeMinutes: 60,
+            breaklineMinutes: 240,
+            numSlots: 2
+          }
+        ]
+      },
+      tpi: { year: 2026, site: 'VENNES' }
+    }
+  )
+
+  assert.equal(missingSlots.length, 1)
+  assert.equal(missingSlots[0].date.toISOString().slice(0, 10), '2026-06-10')
+  assert.equal(missingSlots[0].period, 2)
+  assert.equal(missingSlots[0].startTime, '13:00')
+  assert.equal(missingSlots[0].room.name, 'A01')
+  assert.equal(missingSlots[0].status, 'available')
+})
+
+test('buildMissingConfiguredWindowSlotDocuments ne considère pas un créneau confirmé comme une option disponible', () => {
+  const missingSlots = buildMissingConfiguredWindowSlotDocuments(
+    [
+      {
+        _id: 'slot-morning',
+        year: 2026,
+        date: '2026-06-10T08:00:00.000Z',
+        period: 1,
+        startTime: '08:00',
+        endTime: '09:00',
+        status: 'proposed',
+        room: { name: 'A01', site: 'VENNES', capacity: 1 }
+      },
+      {
+        _id: 'slot-confirmed-afternoon',
+        year: 2026,
+        date: '2026-06-10T12:00:00.000Z',
+        period: 3,
+        startTime: '12:00',
+        endTime: '13:00',
+        status: 'confirmed',
+        assignedTpi: 'other-tpi',
+        room: { name: 'A01', site: 'VENNES', capacity: 1 }
+      }
+    ],
+    {
+      proposalContext: { allowedDateKeys: ['2026-06-10'] },
+      planningConfig: {
+        year: 2026,
+        siteConfigs: [
+          {
+            siteCode: 'VENNES',
+            firstTpiStartTime: '08:00',
+            tpiTimeMinutes: 60,
+            breaklineMinutes: 60,
+            numSlots: 4
+          }
+        ]
+      },
+      tpi: { year: 2026, site: 'VENNES' }
+    }
+  )
+
+  assert.deepEqual(missingSlots.map((slot) => slot.period), [2, 4])
 })
 
 test('buildConfiguredSlotProposalOptions regroupe les salles par fenêtre configurée', () => {

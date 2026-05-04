@@ -101,6 +101,8 @@ const DEFAULT_SITE_PLANNING_COLORS = [
 const DEFAULT_EMAIL_SETTINGS = {
   senderName: "TPI Organizer",
   senderEmail: "",
+  senderArbitrageName: "",
+  senderArbitrageEmail: "",
   replyToEmail: "",
   defaultDeliveryMode: "outlook"
 }
@@ -975,6 +977,8 @@ const normalizeEmailSettings = (value = {}) => {
   return {
     senderName: compactText(source.senderName || DEFAULT_EMAIL_SETTINGS.senderName),
     senderEmail: compactText(source.senderEmail).toLowerCase(),
+    senderArbitrageName: compactText(source.senderArbitrageName),
+    senderArbitrageEmail: compactText(source.senderArbitrageEmail).toLowerCase(),
     replyToEmail: compactText(source.replyToEmail).toLowerCase(),
     defaultDeliveryMode: EMAIL_DELIVERY_MODE_VALUES.has(deliveryMode)
       ? deliveryMode
@@ -2971,6 +2975,30 @@ const EmailSettingsCard = ({
               className='page-tools-field-control'
               value={normalizedSettings.senderEmail}
               onChange={(event) => onChange("senderEmail", event.target.value)}
+              autoComplete='email'
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-email-arbitrage-sender-name'>
+            <span className='page-tools-field-label'>Nom arbitrage</span>
+            <input
+              id='configuration-email-arbitrage-sender-name'
+              className='page-tools-field-control'
+              value={normalizedSettings.senderArbitrageName}
+              onChange={(event) => onChange("senderArbitrageName", event.target.value)}
+              disabled={disabled}
+            />
+          </label>
+
+          <label className='page-tools-field' htmlFor='configuration-email-arbitrage-sender-email'>
+            <span className='page-tools-field-label'>Email arbitrage</span>
+            <input
+              id='configuration-email-arbitrage-sender-email'
+              type='email'
+              className='page-tools-field-control'
+              value={normalizedSettings.senderArbitrageEmail}
+              onChange={(event) => onChange("senderArbitrageEmail", event.target.value)}
               autoComplete='email'
               disabled={disabled}
             />

@@ -135,6 +135,9 @@ function createDefaultResponseState() {
   return {
     mode: '',
     selectedSlotIds: [],
+    onlyAvailabilitySlotIds: [],
+    hardConstraint: false,
+    remark: '',
     specialEnabled: false,
     specialReason: '',
     specialDate: ''
@@ -159,19 +162,82 @@ function normalizeProposalOptions(group) {
     .filter((entry) => entry.slotId)
 }
 
+function getSlotDateKey(slot) {
+  const date = new Date(slot?.date)
+  if (Number.isNaN(date.getTime())) {
+    return 'unknown'
+  }
+
+  return date.toISOString().slice(0, 10)
+}
+
+function getProposalPeriodKey(option) {
+  const periodLabel = compactText(option?.display?.periodLabel).toLowerCase()
+  if (periodLabel.includes('matin')) {
+    return 'morning'
+  }
+
+  if (periodLabel.includes('après') || periodLabel.includes('apres')) {
+    return 'afternoon'
+  }
+
+  const startMinutes = parseTimeToMinutes(option?.slot?.startTime)
+  return startMinutes === null || startMinutes < (12 * 60) ? 'morning' : 'afternoon'
+}
+
+function getProposalPeriodRank(option) {
+  return getProposalPeriodKey(option) === 'morning' ? 0 : 1
+}
+
+function getProposalOptionSortValue(option) {
+  const date = new Date(option?.slot?.date).getTime()
+  return [
+    Number.isFinite(date) ? String(date) : '0',
+    String(getProposalPeriodRank(option)),
+    compactText(option?.slot?.startTime),
+    compactText(option?.slot?.room?.name)
+  ].join('|')
+}
+
+function buildProposalDayGroups(options = []) {
+  const groups = new Map()
+
+  options
+    .filter((option) => option?.slotId)
+    .slice()
+    .sort((left, right) => getProposalOptionSortValue(left).localeCompare(getProposalOptionSortValue(right)))
+    .forEach((option) => {
+      const dateKey = getSlotDateKey(option.slot)
+      const currentGroup = groups.get(dateKey) || {
+        key: dateKey,
+        label: formatSlotDate(option.slot),
+        options: []
+      }
+
+      currentGroup.options.push(option)
+      groups.set(dateKey, currentGroup)
+    })
+
+  return Array.from(groups.values())
+}
+
 function getModeSummary(state, maxProposals = DEFAULT_MAX_PROPOSALS_PER_TPI) {
   if (state?.mode === 'ok') {
     return 'OK prêt'
   }
 
   if (state?.mode === 'proposal') {
+    if (state.hardConstraint) {
+      return 'Contrainte dure'
+    }
+
     const proposalCount = Array.isArray(state.selectedSlotIds) ? state.selectedSlotIds.length : 0
     if (proposalCount > 0) {
       return `${proposalCount}/${maxProposals} propositions`
     }
 
     if (state.specialEnabled) {
-    return 'Demande spéciale'
+      return 'Demande spéciale'
     }
 
     return 'Proposition'
@@ -218,6 +284,56 @@ function getQueueBadgeTitle(option, isSelected) {
   return `${normalizedCount} vote${normalizedCount > 1 ? 's' : ''} favorable${normalizedCount > 1 ? 's' : ''}${capacityLabel} sur cette demi-journée.`
 }
 
+function getProposalLoadInfo(option, isSelected = false) {
+  const queueCount = Number(option?.queue?.count)
+  const capacity = Number(option?.queue?.capacity)
+
+  if (!Number.isFinite(queueCount) || queueCount < 0) {
+    return {
+      tone: 'neutral',
+      label: '',
+      title: ''
+    }
+  }
+
+  const normalizedCount = Math.floor(queueCount)
+  const projectedCount = normalizedCount + (isSelected ? 1 : 0)
+  const normalizedCapacity = Number.isFinite(capacity) && capacity > 0
+    ? Math.floor(capacity)
+    : null
+  const ratio = normalizedCapacity ? projectedCount / normalizedCapacity : 0
+
+  if (normalizedCapacity && ratio >= 0.8) {
+    return {
+      tone: 'busy',
+      label: 'Chargé',
+      title: 'Plus difficile à organiser: beaucoup de préférences pointent déjà vers cette demi-journée.'
+    }
+  }
+
+  if (normalizedCapacity && ratio >= 0.5) {
+    return {
+      tone: 'medium',
+      label: 'À coordonner',
+      title: 'Organisation possible, mais la demi-journée demande déjà un peu de coordination.'
+    }
+  }
+
+  if (normalizedCount > 0 || normalizedCapacity) {
+    return {
+      tone: 'easy',
+      label: 'Souple',
+      title: 'Demi-journée plutôt simple à exploiter pour l’instant.'
+    }
+  }
+
+  return {
+    tone: 'neutral',
+    label: '',
+    title: ''
+  }
+}
+
 function getProposalCardLabel(option) {
   if (option?.display?.isGroupedWindow) {
     return '½ journée'
@@ -232,6 +348,7 @@ function getProposalCardTitle(option, isSelected) {
     formatSlotDate(option?.slot),
     timeDisplay.tooltip || timeDisplay.primary,
     option?.slot?.room?.name && !option?.display?.isGroupedWindow ? `Salle ${option.slot.room.name}` : '',
+    getProposalLoadInfo(option, isSelected).title,
     getQueueBadgeTitle(option, isSelected),
     isSelected ? 'Cliquez pour retirer cette proposition.' : 'Cliquez pour proposer cette demi-journée.'
   ]
@@ -324,6 +441,9 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
       ...currentState,
       mode,
       selectedSlotIds: mode === 'ok' ? [] : currentState.selectedSlotIds || [],
+      onlyAvailabilitySlotIds: mode === 'ok' ? [] : currentState.onlyAvailabilitySlotIds || [],
+      hardConstraint: mode === 'ok' ? false : currentState.hardConstraint || false,
+      remark: mode === 'ok' ? '' : currentState.remark || '',
       specialEnabled: mode === 'ok' ? false : currentState.specialEnabled || false,
       specialReason: mode === 'ok' ? '' : currentState.specialReason || '',
       specialDate: mode === 'ok' ? '' : currentState.specialDate || ''
@@ -342,7 +462,9 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
         setSubmitError(null)
         return {
           ...currentState,
-          selectedSlotIds: currentSelection.filter((currentId) => currentId !== slotId)
+          selectedSlotIds: currentSelection.filter((currentId) => currentId !== slotId),
+          onlyAvailabilitySlotIds: (currentState.onlyAvailabilitySlotIds || [])
+            .filter((currentId) => currentId !== slotId)
         }
       }
 
@@ -354,15 +476,61 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
       setSubmitError(null)
       return {
         ...currentState,
-        selectedSlotIds: [...currentSelection, slotId]
+        selectedSlotIds: [...currentSelection, slotId],
+        onlyAvailabilitySlotIds: (currentState.onlyAvailabilitySlotIds || [])
+          .filter((currentId) => currentSelection.includes(currentId)),
+        hardConstraint: false,
+        specialEnabled: false,
+        specialReason: '',
+        specialDate: ''
       }
     })
+  }, [updateResponseState])
+
+  const toggleHardConstraint = useCallback((tpiId, enabled) => {
+    updateResponseState(tpiId, (currentState) => ({
+      ...currentState,
+      mode: 'proposal',
+      hardConstraint: enabled,
+      selectedSlotIds: enabled ? [] : currentState.selectedSlotIds || [],
+      onlyAvailabilitySlotIds: enabled ? [] : currentState.onlyAvailabilitySlotIds || [],
+      specialEnabled: enabled ? false : currentState.specialEnabled || false,
+      specialReason: enabled ? '' : currentState.specialReason || '',
+      specialDate: enabled ? '' : currentState.specialDate || ''
+    }))
+    setSubmitError(null)
+  }, [updateResponseState])
+
+  const toggleOnlyAvailabilityForDay = useCallback((tpiId, slotIds = [], enabled) => {
+    const daySlotIds = slotIds.map(String).filter(Boolean)
+
+    updateResponseState(tpiId, (currentState) => {
+      const selectedSlotIds = Array.isArray(currentState.selectedSlotIds)
+        ? currentState.selectedSlotIds
+        : []
+      const selectedDaySlotIds = daySlotIds.filter((slotId) => selectedSlotIds.includes(slotId))
+      const currentOnlyAvailability = Array.isArray(currentState.onlyAvailabilitySlotIds)
+        ? currentState.onlyAvailabilitySlotIds
+        : []
+
+      return {
+        ...currentState,
+        onlyAvailabilitySlotIds: enabled
+          ? [...new Set([...currentOnlyAvailability, ...selectedDaySlotIds])]
+          : currentOnlyAvailability.filter((slotId) => !daySlotIds.includes(slotId))
+      }
+    })
+    setSubmitError(null)
   }, [updateResponseState])
 
   const toggleSpecialRequest = useCallback((tpiId, enabled) => {
     updateResponseState(tpiId, (currentState) => ({
       ...currentState,
+      mode: 'proposal',
       specialEnabled: enabled,
+      selectedSlotIds: enabled ? [] : currentState.selectedSlotIds || [],
+      onlyAvailabilitySlotIds: enabled ? [] : currentState.onlyAvailabilitySlotIds || [],
+      hardConstraint: enabled ? false : currentState.hardConstraint || false,
       specialReason: enabled ? currentState.specialReason || '' : '',
       specialDate: enabled ? currentState.specialDate || '' : ''
     }))
@@ -371,6 +539,11 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
 
   const updateSpecialField = useCallback((tpiId, field, value) => {
     updateResponseState(tpiId, { [field]: value })
+    setSubmitError(null)
+  }, [updateResponseState])
+
+  const updateRemark = useCallback((tpiId, value) => {
+    updateResponseState(tpiId, { remark: value })
     setSubmitError(null)
   }, [updateResponseState])
 
@@ -391,12 +564,28 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
       return
     }
 
-    if (state.mode === 'proposal' && state.selectedSlotIds.length === 0 && !state.specialEnabled) {
-      setSubmitError('Ajoutez au moins un créneau ou activez la demande spéciale.')
+    const selectedSlotIds = Array.isArray(state.selectedSlotIds) ? state.selectedSlotIds : []
+    const onlyAvailabilitySlotIds = Array.isArray(state.onlyAvailabilitySlotIds)
+      ? state.onlyAvailabilitySlotIds.filter((slotId) => selectedSlotIds.includes(slotId))
+      : []
+    const remark = compactText(state.remark).slice(0, 2000)
+
+    if (state.mode === 'proposal' && selectedSlotIds.length === 0 && !state.specialEnabled && !state.hardConstraint) {
+      setSubmitError('Ajoutez au moins une date proposée, une demande spéciale hors liste ou indiquez qu’aucune date proposée ne convient.')
       return
     }
 
-    if (state.mode === 'proposal' && state.selectedSlotIds.length > voteSettings.maxProposalsPerTpi) {
+    if (state.mode === 'proposal' && state.hardConstraint && selectedSlotIds.length > 0) {
+      setSubmitError('Ce choix indique qu’aucune date proposée n’est possible.')
+      return
+    }
+
+    if (state.mode === 'proposal' && state.specialEnabled && selectedSlotIds.length > 0) {
+      setSubmitError('La demande spéciale hors liste remplace les dates proposées.')
+      return
+    }
+
+    if (state.mode === 'proposal' && selectedSlotIds.length > voteSettings.maxProposalsPerTpi) {
       setSubmitError(`Maximum ${voteSettings.maxProposalsPerTpi} créneau${voteSettings.maxProposalsPerTpi > 1 ? 'x' : ''} proposé${voteSettings.maxProposalsPerTpi > 1 ? 's' : ''} par TPI.`)
       return
     }
@@ -416,21 +605,31 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
     setSubmitSuccess(null)
 
     try {
-      await voteService.respondToVote(tpiId, {
+      const payload = {
         fixedVoteId,
         mode: state.mode,
-        proposedSlotIds: state.mode === 'proposal' ? state.selectedSlotIds : [],
+        proposedSlotIds: state.mode === 'proposal' && !state.specialEnabled ? selectedSlotIds : [],
+        onlyAvailabilitySlotIds: state.mode === 'proposal' && !state.specialEnabled ? onlyAvailabilitySlotIds : [],
+        hardConstraint: state.mode === 'proposal' && Boolean(state.hardConstraint),
         specialRequest: state.specialEnabled
           ? {
               reason: state.specialReason,
               requestedDate: state.specialDate
             }
           : null
-      })
+      }
+
+      if (state.mode === 'proposal' && remark) {
+        payload.remark = remark
+      }
+
+      await voteService.respondToVote(tpiId, payload)
 
       setSubmitSuccess(
         state.mode === 'ok'
           ? 'Vote enregistré: date fixée validée.'
+          : state.hardConstraint
+            ? 'Vote enregistré: contrainte dure transmise.'
           : 'Vote enregistré: proposition transmise.'
       )
 
@@ -517,12 +716,16 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
           const tpiId = String(tpi._id || '')
           const fixedSlot = group.fixedSlot || group.slots?.[0] || null
           const proposalOptions = normalizeProposalOptions(group)
+          const proposalDayGroups = buildProposalDayGroups(proposalOptions)
           const proposalContextSummary = buildProposalContextSummary(group)
           const proposalContextTitle = buildProposalContextTitle(group)
           const voteSettings = normalizeVoteSettings(group)
           const state = responses[tpiId] || {
             mode: '',
             selectedSlotIds: [],
+            onlyAvailabilitySlotIds: [],
+            hardConstraint: false,
+            remark: '',
             specialEnabled: false,
             specialReason: '',
             specialDate: ''
@@ -627,6 +830,21 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
 
                   {state.mode === 'proposal' && (
                     <>
+                      <div className={`hard-constraint-box ${state.hardConstraint ? 'is-active' : ''}`}>
+                        <label className="hard-constraint-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(state.hardConstraint)}
+                            disabled={Boolean(state.specialEnabled)}
+                            onChange={(event) => toggleHardConstraint(tpiId, event.target.checked)}
+                          />
+                          <span>
+                            <strong>Aucune date proposée ne convient</strong>
+                            <small>Aucune des dates ou demi-journées listées n’est possible pour moi.</small>
+                          </span>
+                        </label>
+                      </div>
+
                       <div className="slot-group-header alternative-group">
                         <div>
                           <h3>Propositions</h3>
@@ -652,62 +870,90 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                         </span>
                       </div>
 
-                      <div className="alternatives-grid">
-                        {proposalOptions.length > 0 ? proposalOptions.map((option, index) => {
-                          const slotId = String(option.slotId || '')
-                          const isSelected = state.selectedSlotIds.includes(slotId)
+                      <div className="proposal-day-grid">
+                        {proposalDayGroups.length > 0 ? proposalDayGroups.map((dayGroup) => {
+                          const daySlotIds = dayGroup.options
+                            .map((option) => String(option.slotId || ''))
+                            .filter(Boolean)
+                          const selectedDaySlotIds = daySlotIds
+                            .filter((slotId) => state.selectedSlotIds.includes(slotId))
+                          const onlyAvailabilitySlotIds = Array.isArray(state.onlyAvailabilitySlotIds)
+                            ? state.onlyAvailabilitySlotIds
+                            : []
+                          const isOnlyAvailabilitySelected = selectedDaySlotIds.length > 0 &&
+                            selectedDaySlotIds.every((slotId) => onlyAvailabilitySlotIds.includes(slotId))
+                          const isOnlyAvailabilityDisabled = Boolean(
+                            state.hardConstraint ||
+                            state.specialEnabled ||
+                            selectedDaySlotIds.length === 0
+                          )
 
                           return (
-                            <button
-                              type="button"
-                              key={slotId || `${tpiId}-${index}`}
-                              className={`slot-vote-card alternative proposal-select-card ${isSelected ? 'preferred' : ''}`}
-                              onClick={() => toggleProposalSlot(tpiId, slotId, voteSettings.maxProposalsPerTpi)}
-                              title={getProposalCardTitle(option, isSelected)}
-                            >
-                              <div className="slot-card-head">
-                                <span
-                                  className="slot-card-label hover-detail"
-                                  data-tooltip={getProposalCardTitle(option, isSelected)}
-                                  title={getProposalCardTitle(option, isSelected)}
-                                >
-                                  {getProposalCardLabel(option)}
-                                </span>
-                                {getQueueBadgeLabel(option, isSelected) ? (
-                                  <span
-                                    className="slot-queue-chip hover-detail"
-                                    data-tooltip={getQueueBadgeTitle(option, isSelected)}
-                                    title={getQueueBadgeTitle(option, isSelected)}
-                                  >
-                                    {getQueueBadgeLabel(option, isSelected)}
-                                  </span>
-                                ) : null}
-                                <span
-                                  className={`slot-state-chip ${isSelected ? 'preferred' : 'default'} hover-detail`}
-                                  data-tooltip={isSelected ? 'Cliquez pour retirer cette proposition.' : 'Cliquez pour ajouter cette demi-journée.'}
-                                  title={isSelected ? 'Cliquez pour retirer cette proposition.' : 'Cliquez pour ajouter cette demi-journée.'}
-                                >
-                                  {isSelected ? 'Pris' : '+'}
-                                </span>
+                            <div className="proposal-day-card" data-testid="proposal-day-card" key={dayGroup.key}>
+                              <div className="proposal-day-title">
+                                <CalendarIcon className="slot-icon" />
+                                <strong>{dayGroup.label}</strong>
                               </div>
+                              <div className="proposal-periods">
+                                {dayGroup.options.map((option, index) => {
+                                  const slotId = String(option.slotId || '')
+                                  const isSelected = state.selectedSlotIds.includes(slotId)
+                                  const timeDisplay = buildSlotTimeDisplay(option.slot, option)
+                                  const queueLabel = getQueueBadgeLabel(option, isSelected)
+                                  const loadInfo = getProposalLoadInfo(option, isSelected)
+                                  const disabled = Boolean(state.hardConstraint || state.specialEnabled)
+                                  const title = disabled
+                                    ? state.hardConstraint
+                                      ? 'Aucune date proposée ne convient.'
+                                      : 'Demande spéciale active: les dates proposées sont remplacées.'
+                                    : getProposalCardTitle(option, isSelected)
 
-                              <div className="slot-info">
-                                <div className="slot-line slot-date">
-                                  <CalendarIcon className="slot-icon" />
-                                  <span>{formatSlotDate(option.slot)}</span>
-                                </div>
-                                <div className="slot-line slot-time">
-                                  <TimeIcon className="slot-icon" />
-                                  <SlotTimeDisplay slot={option.slot} option={option} />
-                                </div>
-                                {option.slot?.room?.name && !option.display?.isGroupedWindow ? (
-                                  <div className="slot-line slot-room">
-                                    <RoomIcon className="slot-icon" />
-                                    <span>{option.slot.room.name}</span>
-                                  </div>
-                                ) : null}
+                                  return (
+                                    <label
+                                      key={slotId || `${dayGroup.key}-${index}`}
+                                      className={`proposal-period-choice load-${loadInfo.tone} ${isSelected ? 'is-selected' : ''} ${disabled ? 'is-disabled' : ''}`}
+                                      title={title}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        disabled={disabled}
+                                        onChange={() => toggleProposalSlot(tpiId, slotId, voteSettings.maxProposalsPerTpi)}
+                                      />
+                                      <span>
+                                        <strong>{timeDisplay.primary}</strong>
+                                        <small className="proposal-option-meta">
+                                          <span>{getProposalCardLabel(option)}</span>
+                                          {loadInfo.label ? (
+                                            <span className={`proposal-load-chip load-${loadInfo.tone}`}>
+                                              {loadInfo.label}
+                                            </span>
+                                          ) : null}
+                                          {queueLabel ? (
+                                            <span>{queueLabel}</span>
+                                          ) : null}
+                                        </small>
+                                      </span>
+                                    </label>
+                                  )
+                                })}
+                                <label
+                                  className={`proposal-only-availability ${isOnlyAvailabilitySelected ? 'is-selected' : ''} ${isOnlyAvailabilityDisabled ? 'is-disabled' : ''}`}
+                                  title={selectedDaySlotIds.length === 0 ? 'Sélectionnez d’abord Matin ou Après-midi pour ce jour.' : 'Marque cette date comme seule disponibilité possible.'}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isOnlyAvailabilitySelected}
+                                    disabled={isOnlyAvailabilityDisabled}
+                                    onChange={(event) => toggleOnlyAvailabilityForDay(tpiId, daySlotIds, event.target.checked)}
+                                  />
+                                  <span>
+                                    <strong>Seule disponibilité</strong>
+                                    <small>Seulement ce jour.</small>
+                                  </span>
+                                </label>
                               </div>
-                            </button>
+                            </div>
                           )
                         }) : (
                           <div className="empty-slot-state">
@@ -716,7 +962,17 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                         )}
                       </div>
 
-                      {voteSettings.allowSpecialRequest ? (
+                      <label className="proposal-remark-box">
+                        <span>Remarque optionnelle</span>
+                        <textarea
+                          rows={2}
+                          value={state.remark || ''}
+                          onChange={(event) => updateRemark(tpiId, event.target.value)}
+                          placeholder="Information utile pour l’administration, si nécessaire."
+                        />
+                      </label>
+
+                      {voteSettings.allowSpecialRequest && !state.hardConstraint ? (
                         <div className="special-request-box">
                           <div className="special-request-toggle-row">
                             <span
@@ -724,7 +980,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                               data-tooltip="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
                               title="Activez cette option si aucune demi-journée ne convient ou si vous avez une contrainte précise."
                             >
-                              Demande spéciale
+                              Demande spéciale (hors liste)
                             </span>
                             <BinaryToggle
                               value={Boolean(state.specialEnabled)}
@@ -733,8 +989,8 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                               className="special-request-toggle"
                               ariaLabel="Activation de la demande spéciale"
                               iconOnly
-                              trueLabel="Ajouter une demande spéciale"
-                              falseLabel="Ne pas ajouter de demande spéciale"
+                              trueLabel="Ajouter une demande spéciale hors liste"
+                              falseLabel="Ne pas ajouter de demande spéciale hors liste"
                               trueIcon={AlertIcon}
                               falseIcon={CloseIcon}
                             />
@@ -744,7 +1000,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                             data-tooltip="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
                             title="Utilisez cette option si vous devez sortir des créneaux disponibles et transmettre une contrainte précise à l'administration."
                           >
-                            Hors planning ou contrainte.
+                            Remplace les dates proposées.
                           </p>
 
                           {state.specialEnabled && (
@@ -763,7 +1019,7 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                                   rows={3}
                                   value={state.specialReason}
                                   onChange={(event) => updateSpecialField(tpiId, 'specialReason', event.target.value)}
-                                  placeholder="Expliquez la contrainte, le contexte ou la demande particulière..."
+                                  placeholder="Expliquez la contrainte, le contexte ou la demande spéciale..."
                                 />
                               </label>
                             </div>
@@ -777,6 +1033,8 @@ const VotingPanel = ({ pendingVotes, onVoteSubmitted }) => {
                     <div className="card-footer-note">
                       {state.mode === 'ok'
                         ? 'Date validée.'
+                        : state.hardConstraint
+                          ? 'Contrainte dure signalée.'
                         : state.mode === 'proposal'
                           ? 'Propositions envoyées.'
                           : 'Choisissez OK ou Proposition.'}

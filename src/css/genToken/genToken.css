@@ -79,6 +79,39 @@
   line-height: 1.42;
 }
 
+.token-access-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #334155;
+  font-size: 0.84rem;
+}
+
+.token-access-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.token-access-filter-reset {
+  border: 0;
+  border-radius: 999px;
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #1e293b;
+  background: #e2e8f0;
+}
+
 .token-access-checkbox-row {
   display: inline-flex;
   align-items: center;
@@ -324,6 +357,26 @@
   color: #b45309;
 }
 
+.token-access-badge.is-arbitrage {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.token-access-badge.is-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.token-access-badge.is-warning {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.token-access-badge.is-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .token-access-badge.is-neutral {
   background: #e2e8f0;
   color: #334155;
@@ -393,6 +446,13 @@
 
 .token-access-link-head span {
   color: #475569;
+}
+
+.token-access-link-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .token-access-link-details {
@@ -487,12 +547,21 @@
   color: #1e293b;
 }
 
+.token-access-btn.is-success {
+  background: #16a34a;
+  color: #ffffff;
+}
+
 .token-generator-page .token-generator-empty-state {
   padding: 38px 24px;
   border-radius: 20px;
   border: 1px dashed rgba(148, 163, 184, 0.5);
   background: rgba(255, 255, 255, 0.72);
   text-align: center;
+}
+
+.token-generator-page .token-generator-empty-state .token-access-filter-reset {
+  margin-top: 12px;
 }
 
 .token-generator-page .token-generator-empty-state h3 {
@@ -552,6 +621,15 @@
   .token-generator-page .token-generator-alert-action {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .token-access-active-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .token-access-filter-reset {
+    align-self: flex-start;
   }
 }
 

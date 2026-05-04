@@ -155,6 +155,38 @@ function pickFirstDefined(...values) {
   return null
 }
 
+function hasLegacyStakeholderIdentity(tpiData = {}) {
+  return Boolean(
+    pickFirstNonEmpty(
+      tpiData?.candidat,
+      tpiData?.expert1?.name,
+      tpiData?.expert2?.name,
+      tpiData?.boss?.name
+    ) ||
+    pickFirstDefined(
+      tpiData?.candidatPersonId,
+      tpiData?.expert1PersonId,
+      tpiData?.expert1?.personId,
+      tpiData?.expert2PersonId,
+      tpiData?.expert2?.personId,
+      tpiData?.bossPersonId,
+      tpiData?.boss?.personId
+    )
+  )
+}
+
+function isEmptyLegacyPlanningSlot(tpiData = {}, legacyTpi = null) {
+  if (legacyTpi) {
+    return false
+  }
+
+  if (normalizeRef(tpiData?.refTpi)) {
+    return false
+  }
+
+  return !hasLegacyStakeholderIdentity(tpiData)
+}
+
 function normalizeLinkedPersonId(value) {
   if (!value) {
     return ''
@@ -513,6 +545,7 @@ async function rebuildWorkflowFromLegacyPlanning({
     slotCount: 0,
     voteCount: 0,
     skippedEntries: 0,
+    emptySlotEntries: 0,
     outOfScopeEntries: 0,
     externalEntries: 0,
     unconfiguredSiteEntries: 0,
@@ -535,13 +568,18 @@ async function rebuildWorkflowFromLegacyPlanning({
 
     for (const [tpiIndex, tpiData] of tpiDatas.entries()) {
       const legacyRef = normalizeRef(tpiData.refTpi || tpiData.id)
+      const legacyTpi = legacyRef ? legacyTpiByRef.get(legacyRef) || null : null
+      if (isEmptyLegacyPlanningSlot(tpiData, legacyTpi)) {
+        summary.emptySlotEntries += 1
+        continue
+      }
+
       if (!legacyRef) {
         console.warn(`⚠️ TPI ignoré (pas de ref): période ${tpiIndex+1} dans ${roomName}`)
         summary.skippedEntries += 1
         continue
       }
 
-      const legacyTpi = legacyTpiByRef.get(legacyRef) || null
       const siteCandidates = [room.site, legacyTpi?.lieu?.site, legacyTpi?.site]
       const planningSiteValue = pickFirstNonEmpty(...siteCandidates)
 

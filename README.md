@@ -1,4 +1,4 @@
-# TPIorganizer 2023 - Version stable VS.260502
+# TPIorganizer 2023 - Version stable VS.260504
 
 TPIorganizer 2023 est une application React + Node/Express pour organiser les défenses TPI : configuration annuelle, gestion des parties prenantes, planification, workflow de validation, votes, liens d'accès et publication publique.
 
@@ -69,7 +69,7 @@ La configuration publique et FTP est centralisée dans l'écran de configuration
 
 ## Orientation desktop
 
-La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : le projet reste web-first, avec un backend exportant `startServer()` pour faciliter une intégration desktop future.
+La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : cette version `VS.260504` fige le socle web 2026 avant une refonte plus large vers une application portable centrée sur la génération, la publication et la synchronisation des sites statiques.
 
 ## Maintenance récente
 

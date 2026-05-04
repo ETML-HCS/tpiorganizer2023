@@ -497,9 +497,12 @@ async function findBestCompromiseSlot(tpiPlanningId) {
       },
       rejectedCount: {
         $sum: { $cond: [{ $eq: ['$decision', 'rejected'] }, 1, 0] }
+      },
+      hardConstraintCount: {
+        $sum: { $cond: ['$hardConstraint', 1, 0] }
       }
     }},
-    { $match: { rejectedCount: { $lt: 2 } } }, // Max 1 rejet
+    { $match: { rejectedCount: { $lt: 2 }, hardConstraintCount: 0 } }, // Max 1 rejet, aucune contrainte dure
     { $sort: { preferredCount: -1, acceptedCount: -1 } },
     { $limit: 1 }
   ]

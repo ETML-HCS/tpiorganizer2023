@@ -146,6 +146,150 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
   }
 })
 
+test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without stakeholder warnings', async () => {
+  const originalGetPlanningConfig = planningConfigService.getPlanningConfig
+  const originalPersonFind = Person.find
+  const originalSlotDeleteMany = Slot.deleteMany
+  const originalSlotCreate = Slot.create
+  const originalTpiPlanningFind = TpiPlanning.find
+  const originalTpiPlanningDeleteMany = TpiPlanning.deleteMany
+  const originalTpiPlanningCreate = TpiPlanning.create
+  const originalCreateTpiRoomModel = tpiRoomsModels.createTpiRoomModel
+  const originalVoteDeleteMany = Vote.deleteMany
+  const originalVoteInsertMany = Vote.insertMany
+  const originalConsoleWarn = console.warn
+  const originalTpiModelsModule = require.cache[TpiModelsYearPath]
+
+  let tpiCreateCount = 0
+  let slotCreateCount = 0
+  let voteInsertCount = 0
+  const warnings = []
+
+  planningConfigService.getPlanningConfig = async () => ({
+    siteConfigs: [
+      {
+        siteCode: 'VENNES',
+        active: true
+      }
+    ]
+  })
+
+  Person.find = () => ({
+    select() {
+      return {
+        lean: async () => ([])
+      }
+    }
+  })
+
+  TpiPlanning.find = () => ({
+    distinct: async () => ([])
+  })
+  TpiPlanning.deleteMany = async () => ({ acknowledged: true })
+  TpiPlanning.create = async () => {
+    tpiCreateCount += 1
+    throw new Error('TpiPlanning.create should not be called for generated empty slots.')
+  }
+
+  tpiRoomsModels.createTpiRoomModel = () => ({
+    deleteMany: async () => ({ acknowledged: true }),
+    insertMany: async () => ({ acknowledged: true })
+  })
+
+  Slot.deleteMany = async () => ({ acknowledged: true })
+  Slot.create = async () => {
+    slotCreateCount += 1
+    throw new Error('Slot.create should not be called for generated empty slots.')
+  }
+
+  Vote.deleteMany = async () => ({ acknowledged: true })
+  Vote.insertMany = async () => {
+    voteInsertCount += 1
+    throw new Error('Vote.insertMany should not be called for generated empty slots.')
+  }
+
+  require.cache[TpiModelsYearPath].exports = () => ({
+    find() {
+      return {
+        lean: async () => ([])
+      }
+    }
+  })
+
+  console.warn = (message) => {
+    warnings.push(String(message))
+  }
+
+  clearLegacyPlanningBridgeService()
+  const { rebuildWorkflowFromLegacyPlanning } = require('../services/legacyPlanningBridgeService')
+
+  try {
+    const summary = await rebuildWorkflowFromLegacyPlanning({
+      year: 2026,
+      legacyRooms: [
+        {
+          idRoom: 1,
+          lastUpdate: Date.now(),
+          site: 'VENNES',
+          date: '2026-06-04',
+          name: 'Vennes - A22',
+          tpiDatas: [
+            {
+              id: 'vennes_0_5',
+              refTpi: null,
+              period: 6,
+              candidat: '',
+              candidatPersonId: '',
+              expert1: { name: '', personId: '' },
+              expert2: { name: '', personId: '' },
+              boss: { name: '', personId: '' }
+            },
+            {
+              id: 'vennes_0_6',
+              refTpi: null,
+              period: 7
+            }
+          ]
+        }
+      ]
+    })
+
+    assert.equal(summary.tpiCount, 0)
+    assert.equal(summary.slotCount, 0)
+    assert.equal(summary.voteCount, 0)
+    assert.equal(summary.skippedEntries, 0)
+    assert.equal(summary.emptySlotEntries, 2)
+    assert.deepEqual(summary.missingReferences, [])
+    assert.equal(
+      warnings.some((message) => message.includes('TPI IGNORÉ (parties prenantes invalides)')),
+      false
+    )
+    assert.equal(tpiCreateCount, 0)
+    assert.equal(slotCreateCount, 0)
+    assert.equal(voteInsertCount, 0)
+  } finally {
+    planningConfigService.getPlanningConfig = originalGetPlanningConfig
+    Person.find = originalPersonFind
+    Slot.deleteMany = originalSlotDeleteMany
+    Slot.create = originalSlotCreate
+    TpiPlanning.find = originalTpiPlanningFind
+    TpiPlanning.deleteMany = originalTpiPlanningDeleteMany
+    TpiPlanning.create = originalTpiPlanningCreate
+    tpiRoomsModels.createTpiRoomModel = originalCreateTpiRoomModel
+    Vote.deleteMany = originalVoteDeleteMany
+    Vote.insertMany = originalVoteInsertMany
+    console.warn = originalConsoleWarn
+
+    if (originalTpiModelsModule) {
+      require.cache[TpiModelsYearPath] = originalTpiModelsModule
+    } else {
+      delete require.cache[TpiModelsYearPath]
+    }
+
+    clearLegacyPlanningBridgeService()
+  }
+})
+
 test('syncLegacyCatalogToPlanning creates missing planning drafts from planifiable legacy TPI', async () => {
   const originalGetPlanningConfig = planningConfigService.getPlanningConfig
   const originalPersonFind = Person.find

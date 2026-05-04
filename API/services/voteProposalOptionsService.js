@@ -6,6 +6,8 @@ function compactText(value) {
   return String(value).trim()
 }
 
+const CONFIGURED_PROPOSAL_SLOT_STATUSES = new Set(['available', 'proposed', 'pending_votes'])
+
 function normalizeClassToken(value) {
   return compactText(value)
     .normalize('NFD')
@@ -108,6 +110,36 @@ function countConfiguredPeriodsForWindow(siteConfig = {}, windowPeriod = 'AM') {
   return windowPeriod === 'AM'
     ? Math.ceil(normalizedNumSlots / 2)
     : Math.floor(normalizedNumSlots / 2)
+}
+
+function getConfiguredSlotSchedule(siteConfig = {}) {
+  const numSlots = Number.parseInt(siteConfig?.numSlots, 10)
+  const durationMinutes = toPositiveNumber(siteConfig?.tpiTimeMinutes, 60)
+
+  return {
+    numSlots: Number.isInteger(numSlots) && numSlots > 0 ? numSlots : 8,
+    firstStartMinutes: parseTimeToMinutes(siteConfig?.firstTpiStartTime || '08:00') ?? (8 * 60),
+    durationMinutes,
+    breakMinutes: Math.max(0, Number(siteConfig?.breaklineMinutes || 0)),
+    maxConsecutiveTpi: Number.isFinite(Number(siteConfig?.maxConsecutiveTpi))
+      ? Number(siteConfig.maxConsecutiveTpi)
+      : 4,
+    minTpiPerRoom: Number.isFinite(Number(siteConfig?.minTpiPerRoom))
+      ? Number(siteConfig.minTpiPerRoom)
+      : 3
+  }
+}
+
+function buildConfiguredSlotTimesForPeriod(siteConfig = {}, period = 1) {
+  const schedule = getConfiguredSlotSchedule(siteConfig)
+  const normalizedPeriod = Math.max(1, Number.parseInt(period, 10) || 1)
+  const startMinutes = schedule.firstStartMinutes +
+    ((normalizedPeriod - 1) * (schedule.durationMinutes + schedule.breakMinutes))
+
+  return {
+    startTime: formatMinutesAsTime(startMinutes),
+    endTime: formatMinutesAsTime(startMinutes + schedule.durationMinutes)
+  }
 }
 
 function resolveSlotWindowPeriod(slot) {
@@ -411,7 +443,6 @@ function findSiteConfigForTpi(tpi, planningConfig = {}) {
 
 function buildProposalOptionDisplay(slot, planningConfig = {}, tpi = {}) {
   const siteConfig = findSiteConfigForTpi(tpi, planningConfig) || {}
-  const startMinutes = parseTimeToMinutes(slot?.startTime)
   const endMinutes = parseTimeToMinutes(slot?.endTime)
   const exactStartTime = normalizeTimeLabel(slot?.startTime)
   const exactEndTime = normalizeTimeLabel(slot?.endTime)
@@ -449,6 +480,164 @@ function buildProposalOptionDisplay(slot, planningConfig = {}, tpi = {}) {
   }
 }
 
+function buildConfiguredWindowSlotDocument({
+  dateKey = '',
+  period = 1,
+  planningConfig = {},
+  room = {},
+  siteConfig = {},
+  tpi = {},
+  year = null
+} = {}) {
+  const slotTimes = buildConfiguredSlotTimesForPeriod(siteConfig, period)
+  const normalizedYear = Number.parseInt(String(year || tpi?.year || planningConfig?.year || ''), 10)
+  const date = new Date(`${dateKey}T08:00:00.000Z`)
+  const schedule = getConfiguredSlotSchedule(siteConfig)
+
+  if (!Number.isInteger(normalizedYear) || Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const roomName = compactText(room?.name || room?.roomName)
+  const roomSite = compactText(room?.site || room?.roomSite)
+
+  if (!roomName || !roomSite) {
+    return null
+  }
+
+  return {
+    year: normalizedYear,
+    date,
+    period,
+    startTime: slotTimes.startTime,
+    endTime: slotTimes.endTime,
+    room: {
+      name: roomName,
+      site: roomSite,
+      capacity: Number.isFinite(Number(room?.capacity)) && Number(room.capacity) > 0
+        ? Number(room.capacity)
+        : 1
+    },
+    status: 'available',
+    assignedTpi: null,
+    assignments: {
+      candidat: null,
+      expert1: null,
+      expert2: null,
+      chefProjet: null
+    },
+    config: {
+      duration: schedule.durationMinutes,
+      breakAfter: schedule.breakMinutes,
+      maxConsecutiveTpi: schedule.maxConsecutiveTpi,
+      minTpiPerRoom: schedule.minTpiPerRoom
+    }
+  }
+}
+
+function buildMissingConfiguredWindowSlotDocuments(slotDocuments = [], {
+  planningConfig = {},
+  proposalContext = {},
+  tpi = {},
+  year = null
+} = {}) {
+  const allowedDateKeys = new Set(
+    Array.isArray(proposalContext?.allowedDateKeys)
+      ? proposalContext.allowedDateKeys.map(toIsoDateKey).filter(Boolean)
+      : []
+  )
+
+  if (allowedDateKeys.size === 0) {
+    return []
+  }
+
+  const siteConfig = findSiteConfigForTpi(tpi, planningConfig) || {}
+  const existingRoomPeriodKeys = new Set()
+  const roomsByDateSite = new Map()
+  const sortedSlotDocuments = (Array.isArray(slotDocuments) ? slotDocuments : [])
+    .slice()
+    .sort((left, right) => {
+      const leftKey = [
+        toIsoDateKey(left?.date),
+        compactText(left?.room?.site),
+        compactText(left?.room?.name),
+        compactText(left?.period)
+      ].join('|')
+      const rightKey = [
+        toIsoDateKey(right?.date),
+        compactText(right?.room?.site),
+        compactText(right?.room?.name),
+        compactText(right?.period)
+      ].join('|')
+
+      return leftKey.localeCompare(rightKey)
+    })
+
+  for (const slotDocument of sortedSlotDocuments) {
+    const dateKey = toIsoDateKey(slotDocument?.date)
+    const roomName = compactText(slotDocument?.room?.name)
+    const roomSite = compactText(slotDocument?.room?.site)
+    const siteKey = normalizeClassToken(roomSite)
+
+    if (!dateKey || !allowedDateKeys.has(dateKey) || !roomName || !roomSite || !siteKey) {
+      continue
+    }
+
+    const dateSiteKey = [dateKey, siteKey].join('|')
+    const period = Number.parseInt(String(slotDocument?.period || ''), 10)
+    if (Number.isInteger(period) && period > 0) {
+      existingRoomPeriodKeys.add([dateSiteKey, roomName, period].join('|'))
+    }
+
+    if (!roomsByDateSite.has(dateSiteKey)) {
+      roomsByDateSite.set(dateSiteKey, new Map())
+    }
+
+    const roomsByName = roomsByDateSite.get(dateSiteKey)
+    if (!roomsByName.has(roomName)) {
+      roomsByName.set(roomName, {
+        name: roomName,
+        site: roomSite,
+        capacity: slotDocument?.room?.capacity
+      })
+    }
+  }
+
+  const missingSlotDocuments = []
+
+  for (const [dateSiteKey, roomsByName] of roomsByDateSite.entries()) {
+    const [dateKey] = dateSiteKey.split('|')
+    const configuredPeriods = Array.from(
+      { length: getConfiguredSlotSchedule(siteConfig).numSlots },
+      (_, index) => index + 1
+    )
+
+    for (const room of roomsByName.values()) {
+      for (const period of configuredPeriods) {
+        if (existingRoomPeriodKeys.has([dateSiteKey, room.name, period].join('|'))) {
+          continue
+        }
+
+        const missingSlotDocument = buildConfiguredWindowSlotDocument({
+          dateKey,
+          period,
+          planningConfig,
+          room,
+          siteConfig,
+          tpi,
+          year
+        })
+
+        if (missingSlotDocument) {
+          missingSlotDocuments.push(missingSlotDocument)
+        }
+      }
+    }
+  }
+
+  return missingSlotDocuments
+}
+
 function getSlotStatusRank(slot) {
   if (slot?.status === 'available') {
     return 0
@@ -476,6 +665,10 @@ function buildConfiguredSlotProposalOptions(slotDocuments = [], {
     const slotId = slotDocument?._id ? String(slotDocument._id) : ''
 
     if (!slotId || slotId === fixedSlotId || existingSlotIds.has(slotId)) {
+      continue
+    }
+
+    if (!CONFIGURED_PROPOSAL_SLOT_STATUSES.has(slotDocument?.status)) {
       continue
     }
 
@@ -523,6 +716,7 @@ function buildConfiguredSlotProposalOptions(slotDocuments = [], {
 
 module.exports = {
   buildConfiguredSlotProposalOptions,
+  buildMissingConfiguredWindowSlotDocuments,
   buildProposalOptionDisplay,
   buildSlotQueueKey,
   buildVoteProposalContext,

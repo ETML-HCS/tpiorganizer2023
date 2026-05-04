@@ -164,6 +164,14 @@ const emailSettingsSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    senderArbitrageName: {
+      type: String,
+      default: ''
+    },
+    senderArbitrageEmail: {
+      type: String,
+      default: ''
+    },
     replyToEmail: {
       type: String,
       default: ''

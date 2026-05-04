@@ -1,25 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { authPlanningService, planningCatalogService, planningConfigService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
+import { authPlanningService, planningCatalogService, planningConfigService, resolutionProposalService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
 import { IS_DEBUG, ROUTES } from '../../config/appConfig'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
-import PlanningCalendar from './PlanningCalendar'
 import TpiPlanningList from './TpiPlanningList'
 import VotingPanel from './VotingPanel'
+import VoteCommandCenter from './VoteCommandCenter'
 import ConflictResolver from './ConflictResolver'
-import ImportPanel from './ImportPanel'
 import PageToolbar from '../shared/PageToolbar'
 import {
   AlertIcon,
   ArrowRightIcon,
-  CalendarIcon,
   CheckIcon,
   CloseIcon,
   FileTextIcon,
   ListIcon,
   MailIcon,
-  PinIcon,
   RefreshIcon,
   SearchIcon,
   SendIcon,
@@ -36,7 +33,7 @@ import {
   normalizePlanningStatus,
   PLANNING_STATUS
 } from '../../constants/planningStatus'
-import { getActivePlanningSiteLabels, getPlanningPerimeterState } from '../../utils/planningScopeUtils'
+import { getPlanningPerimeterState } from '../../utils/planningScopeUtils'
 import { buildValidationToast, extractValidationResultFromError } from '../../utils/workflowFeedback'
 import { YEARS_CONFIG } from '../../config/appConfig'
 import './PlanningDashboard.css'
@@ -45,21 +42,6 @@ const WORKFLOW_LABELS = {
   planning: 'Planification',
   voting_open: 'Votes ouverts',
   published: 'Publie'
-}
-
-const WORKFLOW_ACTION_LABELS = {
-  autoPlan: 'Automatiser planification',
-  validate: 'Verifier conflits',
-  freeze: 'Geler snapshot',
-  startVotes: 'Ouvrir votes',
-  startVotesNoEmail: 'Ouvrir votes sans emails',
-  remindVotes: 'Relancer votes',
-  closeVotes: 'Clore votes',
-  publish: 'Publier definitif',
-  sendLinks: 'Envoyer liens défense',
-  staticVoteGenerate: 'Generer mini-site vote',
-  staticVotePublish: 'Publier mini-site vote',
-  staticVoteSync: 'Synchroniser votes statiques'
 }
 
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== 'test'
@@ -87,8 +69,8 @@ const TAB_PRESENTATIONS = {
   },
   votes: {
     kicker: 'Campagne',
-    title: 'Tous les TPI',
-    adminDescription: 'Suivi global des réponses, relances et clôture.',
+    title: 'Réponses reçues',
+    adminDescription: 'Uniquement les TPI pour lesquels au moins une réponse est arrivée.',
     viewerDescription: 'Réponds aux votes ouverts.'
   },
   'vote-pending': {
@@ -104,9 +86,9 @@ const TAB_PRESENTATIONS = {
     viewerDescription: 'Votes complets.'
   },
   conflicts: {
-    kicker: 'Forçage',
-    title: 'À forcer',
-    adminDescription: 'Choisis un TPI, sélectionne un créneau, indique la raison.',
+    kicker: 'Arbitrage',
+    title: 'À résoudre',
+    adminDescription: 'Choisis un TPI, sélectionne le créneau retenu, indique la raison.',
     viewerDescription: 'Aucune action manuelle.'
   }
 }
@@ -259,6 +241,20 @@ function getVoterRoleLabel(role) {
 }
 
 const VOTE_ROLE_ORDER = ['expert1', 'expert2', 'chef_projet']
+const RESOLUTION_RECIPIENT_ROLES = ['chef_projet', 'expert1', 'expert2']
+const DEFAULT_RESOLUTION_RECIPIENT_ROLES = ['chef_projet']
+
+function normalizeResolutionRecipientRoles(value) {
+  const source = Array.isArray(value) ? value : DEFAULT_RESOLUTION_RECIPIENT_ROLES
+  const selectedRoles = new Set(
+    source
+      .map((role) => compactText(role))
+      .filter((role) => RESOLUTION_RECIPIENT_ROLES.includes(role))
+  )
+  const roles = RESOLUTION_RECIPIENT_ROLES.filter((role) => selectedRoles.has(role))
+
+  return roles.length > 0 ? roles : DEFAULT_RESOLUTION_RECIPIENT_ROLES
+}
 
 function getVoteRoleEntries(tpi) {
   const voteRoleStatus = tpi?.voteRoleStatus || {}
@@ -272,6 +268,7 @@ function getVoteRoleEntries(tpi) {
       votedAt: null,
       alternativeCount: 0,
       availabilityException: false,
+      hardConstraint: false,
       specialRequestReason: '',
       specialRequestDate: null
     }
@@ -294,6 +291,10 @@ function getVoteRoleTone(roleStatus) {
 
   const responseMode = compactText(roleStatus?.responseMode)
   const decision = compactText(roleStatus?.decision)
+
+  if (roleStatus?.hardConstraint) {
+    return 'hard'
+  }
 
   if (responseMode === 'ok' || decision === 'accepted') {
     return 'ok'
@@ -329,6 +330,10 @@ function getVoteRoleStatusLabel(roleStatus) {
 
   if (tone === 'rejected') {
     return 'Refus'
+  }
+
+  if (tone === 'hard') {
+    return 'Bloquant'
   }
 
   if (tone === 'answered') {
@@ -373,16 +378,98 @@ function formatVoteDeadline(value) {
   return label ? `Echeance ${label}` : ''
 }
 
+function parseVoteTimeToMinutes(value) {
+  const match = compactText(value).match(/^(\d{1,2})(?::(\d{2}))?$/)
+
+  if (!match) {
+    return null
+  }
+
+  const hours = Number.parseInt(match[1], 10)
+  const minutes = Number.parseInt(match[2] || '0', 10)
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || minutes < 0 || minutes >= 60) {
+    return null
+  }
+
+  return (hours * 60) + minutes
+}
+
+function normalizeVotePeriodLabel(value) {
+  const normalized = compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  if (normalized.includes('matin')) {
+    return 'Matin'
+  }
+
+  if (normalized.includes('apres')) {
+    return 'Après-midi'
+  }
+
+  return ''
+}
+
+function getVoteSlotPeriodLabel(slot) {
+  const displayPeriod = normalizeVotePeriodLabel(slot?.display?.periodLabel)
+  if (displayPeriod) {
+    return displayPeriod
+  }
+
+  const storedPeriod = normalizeVotePeriodLabel(slot?.period)
+  if (storedPeriod) {
+    return storedPeriod
+  }
+
+  const startMinutes = parseVoteTimeToMinutes(slot?.startTime)
+  if (startMinutes === null) {
+    return 'Demi-journée'
+  }
+
+  return startMinutes < (12 * 60) ? 'Matin' : 'Après-midi'
+}
+
 function formatVoteSlotLabel(slot) {
   if (!slot) {
     return 'Aucun creneau fixe'
   }
 
   const dateLabel = formatVoteDate(slot.date)
-  const timeLabel = [slot.startTime, slot.endTime].filter(Boolean).join('-')
+  const periodLabel = getVoteSlotPeriodLabel(slot)
   const roomLabel = compactText(slot.room?.name || slot.room)
 
-  return [dateLabel, timeLabel, roomLabel].filter(Boolean).join(' · ') || 'Creneau a verifier'
+  return [dateLabel, periodLabel, roomLabel].filter(Boolean).join(' · ') || 'Creneau a verifier'
+}
+
+function normalizeVoteSlotDisplayLabel(value) {
+  const parts = compactText(value).split('·').map((part) => part.trim())
+
+  if (parts.length < 2) {
+    return compactText(value)
+  }
+
+  const timeMatch = parts[1].match(/^(\d{1,2}(?::\d{2})?)(?:\s*-\s*.+)?$/)
+  if (!timeMatch) {
+    return compactText(value)
+  }
+
+  const startMinutes = parseVoteTimeToMinutes(timeMatch[1])
+  parts[1] = startMinutes === null || startMinutes < (12 * 60) ? 'Matin' : 'Après-midi'
+
+  return parts.filter(Boolean).join(' · ')
+}
+
+function normalizeVoteCommentText(value) {
+  return compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function isOnlyAvailabilityVoteComment(value) {
+  return normalizeVoteCommentText(value).includes('seule disponibilite signalee')
 }
 
 function getVoteDecisionSlots(tpi) {
@@ -390,7 +477,7 @@ function getVoteDecisionSlots(tpi) {
     ? tpi.voteDecision.slots
     : []
 
-  return slots
+  const normalizedSlots = slots
     .filter((slot) => compactText(slot?.slotId))
     .map((slot) => ({
       ...slot,
@@ -401,6 +488,50 @@ function getVoteDecisionSlots(tpi) {
       respondedCount: Number(slot.respondedCount || 0),
       roleDecisions: Array.isArray(slot.roleDecisions) ? slot.roleDecisions : []
     }))
+
+  const rolesWithOnlyAvailability = new Set()
+  normalizedSlots.forEach((slot) => {
+    const roleDecisions = Array.isArray(slot.roleDecisions) ? slot.roleDecisions : []
+    roleDecisions.forEach((decision) => {
+      if (slot.isFixed && isOnlyAvailabilityVoteComment(decision?.comment)) {
+        rolesWithOnlyAvailability.add(compactText(decision?.role))
+      }
+    })
+  })
+
+  return normalizedSlots.map((slot) => {
+    const roleDecisions = (Array.isArray(slot.roleDecisions) ? slot.roleDecisions : [])
+      .map((decision) => {
+        const role = compactText(decision?.role)
+        const isInferredOnlyAvailability = Boolean(
+          role &&
+          rolesWithOnlyAvailability.has(role) &&
+          !slot.isFixed &&
+          decision?.decision === 'preferred'
+        )
+
+        return isInferredOnlyAvailability
+          ? {
+              ...decision,
+              comment: decision.comment || 'Seule disponibilité signalée.',
+              hardConstraint: true
+            }
+          : decision
+      })
+
+    return {
+      ...slot,
+      roleDecisions,
+      hasHardConstraint: Boolean(slot.hasHardConstraint) ||
+        roleDecisions.some((decision) => decision?.hardConstraint)
+    }
+  })
+}
+
+function isGenericVoteProposalComment(value) {
+  const normalized = normalizeVoteCommentText(value)
+
+  return normalized === 'proposition de creneaux alternatifs'
 }
 
 function getVoteProposalSummaries(tpi) {
@@ -420,9 +551,11 @@ function getVoteProposalSummaries(tpi) {
         roleLabel: getVoterRoleLabel(role),
         voterName,
         slots: [],
+        comment: '',
         specialRequestReason: '',
         specialRequestDate: null,
-        hasAvailabilityException: false
+        hasAvailabilityException: false,
+        hasHardConstraint: false
       })
     }
 
@@ -458,10 +591,20 @@ function getVoteProposalSummaries(tpi) {
 
       if (
         decision.availabilityException ||
+        decision.hardConstraint ||
+        isOnlyAvailabilityVoteComment(decision.comment) ||
+        (compactText(decision.comment) && !isGenericVoteProposalComment(decision.comment)) ||
         compactText(decision.specialRequestReason) ||
         decision.specialRequestDate
       ) {
+        const decisionComment = isGenericVoteProposalComment(decision.comment)
+          ? ''
+          : compactText(decision.comment)
         summary.hasAvailabilityException = true
+        summary.hasHardConstraint = summary.hasHardConstraint ||
+          Boolean(decision.hardConstraint) ||
+          isOnlyAvailabilityVoteComment(decision.comment)
+        summary.comment = summary.comment || decisionComment
         summary.specialRequestReason = summary.specialRequestReason || compactText(decision.specialRequestReason)
         summary.specialRequestDate = summary.specialRequestDate || decision.specialRequestDate || null
       }
@@ -485,6 +628,8 @@ function getVoteProposalSummaries(tpi) {
     .filter((summary) =>
       summary.slots.length > 0 ||
       summary.hasAvailabilityException ||
+      summary.hasHardConstraint ||
+      compactText(summary.comment) ||
       compactText(summary.specialRequestReason) ||
       summary.specialRequestDate
     )
@@ -509,8 +654,17 @@ function buildVoteProposalMoveReason(tpi, summary, slot) {
   return `Déplacement depuis proposition de vote: ${reference} vers ${slotLabel}${voterLabel ? ` (${voterLabel})` : ''}.`
 }
 
+function buildResolutionProposalDefaultMessage(tpi, slot) {
+  const reference = compactText(tpi?.reference) || 'ce TPI'
+  const candidateName = formatPersonName(tpi?.candidat, 'le candidat')
+  const slotLabel = compactText(slot?.label) || 'le créneau proposé'
+
+  return `Une contrainte bloque ${reference} (${candidateName}). Je propose de retenir ${slotLabel}. Merci de confirmer votre accord ou d'indiquer la raison du refus avec une proposition éventuelle.`
+}
+
 function getMoveSlotLabel(slot, fallback = 'Non défini') {
-  return compactText(slot?.label) || formatVoteSlotLabel(slot) || fallback
+  const directLabel = normalizeVoteSlotDisplayLabel(slot?.label)
+  return directLabel || formatVoteSlotLabel(slot) || fallback
 }
 
 function getMoveConflictLabel(conflict) {
@@ -538,48 +692,302 @@ function getMoveConflictLabel(conflict) {
   return conflict?.description || conflict?.message || 'Conflit détecté.'
 }
 
-function getSlotDecisionTone(decision) {
-  if (decision === 'accepted') {
-    return 'ok'
-  }
-
-  if (decision === 'preferred') {
-    return 'proposal'
-  }
-
-  if (decision === 'rejected') {
-    return 'rejected'
-  }
-
-  return 'pending'
+function getHardConstraintDecisionName(decision) {
+  return compactText(decision?.voterName) || getVoterRoleLabel(decision?.role) || 'cette personne'
 }
 
-function getSlotDecisionLabel(decision, isFixed) {
-  if (decision === 'accepted') {
-    return isFixed ? 'OK' : 'Accepte'
+function addUniqueText(target, value) {
+  const text = compactText(value)
+  if (text && !target.includes(text)) {
+    target.push(text)
   }
-
-  if (decision === 'preferred') {
-    return 'Propose'
-  }
-
-  if (decision === 'rejected') {
-    return isFixed ? 'Refus' : 'Non retenu'
-  }
-
-  return 'Attente'
 }
 
-function getAdminSlotActionLabel(slot) {
-  if (slot?.positiveCount >= 3) {
-    return 'Valider'
+function addUniqueReason(target, value) {
+  const text = compactText(value)
+  if (!text) {
+    return
   }
 
-  if (slot?.positiveCount === 2) {
-    return 'Imposer 2/3'
+  const normalizedText = normalizeVoteCommentText(text)
+  const existingIndex = target.findIndex((existing) => {
+    const normalizedExisting = normalizeVoteCommentText(existing)
+    return normalizedExisting.includes(normalizedText) || normalizedText.includes(normalizedExisting)
+  })
+
+  if (existingIndex === -1) {
+    target.push(text)
+    return
   }
 
-  return 'Forcer'
+  if (text.length > target[existingIndex].length) {
+    target[existingIndex] = text
+  }
+}
+
+function getHardConstraintReasonParts(source) {
+  return [
+    compactText(source?.comment),
+    compactText(source?.specialRequestReason),
+    formatSpecialRequestDate(source?.specialRequestDate)
+  ].filter(Boolean)
+}
+
+function formatHardConstraintEntryMessage(entry) {
+  const name = compactText(entry?.voterName) || compactText(entry?.roleLabel) || 'cette personne'
+  const slotText = entry?.slotLabels?.length
+    ? ` sur ${entry.slotLabels.join(', ')}`
+    : ''
+  const reasonText = entry?.reasons?.length
+    ? `: ${entry.reasons.join(' · ')}`
+    : ''
+
+  return `Contrainte dure: ${name}${slotText}${reasonText}`
+}
+
+function buildVoteConstraintRowSummary(row) {
+  const hardEntriesByRole = new Map()
+  const riskySlotIds = new Set()
+  const addHardEntry = ({ role, roleLabel, voterName, slotLabel, reasonParts = [] }) => {
+    const normalizedRole = compactText(role)
+    const key = normalizedRole || compactText(voterName) || compactText(roleLabel) || `hard-${hardEntriesByRole.size}`
+
+    if (!hardEntriesByRole.has(key)) {
+      hardEntriesByRole.set(key, {
+        role: normalizedRole,
+        roleLabel: compactText(roleLabel) || getVoterRoleLabel(normalizedRole),
+        voterName: compactText(voterName),
+        slotLabels: [],
+        reasons: []
+      })
+    }
+
+    const entry = hardEntriesByRole.get(key)
+    if (!entry.voterName) {
+      entry.voterName = compactText(voterName)
+    }
+
+    addUniqueText(entry.slotLabels, slotLabel)
+    reasonParts.forEach((reason) => addUniqueReason(entry.reasons, reason))
+  }
+
+  const decisionSlots = Array.isArray(row?.decisionSlots) ? row.decisionSlots : []
+  const onlyAvailabilityContextsByRole = new Map()
+  const getOnlyAvailabilityContext = (decision) => {
+    const role = compactText(decision?.role)
+
+    if (!role) {
+      return null
+    }
+
+    if (!onlyAvailabilityContextsByRole.has(role)) {
+      onlyAvailabilityContextsByRole.set(role, {
+        role,
+        roleLabel: getVoterRoleLabel(role),
+        voterName: getHardConstraintDecisionName(decision),
+        reasons: [],
+        preferredSlotIds: [],
+        preferredSlotLabels: [],
+        sourceSlotIds: [],
+        sourceSlotLabels: []
+      })
+    }
+
+    const context = onlyAvailabilityContextsByRole.get(role)
+    const voterName = getHardConstraintDecisionName(decision)
+    if (voterName && !context.voterName) {
+      context.voterName = voterName
+    }
+
+    return context
+  }
+
+  for (const slot of decisionSlots) {
+    const roleDecisions = Array.isArray(slot?.roleDecisions) ? slot.roleDecisions : []
+
+    for (const decision of roleDecisions) {
+      const context = getOnlyAvailabilityContext(decision)
+      if (!context) {
+        continue
+      }
+
+      if (decision?.decision === 'preferred') {
+        addUniqueText(context.preferredSlotIds, slot?.slotId)
+        addUniqueText(context.preferredSlotLabels, slot?.label)
+      }
+
+      if (isOnlyAvailabilityVoteComment(decision?.comment)) {
+        addUniqueText(context.sourceSlotIds, slot?.slotId)
+        addUniqueText(context.sourceSlotLabels, slot?.label)
+        addUniqueReason(context.reasons, decision.comment)
+      }
+    }
+  }
+
+  for (const entry of Array.isArray(row?.roleEntries) ? row.roleEntries : []) {
+    if (!entry?.status?.hardConstraint) {
+      continue
+    }
+
+    addHardEntry({
+      role: entry.role,
+      roleLabel: entry.label,
+      voterName: entry.status?.voterName,
+      reasonParts: getHardConstraintReasonParts(entry.status)
+    })
+  }
+
+  for (const slot of decisionSlots) {
+    const roleDecisions = Array.isArray(slot?.roleDecisions) ? slot.roleDecisions : []
+
+    for (const decision of roleDecisions) {
+      if (!decision?.hardConstraint) {
+        continue
+      }
+
+      riskySlotIds.add(compactText(slot?.slotId))
+      addHardEntry({
+        role: decision.role,
+        roleLabel: getVoterRoleLabel(decision.role),
+        voterName: getHardConstraintDecisionName(decision),
+        slotLabel: slot?.label,
+        reasonParts: getHardConstraintReasonParts(decision)
+      })
+    }
+  }
+
+  const onlyAvailabilityContexts = Array.from(onlyAvailabilityContextsByRole.values())
+    .filter((context) => context.reasons.length > 0)
+
+  onlyAvailabilityContexts.forEach((context) => {
+    const slotLabels = context.preferredSlotLabels.length > 0
+      ? context.preferredSlotLabels
+      : context.sourceSlotLabels
+    const slotIds = context.preferredSlotIds.length > 0
+      ? context.preferredSlotIds
+      : context.sourceSlotIds
+
+    slotIds.forEach((slotId) => {
+      const text = compactText(slotId)
+      if (text) {
+        riskySlotIds.add(text)
+      }
+    })
+
+    if (slotLabels.length === 0) {
+      addHardEntry({
+        role: context.role,
+        roleLabel: context.roleLabel,
+        voterName: context.voterName,
+        reasonParts: context.reasons
+      })
+      return
+    }
+
+    slotLabels.forEach((slotLabel, index) => {
+      addHardEntry({
+        role: context.role,
+        roleLabel: context.roleLabel,
+        voterName: context.voterName,
+        slotLabel,
+        reasonParts: index === 0 ? context.reasons : []
+      })
+    })
+  })
+
+  const hardEntries = Array.from(hardEntriesByRole.values())
+    .sort((left, right) => {
+      const roleDiff = VOTE_ROLE_ORDER.indexOf(left.role) - VOTE_ROLE_ORDER.indexOf(right.role)
+
+      if (roleDiff !== 0) {
+        return roleDiff
+      }
+
+      return compactText(left.voterName || left.roleLabel).localeCompare(
+        compactText(right.voterName || right.roleLabel),
+        'fr'
+      )
+    })
+  const safeSlots = onlyAvailabilityContexts.length > 0
+    ? []
+    : decisionSlots
+    .filter((slot) => {
+      if (slot?.hasHardConstraint) {
+        return false
+      }
+
+      return !(Array.isArray(slot?.roleDecisions) ? slot.roleDecisions : [])
+        .some((decision) => decision?.hardConstraint)
+    })
+    .sort((left, right) => {
+      if (Number(right.positiveCount || 0) !== Number(left.positiveCount || 0)) {
+        return Number(right.positiveCount || 0) - Number(left.positiveCount || 0)
+      }
+
+      if (Number(left.rejectedCount || 0) !== Number(right.rejectedCount || 0)) {
+        return Number(left.rejectedCount || 0) - Number(right.rejectedCount || 0)
+      }
+
+      return compactText(left.label).localeCompare(compactText(right.label), 'fr')
+    })
+  const perfectSlot = safeSlots.find((slot) => Number(slot?.positiveCount || 0) >= VOTE_ROLE_ORDER.length)
+  const bestSlot = safeSlots[0] || null
+  const conflictMessages = hardEntries.map(formatHardConstraintEntryMessage)
+
+  return {
+    hasHardConstraint: hardEntries.length > 0,
+    hardEntries,
+    riskySlotIds: Array.from(riskySlotIds).filter(Boolean),
+    conflictMessages,
+    hasPerfectSolution: Boolean(perfectSlot),
+    bestSlotLabel: bestSlot ? compactText(bestSlot.label) : '',
+    bestSlotPositiveCount: bestSlot ? Number(bestSlot.positiveCount || 0) : 0,
+    recommendation: perfectSlot
+      ? `Solution sans contrainte détectée sur ${compactText(perfectSlot.label)}.`
+      : bestSlot
+        ? `Meilleur créneau sans contrainte dure: ${compactText(bestSlot.label)} (${Number(bestSlot.positiveCount || 0)}/3).`
+        : 'Aucun créneau exploitable sans contrainte dure. Résolution manuelle requise.'
+  }
+}
+
+function buildVoteConstraintCheckResult(rows = [], year = null) {
+  const checkedRows = Array.isArray(rows) ? rows : []
+  const byTpiId = {}
+  const conflicts = []
+
+  checkedRows.forEach((row) => {
+    const summary = row?.constraintSummary || buildVoteConstraintRowSummary(row)
+
+    if (!summary.hasHardConstraint) {
+      return
+    }
+
+    byTpiId[row.id] = summary
+    summary.hardEntries.forEach((entry) => {
+      conflicts.push({
+        tpiId: row.id,
+        reference: row.reference,
+        role: entry.role,
+        roleLabel: entry.roleLabel,
+        voterName: entry.voterName,
+        slotLabels: entry.slotLabels,
+        reasons: entry.reasons,
+        message: formatHardConstraintEntryMessage(entry),
+        recommendation: summary.recommendation
+      })
+    })
+  })
+
+  return {
+    year,
+    checkedAt: new Date().toISOString(),
+    byTpiId,
+    conflicts,
+    conflictCount: conflicts.length,
+    impactedTpiCount: Object.keys(byTpiId).length,
+    checkedTpiCount: checkedRows.length,
+    checkedResponseTpiCount: checkedRows.filter((row) => Number(row?.respondedCount || 0) > 0).length
+  }
 }
 
 function buildAdminSlotForceReason(reference, slot) {
@@ -590,12 +998,33 @@ function buildAdminSlotForceReason(reference, slot) {
     return `Validation admin depuis le suivi des votes: consensus 3/3 sur ${slotLabel}.`
   }
 
-  return `Forçage admin depuis le suivi des votes ${reference}: ${voteRatio} avis favorable(s) sur ${slotLabel}.`
+  return `Choix admin depuis le suivi des votes ${reference}: ${voteRatio} avis favorable(s) sur ${slotLabel}.`
 }
 
 function buildVoteWorkflowRow(tpi) {
-  const roleEntries = getVoteRoleEntries(tpi)
+  const initialRoleEntries = getVoteRoleEntries(tpi)
   const decisionSlots = getVoteDecisionSlots(tpi)
+  const blockingRolesFromSlots = new Set()
+  decisionSlots.forEach((slot) => {
+    const roleDecisions = Array.isArray(slot?.roleDecisions) ? slot.roleDecisions : []
+    roleDecisions.forEach((decision) => {
+      if (decision?.hardConstraint || isOnlyAvailabilityVoteComment(decision?.comment)) {
+        blockingRolesFromSlots.add(compactText(decision?.role))
+      }
+    })
+  })
+  const roleEntries = initialRoleEntries.map((entry) =>
+    blockingRolesFromSlots.has(entry.role)
+      ? {
+          ...entry,
+          status: {
+            ...entry.status,
+            hardConstraint: true
+          }
+        }
+      : entry
+  )
+  const constraintSummary = buildVoteConstraintRowSummary({ decisionSlots, roleEntries })
   const respondedRoles = roleEntries.filter((entry) => hasVoteRoleResponded(entry.status))
   const missingRoles = roleEntries.filter((entry) => !hasVoteRoleResponded(entry.status))
   const normalizedStatus = normalizePlanningStatus(tpi?.status)
@@ -603,6 +1032,7 @@ function buildVoteWorkflowRow(tpi) {
   const hasProposal = roleEntries.some((entry) => getVoteRoleTone(entry.status) === 'proposal')
   const hasSpecialRequest = roleEntries.some((entry) =>
     Boolean(entry.status?.availabilityException) ||
+    Boolean(entry.status?.hardConstraint) ||
     Boolean(compactText(entry.status?.specialRequestReason)) ||
     Boolean(entry.status?.specialRequestDate)
   )
@@ -631,6 +1061,9 @@ function buildVoteWorkflowRow(tpi) {
     fixedSlotLabel: formatVoteSlotLabel(getVoteFixedSlot(tpi)),
     decisionSlots,
     proposalSummaries: getVoteProposalSummaries(tpi),
+    resolutionProposals: Array.isArray(tpi?.resolutionProposals) ? tpi.resolutionProposals : [],
+    constraintSummary,
+    hasHardConstraint: constraintSummary.hasHardConstraint,
     deadlineLabel: formatVoteDeadline(tpi?.votingSession?.deadline),
     hasProposal,
     hasSpecialRequest,
@@ -676,6 +1109,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [planningCatalogSites, setPlanningCatalogSites] = useState([])
   const [planningSiteConfigs, setPlanningSiteConfigs] = useState([])
   const [validationResult, setValidationResult] = useState(null)
+  const [constraintCheckResult, setConstraintCheckResult] = useState(null)
   
   // États de l'interface
   const [activeTab, setActiveTab] = useState(() => requestedTab || 'votes')
@@ -690,6 +1124,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [proposalMoveReview, setProposalMoveReview] = useState(null)
   const [proposalMoveLoadingKey, setProposalMoveLoadingKey] = useState('')
   const [proposalMoveApplying, setProposalMoveApplying] = useState(false)
+  const [resolutionProposalDraft, setResolutionProposalDraft] = useState(null)
+  const [resolutionProposalSubmitting, setResolutionProposalSubmitting] = useState(false)
   const [preferenceActionLoadingKey, setPreferenceActionLoadingKey] = useState('')
   const staticVoteAutoSyncYearsRef = useRef(new Set())
 
@@ -764,6 +1200,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     setIsLoading(true)
     setError(null)
     setValidationResult(null)
+    setConstraintCheckResult(null)
     
     try {
       const staticVoteAutoSyncResponse = await tryAutoSyncStaticVotes()
@@ -995,14 +1432,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [visibleTpis, conflicts, pendingVotes, isAdmin])
 
-  const manualRequiredCount = useMemo(() => {
-    return visibleTpis.filter(t => MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(t.status))).length
-  }, [visibleTpis])
-
-  const hasManualRequired = useMemo(() => {
-    return manualRequiredCount > 0
-  }, [manualRequiredCount])
-
   const voteTrackingTpis = useMemo(() => {
     if (!isAdmin) {
       return []
@@ -1033,6 +1462,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return voteTrackingTpis.map((tpi) => buildVoteWorkflowRow(tpi))
   }, [voteTrackingTpis])
 
+  const voteWorkflowResponseRows = useMemo(() => (
+    voteWorkflowRows.filter((row) => Number(row.respondedCount || 0) > 0)
+  ), [voteWorkflowRows])
+
+  const voteWorkflowAllResponseRows = useMemo(() => (
+    voteWorkflowAllRows.filter((row) => Number(row.respondedCount || 0) > 0)
+  ), [voteWorkflowAllRows])
+
   const voteWorkflowStats = useMemo(() => {
     const totalTpis = voteWorkflowAllRows.length
     const expectedVotes = totalTpis * VOTE_ROLE_ORDER.length
@@ -1048,40 +1485,44 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       receivedVotes,
       missingVotes,
       completionRate,
+      responseTpis: voteWorkflowAllResponseRows.length,
+      pendingResponseTpis: voteWorkflowAllResponseRows.filter((row) => row.bucket === 'pending').length,
+      readyResponseTpis: voteWorkflowAllResponseRows.filter((row) => row.bucket === 'ready').length,
       pendingTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'pending').length,
       readyTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'ready').length,
       manualTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'manual').length,
       confirmedTpis: voteWorkflowAllRows.filter((row) => row.bucket === 'confirmed').length,
-      proposalTpis: voteWorkflowAllRows.filter((row) => row.hasProposal || row.hasSpecialRequest).length
+      proposalTpis: voteWorkflowAllRows.filter((row) => row.hasProposal || row.hasSpecialRequest).length,
+      hardConstraintTpis: voteWorkflowAllRows.filter((row) => row.hasHardConstraint).length
     }
-  }, [voteWorkflowAllRows])
+  }, [voteWorkflowAllRows, voteWorkflowAllResponseRows])
 
   const voteWorkflowSections = useMemo(() => ([
     {
       id: 'pending',
       title: 'À relancer',
       helper: 'Votes encore manquants. Ce sont les personnes à cibler avant la clôture.',
-      rows: voteWorkflowRows.filter((row) => row.bucket === 'pending')
+      rows: voteWorkflowResponseRows.filter((row) => row.bucket === 'pending')
     },
     {
       id: 'ready',
       title: 'Prêts pour clôture',
       helper: 'Les trois rôles ont répondu. La clôture décidera automatiquement ou basculera en manuel.',
-      rows: voteWorkflowRows.filter((row) => row.bucket === 'ready')
+      rows: voteWorkflowResponseRows.filter((row) => row.bucket === 'ready')
     },
     {
       id: 'manual',
-      title: 'À forcer',
-      helper: 'Ces TPI demandent un choix manuel de créneau avant publication.',
-      rows: voteWorkflowRows.filter((row) => row.bucket === 'manual')
+      title: 'À résoudre',
+      helper: 'Ces TPI demandent un arbitrage manuel de créneau avant publication.',
+      rows: voteWorkflowResponseRows.filter((row) => row.bucket === 'manual')
     },
     {
       id: 'confirmed',
       title: 'Confirmés',
       helper: 'Les défenses ont un créneau confirmé.',
-      rows: voteWorkflowRows.filter((row) => row.bucket === 'confirmed')
+      rows: voteWorkflowResponseRows.filter((row) => row.bucket === 'confirmed')
     }
-  ]), [voteWorkflowRows])
+  ]), [voteWorkflowResponseRows])
 
   const activeVoteWorkflowSections = useMemo(() => {
     if (activeTab === 'vote-pending') {
@@ -1094,6 +1535,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
     return voteWorkflowSections
   }, [activeTab, voteWorkflowSections])
+
+  const checkedConstraintByTpiId = useMemo(() => (
+    constraintCheckResult?.byTpiId && typeof constraintCheckResult.byTpiId === 'object'
+      ? constraintCheckResult.byTpiId
+      : {}
+  ), [constraintCheckResult])
 
   const legacyPlanningPerimeterEntries = useMemo(() => {
     if (!isAdmin || !legacyTpis.length) {
@@ -1130,10 +1577,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       })
       .map(({ tpi }) => tpi)
   }, [legacyPlanningPerimeterEntries, tpis])
-
-  const activePlanningSiteLabels = useMemo(() => {
-    return getActivePlanningSiteLabels(planningSiteConfigs)
-  }, [planningSiteConfigs])
 
   const notImportedLegacyTpisByPlanningPerimeter = notImportedLegacyTpis
 
@@ -1409,6 +1852,28 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [proposalMoveReview, proposalMoveApplying])
 
+  useEffect(() => {
+    if (!resolutionProposalDraft) {
+      return undefined
+    }
+
+    const previousOverflow = document.body.style.overflow
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && !resolutionProposalSubmitting) {
+        setResolutionProposalDraft(null)
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [resolutionProposalDraft, resolutionProposalSubmitting])
+
   const clearFocusedSearch = useCallback(() => {
     const params = new URLSearchParams(location.search)
     params.delete('focus')
@@ -1478,15 +1943,18 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     const tpiId = compactText(tpi?._id)
     const slotId = compactText(slot?.slotId)
     const reference = compactText(tpi?.reference) || 'ce TPI'
+    const positiveCount = Number(slot?.positiveCount || 0)
 
     if (!tpiId || !slotId) {
-      setError('Impossible d’identifier le TPI ou le créneau à forcer.')
+      setError('Impossible d’identifier le TPI ou le créneau à valider.')
       return
     }
 
-    const actionLabel = slot?.positiveCount >= 3
-      ? 'valider ce créneau'
-      : 'forcer ce créneau'
+    const actionLabel = positiveCount >= 3
+      ? 'valider le consensus'
+      : positiveCount === 2
+        ? 'valider ce créneau avec 2 avis favorables'
+        : 'choisir ce créneau manuellement'
     const confirmation = window.confirm(
       `Confirmer: ${actionLabel} pour ${reference} ?`
     )
@@ -1545,7 +2013,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         simulation
       })
     } catch (err) {
-      const message = getApiErrorMessage(err, `Impossible de simuler le déplacement de ${reference}.`)
+      const message = getApiErrorMessage(err, `Impossible de tester le déplacement de ${reference}.`)
       setProposalMoveReview({
         ...review,
         status: 'error',
@@ -1568,17 +2036,17 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     )
 
     if (!tpiId || !slotId) {
-      setError('Impossible d’identifier le TPI ou le créneau à déplacer.')
+      setError('Impossible d’identifier le TPI ou le créneau à confirmer.')
       return
     }
 
     if (!proposalMoveReview?.simulation?.canMove) {
-      setError('Le déplacement est bloqué par un conflit. Ouvre le forçage pour le traiter.')
+      setError('Le déplacement est bloqué par un conflit. Ouvre la résolution manuelle pour le traiter.')
       return
     }
 
     const confirmed = window.confirm(
-      `Déplacer et confirmer ${reference} vers ${targetSlotLabel} ?`
+      `Confirmer le déplacement de ${reference} vers ${targetSlotLabel} ?`
     )
 
     if (!confirmed) {
@@ -1596,7 +2064,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       )
 
       if (result?.success) {
-        const message = `${reference}: déplacé et confirmé.`
+        const message = `${reference}: déplacement confirmé.`
         toast.success(message)
         setSuccessMessage(message)
         setProposalMoveReview(null)
@@ -1620,13 +2088,93 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [proposalMoveReview, loadData])
 
+  const handleOpenResolutionProposal = useCallback((tpi, row, slot = null) => {
+    const decisionSlots = Array.isArray(row?.decisionSlots) ? row.decisionSlots : []
+    const selectedSlot = slot || decisionSlots.find((candidateSlot) => compactText(candidateSlot?.slotId)) || null
+    const slotId = compactText(selectedSlot?.slotId)
+
+    if (!tpi || !row || !slotId) {
+      setError('Impossible de préparer la proposition: aucun créneau exploitable.')
+      return
+    }
+
+    setError(null)
+    setSelectedTpi(null)
+    setResolutionProposalDraft({
+      tpi,
+      row,
+      slotId,
+      devMode: IS_DEBUG,
+      sentProposal: null,
+      recipientRoles: DEFAULT_RESOLUTION_RECIPIENT_ROLES,
+      message: buildResolutionProposalDefaultMessage(tpi, selectedSlot)
+    })
+  }, [])
+
+  const handleSendResolutionProposal = useCallback(async () => {
+    const tpiId = compactText(resolutionProposalDraft?.tpi?._id)
+    const slotId = compactText(resolutionProposalDraft?.slotId)
+    const reference = compactText(resolutionProposalDraft?.tpi?.reference) || 'ce TPI'
+
+    if (!tpiId || !slotId) {
+      setError('Impossible d’identifier le TPI ou le créneau proposé.')
+      return
+    }
+
+    const recipientRoles = normalizeResolutionRecipientRoles(resolutionProposalDraft?.recipientRoles)
+
+    setResolutionProposalSubmitting(true)
+    setError(null)
+
+    try {
+      const result = await resolutionProposalService.create(tpiId, {
+        slotId,
+        year,
+        message: resolutionProposalDraft?.message,
+        recipientRoles,
+        baseUrl: window.location.origin,
+        devMode: IS_DEBUG && resolutionProposalDraft?.devMode === true
+      })
+
+      if (result?.success === false) {
+        throw new Error(result?.message || 'Envoi de la proposition impossible.')
+      }
+
+      const createdProposal = result?.proposal || result
+      const hasDevLinks = Array.isArray(createdProposal?.devLinks) && createdProposal.devLinks.length > 0
+      const message = hasDevLinks
+        ? `${reference}: liens DEV générés, aucun email envoyé.`
+        : `${reference}: proposition transmise.`
+      toast.success(message)
+      setSuccessMessage(message)
+      await loadData()
+
+      if (hasDevLinks) {
+        setResolutionProposalDraft((current) => ({
+          ...current,
+          sentProposal: createdProposal
+        }))
+        return
+      }
+
+      setResolutionProposalDraft(null)
+    } catch (err) {
+      const message = getApiErrorMessage(err, `Envoi de la proposition impossible pour ${reference}.`)
+      setError(message)
+      toast.error(message)
+      console.error(err)
+    } finally {
+      setResolutionProposalSubmitting(false)
+    }
+  }, [resolutionProposalDraft, loadData])
+
   const handleInsertProposalPreference = useCallback(async (summary, slot) => {
     const voteId = compactText(slot?.voteId)
     const slotId = compactText(slot?.slotId)
     const actionKey = `${voteId || summary?.role || 'vote'}:${slotId || 'slot'}`
 
     if (!voteId) {
-      setError('Impossible d’identifier le vote à ajouter aux dates idéales.')
+      setError('Impossible d’identifier la préférence à enregistrer.')
       return
     }
 
@@ -1637,28 +2185,19 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       const result = await voteService.addProposalToPreferences(voteId)
       const voterName = compactText(result?.voter?.name) || compactText(summary?.voterName) || summary?.roleLabel || 'Votant'
       const message = result?.added
-        ? `${voterName}: proposition ajoutée aux dates idéales.`
-        : `${voterName}: proposition déjà présente dans les dates idéales.`
+        ? `${voterName}: préférence enregistrée dans ses dates idéales.`
+        : `${voterName}: préférence déjà présente dans ses dates idéales.`
 
       toast.success(message)
       setSuccessMessage(message)
       await loadData()
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Impossible d’ajouter cette proposition aux dates idéales.')
+      const message = getApiErrorMessage(err, 'Impossible d’enregistrer cette préférence.')
       setError(message)
       console.error(err)
     } finally {
       setPreferenceActionLoadingKey('')
     }
-  }, [loadData])
-
-  /**
-   * Gère le drag & drop d'un TPI sur un créneau
-   */
-  const handleDragDrop = useCallback(async (tpiId, slotId) => {
-    // Le drag & drop est géré dans PlanningCalendar
-    // Cette fonction est appelée après confirmation
-    await loadData()
   }, [loadData])
 
   const isActionRunning = useCallback(
@@ -1767,6 +2306,24 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
     return result
   }, [year, executeWorkflowAction])
+
+  const handleCheckVoteConstraints = useCallback(() => {
+    const result = buildVoteConstraintCheckResult(voteWorkflowAllRows, year)
+    setConstraintCheckResult(result)
+
+    if (result.conflictCount > 0) {
+      setActiveTab('votes')
+      toast.warning(
+        `${result.impactedTpiCount} TPI avec contrainte dure (${result.conflictCount} signalement${result.conflictCount > 1 ? 's' : ''}).`,
+        { position: 'top-center' }
+      )
+      return
+    }
+
+    toast.success('Aucune contrainte dure bloquante détectée.', {
+      position: 'top-center'
+    })
+  }, [voteWorkflowAllRows, year])
 
   const handleAutomatePlanification = useCallback(async () => {
     await executeWorkflowAction({
@@ -1974,7 +2531,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       actionKey: 'staticVoteSync',
       run: () => workflowPlanningService.syncStaticVotePublication(year),
       successBuilder: (result) =>
-        `Votes statiques synchronises: ${result?.importedCount || 0}/${result?.receivedCount || 0} importe(s), ${result?.failedCount || 0} erreur(s).`,
+        `Mini-site synchronise: ${result?.voteImportedCount ?? result?.importedCount ?? 0}/${result?.voteReceivedCount ?? result?.receivedCount ?? 0} vote(s), ${result?.arbitrageImportedCount || 0}/${result?.arbitrageReceivedCount || 0} arbitrage(s), ${result?.failedCount || 0} erreur(s).`,
       errorFallback: 'Erreur lors de la synchronisation des votes statiques.',
       reloadAfterSuccess: true
     })
@@ -2019,55 +2576,20 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
 
     return [
-      { id: 'votes', label: 'Tous les TPI', icon: <VoteIcon className='page-tools-tab-icon-svg' />, count: voteTrackingTpis.length },
-      { id: 'vote-pending', label: 'À relancer', icon: <MailIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.pendingTpis },
-      { id: 'vote-ready', label: 'Prêts à clore', icon: <CheckIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.readyTpis },
-      { id: 'conflicts', label: 'À forcer', icon: <WrenchIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.manualTpis || stats.conflicts }
+      { id: 'votes', label: 'Réponses reçues', icon: <VoteIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.responseTpis },
+      { id: 'vote-pending', label: 'À relancer', icon: <MailIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.pendingResponseTpis },
+      { id: 'vote-ready', label: 'Prêts à clore', icon: <CheckIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.readyResponseTpis },
+      { id: 'conflicts', label: 'À résoudre', icon: <WrenchIcon className='page-tools-tab-icon-svg' />, count: voteWorkflowStats.manualTpis || stats.conflicts }
     ]
   }, [
     isScopedVoteViewer,
     stats.pendingVotes,
     stats.total,
     stats.conflicts,
-    voteTrackingTpis.length,
-    voteWorkflowStats.pendingTpis,
-    voteWorkflowStats.readyTpis,
+    voteWorkflowStats.responseTpis,
+    voteWorkflowStats.pendingResponseTpis,
+    voteWorkflowStats.readyResponseTpis,
     voteWorkflowStats.manualTpis
-  ])
-
-  const workflowSteps = useMemo(() => {
-    if (!isAdmin) {
-      return []
-    }
-
-    return [
-      {
-        id: 'step-planification',
-        label: '1. Planification gelée',
-        done: hasActiveSnapshot || isVotingState || isPublishedState
-      },
-      {
-        id: 'step-votes',
-        label: '2. Votes',
-        done: isPublishedState,
-        active: isVotingState,
-        warning: isVotingState && hasManualRequired
-          ? `${manualRequiredCount} TPI à forcer`
-          : ''
-      },
-      {
-        id: 'step-publication',
-        label: '3. Publication',
-        done: isPublishedState
-      }
-    ]
-  }, [
-    isAdmin,
-    hasActiveSnapshot,
-    isVotingState,
-    isPublishedState,
-    hasManualRequired,
-    manualRequiredCount
   ])
 
   const activeTabPresentation = useMemo(() => {
@@ -2081,9 +2603,6 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         : presentation.viewerDescription
     }
   }, [activeTab, isAdmin])
-  const activeSitesSummary = activePlanningSiteLabels.length > 0
-    ? activePlanningSiteLabels.join(', ')
-    : `Aucun site actif pour ${year}`
   const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || STATUS_FILTER_LABELS.all
   const activeViewCount = (() => {
     if (activeTab === 'list') {
@@ -2141,19 +2660,27 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     : []
   const proposalMoveCanApply = proposalMoveReview?.status === 'ready' &&
     proposalMoveSimulation?.canMove === true
-
-  /**
-   * Callback après import réussi
-   */
-  const handleImportComplete = useCallback((type, results) => {
-    logWorkflowDebug(`Import ${type} terminé:`, results)
-    // Recharger les données après import
-    loadData()
-    // Passer à l'onglet approprié
-    if (type === 'csv') {
-      setActiveTab('list')
-    }
-  }, [loadData])
+  const proposalMoveConfirmLabel = proposalMoveApplying
+    ? `Déplacement de ${proposalMoveReference} en cours.`
+    : `Confirmer déplacement sans conflit détecté pour ${proposalMoveReference}.`
+  const proposalMoveResolveLabel = `Résoudre manuellement le déplacement de ${proposalMoveReference}.`
+  const proposalMoveConfirmTitle = proposalMoveApplying
+    ? 'Déplacement en cours.'
+    : 'Pas de conflit détecté: déplacement simplifié.'
+  const proposalMoveResolveTitle = 'Conflit détecté: résolution manuelle nécessaire.'
+  const resolutionProposalSlotOptions = Array.isArray(resolutionProposalDraft?.row?.decisionSlots)
+    ? resolutionProposalDraft.row.decisionSlots.filter((slot) => compactText(slot?.slotId))
+    : []
+  const resolutionProposalSelectedSlot = resolutionProposalSlotOptions.find((slot) =>
+    compactText(slot?.slotId) === compactText(resolutionProposalDraft?.slotId)
+  ) || resolutionProposalSlotOptions[0] || null
+  const resolutionProposalReference = compactText(resolutionProposalDraft?.tpi?.reference) || 'TPI'
+  const resolutionProposalCandidate = formatPersonName(resolutionProposalDraft?.tpi?.candidat, 'Candidat non renseigné')
+  const resolutionProposalDevLinks = Array.isArray(resolutionProposalDraft?.sentProposal?.devLinks)
+    ? resolutionProposalDraft.sentProposal.devLinks
+    : []
+  const resolutionProposalHasDevResult = resolutionProposalDevLinks.length > 0
+  const resolutionProposalRecipientRoles = normalizeResolutionRecipientRoles(resolutionProposalDraft?.recipientRoles)
 
   useEffect(() => {
     const isHiddenListRequest = isAdmin && requestedTab === 'list'
@@ -2307,7 +2834,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 title="Ouvrir la gestion TPI."
                 aria-label="Ouvrir la gestion TPI."
               >
-                Ouvrir Gestion TPI
+                Gestion TPI
               </button>
             </div>
           )}
@@ -2331,9 +2858,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               type="button"
               className="workflow-btn neutral"
               onClick={handleExitScopedVoteView}
-              title="Quitter le mode vote et revenir à la vue globale."
+              title="Quitter la vue de vote."
             >
-              Quitter le mode vote
+              Quitter vote
             </button>
           </div>
         </section>
@@ -2486,10 +3013,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   type="button"
                   className="planning-focus-banner-btn"
                   onClick={() => setSelectedTpi(focusedTpiMatch)}
-                  title={`Ouvrir la fiche ${focusedTpiMatch.reference || focusedTpiMatch.refTpi || 'ciblée'}.`}
-                  aria-label={`Ouvrir la fiche ${focusedTpiMatch.reference || focusedTpiMatch.refTpi || 'ciblée'}.`}
+                  title={`Voir ${focusedTpiMatch.reference || focusedTpiMatch.refTpi || 'cette fiche'}.`}
+                  aria-label={`Voir ${focusedTpiMatch.reference || focusedTpiMatch.refTpi || 'cette fiche'}.`}
                 >
-                  Ouvrir le TPI ciblé
+                  Voir TPI
                 </button>
               ) : null}
               <button
@@ -2499,7 +3026,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 title="Annuler le focus sur la recherche."
                 aria-label="Annuler le focus sur la recherche."
               >
-                Effacer le focus
+                Effacer
               </button>
             </div>
           </section>
@@ -2553,7 +3080,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                       title="Ouvrir la gestion TPI."
                       aria-label="Ouvrir la gestion TPI."
                     >
-                      Ouvrir Gestion TPI
+                      Gestion TPI
                     </button>
                   </div>
                     <div className="validation-feedback-orphan-list">
@@ -2594,575 +3121,53 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         )}
 
         {isVoteWorkspaceTab && isAdmin && (
-          <section className="vote-workflow-panel">
-            <div className="vote-workflow-header">
-              <div className="vote-workflow-title-block">
-                <span className="vote-workflow-kicker">Planification-votes</span>
-                <h2>
-                  <VoteIcon className="section-title-icon" />
-                  Campagne de votes {year}
-                </h2>
-                <p>
-                  Ouvrir, relancer, clore, traiter.
-                </p>
-              </div>
-
-              <div className={`vote-workflow-next state-${workflowState}`}>
-                <span>Prochaine action</span>
-                <strong>
-                  {isPlanningState
-                    ? hasActiveSnapshot
-                      ? 'Ouvrir la campagne'
-                      : 'Geler un snapshot'
-                    : isVotingState
-                      ? voteWorkflowStats.missingVotes > 0
-                        ? 'Relancer les votes'
-                        : 'Clore la campagne'
-                      : isPublishedState
-                        ? 'Agenda publie'
-                        : 'Verifier le workflow'}
-                </strong>
-                <p>
-                  {isPlanningState
-                    ? hasActiveSnapshot
-                      ? `${voteWorkflowStats.totalTpis} TPI sont prets a recevoir un lien de vote.`
-                      : 'La campagne ne peut pas demarrer sans snapshot de planification gele.'
-                    : isVotingState
-                      ? `${voteWorkflowStats.receivedVotes}/${voteWorkflowStats.expectedVotes} votes recus.`
-                      : isPublishedState
-                        ? 'Les votes ne sont plus modifiables depuis cette vue.'
-                        : 'Etat annuel inattendu pour la campagne.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="vote-workflow-metrics" aria-label="Resume de campagne">
-              <article className="vote-workflow-metric is-progress">
-                <span>Votes recus</span>
-                <strong>{voteWorkflowStats.receivedVotes}/{voteWorkflowStats.expectedVotes}</strong>
-                <div className="vote-workflow-progressbar">
-                  <span style={{ width: `${voteWorkflowStats.completionRate}%` }} />
-                </div>
-                <p>{voteWorkflowStats.completionRate}% de la campagne</p>
-              </article>
-              <article className="vote-workflow-metric">
-                <span>A relancer</span>
-                <strong>{voteWorkflowStats.pendingTpis}</strong>
-                <p>{voteWorkflowStats.missingVotes} vote{voteWorkflowStats.missingVotes > 1 ? 's' : ''} manquant{voteWorkflowStats.missingVotes > 1 ? 's' : ''}</p>
-              </article>
-              <article className="vote-workflow-metric">
-                <span>Prets cloture</span>
-                <strong>{voteWorkflowStats.readyTpis}</strong>
-                <p>{voteWorkflowStats.proposalTpis} avec proposition ou demande</p>
-              </article>
-              <article className={`vote-workflow-metric ${voteWorkflowStats.manualTpis > 0 ? 'is-warning' : ''}`}>
-                <span>À forcer</span>
-                <strong>{voteWorkflowStats.manualTpis}</strong>
-                <p>{voteWorkflowStats.confirmedTpis} TPI confirme{voteWorkflowStats.confirmedTpis > 1 ? 's' : ''}</p>
-              </article>
-            </div>
-
-            <div className="vote-workflow-actions">
-              {isPlanningState ? (
-                <>
-                  <button
-                    type="button"
-                    className="workflow-btn primary"
-                    onClick={handleStartVotesCampaign}
-                    disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
-                    title={hasLegacyImportGap
-                      ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
-                      : hasBlockedValidation
-                        ? 'La vérification a détecté des anomalies. Corrigez-les avant d\'ouvrir les votes.'
-                        : !hasActiveSnapshot
-                        ? 'Geler un snapshot d abord.'
-                        : 'Ouvrir la campagne et envoyer les liens de vote.'}
-                  >
-                    <ArrowRightIcon className="button-icon" />
-                    {isActionRunning('startVotes') ? 'Ouverture...' : 'Ouvrir votes'}
-                  </button>
-                  {IS_DEBUG && (
-                    <button
-                      type="button"
-                      className="workflow-btn secondary"
-                      aria-label="Ouvrir votes sans emails"
-                      onClick={handleStartVotesCampaignWithoutEmails}
-                      disabled={workflowActionLoading || !canStartVotes || hasLegacyImportGap}
-                      title={hasLegacyImportGap
-                        ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
-                        : hasBlockedValidation
-                          ? 'La vérification a détecté des anomalies. Corrigez-les avant d\'ouvrir les votes.'
-                          : 'Mode debug: ouvre la campagne sans envoyer les emails automatiques.'}
-                    >
-                      <VoteIcon className="button-icon" />
-                      {isActionRunning('startVotesNoEmail') ? 'Ouverture...' : 'Ouvrir sans emails'}
-                    </button>
-                  )}
-                </>
-              ) : null}
-
-              {isVotingState ? (
-                <>
-                  <button
-                    type="button"
-                    className="workflow-btn neutral"
-                    onClick={handleRemindVotes}
-                    disabled={workflowActionLoading || voteWorkflowStats.missingVotes === 0}
-                    title="Renvoyer les liens magiques aux personnes qui n'ont pas encore voté."
-                  >
-                    <MailIcon className="button-icon" />
-                    {isActionRunning('remindVotes') ? 'Relance...' : 'Relancer non-repondants'}
-                    </button>
-                  {IS_DEBUG ? (
-                    <button
-                      type="button"
-                      className="workflow-btn open"
-                      onClick={handleOpenVoteAccessPreview}
-                      title="Ouvre l'aperçu des liens de vote préfiltré sur cette année."
-                    >
-                      <VoteIcon className="button-icon" />
-                      Aperçu des liens vote
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="workflow-btn secondary"
-                    onClick={handleGenerateStaticVotePublication}
-                    disabled={workflowActionLoading || voteWorkflowStats.totalTpis === 0}
-                    title="Générer localement la publication PHP de vote."
-                  >
-                    <VoteIcon className="button-icon" />
-                    {isActionRunning('staticVoteGenerate') ? 'Génération...' : 'Générer vote web'}
-                  </button>
-                  <button
-                    type="button"
-                    className="workflow-btn open"
-                    onClick={handlePublishStaticVotePublication}
-                    disabled={workflowActionLoading || !staticVotePublicationInfo?.available}
-                    title={
-                      staticVotePublicationInfo?.available
-                        ? 'Publier le dossier vote généré par FTP.'
-                        : 'Générer le mini-site vote avant de publier.'
-                    }
-                  >
-                    <SendIcon className="button-icon" />
-                    {isActionRunning('staticVotePublish') ? 'Publication...' : 'Publier vote web'}
-                  </button>
-                  <button
-                    type="button"
-                    className="workflow-btn neutral"
-                    onClick={handleSyncStaticVotePublication}
-                    disabled={workflowActionLoading || !staticVotePublicationInfo?.syncSecretConfigured}
-                    title={
-                      staticVotePublicationInfo?.syncSecretConfigured
-                        ? 'Importer les réponses stockées sur le mini-site vote.'
-                        : 'Configurer STATIC_VOTE_SYNC_SECRET avant de synchroniser.'
-                    }
-                  >
-                    <RefreshIcon className="button-icon" />
-                    {isActionRunning('staticVoteSync') ? 'Sync...' : 'Sync vote web'}
-                  </button>
-                  <button
-                    type="button"
-                    className="workflow-btn primary"
-                    onClick={handleCloseVotes}
-                    disabled={workflowActionLoading || voteWorkflowStats.totalTpis === 0}
-                    title="Clore la campagne et classer chaque TPI en confirme ou manuel."
-                  >
-                    <ArrowRightIcon className="button-icon" />
-                    {isActionRunning('closeVotes') ? 'Cloture...' : 'Clore campagne'}
-                  </button>
-                </>
-              ) : null}
-
-              {voteWorkflowStats.manualTpis > 0 ? (
-                <button
-                  type="button"
-                  className="workflow-btn open"
-                  onClick={() => {
-                    setManualFocusTpiId('')
-                    setActiveTab('conflicts')
-                  }}
-                  title="Ouvrir la vue pour forcer les créneaux manuels."
-                  aria-label="Ouvrir la vue pour forcer les créneaux manuels."
-                >
-                  <WrenchIcon className="button-icon" />
-                  Forcer créneaux
-                </button>
-              ) : null}
-
-              {isPlanningState || isVotingState ? (
-                <button
-                  type="button"
-                  className="workflow-btn success"
-                  onClick={handlePublishDefinitive}
-                  disabled={workflowActionLoading || (isPlanningState ? !canPublishDirect : !canPublish)}
-                  title={
-                    isPlanningState
-                      ? hasLegacyImportGap
-                        ? 'Des TPI de GestionTPI ne sont pas encore présents dans Planning.'
-                        : hasBlockedValidation
-                          ? 'La vérification a détecté des anomalies. Corrigez-les avant de publier.'
-                          : canPublishDirect
-                            ? 'Confirmer les créneaux du snapshot et publier sans campagne de votes.'
-                            : 'Geler un snapshot avant publication directe.'
-                      : 'Publier les défenses confirmées.'
-                  }
-                >
-                  <CheckIcon className="button-icon" />
-                  {isActionRunning('publish')
-                    ? 'Publication...'
-                    : isPlanningState
-                      ? 'Publier sans votes'
-                      : 'Publier définitif'}
-                </button>
-              ) : null}
-
-              {isPublishedState ? (
-                <button
-                  type="button"
-                  className="workflow-btn success"
-                  onClick={handleOpenPublishedView}
-                  title="Afficher la vue de publication des défenses."
-                  aria-label="Ouvrir défenses."
-                >
-                  <CheckIcon className="button-icon" />
-                  Ouvrir défenses
-                </button>
-              ) : null}
-            </div>
-
-            {voteWorkflowStats.totalTpis === 0 ? (
-              <div className="vote-workflow-empty-state">
-                <strong>Aucune donnée de vote visible pour cette année.</strong>
-                <p>
-                  Gèle un snapshot, ouvre la campagne, puis recharge cette vue si besoin.
-                </p>
-              </div>
-            ) : (
-              <div className="vote-workflow-board">
-                <div className="vote-workflow-board-head">
-                  <div>
-                    <strong>File de traitement</strong>
-                    <p>Les filtres et la recherche ci-dessus s'appliquent a cette file.</p>
-                  </div>
-                  <span>
-                    {filteredVoteTrackingTpis.length}/{voteTrackingTpis.length} TPI affiches
-                  </span>
-                </div>
-
-                <div className="vote-workflow-sections">
-                  {activeVoteWorkflowSections.map((section) => (
-                    <section
-                      key={section.id}
-                      className={`vote-workflow-queue is-${section.id}`}
-                    >
-                      <div className="vote-workflow-queue-head">
-                        <div>
-                          <h3>{section.title}</h3>
-                          <p>{section.helper}</p>
-                        </div>
-                        <span>{section.rows.length}</span>
-                      </div>
-
-                      <div className="vote-workflow-row-list">
-                        {section.rows.length > 0 ? section.rows.map((row) => (
-                          <article
-                            key={row.id}
-                            className={`vote-workflow-row ${selectedTpi?._id === row.tpi?._id ? 'is-selected' : ''}`}
-                          >
-                            <div className="vote-workflow-row-main">
-                              <div>
-                                <strong>{row.reference}</strong>
-                                <p>{row.candidate}</p>
-                              </div>
-                              <div className="vote-workflow-row-actions">
-                                {row.bucket === 'manual' ? (
-                                  <button
-                                    type="button"
-                                    className="vote-workflow-open is-force"
-                                    onClick={() => openManualResolver(row.tpi)}
-                                    title={`Forcer un créneau pour ${row.reference}.`}
-                                    aria-label={`Forcer un créneau pour ${row.reference}.`}
-                                  >
-                                    Forcer
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="vote-workflow-open"
-                                  onClick={() => setSelectedTpi(row.tpi)}
-                                  title={`Afficher le résumé ${row.reference}.`}
-                                  aria-label={`Afficher le résumé ${row.reference}.`}
-                                >
-                                  Détails
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="vote-workflow-slot">
-                              <CalendarIcon className="inline-icon" />
-                              <span>{row.fixedSlotLabel}</span>
-                            </div>
-
-                            <div className="vote-workflow-role-grid" aria-label={`Votes ${row.reference}`}>
-                              {row.roleEntries.map((entry) => {
-                                const tone = getVoteRoleTone(entry.status)
-
-                                return (
-                                  <span
-                                    key={entry.role}
-                                    className={`vote-workflow-role is-${tone}`}
-                                    title={entry.status?.specialRequestReason || undefined}
-                                  >
-                                    <strong>{entry.label}</strong>
-                                    <span>{getVoteRoleStatusLabel(entry.status)}</span>
-                                  </span>
-                                )
-                              })}
-                            </div>
-
-                            {row.proposalSummaries.length > 0 ? (
-                              <div
-                                className="vote-proposal-summary is-compact"
-                                aria-label={`Propositions reçues ${row.reference}`}
-                              >
-                                <div className="vote-proposal-summary-head">
-                                  <strong>Propositions reçues</strong>
-                                  <span>
-                                    {row.proposalSummaries.length} votant{row.proposalSummaries.length > 1 ? 's' : ''}
-                                  </span>
-                                </div>
-
-                                <div className="vote-proposal-summary-list">
-                                  {row.proposalSummaries.map((summary) => {
-                                    const voterLabel = [
-                                      summary.roleLabel,
-                                      summary.voterName
-                                    ].map(compactText).filter(Boolean).join(' - ')
-                                    const specialDateLabel = formatSpecialRequestDate(summary.specialRequestDate)
-                                    const specialDateShortLabel = formatVoteDate(summary.specialRequestDate)
-                                    const hasSpecialRequest = Boolean(
-                                      summary.hasAvailabilityException ||
-                                      compactText(summary.specialRequestReason) ||
-                                      specialDateLabel
-                                    )
-                                    const specialPreview = [
-                                      specialDateShortLabel,
-                                      compactText(summary.specialRequestReason)
-                                    ].filter(Boolean).join(' · ')
-
-                                    return (
-                                      <div
-                                        key={`${row.id}-${summary.role}`}
-                                        className="vote-proposal-summary-item"
-                                      >
-                                        <span className="vote-proposal-person" title={voterLabel || summary.roleLabel}>
-                                          <strong>{summary.roleLabel}</strong>
-                                          {summary.voterName ? <span>{summary.voterName}</span> : null}
-                                        </span>
-                                        <div className="vote-proposal-summary-chips">
-                                          {summary.slots.length > 0 ? (
-                                            <div className="vote-proposal-choice-list">
-                                              {summary.slots.map((slot) => {
-                                                const moveKey = `${row.id}:${slot.slotId}:move`
-                                                const preferenceKey = `${slot.voteId || summary.role}:${slot.slotId}`
-                                                const isMoveLoading = proposalMoveLoadingKey === `${row.id}:${slot.slotId}` ||
-                                                  proposalMoveLoadingKey === `${compactText(row.tpi?._id)}:${slot.slotId}`
-                                                const isPreferenceLoading = preferenceActionLoadingKey === preferenceKey
-
-                                                return (
-                                                  <div
-                                                    key={`${summary.role}-${slot.slotId}`}
-                                                    className="vote-proposal-choice"
-                                                  >
-                                                    <span
-                                                      className="vote-proposal-chip is-normal"
-                                                      title={slot.label}
-                                                    >
-                                                      {slot.label}
-                                                    </span>
-                                                    <button
-                                                      type="button"
-                                                      className="vote-proposal-mini-action"
-                                                      onClick={(event) => {
-                                                        event.stopPropagation()
-                                                        handleReviewVoteProposalMove(row.tpi, summary, slot)
-                                                      }}
-                                                      disabled={isMoveLoading || proposalMoveApplying}
-                                                      title={`Simuler le déplacement de ${row.reference} vers ${slot.label}.`}
-                                                      aria-label={`Simuler le déplacement de ${row.reference} vers ${slot.label}.`}
-                                                      data-action-key={moveKey}
-                                                    >
-                                                      <ArrowRightIcon className="button-icon" />
-                                                      {isMoveLoading ? '...' : 'Déplacer'}
-                                                    </button>
-                                                    {slot.voteId ? (
-                                                      <button
-                                                        type="button"
-                                                        className="vote-proposal-mini-action is-preference"
-                                                        onClick={(event) => {
-                                                          event.stopPropagation()
-                                                          handleInsertProposalPreference(summary, slot)
-                                                        }}
-                                                        disabled={isPreferenceLoading}
-                                                        title="Ajouter ce choix aux dates idéales du votant."
-                                                        aria-label={`Ajouter ${slot.label} aux dates idéales de ${summary.voterName || summary.roleLabel}.`}
-                                                      >
-                                                        <PinIcon className="button-icon" />
-                                                        {isPreferenceLoading ? '...' : 'Dates idéales'}
-                                                      </button>
-                                                    ) : null}
-                                                  </div>
-                                                )
-                                              })}
-                                            </div>
-                                          ) : null}
-
-                                          {hasSpecialRequest ? (
-                                            <span
-                                              className="vote-proposal-chip is-special"
-                                              title={[
-                                                specialDateLabel,
-                                                summary.specialRequestReason
-                                              ].map(compactText).filter(Boolean).join(' - ')}
-                                            >
-                                              Perso.{specialPreview ? ` ${specialPreview}` : ''}
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            ) : null}
-
-                            {row.decisionSlots.length > 0 ? (
-                              <div className="vote-decision-board" aria-label={`Créneaux votés ${row.reference}`}>
-                                <div className="vote-decision-head">
-                                  <strong>Créneaux votés</strong>
-                                  <span>Les 3 rôles doivent être d'accord. L'admin peut trancher.</span>
-                                </div>
-                                <div className="vote-decision-slot-list">
-                                  {row.decisionSlots.map((slot) => (
-                                    <div
-                                      key={slot.slotId}
-                                      className={`vote-decision-slot ${slot.isFixed ? 'is-fixed' : 'is-proposal'} ${slot.positiveCount >= 3 ? 'has-consensus' : ''}`}
-                                    >
-                                      <div className="vote-decision-slot-main">
-                                        <div>
-                                          <strong>{slot.label}</strong>
-                                          <span>{slot.isFixed ? 'Créneau fixé' : 'Proposition'}</span>
-                                        </div>
-                                        <span className={`vote-decision-score ${slot.positiveCount >= 3 ? 'is-ok' : slot.positiveCount === 2 ? 'is-warning' : ''}`}>
-                                          {slot.positiveCount}/3 accord
-                                        </span>
-                                      </div>
-
-                                      <div className="vote-decision-role-list">
-                                        {slot.roleDecisions.map((decision) => {
-                                          const tone = getSlotDecisionTone(decision.decision)
-                                          const title = [
-                                            decision.voterName,
-                                            decision.comment,
-                                            decision.specialRequestReason
-                                          ].map(compactText).filter(Boolean).join(' · ')
-
-                                          return (
-                                            <span
-                                              key={`${slot.slotId}-${decision.role}`}
-                                              className={`vote-decision-role is-${tone}`}
-                                              title={title || undefined}
-                                            >
-                                              <strong>{getVoterRoleLabel(decision.role)}</strong>
-                                              <span>{getSlotDecisionLabel(decision.decision, slot.isFixed)}</span>
-                                            </span>
-                                          )
-                                        })}
-                                      </div>
-
-                                      {normalizePlanningStatus(row.tpi?.status) !== PLANNING_STATUS.CONFIRMED ? (
-                                        <button
-                                          type="button"
-                                          className="vote-decision-force"
-                                          onClick={() => handleForceVoteSlot(row.tpi, slot)}
-                                          disabled={workflowActionLoading}
-                                          title={`${getAdminSlotActionLabel(slot)} ${slot.label}.`}
-                                          aria-label={`${getAdminSlotActionLabel(slot)} ${slot.label} pour ${row.reference}.`}
-                                        >
-                                          {getAdminSlotActionLabel(slot)}
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
-
-                            <div className="vote-workflow-row-foot">
-                              <span>{row.respondedCount}/3 reponses</span>
-                              {row.missingLabels.length > 0 ? (
-                                <span>Manque: {row.missingLabels.join(', ')}</span>
-                              ) : row.hasSpecialRequest ? (
-                                <span>Demande speciale</span>
-                              ) : row.hasProposal ? (
-                                <span>Proposition recue</span>
-                              ) : (
-                                <span>{row.deadlineLabel || 'Complet'}</span>
-                              )}
-                            </div>
-                          </article>
-                        )) : (
-                          <div className="vote-workflow-empty">
-                            Rien dans cette file avec les filtres actuels.
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Section TPI non importés */}
-            {notImportedLegacyTpisByPlanningPerimeter.length > 0 && (
-              <div className="not-imported-section">
-                <h3>
-                  <CloseIcon className="section-title-icon" />
-                  TPI non intégrés au workflow ({notImportedLegacyTpisByPlanningPerimeter.length})
-                </h3>
-                <p className="not-imported-hint">
-                  Présents dans GestionTPI, absents du workflow. Complétez les parties prenantes.
-                </p>
-                <div className="not-imported-list">
-                  {notImportedLegacyTpisByPlanningPerimeter.map((tpi) => {
-                    const ref = tpi.refTpi || tpi.id || '?'
-                    const candidat = tpi.candidat || '—'
-                    const reasons = []
-                    if (!tpi.expert1?.name || tpi.expert1.name.toLowerCase() === 'null') reasons.push('Expert 1 manquant')
-                    if (!tpi.expert2?.name || tpi.expert2.name.toLowerCase() === 'null') reasons.push('Expert 2 manquant')
-                    if (!tpi.boss?.name || tpi.boss.name.toLowerCase() === 'null') reasons.push('Chef de projet manquant')
-                    if (!tpi.candidat) reasons.push('Candidat manquant')
-
-                    return (
-                      <div key={ref} className="not-imported-item">
-                        <span className="not-imported-ref">
-                          <CloseIcon className="inline-icon" />
-                          TPI-{year}-{ref}
-                        </span>
-                        <span className="not-imported-candidat">{candidat}</span>
-                        <span className="not-imported-reason" title={reasons.join(', ')}>
-                          <AlertIcon className="inline-icon" />
-                          {reasons[0]}{reasons.length > 1 ? ` +${reasons.length - 1}` : ''}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
+          <VoteCommandCenter
+            year={year}
+            workflowState={workflowState}
+            isPlanningState={isPlanningState}
+            isVotingState={isVotingState}
+            isPublishedState={isPublishedState}
+            hasActiveSnapshot={hasActiveSnapshot}
+            canStartVotes={canStartVotes}
+            canPublish={canPublish}
+            canPublishDirect={canPublishDirect}
+            hasLegacyImportGap={hasLegacyImportGap}
+            hasBlockedValidation={hasBlockedValidation}
+            workflowActionLoading={workflowActionLoading}
+            isActionRunning={isActionRunning}
+            stats={voteWorkflowStats}
+            activeSections={activeVoteWorkflowSections}
+            allRows={voteWorkflowAllRows}
+            filteredRows={voteWorkflowRows}
+            checkedConstraintByTpiId={checkedConstraintByTpiId}
+            constraintCheckResult={constraintCheckResult}
+            staticVotePublicationInfo={staticVotePublicationInfo}
+            preferenceActionLoadingKey={preferenceActionLoadingKey}
+            proposalMoveLoadingKey={proposalMoveLoadingKey}
+            proposalMoveApplying={proposalMoveApplying}
+            resolutionProposalSubmitting={resolutionProposalSubmitting}
+            onAutomatePlanification={handleAutomatePlanification}
+            onValidatePlanification={handleValidatePlanification}
+            onFreezePlanification={handleFreezePlanification}
+            onStartVotesCampaign={handleStartVotesCampaign}
+            onStartVotesCampaignWithoutEmails={handleStartVotesCampaignWithoutEmails}
+            onRemindVotes={handleRemindVotes}
+            onOpenVoteAccessPreview={handleOpenVoteAccessPreview}
+            onGenerateStaticVotePublication={handleGenerateStaticVotePublication}
+            onPublishStaticVotePublication={handlePublishStaticVotePublication}
+            onSyncStaticVotePublication={handleSyncStaticVotePublication}
+            onCloseVotes={handleCloseVotes}
+            onCheckVoteConstraints={handleCheckVoteConstraints}
+            onPublishDefinitive={handlePublishDefinitive}
+            onSendPublicationLinks={handleSendPublicationLinks}
+            onOpenPublishedView={handleOpenPublishedView}
+            onOpenManualResolver={openManualResolver}
+            onSelectTpi={setSelectedTpi}
+            onForceVoteSlot={handleForceVoteSlot}
+            onReviewVoteProposalMove={handleReviewVoteProposalMove}
+            onOpenResolutionProposal={handleOpenResolutionProposal}
+            onInsertProposalPreference={handleInsertProposalPreference}
+          />
         )}
 
         {activeTab === 'votes' && !isAdmin && (
@@ -3177,10 +3182,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             <div className="manual-header">
               <h2>
                 <WrenchIcon className="section-title-icon" />
-                Créneaux à forcer
+                Créneaux à résoudre
               </h2>
               <p>
-                Sélectionne le TPI, choisis le créneau à imposer, puis indique la raison.
+                Sélectionne le TPI, choisis le créneau retenu, puis indique la raison d'arbitrage.
               </p>
             </div>
             <ConflictResolver
@@ -3194,18 +3199,279 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         )}
       </main>
 
+      {resolutionProposalDraft && (
+        <>
+          <button
+            type="button"
+            className="tpi-detail-panel-backdrop"
+            aria-label="Fermer la proposition d'arbitrage"
+            onClick={() => {
+              if (!resolutionProposalSubmitting) {
+                setResolutionProposalDraft(null)
+              }
+            }}
+            title="Fermer la proposition."
+          />
+
+          <aside
+            className="tpi-detail-panel vote-resolution-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vote-resolution-panel-title"
+          >
+            <div className="panel-header">
+              <div className="panel-header-copy">
+                <span className="panel-kicker">Arbitrage votants</span>
+                <h3 id="vote-resolution-panel-title">
+                  <MailIcon className="section-title-icon" />
+                  Informer les parties prenantes
+                </h3>
+                <p className="panel-candidate">{resolutionProposalReference}</p>
+                <p className="panel-subject">{resolutionProposalCandidate}</p>
+              </div>
+
+              <button
+                type="button"
+                className="close-panel"
+                onClick={() => setResolutionProposalDraft(null)}
+                disabled={resolutionProposalSubmitting}
+                aria-label="Fermer la proposition d'arbitrage"
+                title="Fermer"
+              >
+                <CloseIcon className="section-title-icon" />
+              </button>
+            </div>
+
+            <div className="panel-content vote-resolution-content">
+              <section className="vote-resolution-card">
+                <h4>Créneau proposé</h4>
+                <select
+                  className="vote-resolution-select"
+                  value={compactText(resolutionProposalDraft.slotId)}
+                  disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                  onChange={(event) => {
+                    const nextSlotId = event.target.value
+                    const previousSlot = resolutionProposalSlotOptions.find((slot) =>
+                      compactText(slot?.slotId) === compactText(resolutionProposalDraft?.slotId)
+                    )
+                    const nextSlot = resolutionProposalSlotOptions.find((slot) =>
+                      compactText(slot?.slotId) === nextSlotId
+                    )
+                    setResolutionProposalDraft((current) => ({
+                      ...current,
+                      slotId: nextSlotId,
+                      message: current.message === buildResolutionProposalDefaultMessage(current.tpi, previousSlot)
+                        ? buildResolutionProposalDefaultMessage(current.tpi, nextSlot)
+                        : current.message
+                    }))
+                  }}
+                >
+                  {resolutionProposalSlotOptions.map((slot) => (
+                    <option key={slot.slotId} value={slot.slotId}>
+                      {slot.label} · {slot.positiveCount}/3 accord · {slot.rejectedCount} refus
+                    </option>
+                  ))}
+                </select>
+                <p>{resolutionProposalSelectedSlot?.label || 'Créneau à confirmer par les parties prenantes.'}</p>
+              </section>
+
+              {IS_DEBUG ? (
+                <label className="vote-resolution-dev-toggle">
+                  <input
+                    type="checkbox"
+                    checked={resolutionProposalDraft.devMode === true}
+                    disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                    onChange={(event) => {
+                      setResolutionProposalDraft((current) => ({
+                        ...current,
+                        devMode: event.target.checked
+                      }))
+                    }}
+                  />
+                  <span>
+                    Mode DEV
+                    <small>Génère les liens sans envoyer d’email réel.</small>
+                  </span>
+                </label>
+              ) : null}
+
+              {resolutionProposalHasDevResult ? (
+                <section className="vote-resolution-card is-dev-result">
+                  <h4>Liens de test</h4>
+                  <p>Aucun email n’a été envoyé. Ouvre un lien pour tester la réponse de ce rôle.</p>
+                  <div className="vote-resolution-dev-links">
+                    {resolutionProposalDevLinks.map((link) => (
+                      <a
+                        key={`${link.role}-${link.url}`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <strong>{link.roleLabel || link.role}</strong>
+                        <span>{link.name || link.email || 'Lien de test'}</span>
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              <section className="vote-resolution-card">
+                <h4>Destinataires</h4>
+                <div className="vote-resolution-recipient-presets">
+                  <button
+                    type="button"
+                    className={resolutionProposalRecipientRoles.length === 1 && resolutionProposalRecipientRoles[0] === 'chef_projet'
+                      ? 'is-active'
+                      : ''}
+                    disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                    onClick={() => {
+                      setResolutionProposalDraft((current) => ({
+                        ...current,
+                        recipientRoles: ['chef_projet']
+                      }))
+                    }}
+                  >
+                    Chef de projet
+                  </button>
+                  <button
+                    type="button"
+                    className={resolutionProposalRecipientRoles.length === 2 &&
+                      resolutionProposalRecipientRoles.includes('expert1') &&
+                      resolutionProposalRecipientRoles.includes('expert2')
+                      ? 'is-active'
+                      : ''}
+                    disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                    onClick={() => {
+                      setResolutionProposalDraft((current) => ({
+                        ...current,
+                        recipientRoles: ['expert1', 'expert2']
+                      }))
+                    }}
+                  >
+                    Experts
+                  </button>
+                  <button
+                    type="button"
+                    className={resolutionProposalRecipientRoles.length === RESOLUTION_RECIPIENT_ROLES.length
+                      ? 'is-active'
+                      : ''}
+                    disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                    onClick={() => {
+                      setResolutionProposalDraft((current) => ({
+                        ...current,
+                        recipientRoles: RESOLUTION_RECIPIENT_ROLES
+                      }))
+                    }}
+                  >
+                    Tous
+                  </button>
+                </div>
+                <div className="vote-resolution-recipients" role="group" aria-label="Destinataires de la proposition">
+                  {RESOLUTION_RECIPIENT_ROLES.map((role) => {
+                    const checked = resolutionProposalRecipientRoles.includes(role)
+
+                    return (
+                      <label
+                        key={role}
+                        className={`vote-resolution-recipient-option ${checked ? 'is-selected' : ''}`.trim()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                          onChange={(event) => {
+                            const shouldSelect = event.target.checked
+                            setResolutionProposalDraft((current) => {
+                              const currentRoles = normalizeResolutionRecipientRoles(current?.recipientRoles)
+                              const nextRoleSet = new Set(currentRoles)
+
+                              if (shouldSelect) {
+                                nextRoleSet.add(role)
+                              } else {
+                                nextRoleSet.delete(role)
+                              }
+
+                              const nextRoles = RESOLUTION_RECIPIENT_ROLES.filter((candidateRole) =>
+                                nextRoleSet.has(candidateRole)
+                              )
+
+                              return {
+                                ...current,
+                                recipientRoles: nextRoles.length > 0 ? nextRoles : currentRoles
+                              }
+                            })
+                          }}
+                        />
+                        <span>{getVoterRoleLabel(role)}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </section>
+
+              <label className="vote-resolution-message">
+                Message transmis
+                <textarea
+                  value={resolutionProposalDraft.message}
+                  disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
+                  rows={5}
+                  onChange={(event) => {
+                    setResolutionProposalDraft((current) => ({
+                      ...current,
+                      message: event.target.value
+                    }))
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="panel-actions vote-resolution-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setResolutionProposalDraft(null)}
+                disabled={resolutionProposalSubmitting}
+              >
+                {resolutionProposalHasDevResult ? 'Fermer' : 'Annuler'}
+              </button>
+              {!resolutionProposalHasDevResult ? (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleSendResolutionProposal}
+                  disabled={resolutionProposalSubmitting ||
+                    !compactText(resolutionProposalDraft.slotId) ||
+                    resolutionProposalRecipientRoles.length === 0}
+                  title={resolutionProposalDraft.devMode === true
+                    ? 'Mode DEV: génère les liens sans envoyer d’email.'
+                    : 'Envoie un email avec lien de confirmation ou refus.'}
+                  aria-label={`Transmettre la proposition d'arbitrage pour ${resolutionProposalReference}.`}
+                >
+                  <SendIcon className="button-icon" />
+                  {resolutionProposalSubmitting
+                    ? 'Envoi...'
+                    : resolutionProposalDraft.devMode === true
+                      ? 'Générer liens'
+                      : 'Transmettre'}
+                </button>
+              ) : null}
+            </div>
+          </aside>
+        </>
+      )}
+
       {proposalMoveReview && (
         <>
           <button
             type="button"
             className="tpi-detail-panel-backdrop"
-            aria-label="Fermer la simulation de déplacement"
+            aria-label="Fermer le test de déplacement"
             onClick={() => {
               if (!proposalMoveApplying) {
                 setProposalMoveReview(null)
               }
             }}
-            title="Fermer la simulation."
+            title="Fermer le test."
           />
 
           <aside
@@ -3219,7 +3485,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <span className="panel-kicker">Proposition votant</span>
                 <h3 id="vote-move-panel-title">
                   <ArrowRightIcon className="section-title-icon" />
-                  Simulation déplacement
+                  Test de déplacement
                 </h3>
                 <p className="panel-candidate">{proposalMoveReference}</p>
                 {proposalMoveVoterLabel ? (
@@ -3232,7 +3498,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 className="close-panel"
                 onClick={() => setProposalMoveReview(null)}
                 disabled={proposalMoveApplying}
-                aria-label="Fermer la simulation"
+                aria-label="Fermer le test de déplacement"
                 title="Fermer"
               >
                 <CloseIcon className="section-title-icon" />
@@ -3241,7 +3507,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
             <div className="panel-content vote-move-content">
               {proposalMoveReview.status === 'loading' ? (
-                <div className="vote-move-state">Simulation des contraintes en cours...</div>
+                <div className="vote-move-state">Test des contraintes en cours...</div>
               ) : null}
 
               {proposalMoveReview.status === 'error' ? (
@@ -3306,25 +3572,29 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               {proposalMoveCanApply ? (
                 <button
                   type="button"
-                  className="btn-primary"
+                  className="btn-primary vote-move-action is-safe"
                   onClick={handleApplyVoteProposalMove}
                   disabled={proposalMoveApplying}
+                  aria-label={proposalMoveConfirmLabel}
+                  title={proposalMoveConfirmTitle}
                 >
                   <CheckIcon className="button-icon" />
-                  {proposalMoveApplying ? 'Déplacement...' : 'Déplacer et confirmer'}
+                  {proposalMoveApplying ? '...' : 'Confirmer'}
                 </button>
               ) : (
                 <button
                   type="button"
-                  className="btn-primary"
+                  className="btn-primary vote-move-action is-blocked"
                   onClick={() => {
                     openManualResolver(proposalMoveReview.tpi)
                     setProposalMoveReview(null)
                   }}
                   disabled={proposalMoveReview.status === 'loading'}
+                  aria-label={proposalMoveResolveLabel}
+                  title={proposalMoveResolveTitle}
                 >
                   <WrenchIcon className="button-icon" />
-                  Ouvrir le forçage
+                  Résoudre
                 </button>
               )}
             </div>
@@ -3408,7 +3678,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   <h4>Votes</h4>
                   <div className="planning-detail-vote-status">
                     <strong>{selectedTpiRespondedVoteCount}/3 réponses</strong>
-                    <span>{selectedTpiManualAction ? 'Forçage requis' : selectedTpiStatusMeta.label}</span>
+                    <span>{selectedTpiManualAction ? 'Résolution requise' : selectedTpiStatusMeta.label}</span>
                   </div>
                   <div className="planning-detail-role-grid">
                     {selectedTpiVoteEntries.map((entry) => {
@@ -3456,32 +3726,28 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <button
                   className="btn-primary"
                   onClick={() => openManualResolver(selectedTpi)}
-                  title="Ouvrir le formulaire de forçage pour ce TPI."
-                  aria-label="Forcer un créneau pour ce TPI."
+                  title="Ouvrir la résolution manuelle pour ce TPI."
+                  aria-label="Résoudre le créneau de ce TPI."
                 >
                   <WrenchIcon className="button-icon" />
-                  Forcer un créneau
+                  Résoudre
                 </button>
               ) : null}
               {isAdmin ? (
                 <Link
                   className="btn-secondary"
                   to={selectedTpiDetailLink}
-                  title="Ouvrir la fiche complète du TPI dans la gestion."
-                  aria-label="Ouvrir la fiche complète du TPI."
                 >
-                  Ouvrir la fiche complète
+                  Fiche complète
                 </Link>
               ) : null}
               {isAdmin && selectedTpi.status === 'draft' ? (
                 <button
                   className="btn-primary"
                   onClick={() => handleProposeSlots(selectedTpi._id)}
-                  title="Lancer le processus de vote pour ce TPI."
-                  aria-label="Lancer le processus de vote pour ce TPI."
                 >
                   <VoteIcon className="button-icon" />
-                  Lancer le vote
+                  Lancer
                 </button>
               ) : null}
             </div>
