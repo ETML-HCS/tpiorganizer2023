@@ -78,7 +78,10 @@ jest.mock('./TpiSoutenanceParts', () => ({
     isPrintEnabled,
     pdfViewMode,
     onPdfViewModeChange,
-    onShowPersonalView
+    onShowPersonalView,
+    canUseAdminGeneralView,
+    adminGeneralView,
+    onToggleAdminGeneralView
   }) => (
     <div>
       <select
@@ -88,7 +91,7 @@ jest.mock('./TpiSoutenanceParts', () => ({
       >
         <option value='general'>Vue générale</option>
         <option value='rooms'>Par salle</option>
-        <option value='roomGrid'>Planning salles</option>
+        <option value='roomGrid'>Planification salles</option>
         <option value='people'>Par expert/CDP</option>
       </select>
       <button type='button' onClick={onPreviewPdf} disabled={!isPrintEnabled}>
@@ -100,6 +103,11 @@ jest.mock('./TpiSoutenanceParts', () => ({
       {onShowPersonalView ? (
         <button type='button' onClick={onShowPersonalView}>
           Mes TPI
+        </button>
+      ) : null}
+      {canUseAdminGeneralView ? (
+        <button type='button' onClick={onToggleAdminGeneralView}>
+          {adminGeneralView ? 'Vue personnelle' : 'Vue admin'}
         </button>
       ) : null}
     </div>
@@ -188,6 +196,9 @@ describe('TpiSoutenance focus UX', () => {
       displayedSchedule: [],
       isFilterApplied: false,
       aggregatedICalPersonLabel: '',
+      adminGeneralView: false,
+      setAdminGeneralView: jest.fn(),
+      isAdminMagicLinkViewer: false,
       ...overrides
     }
   }
@@ -570,6 +581,28 @@ describe('TpiSoutenance focus UX', () => {
     })
     expect(props.aggregatedICalPersonLabel).toBe('Paul Chef')
     expect(props.onClearPersonFilters).toBeUndefined()
+  })
+
+  test('un admin peut basculer vers la vue générale depuis son lien magique', () => {
+    const setAdminGeneralView = jest.fn()
+
+    renderSoutenance(
+      buildHookData({
+        magicLinkToken: 'magic-token',
+        magicLinkViewer: {
+          personId: 'person-1',
+          name: 'Ada Admin',
+          roles: ['admin'],
+          isAdmin: true
+        },
+        isAdminMagicLinkViewer: true,
+        setAdminGeneralView
+      })
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /vue admin/i }))
+
+    expect(setAdminGeneralView).toHaveBeenCalledWith(true)
   })
 
   test('le bouton Mes TPI du lien magique réinitialise uniquement les filtres de la page', () => {

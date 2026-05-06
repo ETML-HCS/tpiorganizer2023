@@ -1,4 +1,7 @@
-import { extractValidationResultFromError } from './workflowFeedback'
+import {
+  buildValidationToast,
+  extractValidationResultFromError
+} from './workflowFeedback'
 
 describe('extractValidationResultFromError', () => {
   test('reconstruit un resultat de validation a partir des details d erreur', () => {
@@ -31,5 +34,22 @@ describe('extractValidationResultFromError', () => {
 
   test('ignore les erreurs sans details de validation exploitables', () => {
     expect(extractValidationResultFromError(2026, { data: { error: 'boom' } })).toBeNull()
+  })
+})
+
+describe('buildValidationToast', () => {
+  test('annonce les overrides de contraintes comme avertissements', () => {
+    const toast = buildValidationToast(2026, {
+      summary: {
+        issueCount: 0,
+        hardConflictCount: 0,
+        warningCount: 2,
+        constraintOverrideWarningCount: 2
+      }
+    })
+
+    expect(toast.level).toBe('warning')
+    expect(toast.message).toMatch(/2 avertissement\(s\) de contrainte/)
+    expect(toast.message).toMatch(/planification valide/)
   })
 })

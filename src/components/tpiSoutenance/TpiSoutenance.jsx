@@ -17,6 +17,7 @@ import {
   MobileRoomFilter,
   SoutenanceDesktopHeader
 } from "./TpiSoutenanceParts"
+import { persistCoordinationYear } from "../../utils/coordinationYear"
 
 import "../../css/tpiSoutenance/tpiSoutenance.css"
 
@@ -853,7 +854,7 @@ const renderPdfDocument = ({
   year,
   generatedAtLabel,
   title = `Export des défenses ${year}`,
-  subtitle = "Plateforme planning soutenances",
+  subtitle = "Plateforme de planification des soutenances",
   summaryLabel = "Sans filtre (toutes les données)",
   viewMode = PDF_VIEW_MODES.GENERAL
 }) => {
@@ -1219,6 +1220,14 @@ const getPdfRoomClassTagColors = (label = "") => {
       fill: [254, 243, 199],
       text: [120, 53, 15],
       stroke: [251, 191, 36]
+    }
+  }
+
+  if (normalizedLabel === "matu") {
+    return {
+      fill: [224, 242, 254],
+      text: [12, 74, 110],
+      stroke: [125, 211, 252]
     }
   }
 
@@ -1655,6 +1664,10 @@ const TpiSoutenance = () => {
   const [pdfOrientationMode, setPdfOrientationMode] = useState("auto")
   const [pdfViewMode, setPdfViewMode] = useState(PDF_VIEW_MODES.GENERAL)
 
+  useEffect(() => {
+    persistCoordinationYear(year)
+  }, [year])
+
   const {
     token,
     magicLinkToken,
@@ -1677,7 +1690,10 @@ const TpiSoutenance = () => {
     updateSoutenanceData,
     schedule,
     isFilterApplied,
-    aggregatedICalPersonLabel
+    aggregatedICalPersonLabel,
+    adminGeneralView = false,
+    setAdminGeneralView = () => {},
+    isAdminMagicLinkViewer = false
   } = useSoutenanceData(year)
   const hasMagicLinkPersonalView = Boolean(
     magicLinkToken ||
@@ -1693,7 +1709,7 @@ const TpiSoutenance = () => {
         role: "viewer"
       }
     : expertOrBoss
-  const focusReference = String(filters.reference || '').trim()
+  const focusReference = adminGeneralView ? "" : String(filters.reference || '').trim()
   const hasFocusedResults = filteredData.length > 0
   const clearFocusQueryParam = () => {
     const params = new URLSearchParams(location.search)
@@ -1710,6 +1726,34 @@ const TpiSoutenance = () => {
       { replace: true }
     )
   }
+  const syncAdminGeneralViewQueryParam = (enabled) => {
+    const params = new URLSearchParams(location.search)
+
+    if (enabled) {
+      params.set("view", "admin")
+      params.delete("mode")
+      params.delete("admin")
+      params.delete("adminView")
+    } else {
+      params.delete("view")
+      params.delete("mode")
+      params.delete("admin")
+      params.delete("adminView")
+    }
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : ""
+      },
+      { replace: true }
+    )
+  }
+  const toggleAdminGeneralView = () => {
+    const nextValue = !adminGeneralView
+    setAdminGeneralView(nextValue)
+    syncAdminGeneralViewQueryParam(nextValue)
+  }
   const clearFocusedView = () => {
     clearFocusQueryParam()
     updateFilter("reference", "")
@@ -1722,6 +1766,8 @@ const TpiSoutenance = () => {
   }
   const showPersonalView = () => {
     clearFocusQueryParam()
+    setAdminGeneralView(false)
+    syncAdminGeneralViewQueryParam(false)
     setIsOn(true)
     PERSONAL_VIEW_RESET_FILTERS.forEach((filterName) => updateFilter(filterName, ""))
   }
@@ -1770,7 +1816,7 @@ const TpiSoutenance = () => {
     }
   }, [])
 
-  const showEmptySlots = hasMagicLinkPersonalView
+  const showEmptySlots = hasMagicLinkPersonalView && !adminGeneralView
     ? false
     : shouldShowEmptySlotsForFilters(filters)
   const totalSlots = filteredData?.reduce(
@@ -1796,6 +1842,10 @@ const TpiSoutenance = () => {
   const effectiveAggregatedICalPersonLabel = hasMagicLinkPersonalView
     ? magicLinkViewerName
     : aggregatedICalPersonLabel
+  const canUseAdminGeneralView = Boolean(hasMagicLinkPersonalView && isAdminMagicLinkViewer)
+  const effectiveIsFilterApplied = adminGeneralView
+    ? Boolean(filters.date || filters.classType)
+    : isFilterApplied
 
   if (isLoading) {
     return <div>Chargement...</div>
@@ -1816,11 +1866,11 @@ const TpiSoutenance = () => {
       items.push(`Date : ${filters.date}`)
     }
 
-    if (filters.site) {
+    if (filters.site && !adminGeneralView) {
       items.push(`Site : ${filters.site}`)
     }
 
-    if (filters.nameRoom) {
+    if (filters.nameRoom && !adminGeneralView) {
       items.push(`Salle : ${filters.nameRoom}`)
     }
 
@@ -1831,17 +1881,17 @@ const TpiSoutenance = () => {
       }
     }
 
-    if (filters.experts) {
+    if (filters.experts && !adminGeneralView) {
       items.push(`Expert : ${filters.experts}`)
     }
 
-    if (filters.projectManager || filters.projectManagerButton) {
+    if ((filters.projectManager || filters.projectManagerButton) && !adminGeneralView) {
       items.push(
         `Chef de projet : ${filters.projectManager || filters.projectManagerButton}`
       )
     }
 
-    if (filters.candidate) {
+    if (filters.candidate && !adminGeneralView) {
       items.push(`Candidat : ${filters.candidate}`)
     }
 
@@ -2170,7 +2220,19 @@ const TpiSoutenance = () => {
             pdfViewMode={pdfViewMode}
             onPdfViewModeChange={setPdfViewMode}
             onShowPersonalView={showPersonalView}
+            canUseAdminGeneralView={canUseAdminGeneralView}
+            adminGeneralView={adminGeneralView}
+            onToggleAdminGeneralView={toggleAdminGeneralView}
           />
+
+          {adminGeneralView ? (
+            <section className='soutenance-focus-banner is-ready'>
+              <div>
+                <strong>Vue générale admin</strong>
+                <p>Toutes les défenses publiées sont affichées. Seuls date et type de classe restent appliqués.</p>
+              </div>
+            </section>
+          ) : null}
 
           {focusReference && (
             <section className={`soutenance-focus-banner ${hasFocusedResults ? "is-ready" : "is-missing"}`}>
@@ -2193,7 +2255,7 @@ const TpiSoutenance = () => {
             </section>
           )}
 
-          <div id='soutenances' className={`soutenances ${isFilterApplied ? "filterActive" : ""}`}>
+          <div id='soutenances' className={`soutenances ${effectiveIsFilterApplied ? "filterActive" : ""}`}>
               <section className='soutenance-main-area'>
               {filteredData.length === 0 ? (
                 <div className='soutenance-empty-state'>
@@ -2214,9 +2276,10 @@ const TpiSoutenance = () => {
                 aggregatedICalPersonLabel={effectiveAggregatedICalPersonLabel}
                 focusReference={focusReference}
                 layoutColumns={layoutColumns}
-                isAnyFilterApplied={isFilterApplied}
+                isAnyFilterApplied={effectiveIsFilterApplied}
                 showEmptySlots={showEmptySlots}
                 personIcalFilter={personIcalFilter}
+                voteAccessUrl={magicLinkViewer?.voteAccessUrl || ""}
                 onClearPersonFilters={hasMagicLinkPersonalView ? undefined : clearPersonFilters}
                 loadData={loadData}
                 token={token}

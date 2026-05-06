@@ -1,30 +1,40 @@
-const Person = require('../models/personModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
-const Vote = require('../models/voteModel')
+const Person = require('../../models/personModel')
+const TpiPlanning = require('../../models/tpiCoordinationModel')
+const Vote = require('../../models/voteModel')
 const {
   ResolutionProposal
-} = require('../models/resolutionProposalModel')
-const magicLinkV2Service = require('./magicLinkV2Service')
-const resolutionProposalService = require('./resolutionProposalService')
+} = require('../../models/resolutionProposalModel')
+const accessLinkTokenService = require('./tokenService')
+const resolutionProposalService = require('../../services/resolutionProposalService')
+const {
+  ensureVoteRecordsForTpis: defaultEnsureVoteRecordsForTpis
+} = require('../../services/votingCampaignService')
 const {
   getActivePublicationVersion,
   getPublicationVersion,
-  listPublicationVersions
-} = require('./publishedSoutenanceService')
-const { buildDefensePublicPath } = require('../utils/publicRoutes')
-
-const ADMIN_ACCESS_LINK_SOURCE = 'admin_access_generated'
-const ADMIN_PUBLICATION_ACCESS_LINK_SOURCE = 'admin_publication_access_generated'
-const ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE = 'admin_static_vote_access_generated'
-const ADMIN_ACCESS_REVOKE_SOURCES = ['admin_access_preview', ADMIN_ACCESS_LINK_SOURCE]
-const ADMIN_PUBLICATION_ACCESS_REVOKE_SOURCES = [
-  'admin_publication_access_preview',
-  ADMIN_PUBLICATION_ACCESS_LINK_SOURCE
-]
-const ADMIN_STATIC_VOTE_ACCESS_REVOKE_SOURCES = [
-  'admin_static_vote_access_preview',
-  ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE
-]
+  listPublicationVersions,
+  publishConfirmedPlanningSoutenances: defaultPublishConfirmedPlanningSoutenances
+} = require('../../services/publishedSoutenanceService')
+const { buildDefensePublicPath } = require('../../utils/publicRoutes')
+const {
+  ADMIN_ACCESS_LINK_SOURCE,
+  ADMIN_ACCESS_REVOKE_SOURCES,
+  getVoteAccessLinkSource,
+  getVoteAccessRevokeSources,
+  getSoutenanceAccessLinkSource,
+  getSoutenanceAccessRevokeSources,
+  normalizeVoteLinkTarget,
+  normalizeSoutenanceLinkTarget
+} = require('./constants')
+const {
+  COORDINATION_PROPOSAL_READY_STATUSES,
+  COORDINATION_VOTE_STATUSES,
+  COORDINATION_WORKFLOW_FREE_VOTE_STATUSES,
+  normalizeCoordinationStatus
+} = require('../coordination/status')
+const {
+  formatTpiStakeholderRoleLabel
+} = require('../stakeholders/stakeholderDefinitions')
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -32,38 +42,6 @@ function compactText(value) {
   }
 
   return String(value).trim()
-}
-
-function normalizeVoteLinkTarget(value) {
-  return value === 'static' || value === 'publication' ? 'static' : 'app'
-}
-
-function getVoteAccessLinkSource(target) {
-  return normalizeVoteLinkTarget(target) === 'static'
-    ? ADMIN_STATIC_VOTE_ACCESS_LINK_SOURCE
-    : ADMIN_ACCESS_LINK_SOURCE
-}
-
-function getVoteAccessRevokeSources(target) {
-  return normalizeVoteLinkTarget(target) === 'static'
-    ? ADMIN_STATIC_VOTE_ACCESS_REVOKE_SOURCES
-    : ADMIN_ACCESS_REVOKE_SOURCES
-}
-
-function normalizeSoutenanceLinkTarget(value) {
-  return value === 'publication' ? 'publication' : 'app'
-}
-
-function getSoutenanceAccessLinkSource(target) {
-  return normalizeSoutenanceLinkTarget(target) === 'publication'
-    ? ADMIN_PUBLICATION_ACCESS_LINK_SOURCE
-    : ADMIN_ACCESS_LINK_SOURCE
-}
-
-function getSoutenanceAccessRevokeSources(target) {
-  return normalizeSoutenanceLinkTarget(target) === 'publication'
-    ? ADMIN_PUBLICATION_ACCESS_REVOKE_SOURCES
-    : ADMIN_ACCESS_REVOKE_SOURCES
 }
 
 function parsePublicationVersion(value) {
@@ -80,30 +58,6 @@ function formatPersonName(person) {
     .filter(Boolean)
     .join(' ')
     .trim()
-}
-
-function formatRoleLabel(role) {
-  if (role === 'expert1') {
-    return 'Expert 1'
-  }
-
-  if (role === 'expert2') {
-    return 'Expert 2'
-  }
-
-  if (role === 'chef_projet') {
-    return 'Chef de projet'
-  }
-
-  if (role === 'expert') {
-    return 'Expert'
-  }
-
-  if (role === 'candidat') {
-    return 'Candidat'
-  }
-
-  return String(role || '').trim()
 }
 
 function buildPersonSnapshot(person) {
@@ -180,7 +134,63 @@ function addVotePreviewTpi(target, vote, tpi) {
 
   const entry = target.tpisById.get(tpiId)
   if (vote?.voterRole) {
-    entry.roleLabels.add(formatRoleLabel(vote.voterRole))
+    entry.roleLabels.add(formatTpiStakeholderRoleLabel(vote.voterRole))
+  }
+}
+
+function canPrepareVoteAccessForPerson(person) {
+  return Boolean(person?._id && person?.email) && person.sendEmails !== false
+}
+
+function canPrepareSoutenanceAccessForPerson(person) {
+  return Boolean(person?._id && person?.email) && person.sendEmails !== false
+}
+
+function listPlanningVoteParticipants(tpi) {
+  return [
+    { person: tpi?.chefProjet, role: 'chef_projet' },
+    { person: tpi?.expert1, role: 'expert1' },
+    { person: tpi?.expert2, role: 'expert2' }
+  ].filter((entry) => canPrepareVoteAccessForPerson(entry.person))
+}
+
+function addWorkflowFreeVotePreviewTargets({
+  tpis = [],
+  groupedPendingVotes,
+  coveredVoteKeys
+}) {
+  for (const tpi of Array.isArray(tpis) ? tpis : []) {
+    if (!COORDINATION_PROPOSAL_READY_STATUSES.includes(normalizeCoordinationStatus(tpi?.status))) {
+      continue
+    }
+
+    if (!Array.isArray(tpi?.proposedSlots) || tpi.proposedSlots.length === 0) {
+      continue
+    }
+
+    const tpiId = tpi?._id ? String(tpi._id) : ''
+    if (!tpiId) {
+      continue
+    }
+
+    for (const { person, role } of listPlanningVoteParticipants(tpi)) {
+      const voterId = person?._id ? String(person._id) : ''
+      const voteKey = `${tpiId}|${voterId}|${role}`
+
+      if (!voterId || coveredVoteKeys.has(voteKey)) {
+        continue
+      }
+
+      if (!groupedPendingVotes.has(voterId)) {
+        groupedPendingVotes.set(voterId, {
+          voter: person,
+          tpisById: new Map()
+        })
+      }
+
+      addVotePreviewTpi(groupedPendingVotes.get(voterId), { voterRole: role }, tpi)
+      coveredVoteKeys.add(voteKey)
+    }
   }
 }
 
@@ -447,13 +457,19 @@ async function buildVoteAccessLink({
   magicLinks,
   target = 'app'
 }) {
-  const resolvedRedirectPath = redirectPath || `/planning/${year}`
+  const resolvedRedirectPath = redirectPath || `/coordination/${year}`
   const normalizedTarget = normalizeVoteLinkTarget(target)
   const source = getVoteAccessLinkSource(normalizedTarget)
   const scope = {
     year,
     kind: 'stakeholder_votes',
     source
+  }
+  const reusableScope = {
+    year,
+    kind: 'stakeholder_votes',
+    tpiId: null,
+    voterRole: null
   }
 
   if (!generateLinks) {
@@ -462,10 +478,7 @@ async function buildVoteAccessLink({
       year,
       type: 'vote',
       person,
-      scope: {
-        year,
-        kind: 'stakeholder_votes'
-      },
+      scope: reusableScope,
       baseUrl,
       sources: getVoteAccessRevokeSources(normalizedTarget)
     })
@@ -479,10 +492,7 @@ async function buildVoteAccessLink({
       year,
       type: 'vote',
       person,
-      scope: {
-        year,
-        kind: 'stakeholder_votes'
-      },
+      scope: reusableScope,
       baseUrl,
       sources: getVoteAccessRevokeSources(normalizedTarget)
     })
@@ -604,16 +614,22 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     generateLinks,
     voteBaseUrl,
     voteRedirectPath,
-    voteLinkTarget
+    voteLinkTarget,
+    workflowFreeModeEnabled,
+    ensureVoteRecordsForTpis
   } = dependencies
   const normalizedVoteLinkTarget = normalizeVoteLinkTarget(voteLinkTarget)
+  const voteStatuses = workflowFreeModeEnabled === true
+    ? COORDINATION_WORKFLOW_FREE_VOTE_STATUSES
+    : COORDINATION_VOTE_STATUSES
 
   const votingTpis = await TpiPlanningModel.find({
     year,
-    status: { $in: ['voting', 'pending_validation'] }
+    status: { $in: voteStatuses }
   })
-    .populate('candidat', 'firstName lastName')
-    .select('reference sujet year status candidat')
+    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email roles site sendEmails')
+    .populate('proposedSlots.slot')
+    .select('reference sujet year status candidat expert1 expert2 chefProjet proposedSlots')
     .sort({ reference: 1 })
 
   if (!Array.isArray(votingTpis) || votingTpis.length === 0) {
@@ -622,6 +638,21 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       recipientCount: 0,
       tpiCount: 0
     }
+  }
+
+  let preparedVoteRecords = null
+  if (
+    generateLinks === true &&
+    workflowFreeModeEnabled === true &&
+    typeof ensureVoteRecordsForTpis === 'function'
+  ) {
+    preparedVoteRecords = await ensureVoteRecordsForTpis(
+      votingTpis.filter((tpi) =>
+        COORDINATION_PROPOSAL_READY_STATUSES.includes(normalizeCoordinationStatus(tpi?.status)) &&
+        Array.isArray(tpi?.proposedSlots) &&
+        tpi.proposedSlots.length > 0
+      )
+    )
   }
 
   const tpiById = new Map(
@@ -636,6 +667,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     .select('tpiPlanning voter voterRole')
 
   const groupedPendingVotes = new Map()
+  const coveredVoteKeys = new Set()
 
   for (const vote of pendingVotes || []) {
     const tpiId = vote?.tpiPlanning ? String(vote.tpiPlanning) : ''
@@ -658,6 +690,15 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     }
 
     addVotePreviewTpi(groupedPendingVotes.get(voterId), vote, tpi)
+    coveredVoteKeys.add(`${tpiId}|${voterId}|${vote.voterRole || ''}`)
+  }
+
+  if (workflowFreeModeEnabled === true) {
+    addWorkflowFreeVotePreviewTargets({
+      tpis: votingTpis,
+      groupedPendingVotes,
+      coveredVoteKeys
+    })
   }
 
   const uniqueRecipients = new Set()
@@ -677,6 +718,14 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       continue
     }
 
+    const tpis = Array.from(item.tpisById.values())
+      .map((tpiEntry) => ({
+        ...tpiEntry,
+        roleLabel: Array.from(tpiEntry.roleLabels).filter(Boolean).join(', '),
+        roleLabels: undefined
+      }))
+      .sort((left, right) => String(left.reference).localeCompare(String(right.reference)))
+
     const link = await buildVoteAccessLink({
       year,
       person: item.voter,
@@ -687,15 +736,8 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       magicLinks
     })
 
-    const tpis = Array.from(item.tpisById.values())
-      .map((tpiEntry) => ({
-        ...tpiEntry,
-        roleLabel: Array.from(tpiEntry.roleLabels).filter(Boolean).join(', '),
-        roleLabels: undefined
-      }))
-      .sort((left, right) => String(left.reference).localeCompare(String(right.reference)))
-
     entry.voteLinks.push({
+      id: link.id || null,
       type: 'vote',
       role: null,
       roleLabel: 'Partie prenante',
@@ -705,7 +747,7 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       status: '',
       tpiId: null,
       tpis,
-      redirectPath: link.redirectPath || voteRedirectPath || `/planning/${year}`,
+      redirectPath: link.redirectPath || voteRedirectPath || `/coordination/${year}`,
       expiresAt: link.expiresAt,
       token: link.token,
       url: link.url,
@@ -738,7 +780,9 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     tpiCount: uniqueTpis.size,
     linkTarget: normalizedVoteLinkTarget,
     baseUrl: voteBaseUrl || baseUrl,
-    redirectPath: voteRedirectPath || `/planning/${year}`
+    redirectPath: voteRedirectPath || `/coordination/${year}`,
+    workflowFreeModeEnabled: workflowFreeModeEnabled === true,
+    preparedVoteRecordCount: preparedVoteRecords?.voteCount || 0
   }
 }
 
@@ -765,6 +809,40 @@ function collectPublicationPersonIds(rooms = []) {
   return Array.from(personIds)
 }
 
+async function listAdminSoutenanceRecipients(PersonModel) {
+  const admins = await PersonModel.find({
+    roles: 'admin',
+    isActive: true
+  })
+    .select('firstName lastName email roles site sendEmails')
+    .lean()
+
+  return (Array.isArray(admins) ? admins : [])
+    .filter((person) => (
+      canPrepareSoutenanceAccessForPerson(person) &&
+      Array.isArray(person.roles) &&
+      person.roles.includes('admin')
+    ))
+}
+
+function mergeRecipientsById(recipients = [], additionalRecipients = []) {
+  const byId = new Map()
+
+  for (const person of [...(Array.isArray(recipients) ? recipients : []), ...(Array.isArray(additionalRecipients) ? additionalRecipients : [])]) {
+    const personId = person?._id ? String(person._id) : ''
+    if (!personId || !person?.email) {
+      continue
+    }
+
+    byId.set(personId, {
+      ...(byId.get(personId) || {}),
+      ...person
+    })
+  }
+
+  return Array.from(byId.values())
+}
+
 async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies) {
   const {
     PersonModel,
@@ -775,15 +853,38 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     publicationVersion: requestedPublicationVersion,
     generateLinks,
     soutenanceRedirectPath,
-    soutenanceLinkTarget
+    soutenanceLinkTarget,
+    autoPublishSoutenance,
+    publicationUser,
+    publishConfirmedPlanningSoutenances
   } = dependencies
   const normalizedSoutenanceLinkTarget = normalizeSoutenanceLinkTarget(soutenanceLinkTarget)
   const source = getSoutenanceAccessLinkSource(normalizedSoutenanceLinkTarget)
 
   const normalizedRequestedVersion = parsePublicationVersion(requestedPublicationVersion)
-  const publicationVersion = normalizedRequestedVersion
+  let publicationVersion = normalizedRequestedVersion
     ? await getPublication(year, normalizedRequestedVersion)
     : await getActivePublication(year)
+  let autoPublishedPublicationVersion = null
+  let autoPublishedRoomsCount = 0
+
+  if (
+    generateLinks === true &&
+    autoPublishSoutenance === true &&
+    !normalizedRequestedVersion &&
+    !publicationVersion?.rooms?.length &&
+    typeof publishConfirmedPlanningSoutenances === 'function'
+  ) {
+    const publishedResult = await publishConfirmedPlanningSoutenances(year, publicationUser)
+    const publishedVersion = publishedResult?.publicationVersion || null
+
+    if (publishedVersion?.rooms?.length) {
+      publicationVersion = publishedVersion
+      autoPublishedPublicationVersion = publishedVersion.version || null
+      autoPublishedRoomsCount = publishedVersion.rooms.length
+    }
+  }
+
   const publicationLinkStats = await getSoutenancePublicationLinkStats(year, magicLinks, [source])
   const availableVersions = applyPublicationLinkStats(
     normalizePublicationVersions(await listVersions(year)),
@@ -797,29 +898,37 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
       publicationVersion: null,
       requestedPublicationVersion: normalizedRequestedVersion,
       availableVersions,
-      roomsCount: 0
+      roomsCount: 0,
+      autoPublishedPublicationVersion,
+      autoPublishedRoomsCount
     }
   }
 
   const recipientIds = collectPublicationPersonIds(publicationVersion.rooms)
+  const adminRecipients = await listAdminSoutenanceRecipients(PersonModel)
 
-  if (recipientIds.length === 0) {
+  if (recipientIds.length === 0 && adminRecipients.length === 0) {
     return {
       linkCount: 0,
       recipientCount: 0,
       publicationVersion: publicationVersion.version || null,
       requestedPublicationVersion: normalizedRequestedVersion,
       availableVersions,
-      roomsCount: publicationVersion.rooms.length
+      roomsCount: publicationVersion.rooms.length,
+      autoPublishedPublicationVersion,
+      autoPublishedRoomsCount
     }
   }
 
-  const recipients = await PersonModel.find({
-    _id: { $in: recipientIds },
-    isActive: true
-  })
-    .select('firstName lastName email roles site')
-    .lean()
+  const publicationRecipients = recipientIds.length > 0
+    ? await PersonModel.find({
+      _id: { $in: recipientIds },
+      isActive: true
+    })
+      .select('firstName lastName email roles site sendEmails')
+      .lean()
+    : []
+  const recipients = mergeRecipientsById(publicationRecipients, adminRecipients)
 
   let linkCount = 0
   let generatedLinkCount = 0
@@ -849,6 +958,7 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     })
 
     entry.soutenanceLinks.push({
+      id: link.id || null,
       type: 'soutenance',
       publicationVersion: publicationVersion.version || null,
       redirectPath: link.redirectPath || buildDefensePublicPath(year),
@@ -881,7 +991,9 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     publicationVersion: publicationVersion.version || null,
     requestedPublicationVersion: normalizedRequestedVersion,
     availableVersions,
-    roomsCount: Array.isArray(publicationVersion.rooms) ? publicationVersion.rooms.length : 0
+    roomsCount: Array.isArray(publicationVersion.rooms) ? publicationVersion.rooms.length : 0,
+    autoPublishedPublicationVersion,
+    autoPublishedRoomsCount
   }
 }
 
@@ -1027,7 +1139,10 @@ async function buildAccessLinkPreview({
   soutenanceRedirectPath = null,
   soutenanceLinkTarget = 'app',
   publicationVersion = null,
+  autoPublishSoutenance = false,
+  publicationUser = null,
   generateLinks = false,
+  workflowFreeModeEnabled = false,
   dependencies = {}
 }) {
   const normalizedYear = Number.parseInt(year, 10)
@@ -1042,18 +1157,24 @@ async function buildAccessLinkPreview({
     TpiPlanningModel: dependencies.TpiPlanningModel || TpiPlanning,
     VoteModel: dependencies.VoteModel || Vote,
     ResolutionProposalModel: dependencies.ResolutionProposalModel || (hasInjectedDependencies ? null : ResolutionProposal),
-    magicLinks: dependencies.magicLinks || magicLinkV2Service,
+    magicLinks: dependencies.magicLinks || accessLinkTokenService,
     getActivePublication: dependencies.getActivePublication || getActivePublicationVersion,
     getPublication: dependencies.getPublication || getPublicationVersion,
     listPublicationVersions: dependencies.listPublicationVersions || listPublicationVersions,
+    publishConfirmedPlanningSoutenances: dependencies.publishConfirmedPlanningSoutenances ||
+      (hasInjectedDependencies ? null : defaultPublishConfirmedPlanningSoutenances),
     publicationVersion,
+    autoPublishSoutenance: autoPublishSoutenance === true,
+    publicationUser,
     generateLinks: generateLinks === true,
+    workflowFreeModeEnabled: workflowFreeModeEnabled === true,
+    ensureVoteRecordsForTpis: dependencies.ensureVoteRecordsForTpis || defaultEnsureVoteRecordsForTpis,
     voteBaseUrl: typeof voteBaseUrl === 'string' && voteBaseUrl.trim()
       ? voteBaseUrl.trim()
       : baseUrl,
     voteRedirectPath: typeof voteRedirectPath === 'string' && voteRedirectPath.trim()
       ? voteRedirectPath.trim()
-      : `/planning/${normalizedYear}`,
+      : `/coordination/${normalizedYear}`,
     voteLinkTarget: normalizeVoteLinkTarget(voteLinkTarget),
     soutenanceRedirectPath: typeof soutenanceRedirectPath === 'string' && soutenanceRedirectPath.trim()
       ? soutenanceRedirectPath.trim()
@@ -1135,12 +1256,14 @@ async function buildAccessLinkPreview({
     contexts: {
       vote: {
         linkTarget: votePreview.linkTarget,
+        workflowFreeModeEnabled: votePreview.workflowFreeModeEnabled === true,
         baseUrl: votePreview.baseUrl,
         redirectPath: votePreview.redirectPath,
         tpiCount: votePreview.tpiCount,
         recipientCount: votePreview.recipientCount,
         linkCount: votePreview.linkCount,
         generatedLinkCount: votePreview.availableLinkCount || 0,
+        preparedVoteRecordCount: votePreview.preparedVoteRecordCount || 0,
         pendingLinkCount: votePreview.pendingLinkCount || 0,
         unavailableGeneratedLinkCount: votePreview.unavailableGeneratedLinkCount || 0,
         unrecoverableGeneratedLinkCount: votePreview.unrecoverableGeneratedLinkCount || 0,
@@ -1154,6 +1277,8 @@ async function buildAccessLinkPreview({
         redirectPath: resolvedDependencies.soutenanceRedirectPath,
         publicationVersion: soutenancePreview.publicationVersion,
         requestedPublicationVersion: soutenancePreview.requestedPublicationVersion,
+        autoPublishedPublicationVersion: soutenancePreview.autoPublishedPublicationVersion || null,
+        autoPublishedRoomsCount: soutenancePreview.autoPublishedRoomsCount || 0,
         availableVersions: soutenancePreview.availableVersions,
         roomsCount: soutenancePreview.roomsCount,
         recipientCount: soutenancePreview.recipientCount,

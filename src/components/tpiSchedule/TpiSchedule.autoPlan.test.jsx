@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import TpiSchedule from './TpiSchedule'
 import { getTpiModels } from '../tpiControllers/TpiController'
 import { showNotification } from '../Tools'
-import { planningConfigService, workflowPlanningService } from '../../services/planningService'
+import { coordinationConfigService, workflowCoordinationService } from '../../services/coordinationService'
 import { installFetchMock } from '../../test-utils/mockFetch'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
@@ -89,21 +89,22 @@ jest.mock('../tpiControllers/TpiController', () => ({
 
 jest.mock('../tpiControllers/TpiRoomsController', () => ({
   createTpiCollectionForYear: jest.fn(),
+  publishSoutenancesFromPlanification: jest.fn(),
   publishSoutenancesFromPlanning: jest.fn(),
   transmitToDatabase: jest.fn(() => Promise.resolve(true))
 }))
 
-jest.mock('../../services/planningService', () => ({
-  workflowPlanningService: {
+jest.mock('../../services/coordinationService', () => ({
+  workflowCoordinationService: {
     automatePlanification: jest.fn(),
     startVotesWithoutEmails: jest.fn(),
     getYearState: jest.fn(() => Promise.resolve({ state: 'planning' })),
     getActiveSnapshot: jest.fn(() => Promise.resolve(null))
   },
-  planningCatalogService: {
+  coordinationCatalogService: {
     getGlobal: jest.fn(() => Promise.resolve(null))
   },
-  planningConfigService: {
+  coordinationConfigService: {
     getByYear: jest.fn(() => Promise.resolve(null))
   },
   personService: {
@@ -133,7 +134,7 @@ describe('TpiSchedule auto plan', () => {
   })
 
   test('injecte directement les salles legacy générées après auto-planification', async () => {
-    workflowPlanningService.automatePlanification.mockResolvedValue({
+    workflowCoordinationService.automatePlanification.mockResolvedValue({
       success: true,
       summary: {
         plannedCount: 1,
@@ -183,7 +184,7 @@ describe('TpiSchedule auto plan', () => {
     fireEvent.click(screen.getByRole('button', { name: /auto-plan/i }))
 
     await waitFor(() => {
-      expect(workflowPlanningService.automatePlanification).toHaveBeenCalledWith(2026)
+      expect(workflowCoordinationService.automatePlanification).toHaveBeenCalledWith(2026)
     })
 
     expect(await screen.findByText('A101')).toBeInTheDocument()
@@ -193,7 +194,7 @@ describe('TpiSchedule auto plan', () => {
   })
 
   test('aligne le compteur Données sur les TPI réellement planifiables', async () => {
-    planningConfigService.getByYear.mockResolvedValue({
+    coordinationConfigService.getByYear.mockResolvedValue({
       siteConfigs: [
         {
           siteCode: 'VENNES',
@@ -213,7 +214,7 @@ describe('TpiSchedule auto plan', () => {
       }
     ])
 
-    workflowPlanningService.automatePlanification.mockResolvedValue({
+    workflowCoordinationService.automatePlanification.mockResolvedValue({
       success: true,
       summary: {
         plannedCount: 1,
@@ -266,7 +267,7 @@ describe('TpiSchedule auto plan', () => {
   })
 
   test('ouvre les votes sans emails depuis le workflow debug', async () => {
-    workflowPlanningService.startVotesWithoutEmails.mockResolvedValue({
+    workflowCoordinationService.startVotesWithoutEmails.mockResolvedValue({
       success: true,
       workflowState: 'voting_open',
       tpiCount: 0,
@@ -282,10 +283,10 @@ describe('TpiSchedule auto plan', () => {
     fireEvent.click(await screen.findByRole('button', { name: /open-votes-no-email/i }))
 
     await waitFor(() => {
-      expect(workflowPlanningService.startVotesWithoutEmails).toHaveBeenCalledTimes(1)
+      expect(workflowCoordinationService.startVotesWithoutEmails).toHaveBeenCalledTimes(1)
     })
 
-    const [selectedYear, rooms] = workflowPlanningService.startVotesWithoutEmails.mock.calls[0]
+    const [selectedYear, rooms] = workflowCoordinationService.startVotesWithoutEmails.mock.calls[0]
     expect(Number.isInteger(Number(selectedYear))).toBe(true)
     expect(Array.isArray(rooms)).toBe(true)
   })

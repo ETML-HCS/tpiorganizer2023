@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { VOTING_STAKEHOLDER_ROLES } = require('../modules/stakeholders/stakeholderDefinitions')
 
 const RECIPIENT_RESPONSE_STATUSES = ['pending', 'accepted', 'rejected']
 const RECIPIENT_DELIVERY_STATUSES = ['pending', 'sent', 'failed', 'skipped']
@@ -7,7 +8,7 @@ const RESOLUTION_PROPOSAL_STATUSES = ['sent', 'partial', 'accepted', 'rejected',
 const resolutionProposalRecipientSchema = new mongoose.Schema({
   role: {
     type: String,
-    enum: ['expert1', 'expert2', 'chef_projet'],
+    enum: VOTING_STAKEHOLDER_ROLES,
     required: true
   },
   person: {

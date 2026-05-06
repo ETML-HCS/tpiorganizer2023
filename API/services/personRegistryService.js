@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 
 const Person = require('../models/personModel')
 const Slot = require('../models/slotModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const { MagicLink } = require('../models/magicLinkModel')
 const {
   isValidEmail,
@@ -11,8 +11,12 @@ const {
   resolveUniquePersonFromList
 } = require('./personIdentityService')
 const { ensurePersonShortId } = require('./personShortIdService')
+const {
+  REGISTRY_ROLE_SET,
+  mapStakeholderRoleToRegistryRole
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
-const ALLOWED_ROLES = new Set(['candidat', 'expert', 'chef_projet', 'admin'])
+const ALLOWED_ROLES = REGISTRY_ROLE_SET
 const PLACEHOLDER_EMPTY_VALUES = new Set(['null', 'undefined'])
 
 class PersonRegistryError extends Error {
@@ -171,9 +175,13 @@ function normalizePreferredSoutenanceDates(dates = [], fallbackChoices = []) {
 }
 
 function normalizeRoleList(roles = []) {
-  return (Array.isArray(roles) ? roles : [roles])
-    .map((role) => String(role || '').trim())
-    .filter((role) => ALLOWED_ROLES.has(role))
+  return Array.from(
+    new Set(
+      (Array.isArray(roles) ? roles : [roles])
+        .map((role) => mapStakeholderRoleToRegistryRole(role))
+        .filter((role) => ALLOWED_ROLES.has(role))
+    )
+  )
 }
 
 function normalizeRoles(roles = ['expert']) {
@@ -190,7 +198,8 @@ function mergeRoles(existingRoles = [], incomingRoles = ['expert']) {
     }
   }
 
-  return merged.length > 0 ? merged : ['expert']
+  const nextRoles = merged.length > 0 ? merged : ['expert']
+  return nextRoles
 }
 
 function mergePreferredSoutenanceDates(existingDates = [], incomingDates = []) {
@@ -218,21 +227,7 @@ function arePreferredSoutenanceChoicesEqual(leftChoices = [], rightChoices = [])
 }
 
 function mapParticipantRoleToRegistryRole(role = '') {
-  switch (String(role || '').trim()) {
-    case 'expert1':
-    case 'expert2':
-    case 'expert':
-      return 'expert'
-    case 'chef_projet':
-    case 'boss':
-      return 'chef_projet'
-    case 'candidat':
-      return 'candidat'
-    case 'admin':
-      return 'admin'
-    default:
-      return ''
-  }
+  return mapStakeholderRoleToRegistryRole(role)
 }
 
 function personHasRole(person, requiredRole, options = {}) {

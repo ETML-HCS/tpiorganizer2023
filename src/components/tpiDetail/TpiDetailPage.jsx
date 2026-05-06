@@ -129,7 +129,7 @@ const TpiDetailPage = ({ toggleArrow, isArrowUp }) => {
         className='tpi-detail-tools'
         eyebrow='Fiche TPI'
         title={displayReference ? `Dossier ${displayReference}` : 'Dossier TPI'}
-        description='Données utiles, corrections et planning.'
+        description='Données utiles, corrections et coordination.'
         navigationLinks={navigationLinks}
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
@@ -145,11 +145,11 @@ const TpiDetailPage = ({ toggleArrow, isArrowUp }) => {
             </Link>
             <Link
               className='tpi-detail-toolbar-link'
-              to={`/planning/${year}`}
-              aria-label={`Ouvrir le planning ${year}`}
-              title={`Ouvrir le planning ${year}`}
+              to={`${ROUTES.COORDINATION}/${year}`}
+              aria-label={`Ouvrir la coordination ${year}`}
+              title={`Ouvrir la coordination ${year}`}
             >
-              Planning {year}
+              Coordination {year}
             </Link>
             <Link
               className='tpi-detail-toolbar-link'

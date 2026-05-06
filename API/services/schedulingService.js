@@ -6,13 +6,13 @@
 const mongoose = require('mongoose')
 const Slot = require('../models/slotModel')
 const Person = require('../models/personModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 const { getRoomCompatibilityReport } = require('./roomClassCompatibilityService')
 const {
   getPlanningConfigIfAvailable,
   normalizeWorkflowSettings
-} = require('./planningConfigService')
+} = require('./coordinationConfigService')
 const {
   buildOccupiedStepKeys,
   buildTimelineIndex,
@@ -21,7 +21,10 @@ const {
   OCCUPIED_SLOT_STATUSES,
   slotContainsPerson,
   toTimeStepKey
-} = require('./planningRuleUtils')
+} = require('./coordinationRuleUtils')
+const {
+  formatTpiStakeholderRoleLabel
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
 // Constantes
 const VOTING_DEADLINE_DAYS = 7
@@ -159,20 +162,20 @@ async function calculateSlotScore(slot, tpi) {
     return result
   }
   
-  // 1. Vérifier la disponibilité du chef de projet (PRIORITAIRE)
-  const chefProjetAvailable = await checkPersonAvailability(tpi.chefProjet, date, period, slot._id)
+  // 1. Vérifier la disponibilité du chef de projet comme signal visuel non bloquant.
+  const chefProjetAvailable = await checkPersonAvailability(tpi.chefProjet, date, period, slot)
   result.availability.chefProjet = chefProjetAvailable.available
   
-  if (!chefProjetAvailable.available) {
-    result.isValid = false
-    result.reasons.push(`Chef de projet non disponible: ${chefProjetAvailable.reason}`)
-    return result
+  if (chefProjetAvailable.available) {
+    result.totalScore += 30
+    result.reasons.push(`${formatTpiStakeholderRoleLabel('chef_projet')} disponible`)
+  } else {
+    result.totalScore -= 5
+    result.reasons.push(`${formatTpiStakeholderRoleLabel('chef_projet')} à signaler visuellement: ${chefProjetAvailable.reason}`)
   }
-  result.totalScore += 30 // Bonus fort pour disponibilité chef de projet
-  result.reasons.push('Chef de projet disponible')
   
   // 2. Vérifier le candidat
-  const candidatAvailable = await checkPersonAvailability(tpi.candidat, date, period, slot._id)
+  const candidatAvailable = await checkPersonAvailability(tpi.candidat, date, period, slot)
   result.availability.candidat = candidatAvailable.available
   
   if (!candidatAvailable.available) {
@@ -184,26 +187,26 @@ async function calculateSlotScore(slot, tpi) {
   result.reasons.push('Candidat disponible')
   
   // 3. Vérifier les experts (on peut proposer même si non disponibles, ils voteront)
-  const expert1Available = await checkPersonAvailability(tpi.expert1, date, period, slot._id)
+  const expert1Available = await checkPersonAvailability(tpi.expert1, date, period, slot)
   result.availability.expert1 = expert1Available.available
   
   if (expert1Available.available) {
     result.totalScore += 20
-    result.reasons.push('Expert 1 disponible')
+    result.reasons.push(`${formatTpiStakeholderRoleLabel('expert1')} disponible`)
   } else {
     result.totalScore -= 5
-    result.reasons.push(`Expert 1 à confirmer: ${expert1Available.reason}`)
+    result.reasons.push(`${formatTpiStakeholderRoleLabel('expert1')} à confirmer: ${expert1Available.reason}`)
   }
   
-  const expert2Available = await checkPersonAvailability(tpi.expert2, date, period, slot._id)
+  const expert2Available = await checkPersonAvailability(tpi.expert2, date, period, slot)
   result.availability.expert2 = expert2Available.available
   
   if (expert2Available.available) {
     result.totalScore += 20
-    result.reasons.push('Expert 2 disponible')
+    result.reasons.push(`${formatTpiStakeholderRoleLabel('expert2')} disponible`)
   } else {
     result.totalScore -= 5
-    result.reasons.push(`Expert 2 à confirmer: ${expert2Available.reason}`)
+    result.reasons.push(`${formatTpiStakeholderRoleLabel('expert2')} à confirmer: ${expert2Available.reason}`)
   }
   
   // 4. Vérifier la règle des TPI consécutifs
@@ -234,13 +237,18 @@ async function calculateSlotScore(slot, tpi) {
 /**
  * Vérifie la disponibilité d'une personne sur un créneau
  */
-async function checkPersonAvailability(person, date, period, slotId) {
+async function checkPersonAvailability(person, date, period, slotOrId) {
   if (!person) {
     return { available: false, reason: 'Personne non renseignée' }
   }
 
+  const slotId = slotOrId?._id || slotOrId
+
   // 1. Vérifier les disponibilités par défaut et exceptions
-  if (typeof person.isAvailableOn === 'function' && !person.isAvailableOn(date, period)) {
+  if (
+    typeof person.isAvailableOn === 'function' &&
+    !person.isAvailableOn(date, period, { numSlots: slotOrId?.config?.numSlots })
+  ) {
     return { available: false, reason: 'Indisponibilité déclarée' }
   }
   

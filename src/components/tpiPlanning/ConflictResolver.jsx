@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { tpiPlanningService } from '../../services/planningService'
+import { tpiCoordinationService } from '../../services/coordinationService'
 import {
   AlertIcon,
   BanIcon,
@@ -17,6 +17,7 @@ import {
   TimeIcon,
   WrenchIcon
 } from '../shared/InlineIcons'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules'
 import './ConflictResolver.css'
 
 /**
@@ -150,7 +151,7 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
     setResendVotesError(null)
 
     try {
-      const data = await tpiPlanningService.resendVotes(selectedConflict._id, {
+      const data = await tpiCoordinationService.resendVotes(selectedConflict._id, {
         fromArbitrage: true
       })
       
@@ -278,21 +279,21 @@ const ConflictResolver = ({ conflicts, calendarData, onForceSlot, onReload, focu
                       <div className="participant">
                         <span className="role">
                           <ExpertIcon className="participant-icon" badge="1" />
-                          Expert 1:
+                          {getTpiRelationRoleLabel('expert1')}:
                         </span>
                         <span className="name">{tpi.expert1?.firstName} {tpi.expert1?.lastName}</span>
                       </div>
                       <div className="participant">
                         <span className="role">
                           <ExpertIcon className="participant-icon" badge="2" />
-                          Expert 2:
+                          {getTpiRelationRoleLabel('expert2')}:
                         </span>
                         <span className="name">{tpi.expert2?.firstName} {tpi.expert2?.lastName}</span>
                       </div>
                       <div className="participant">
                         <span className="role">
                           <ProjectLeadIcon className="participant-icon" />
-                          Chef de projet:
+                          {getTpiRelationRoleLabel('chef_projet')}:
                         </span>
                         <span className="name">{tpi.chefProjet?.firstName} {tpi.chefProjet?.lastName}</span>
                       </div>

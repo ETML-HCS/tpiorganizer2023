@@ -16,8 +16,8 @@ jest.mock('../../services/apiService', () => ({
   }
 }))
 
-jest.mock('../../services/planningService', () => ({
-  workflowPlanningService: {
+jest.mock('../../services/coordinationService', () => ({
+  workflowCoordinationService: {
     resolveMagicLink: jest.fn()
   }
 }))
@@ -142,7 +142,83 @@ describe('useSoutenanceData helpers', () => {
         name: 'A101',
         site: 'ETML',
         date: '2026-06-10',
+        roomClassMode: 'other',
+        tpiDatas: [{
+          refTpi: '2103',
+          candidat: 'Chloé',
+          expert1: { name: 'Expert 5' },
+          expert2: { name: 'Expert 6' },
+          boss: { name: 'Chef 3' }
+        }]
+      },
+      {
+        name: 'B101',
+        site: 'ETML',
+        date: '2026-06-10',
         roomClassMode: null,
+        tpiDatas: [{
+          refTpi: '2104',
+          candidat: 'David',
+          expert1: { name: 'Expert 7' },
+          expert2: { name: 'Expert 8' },
+          boss: { name: 'Chef 4' }
+        }]
+      }
+    ]
+
+    expect(getRoomClassFilterValue(rooms[0])).toBe('matu')
+    expect(getRoomClassFilterValue(rooms[1])).toBe('special')
+    expect(getRoomClassFilterValue(rooms[2])).toBe('noBadge')
+    expect(getRoomClassFilterValue(rooms[3])).toBe('noBadge')
+    expect(filterRooms(rooms, { ...baseFilters, classType: 'matu' })).toEqual([rooms[0]])
+    expect(filterRooms(rooms, { ...baseFilters, classType: 'special' })).toEqual([rooms[1]])
+    expect(filterRooms(rooms, { ...baseFilters, classType: 'noBadge' })).toEqual([rooms[2], rooms[3]])
+  })
+
+  test('filterRooms en vue admin ignore les filtres personnels sauf date et type de classe', () => {
+    const filters = {
+      site: 'ETML',
+      date: '10 juin 2026',
+      reference: '2101',
+      candidate: 'Alice',
+      experts: 'Expert 1',
+      projectManagerButton: 'Chef 1',
+      projectManager: 'Chef 1',
+      classType: 'matu',
+      nameRoom: 'M101'
+    }
+    const rooms = [
+      {
+        name: 'M101',
+        site: 'ETML',
+        date: '2026-06-10',
+        roomClassMode: 'matu',
+        tpiDatas: [{
+          refTpi: '2101',
+          candidat: 'Alice',
+          expert1: { name: 'Expert 1', personId: 'expert-1' },
+          expert2: { name: 'Expert 2' },
+          boss: { name: 'Chef 1' }
+        }]
+      },
+      {
+        name: 'M102',
+        site: 'CFPV',
+        date: '2026-06-10',
+        roomClassMode: 'matu',
+        tpiDatas: [{
+          refTpi: '2102',
+          candidat: 'Bob',
+          expert1: { name: 'Expert 3' },
+          expert2: { name: 'Expert 4' },
+          boss: { name: 'Chef 2' }
+        }]
+      },
+      {
+        name: 'S101',
+        site: 'ETML',
+        date: '2026-06-10',
+        roomClassMode: 'special',
         tpiDatas: [{
           refTpi: '2103',
           candidat: 'Chloé',
@@ -153,12 +229,10 @@ describe('useSoutenanceData helpers', () => {
       }
     ]
 
-    expect(getRoomClassFilterValue(rooms[0])).toBe('matu')
-    expect(getRoomClassFilterValue(rooms[1])).toBe('special')
-    expect(getRoomClassFilterValue(rooms[2])).toBe('noBadge')
-    expect(filterRooms(rooms, { ...baseFilters, classType: 'matu' })).toEqual([rooms[0]])
-    expect(filterRooms(rooms, { ...baseFilters, classType: 'special' })).toEqual([rooms[1]])
-    expect(filterRooms(rooms, { ...baseFilters, classType: 'noBadge' })).toEqual([rooms[2]])
+    expect(filterRooms(rooms, filters, { personId: 'expert-1' }, true)).toEqual([
+      rooms[0],
+      rooms[1]
+    ])
   })
 
   test('matchesReferenceFilter accepte les références workflow et legacy', () => {

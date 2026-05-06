@@ -112,6 +112,38 @@ test('Email configuration should be environment-dependent', async () => {
     'Prod environment should use port 465 (secure)')
 })
 
+test('SMTP transport config should not silently fallback to localhost', async () => {
+  const missingHostConfig = emailService.getSmtpTransportConfig({
+    SMTP_PORT: '465',
+    SMTP_USER: 'expert@example.ch',
+    SMTP_PASS: 'app-password'
+  })
+
+  assert.equal(missingHostConfig.host, '')
+  assert.equal(missingHostConfig.port, 465)
+  assert.equal(missingHostConfig.secure, true)
+  assert.equal(missingHostConfig.connectionTimeout, 10000)
+  assert.equal(missingHostConfig.greetingTimeout, 10000)
+  assert.equal(missingHostConfig.socketTimeout, 30000)
+
+  const hostingerConfig = emailService.getSmtpTransportConfig({
+    SMTP_HOST: 'smtp.hostinger.com',
+    SMTP_PORT: '465',
+    SMTP_USER: 'expert@example.ch',
+    SMTP_PASS: 'app-password',
+    SMTP_CONNECTION_TIMEOUT_MS: '12000',
+    SMTP_GREETING_TIMEOUT_MS: '13000',
+    SMTP_SOCKET_TIMEOUT_MS: '14000'
+  })
+
+  assert.equal(hostingerConfig.host, 'smtp.hostinger.com')
+  assert.equal(hostingerConfig.port, 465)
+  assert.equal(hostingerConfig.secure, true)
+  assert.equal(hostingerConfig.connectionTimeout, 12000)
+  assert.equal(hostingerConfig.greetingTimeout, 13000)
+  assert.equal(hostingerConfig.socketTimeout, 14000)
+})
+
 /**
  * Test des validations d'email
  */
@@ -260,6 +292,72 @@ test('Email voteRequest template should use configured link validity label', () 
   assert.match(email.text, /Ce lien est valide pendant 7 jours/)
   assert.equal(emailService.formatLinkValidityLabel(168), '7 jours')
   assert.equal(emailService.formatLinkValidityLabel(25), '25 heures')
+})
+
+test('Email soutenanceAccess template frames change requests as exceptional', () => {
+  const email = emailService.emailTemplates.soutenanceAccess({
+    brandName: 'Commission TPI',
+    recipientName: 'Jean Expert',
+    recipientRoles: ['expert'],
+    year: 2026,
+    deadline: '12.06.2026',
+    magicLinkUrl: 'https://tpi26.ch/soutenances-2026/?ml=token-defense'
+  })
+
+  assert.match(email.subject, /Horaire des défenses TPI 2026/)
+  assert.match(email.html, /formulaire de demande de modification/)
+  assert.match(email.html, /considérer l’horaire comme définitif/)
+  assert.match(email.html, /Voir mon horaire/)
+  assert.match(email.html, /align="center"/)
+  assert.match(email.html, /Merci de faire votre retour dans les 5 jours maximum/)
+  assert.match(email.html, /5 jours maximum/)
+  assert.doesNotMatch(email.html, /Pour les experts/)
+  assert.doesNotMatch(email.html, /Retour attendu:/)
+  assert.match(email.html, /style="display:inline-block; background:#0f766e/)
+  assert.match(email.text, /aucune modification ne peut être garantie/)
+  assert.match(email.text, /Merci de faire votre retour dans les 5 jours maximum/)
+  assert.match(email.text, /5 jours maximum/)
+  assert.doesNotMatch(email.text, /Pour les experts/)
+  assert.doesNotMatch(email.text, /Retour attendu:/)
+  assert.match(email.text, /token-defense/)
+  assert.match(email.text, /Validité du lien/)
+})
+
+test('Email soutenanceAccess template asks project leads to respond within 3 days', () => {
+  const email = emailService.emailTemplates.soutenanceAccess({
+    brandName: 'Commission TPI',
+    recipientName: 'Camille Projet',
+    recipientRoles: ['chef_projet', 'expert'],
+    year: 2026,
+    deadline: '12.06.2026',
+    magicLinkUrl: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp'
+  })
+
+  assert.match(email.html, /3 jours/)
+  assert.match(email.text, /3 jours/)
+  assert.match(email.text, /Merci de faire votre retour dans les 3 jours/)
+  assert.doesNotMatch(email.text, /Pour les chefs de projet/)
+  assert.doesNotMatch(email.text, /5 jours maximum/)
+})
+
+test('Email soutenanceAccess template mentions admin general view for administrators', () => {
+  const email = emailService.emailTemplates.soutenanceAccess({
+    brandName: 'Commission TPI',
+    recipientName: 'Ada Admin',
+    recipientRoles: ['admin'],
+    year: 2026,
+    deadline: '12.06.2026',
+    magicLinkUrl: 'https://tpi26.ch/defenses-2026/?ml=token-admin'
+  })
+
+  assert.match(email.html, /Accès administrateur/)
+  assert.match(email.html, /vue générale des défenses/)
+  assert.match(email.html, /Ouvrir la vue générale admin/)
+  assert.match(email.html, /view=admin/)
+  assert.match(email.html, /filtres date et type de classe/)
+  assert.match(email.text, /Accès administrateur/)
+  assert.match(email.text, /vue générale des défenses/)
+  assert.match(email.text, /view=admin/)
 })
 
 test('Email templates should reflect configured brand and reply contact', () => {

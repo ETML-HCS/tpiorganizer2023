@@ -5,6 +5,11 @@ import {
   useInRouterContext
 } from "react-router-dom"
 import { ChevronDownIcon } from "./InlineIcons"
+import { ROUTES } from "../../config/appConfig"
+import {
+  appendCoordinationYearQuery,
+  getStoredCoordinationYear
+} from "../../utils/coordinationYear"
 
 const PageToolbar = ({
   id = "tools",
@@ -39,6 +44,7 @@ const PageToolbar = ({
   const isInRouter = useInRouterContext()
   const routerLocation = React.useContext(LocationContext)?.location
   const pathname = routerLocation?.pathname || ""
+  const coordinationYear = getStoredCoordinationYear()
   const hasHeaderCopy = Boolean(eyebrow || title || description)
   const hasMeta = Boolean(meta)
   const hasActions = Boolean(actions)
@@ -152,6 +158,26 @@ const PageToolbar = ({
     }
   }
 
+  const getNavigationTarget = (link) => {
+    if (!link?.to || link.to === ROUTES.HOME) {
+      return link?.to
+    }
+
+    if (link.to === ROUTES.COORDINATION || link.to === ROUTES.COORDINATION_LEGACY) {
+      return `${ROUTES.COORDINATION}/${coordinationYear}`
+    }
+
+    if (link.to === ROUTES.SOUTENANCES) {
+      return `${ROUTES.SOUTENANCES}/${coordinationYear}`
+    }
+
+    if (link.to === ROUTES.GEN_TOKENS) {
+      return link.to
+    }
+
+    return appendCoordinationYearQuery(link.to, coordinationYear)
+  }
+
   const toolbarClassName = [
     "page-tools",
     className,
@@ -171,16 +197,20 @@ const PageToolbar = ({
       role='navigation'
       aria-label='Navigation rapide'
     >
-      {navItems.map((link) => (
-        <Link
-          key={link.to}
-          to={link.to}
-          className={`page-tools-navigation-link ${isLinkActive(link) ? "active" : ""}`.trim()}
-          title={link.title || link.label}
-        >
-          {link.label}
-        </Link>
-      ))}
+      {navItems.map((link) => {
+        const target = getNavigationTarget(link)
+
+        return (
+          <Link
+            key={link.to}
+            to={target}
+            className={`page-tools-navigation-link ${isLinkActive(link) ? "active" : ""}`.trim()}
+            title={link.title || link.label}
+          >
+            {link.label}
+          </Link>
+        )
+      })}
     </div>
   )
 

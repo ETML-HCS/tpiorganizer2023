@@ -28,6 +28,7 @@ Les dernières évolutions ajoutent aussi :
 - publication statique des soutenances ;
 - publication statique des votes avec `index.php`, `sync.php`, `.htaccess` et synchronisation JSONL ;
 - synchronisation automatique optionnelle des votes statiques au démarrage de l'API.
+- Une base de données noSQL, est-ce vraiment le bon format ?
 
 ## Nouvelle orientation
 
@@ -35,7 +36,7 @@ Le programme doit être repensé autour d'un flux plus court :
 
 - importer ou saisir les données utiles ;
 - configurer les sites, dates, salles, votes, emails et publications ;
-- générer les plannings et les propositions de résolution ;
+- générer les planifications et les propositions de résolution ;
 - générer les sites publics nécessaires ;
 - publier ces sites et récupérer les réponses distantes ;
 - exporter ou sauvegarder les données.
@@ -88,7 +89,7 @@ Autres points à traiter avant un vrai portable autonome :
 
 - Garder la version `VS.260504` comme dernier état web stable de référence.
 - Ne pas ajouter Electron directement sur tout le programme existant.
-- Lister les modules à conserver : configuration, import/export, planning, votes, génération, publication, synchronisation.
+- Lister les modules à conserver : configuration, import/export, planification, coordination des votes, génération, publication, synchronisation.
 - Lister les modules à supprimer ou isoler : administration web historique, accès non utilisés, routes legacy sans rôle de migration.
 - Documenter toute collection ou structure de données nécessaire avant migration.
 - Conserver des exports/imports robustes pour préparer le changement de stockage.
@@ -117,7 +118,7 @@ SQLite reste l'option la plus propre pour une vraie application desktop portable
 - Ne pas appeler directement MongoDB depuis le frontend.
 - Ne pas multiplier les chemins d'accès API hors de `src/config/appConfig.js` et des services existants.
 - Garder la logique métier dans les services backend plutôt que dans les composants React.
-- Ne pas porter un module dans Electron sans lien clair avec import, configuration, planning, votes, génération, publication, synchronisation ou export.
+- Ne pas porter un module dans Electron sans lien clair avec import, configuration, planification, coordination des votes, génération, publication, synchronisation ou export.
 - Garder les compatibilités legacy uniquement comme aides de migration documentées.
 - Ne pas exposer les secrets SMTP, JWT ou FTP dans le renderer Electron.
 - Utiliser une racine configurable pour tous les fichiers locaux.
@@ -163,4 +164,4 @@ La version web disparaît : le programme devient exclusivement une application d
 
 Ne pas lancer la migration Electron comme simple emballage du programme actuel.
 
-La prochaine action raisonnable est de faire un inventaire fonctionnel module par module, puis de définir le noyau portable : configuration, génération de planning, génération des sites, publication, synchronisation, export et sauvegarde. Ensuite seulement, créer un petit prototype Electron connecté pour valider le packaging Windows sans toucher encore à toute la persistance.
+La prochaine action raisonnable est de faire un inventaire fonctionnel module par module, puis de définir le noyau portable : configuration, génération de planification, génération des sites, publication, synchronisation, export et sauvegarde. Ensuite seulement, créer un petit prototype Electron connecté pour valider le packaging Windows sans toucher encore à toute la persistance.

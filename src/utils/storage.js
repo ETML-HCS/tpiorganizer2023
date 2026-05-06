@@ -5,7 +5,7 @@ const LEGACY_STORAGE_KEYS = {
   ORGANIZER_DATA: "organizerData",
   EVALUATION_DATA: "evaluationData",
   TPI_LIST: "tpiList",
-  PLANNING_USER: "planningUser"
+  COORDINATION_USER: "planningUser"
 }
 
 const hasLocalStorage = () => {
@@ -49,11 +49,25 @@ const getCurrentPathname = () => {
     : ""
 }
 
+const isCoordinationApiPath = (path = "") =>
+  path === "/api/coordination" ||
+  path.startsWith("/api/coordination/") ||
+  path === "/api/planning" ||
+  path.startsWith("/api/planning/")
+
+const isCoordinationPagePath = (path = "") =>
+  path === "/coordination" ||
+  path.startsWith("/coordination/") ||
+  path === "/planning" ||
+  path.startsWith("/planning/")
+
 export const getAuthScopeForEndpoint = (endpoint = "") => {
   const path = normalizeEndpointPath(endpoint)
 
   if (
     path === "/api/auth/login" ||
+    path.startsWith("/api/coordination/auth/") ||
+    path.startsWith("/api/coordination/resolution-proposals/public/") ||
     path.startsWith("/api/planning/auth/") ||
     path.startsWith("/api/planning/resolution-proposals/public/") ||
     path.startsWith("/api/magic-link/")
@@ -62,26 +76,25 @@ export const getAuthScopeForEndpoint = (endpoint = "") => {
   }
 
   if (
-    path === "/api/planning" ||
-    path.startsWith("/api/planning/") ||
+    isCoordinationApiPath(path) ||
     path === "/api/workflow" ||
     path.startsWith("/api/workflow/")
   ) {
-    return "planning"
+    return "coordination"
   }
 
   return "app"
 }
 
-const shouldPreferPlanningToken = (endpoint = "") => {
+const shouldPreferCoordinationToken = (endpoint = "") => {
   const path = normalizeEndpointPath(endpoint)
   const currentPathname = getCurrentPathname()
 
-  if (!(path === "/api/planning" || path.startsWith("/api/planning/") || path === "/api/workflow" || path.startsWith("/api/workflow/"))) {
+  if (!(isCoordinationApiPath(path) || path === "/api/workflow" || path.startsWith("/api/workflow/"))) {
     return false
   }
 
-  return currentPathname === "/planning" || currentPathname.startsWith("/planning/")
+  return isCoordinationPagePath(currentPathname)
 }
 
 export const decodeJwtPayload = (token) => {
@@ -297,17 +310,17 @@ export const resolveStoredAuthToken = (endpoint = "") => {
     return { token: "", source: null }
   }
 
-  if (scope === "planning") {
-    const preferPlanningToken = shouldPreferPlanningToken(endpoint)
-    const candidates = preferPlanningToken
+  if (scope === "coordination") {
+    const preferCoordinationToken = shouldPreferCoordinationToken(endpoint)
+    const candidates = preferCoordinationToken
       ? [
-          { key: STORAGE_KEYS.PLANNING_SESSION_TOKEN, source: "planning", token: readStorageValue(STORAGE_KEYS.PLANNING_SESSION_TOKEN, "") },
+          { key: STORAGE_KEYS.COORDINATION_SESSION_TOKEN, source: "coordination", token: readStorageValue(STORAGE_KEYS.COORDINATION_SESSION_TOKEN, "") },
           { key: STORAGE_KEYS.APP_SESSION_TOKEN, source: "app", token: readStorageValue(STORAGE_KEYS.APP_SESSION_TOKEN, "") },
           { key: LEGACY_STORAGE_KEYS.TOKEN, source: "legacy", token: readStorageValue(LEGACY_STORAGE_KEYS.TOKEN, "") }
         ]
       : [
           { key: STORAGE_KEYS.APP_SESSION_TOKEN, source: "app", token: readStorageValue(STORAGE_KEYS.APP_SESSION_TOKEN, "") },
-          { key: STORAGE_KEYS.PLANNING_SESSION_TOKEN, source: "planning", token: readStorageValue(STORAGE_KEYS.PLANNING_SESSION_TOKEN, "") },
+          { key: STORAGE_KEYS.COORDINATION_SESSION_TOKEN, source: "coordination", token: readStorageValue(STORAGE_KEYS.COORDINATION_SESSION_TOKEN, "") },
           { key: LEGACY_STORAGE_KEYS.TOKEN, source: "legacy", token: readStorageValue(LEGACY_STORAGE_KEYS.TOKEN, "") }
         ]
 
@@ -319,8 +332,8 @@ export const resolveStoredAuthToken = (endpoint = "") => {
 
       if (isJwtExpired(token)) {
         removeStorageValue(key)
-        if (key === STORAGE_KEYS.PLANNING_SESSION_TOKEN) {
-          removeStorageValue(STORAGE_KEYS.PLANNING_USER)
+        if (key === STORAGE_KEYS.COORDINATION_SESSION_TOKEN) {
+          removeStorageValue(STORAGE_KEYS.COORDINATION_USER)
         }
         continue
       }

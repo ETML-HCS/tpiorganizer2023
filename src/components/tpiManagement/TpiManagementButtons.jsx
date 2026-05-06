@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { createTpiModel, deleteTpiModelsByYear } from '../tpiControllers/TpiController.jsx'
@@ -74,7 +74,6 @@ const TpiManagementButtons = ({
   tpiCount = 0
 }) => {
   const [showImportForm, setShowImportForm] = useState(false)
-  const [importYear, setImportYear] = useState(String(year))
   const [isImporting, setIsImporting] = useState(false)
   const [isDeletingYear, setIsDeletingYear] = useState(false)
   const [isParsingFile, setIsParsingFile] = useState(false)
@@ -83,10 +82,6 @@ const TpiManagementButtons = ({
   const [importRows, setImportRows] = useState([])
   const [importMapping, setImportMapping] = useState(() => buildDefaultImportMapping([]))
   const [importFeedback, setImportFeedback] = useState(null)
-
-  useEffect(() => {
-    setImportYear(String(year))
-  }, [year])
 
   const handleCancelImport = () => {
     setShowImportForm(false)
@@ -390,7 +385,7 @@ const TpiManagementButtons = ({
   const handleSubmitImportForm = async (event) => {
     event.preventDefault()
 
-    const selectedYear = Number.parseInt(importYear, 10)
+    const selectedYear = Number.parseInt(year, 10)
     const missingKeys = getMissingRequiredMappingKeys(importMapping)
 
     if (!importRows.length) {
@@ -709,7 +704,7 @@ const TpiManagementButtons = ({
               <div className='tpi-import-card-head'>
                 <div>
                   <span className='tpi-management-tools-label'>Source</span>
-                  <h4>Fichier et année</h4>
+                  <h4>Fichier</h4>
                 </div>
               </div>
 
@@ -739,24 +734,15 @@ const TpiManagementButtons = ({
                   </div>
                 </div>
 
-                <label className='tpi-import-field' htmlFor='yearInput'>
+                <div className='tpi-import-field tpi-import-year-context'>
                   <span>Année d&apos;import</span>
-                  <input
-                    type='number'
-                    id='yearInput'
-                    min='1900'
-                    max='2100'
-                    step='1'
-                    value={importYear}
-                    onChange={(event) => setImportYear(event.target.value)}
-                    required
-                  />
-                </label>
+                  <strong>{year}</strong>
+                </div>
               </div>
 
               <p className='tpi-import-note'>
-                Le fichier peut être remplacé à tout moment. L&apos;année sert à enregistrer les
-                TPI au bon millésime.
+                Le fichier peut être remplacé à tout moment. Les TPI seront enregistrés dans
+                l&apos;année active.
               </p>
             </section>
 

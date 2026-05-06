@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema
+const { REGISTRY_ROLES } = require('../modules/stakeholders/stakeholderDefinitions')
 
 const preferredSoutenanceChoiceSchema = new Schema(
   {
@@ -32,7 +33,7 @@ const personSchema = new Schema({
   // Rôle(s) de la personne - une personne peut avoir plusieurs rôles
   roles: [{
     type: String,
-    enum: ['candidat', 'expert', 'chef_projet', 'admin'],
+    enum: REGISTRY_ROLES,
     required: true
   }],
   
@@ -137,15 +138,85 @@ personSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`
 })
 
+function normalizePeriodNumber(value) {
+  const numericValue = Number.parseInt(String(value), 10)
+  return Number.isInteger(numericValue) && numericValue > 0
+    ? numericValue
+    : null
+}
+
+function getHalfDayPeriodForSlot(period, options = {}) {
+  const normalizedText = String(period || '').trim().toLowerCase()
+  if (normalizedText === 'matin' || normalizedText === 'morning') {
+    return 1
+  }
+  if (normalizedText === 'apres-midi' || normalizedText === 'après-midi' || normalizedText === 'afternoon') {
+    return 2
+  }
+
+  const periodNumber = normalizePeriodNumber(period)
+  if (!periodNumber) {
+    return null
+  }
+
+  const explicitHalfDay =
+    options.periodKind === 'half-day' ||
+    options.periodKind === 'halfDay' ||
+    options.periodGranularity === 'half-day' ||
+    options.periodGranularity === 'halfDay'
+
+  if (explicitHalfDay) {
+    return periodNumber === 1 ? 1 : 2
+  }
+
+  const configuredSlotCount = Number.parseInt(
+    String(options.numSlots || options.totalPeriods || options.maxPeriod || ''),
+    10
+  )
+  if (!Number.isInteger(configuredSlotCount) || configuredSlotCount <= 2) {
+    return periodNumber === 1 ? 1 : 2
+  }
+
+  const slotCount = configuredSlotCount
+  const morningLimit = Math.ceil(slotCount / 2)
+
+  return periodNumber <= morningLimit ? 1 : 2
+}
+
+function periodListContains(periods = [], period, options = {}) {
+  const normalizedPeriod = normalizePeriodNumber(period)
+  const normalizedPeriods = (Array.isArray(periods) ? periods : [periods])
+    .map(normalizePeriodNumber)
+    .filter(Boolean)
+
+  if (!normalizedPeriod || normalizedPeriods.length === 0) {
+    return false
+  }
+
+  const usesHalfDayPeriods = normalizedPeriods.every((value) => value === 1 || value === 2)
+  const configuredSlotCount = Number.parseInt(
+    String(options.numSlots || options.totalPeriods || options.maxPeriod || ''),
+    10
+  )
+  const usesMultiSlotDay = Number.isInteger(configuredSlotCount) && configuredSlotCount > 2
+
+  if (!usesHalfDayPeriods || !usesMultiSlotDay) {
+    return normalizedPeriods.includes(normalizedPeriod)
+  }
+
+  const halfDayPeriod = getHalfDayPeriodForSlot(period, options)
+  return Boolean(halfDayPeriod && normalizedPeriods.includes(halfDayPeriod))
+}
+
 // Méthode pour vérifier la disponibilité sur un créneau
-personSchema.methods.isAvailableOn = function(date, period) {
+personSchema.methods.isAvailableOn = function(date, period, options = {}) {
   // Vérifier les exceptions (congés, absences)
   const exception = this.unavailableDates.find(u => {
     const uDate = new Date(u.date).toDateString()
     const checkDate = new Date(date).toDateString()
     if (uDate !== checkDate) return false
     if (u.allDay) return true
-    return u.periods.includes(period)
+    return periodListContains(u.periods, period, options)
   })
   
   if (exception) return false
@@ -161,7 +232,7 @@ personSchema.methods.isAvailableOn = function(date, period) {
   const importedPresence = this.importedPresences?.get(dateStr)
   
   if (importedPresence) {
-    const periodKey = period === 1 || period === 'matin' ? 'matin' : 'apres-midi'
+    const periodKey = getHalfDayPeriodForSlot(period, options) === 1 ? 'matin' : 'apres-midi'
     return importedPresence[periodKey] === true
   }
   
@@ -173,7 +244,7 @@ personSchema.methods.isAvailableOn = function(date, period) {
     return !hasImportedPresenceData && !hasDefaultAvailability
   }
 
-  return defaultAvail.periods.includes(period)
+  return periodListContains(defaultAvail.periods, period, options)
 }
 
 // Méthode pour vérifier la règle des 4 TPI consécutifs

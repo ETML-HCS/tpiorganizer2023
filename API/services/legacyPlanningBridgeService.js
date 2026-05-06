@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 
 const Slot = require('../models/slotModel')
 const Person = require('../models/personModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 const TpiModelsYear = require('../models/tpiModels')
 const { createTpiRoomModel } = require('../models/tpiRoomsModels')
@@ -10,8 +10,8 @@ const { findOrCreatePerson } = require('./csvImportService')
 const {
   getPlanningConfig,
   normalizeWorkflowSettings
-} = require('./planningConfigService')
-const { isExternalPlanningSite, isPlanifiableTpi } = require('./tpiPlanningVisibility')
+} = require('./coordinationConfigService')
+const { isExternalPlanningSite, isPlanifiableTpi } = require('./coordinationTpiVisibility')
 const { personHasRole } = require('./personRegistryService')
 const {
   linkLegacyTpiStakeholders,
@@ -501,7 +501,7 @@ async function rebuildWorkflowFromLegacyPlanning({
 }) {
   const normalizedYear = Number.parseInt(String(year), 10)
   if (!Number.isInteger(normalizedYear)) {
-    throw new Error('Annee invalide pour la synchronisation du planning.')
+    throw new Error('Annee invalide pour la synchronisation de la planification.')
   }
 
   const planningConfig = await getPlanningConfig(normalizedYear)

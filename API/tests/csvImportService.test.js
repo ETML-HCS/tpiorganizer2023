@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { Types } = require('mongoose')
 
 const Person = require('../models/personModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 
 const {
   detectDelimiter,

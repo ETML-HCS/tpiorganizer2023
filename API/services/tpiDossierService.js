@@ -1,39 +1,15 @@
 const Person = require('../models/personModel')
 const TpiModelsYear = require('../models/tpiModels')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
-const { getPlanningConfigIfAvailable } = require('./planningConfigService')
+const { getPlanningConfigIfAvailable } = require('./coordinationConfigService')
 const { validateLegacyTpiStakeholders } = require('./tpiStakeholderService')
-const { isPlanifiableTpi } = require('./tpiPlanningVisibility')
+const { isPlanifiableTpi } = require('./coordinationTpiVisibility')
 const { enrichLegacyTpisWithDerivedDates } = require('./legacyTpiDateEnrichmentService')
-
-function compactText(value) {
-  if (value === null || value === undefined) {
-    return ''
-  }
-
-  return String(value).trim()
-}
-
-function uniqueList(values = []) {
-  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)))
-}
-
-function normalizeTpiDossierRef(year, ref) {
-  const rawRef = compactText(ref)
-  const workflowPrefix = `TPI-${year}-`
-  const isWorkflowReference = rawRef.toUpperCase().startsWith(workflowPrefix.toUpperCase())
-  const legacyRef = compactText(isWorkflowReference ? rawRef.slice(workflowPrefix.length) : rawRef)
-  const workflowReference = compactText(legacyRef ? `${workflowPrefix}${legacyRef}` : rawRef)
-
-  return {
-    rawRef,
-    legacyRef,
-    workflowReference,
-    legacyCandidates: uniqueList([rawRef, legacyRef, workflowReference]),
-    workflowCandidates: uniqueList([rawRef, workflowReference])
-  }
-}
+const {
+  compactText,
+  normalizeTpiDossierRef
+} = require('../modules/gestionTpi/normalization')
 
 async function resolveQueryResult(query) {
   if (!query) {
@@ -146,7 +122,7 @@ function buildLegacyConsistencyIssues(legacyTpi, stakeholderState, planningTpi, 
     issues.push({
       type: 'legacy_tpi_not_imported',
       severity: 'warning',
-      message: 'Fiche présente dans GestionTPI mais absente de Planning.'
+      message: 'Fiche présente dans GestionTPI mais absente de Coordination.'
     })
   }
 
@@ -154,7 +130,7 @@ function buildLegacyConsistencyIssues(legacyTpi, stakeholderState, planningTpi, 
     issues.push({
       type: 'planning_tpi_missing_legacy',
       severity: 'warning',
-      message: 'Fiche présente dans Planning mais absente de GestionTPI.'
+      message: 'Fiche présente dans Coordination mais absente de GestionTPI.'
     })
   }
 

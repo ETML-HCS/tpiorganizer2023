@@ -70,6 +70,13 @@ const baseProps = {
   onCloseVotes: jest.fn(),
   onPublishDefinitive: jest.fn(),
   onDeactivatePublication: jest.fn(),
+  workflowPhases: {
+    planning: { active: true },
+    votes: { active: false },
+    arbitrage: { active: false },
+    defenses: { active: false }
+  },
+  onWorkflowPhaseToggle: jest.fn(),
   onSendSoutenanceLinks: jest.fn(),
   onGenerateStaticPublication: jest.fn(),
   onPreviewStaticPublication: jest.fn(),
@@ -160,7 +167,7 @@ describe('TpiScheduleButtons - Données', () => {
   test('importe un fichier JSON via le sélecteur', async () => {
     renderButtons()
     const input = screen.getByTestId('planning-file-input')
-    const file = new File(['{"rooms":[{"name":"Salle A"}]}'], 'planning.json', {
+    const file = new File(['{"rooms":[{"name":"Salle A"}]}'], 'planification.json', {
       type: 'application/json'
     })
 
@@ -220,6 +227,17 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('button', { name: /Automatiser planification/i }))
 
     expect(baseProps.onAutomatePlanification).toHaveBeenCalledTimes(1)
+  })
+
+  test('permet d activer et désactiver une phase depuis le menu Phases', () => {
+    const onWorkflowPhaseToggle = jest.fn()
+    renderButtons({ onWorkflowPhaseToggle })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Phases/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Activer Votes/i }))
+
+    expect(onWorkflowPhaseToggle).toHaveBeenCalledWith('votes', true)
   })
 
   test('désactive le bouton Vérifier après une validation réussie sans conflit', () => {
@@ -285,6 +303,35 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.getByText(/Grace Hopper a 5 TPI consécutifs/i)).toBeInTheDocument()
   })
 
+  test('affiche les overrides de contraintes comme avertissements non bloquants', () => {
+    renderButtons({
+      validationResult: {
+        year: 2024,
+        checkedAt: '2026-04-12T10:00:00.000Z',
+        summary: {
+          issueCount: 0,
+          hardConflictCount: 0,
+          warningCount: 1,
+          isValid: true
+        },
+        issues: [
+          {
+            type: 'consecutive_limit',
+            severity: 'warning',
+            isConstraintOverride: true,
+            message: 'Grace Hopper a 5 TPI consécutifs, contrainte indiquée sur la carte.'
+          }
+        ]
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+
+    expect(screen.getByText(/Avertissements: 1/i)).toBeInTheDocument()
+    expect(screen.getByText(/Grace Hopper a 5 TPI consécutifs/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Erreurs détectées/i)).not.toBeInTheDocument()
+  })
+
   test('mentionne une incompatibilité de salle dans le tooltip de vérification', () => {
     renderButtons({
       validationResult: {
@@ -330,6 +377,33 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.getByLabelText('A101')).toBeInTheDocument()
   })
 
+  test('propose les filtres compacts dans l en-tête', () => {
+    const onRoomFiltersChange = jest.fn()
+
+    renderButtons({ onRoomFiltersChange })
+
+    fireEvent.click(screen.getByLabelText('Filtres de planification'))
+    fireEvent.change(screen.getByLabelText('Filtrer par date'), {
+      target: { value: '2026-06-10' }
+    })
+
+    expect(onRoomFiltersChange).toHaveBeenCalledWith({ date: '2026-06-10' })
+  })
+
+  test('réinitialise les filtres compacts depuis l en-tête', () => {
+    const onClearRoomFilters = jest.fn()
+
+    renderButtons({
+      roomFilters: { site: '', date: '2026-06-10', room: '' },
+      onClearRoomFilters
+    })
+
+    fireEvent.click(screen.getByLabelText(/1 filtre actif/i))
+    fireEvent.click(screen.getByRole('button', { name: /Réinitialiser les filtres/i }))
+
+    expect(onClearRoomFilters).toHaveBeenCalledTimes(1)
+  })
+
   test('affiche les dates et les salles par site en lecture seule', () => {
     renderButtons()
 
@@ -344,11 +418,11 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.getByLabelText('B202')).toBeInTheDocument()
   })
 
-  test('génère les salles de planning depuis la configuration', () => {
+  test('génère les salles de planification depuis la configuration', () => {
     renderButtons()
 
     fireEvent.click(screen.getByRole('button', { name: /Salles/i }))
-    fireEvent.click(screen.getByRole('button', { name: /Créer les rooms du planning/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Créer les rooms de la planification/i }))
 
     expect(baseProps.onGenerateRoomsFromCatalog).toHaveBeenCalledTimes(1)
   })
@@ -388,6 +462,17 @@ describe('TpiScheduleButtons - Données', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Salles/i }))
 
+    const densityGroup = screen.getByRole('radiogroup', {
+      name: /Niveau de détail des cartes TPI/i
+    })
+    expect(document.querySelector('.planning-room-form-head-actions')).toContainElement(
+      densityGroup
+    )
+    expect(document.querySelector('.planning-room-form-head-actions')?.firstElementChild).toBe(
+      densityGroup
+    )
+    expect(screen.queryByText('Cartes')).not.toBeInTheDocument()
+
     fireEvent.click(
       screen.getByRole('radio', {
         name: /Identifiants des parties prenantes sur une ligne/i
@@ -406,7 +491,7 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.queryByRole('button', { name: /Mode édition/i })).not.toBeInTheDocument()
   })
 
-  test('bloque l ouverture des votes si le planning a changé depuis le snapshot', () => {
+  test('avertit sans bloquer l ouverture des votes si la planification a changé depuis le snapshot', () => {
     renderButtons({
       activeSnapshotVersion: 3,
       roomsHashAtFreeze: 'hash-freeze',
@@ -417,14 +502,14 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Vote/i }))
 
     const openVotesButton = screen.getByRole('button', { name: /^Ouvrir votes$/i })
-    expect(openVotesButton).toBeDisabled()
+    expect(openVotesButton).toBeEnabled()
     expect(openVotesButton).toHaveAttribute(
       'title',
-      expect.stringContaining('a changé depuis le dernier snapshot')
+      expect.stringContaining('confirmation admin')
     )
   })
 
-  test('bloque l ouverture des votes si la verification courante contient des anomalies', () => {
+  test('avertit sans bloquer l ouverture des votes si la verification courante contient des anomalies', () => {
     renderButtons({
       activeSnapshotVersion: 3,
       validationResult: {
@@ -448,14 +533,14 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Vote/i }))
 
     const openVotesButton = screen.getByRole('button', { name: /^Ouvrir votes$/i })
-    expect(openVotesButton).toBeDisabled()
+    expect(openVotesButton).toBeEnabled()
     expect(openVotesButton).toHaveAttribute(
       'title',
-      expect.stringContaining('anomalies')
+      expect.stringContaining('confirmation admin')
     )
   })
 
-  test('déclenche l ouverture des votes sans emails en mode debug', () => {
+  test('déclenche l ouverture des votes sans emails', () => {
     const onOpenVotesWithoutEmails = jest.fn()
 
     renderButtons({
@@ -474,7 +559,7 @@ describe('TpiScheduleButtons - Données', () => {
     expect(onOpenVotesWithoutEmails).toHaveBeenCalledTimes(1)
   })
 
-  test('permet la publication directe quand le planning est gelé et valide', () => {
+  test('permet la publication directe quand la planification est gelée et valide', () => {
     const onPublishDefinitive = jest.fn()
 
     renderButtons({
@@ -486,7 +571,7 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Finalisation/i }))
 
     const publishButton = screen.getByRole('button', {
-      name: /Publier sans votes/i
+      name: /Publier défenses/i
     })
     expect(publishButton).toBeEnabled()
 
@@ -507,7 +592,7 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Finalisation/i }))
 
     const deactivateButton = screen.getByRole('button', {
-      name: /Revenir aux votes/i
+      name: /Désactiver défenses/i
     })
     expect(deactivateButton).toBeEnabled()
 
@@ -624,7 +709,7 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.getByText(/Configuration FTP incomplete\./i)).toBeInTheDocument()
   })
 
-  test('déclenche l aperçu des liens de vote en mode debug', () => {
+  test('déclenche l aperçu des liens de vote', () => {
     const onOpenVoteAccessPreview = jest.fn()
 
     renderButtons({

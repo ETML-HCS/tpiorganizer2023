@@ -9,8 +9,12 @@ const {
   buildStaticDefenseHtml,
   buildStaticDefensePhp,
   flattenPublishedRooms,
-  getStaticPublicationStatus
+  getStaticPublicationStatus,
+  listStaticPublicationAccessLinks
 } = require('../services/staticDefensePublicationService')
+const { MagicLink } = require('../models/magicLinkModel')
+const Person = require('../models/personModel')
+const { replaceProperty, makeQueryResult } = require('./helpers/stubSandbox')
 
 const STATIC_PUBLICATION_ENV_KEYS = [
   'FTP_HOST',
@@ -99,6 +103,35 @@ test('flattenPublishedRooms prepares defense rows with schedule data', () => {
   assert.equal(rows[0].candidate, 'Alice Candidate')
 })
 
+test('flattenPublishedRooms laisse les salles AUTRE sans badge', () => {
+  const rows = flattenPublishedRooms([
+    {
+      idRoom: 2,
+      site: 'ETML',
+      name: 'A102',
+      date: '2026-06-11',
+      roomClassMode: 'other',
+      configSite: {
+        numSlots: 1,
+        firstTpiStart: 8,
+        tpiTime: 1,
+        breakline: 0.25
+      },
+      tpiDatas: [
+        {
+          id: 'room-2_0',
+          period: 1,
+          refTpi: '2164',
+          candidat: 'Bob Candidate'
+        }
+      ]
+    }
+  ])
+
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].classType, '')
+})
+
 test('buildStaticDefenseHtml embeds data and static rendering script in one html file', () => {
   const html = buildStaticDefenseHtml({
     year: 2026,
@@ -137,6 +170,7 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /soutenance-toolbar/)
   assert.match(html, /salles-container/)
   assert.match(html, /Alice Candidate/)
+  assert.match(html, /MATU/)
   assert.match(html, /URLSearchParams/)
   assert.match(html, /magic-link\/resolve/)
   assert.match(html, /doesTpiMatchViewer/)
@@ -148,12 +182,66 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.doesNotMatch(html, /id="clear-focus"/)
   assert.match(html, /class="soutenance-hero-fullscreen-action static-hero-pdf-action"/)
   assert.match(html, /triggerStaticPrint/)
+  assert.match(html, /id="static-print-schedule"/)
+  assert.match(html, /renderPrintSchedule/)
+  assert.match(html, /static-print-table/)
   assert.match(html, /id="static-person-ical"/)
   assert.match(html, /id="static-person-ical-download"/)
+  assert.match(html, /id="static-person-vote-link"/)
+  assert.match(html, /Demander une modification/)
+  assert.match(html, /id="static-admin-view-toggle"/)
+  assert.match(html, /id="static-admin-filters"/)
+  assert.match(html, /id="static-admin-filter-date"/)
+  assert.match(html, /id="static-admin-filter-class-type"/)
+  assert.match(html, /Filtrer la vue admin par date/)
+  assert.match(html, /Filtrer la vue admin par type de classe/)
+  assert.match(html, /syncAdminFilters/)
+  assert.match(html, /Vue générale admin/)
+  assert.match(html, /isAdminViewer/)
+  assert.match(html, /getEffectiveFilters/)
   assert.match(html, /buildIcalContent/)
   assert.match(html, /getMagicLinkViewerRooms/)
   assert.match(html, /STATIC_MAGIC_LINK_BOOTSTRAP/)
   assert.match(html, /__STATIC_MAGIC_LINK_VALIDATED__/)
+})
+
+test('buildStaticDefenseHtml applique le tronquage statique des noms de défense à 24 caractères', () => {
+  const html = buildStaticDefenseHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    rooms: [
+      {
+        idRoom: 1,
+        date: '2026-06-10',
+        site: 'ETML',
+        name: 'A101',
+        configSite: {
+          numSlots: 1,
+          firstTpiStart: 8,
+          tpiTime: 1,
+          breakline: 0
+        },
+        tpiDatas: [
+          {
+            id: 'room-1_0',
+            period: 1,
+            refTpi: '2163',
+            candidat: 'Alice Martin Dupont Très Long',
+            expert1: { name: 'Expert Principal Avec Nom Très Long' },
+            expert2: { name: 'Expert Secondaire Avec Nom Très Long' },
+            boss: { name: 'Chef de Projet Avec Nom Très Long' }
+          }
+        ]
+      }
+    ]
+  })
+
+  assert.match(html, /var SLOT_NAME_MAX_LENGTH = 24;/)
+  assert.match(html, /function renderSlotName/)
+  assert.match(html, /className = truncated\.isTruncated \? 'truncated-text' : 'nameTpi'/)
+  assert.match(html, /renderSlotName\(tpi\.candidat\)/)
+  assert.match(html, /renderSlotName\(tpi\.expert1 && tpi\.expert1\.name\)/)
+  assert.match(html, /renderSlotName\(tpi\.boss && tpi\.boss\.name\)/)
 })
 
 test('buildStaticDefensePhp gates static data behind a magic link hash', () => {
@@ -172,6 +260,8 @@ test('buildStaticDefensePhp gates static data behind a magic link hash', () => {
         personId: 'person-1',
         name: 'Alice Candidate',
         email: 'alice@example.test',
+        roles: ['admin'],
+        isAdmin: true,
         expiresAt: '2026-06-01T10:00:00.000Z'
       }
     ]
@@ -180,9 +270,123 @@ test('buildStaticDefensePhp gates static data behind a magic link hash', () => {
   assert.match(php, /^<\?php/)
   assert.match(php, /hash\('sha256', \$staticToken\)/)
   assert.match(php, /hash_equals\(\$candidateHash, \$staticTokenHash\)/)
+  assert.match(php, /staticPublicationDecryptLinkedVoteUrl/)
+  assert.match(php, /voteAccessUrl/)
+  assert.match(php, /isAdmin/)
+  assert.match(php, /admin/)
   assert.match(php, /__STATIC_MAGIC_LINK_VALIDATED__/)
   assert.match(php, /Alice Candidate/)
   assert.doesNotMatch(php, /STATIC_MAGIC_LINK_BOOTSTRAP/)
+})
+
+test('listStaticPublicationAccessLinks chiffre uniquement le lien vote de la meme personne', async () => {
+  const calls = []
+  const restore = replaceProperty(MagicLink, 'find', (query) => {
+    calls.push(query)
+
+    if (query.type === 'vote') {
+      return makeQueryResult([
+        {
+          tokenHash: 'v'.repeat(64),
+          rawToken: 'vote-token-person-1',
+          personId: 'person-1',
+          personName: 'Alice Expert',
+          recipientEmail: 'alice@example.test',
+          redirectPath: '/votes-2026/',
+          scope: {
+            source: 'admin_static_vote_access_generated',
+            kind: 'stakeholder_votes',
+            year: 2026
+          },
+          expiresAt: new Date('2026-06-01T10:00:00.000Z'),
+          maxUses: 20,
+          usageCount: 0,
+          createdAt: new Date('2026-05-01T10:00:00.000Z')
+        },
+        {
+          tokenHash: 'w'.repeat(64),
+          rawToken: 'app-vote-token-person-1',
+          personId: 'person-1',
+          personName: 'Alice Expert',
+          recipientEmail: 'alice@example.test',
+          redirectPath: '/coordination/2026',
+          scope: {
+            source: 'admin_access_generated',
+            kind: 'stakeholder_votes',
+            year: 2026
+          },
+          expiresAt: new Date('2026-06-02T10:00:00.000Z'),
+          maxUses: 20,
+          usageCount: 0,
+          createdAt: new Date('2026-05-02T10:00:00.000Z')
+        }
+      ])
+    }
+
+    return makeQueryResult([
+      {
+        tokenHash: 'a'.repeat(64),
+        rawToken: 'defense-token-person-1',
+        personId: 'person-1',
+        personName: 'Alice Expert',
+        recipientEmail: 'alice@example.test',
+        expiresAt: new Date('2026-05-30T10:00:00.000Z'),
+        maxUses: 60,
+        usageCount: 0
+      },
+      {
+        tokenHash: 'b'.repeat(64),
+        rawToken: 'defense-token-person-2',
+        personId: 'person-2',
+        personName: 'Bob Expert',
+        recipientEmail: 'bob@example.test',
+        expiresAt: new Date('2026-05-30T10:00:00.000Z'),
+        maxUses: 60,
+        usageCount: 0
+      }
+    ])
+  })
+  const restorePeople = replaceProperty(Person, 'find', (query) => {
+    assert.deepEqual([...query._id.$in].sort(), ['person-1', 'person-2'])
+
+    return makeQueryResult([
+      {
+        _id: 'person-1',
+        roles: ['expert', 'admin']
+      },
+      {
+        _id: 'person-2',
+        roles: ['expert']
+      }
+    ])
+  })
+
+  try {
+    const links = await listStaticPublicationAccessLinks(2026, {
+      publicBaseUrl: 'https://tpi26.ch'
+    })
+
+    assert.equal(calls[0].type, 'vote')
+    assert.equal(calls[1].type, 'soutenance')
+    assert.deepEqual(
+      calls[0]['scope.source'].$in,
+      ['admin_access_generated', 'admin_static_vote_access_generated']
+    )
+    assert.equal(links.length, 2)
+    assert.deepEqual(links[0].roles, ['expert', 'admin'])
+    assert.equal(links[0].isAdmin, true)
+    assert.deepEqual(links[1].roles, ['expert'])
+    assert.equal(links[1].isAdmin, false)
+    assert.equal(links[0].voteAccess.expiresAt, '2026-06-01T10:00:00.000Z')
+    assert.equal(links[0].voteAccess.source, 'admin_static_vote_access_generated')
+    assert.equal(links[0].voteAccess.encryptedUrl.cipher, 'aes-256-gcm')
+    assert.equal(links[1].voteAccess, undefined)
+    assert.doesNotMatch(JSON.stringify(links), /vote-token-person-1/)
+    assert.doesNotMatch(JSON.stringify(links), /app-vote-token-person-1/)
+  } finally {
+    restorePeople()
+    restore()
+  }
 })
 
 test('buildStaticAccessDeniedHtml does not expose defense data', () => {

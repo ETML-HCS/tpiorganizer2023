@@ -6,7 +6,7 @@ const zlib = require('zlib')
 
 const { rootDir } = require('../config/loadEnv')
 const Slot = require('../models/slotModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 const { MagicLink } = require('../models/magicLinkModel')
 const { ResolutionProposal } = require('../models/resolutionProposalModel')
@@ -14,8 +14,8 @@ const schedulingService = require('./schedulingService')
 const {
   getPlanningConfigIfAvailable,
   normalizeWorkflowSettings
-} = require('./planningConfigService')
-const { getSharedPublicationSettingsIfAvailable } = require('./planningCatalogService')
+} = require('./coordinationConfigService')
+const { getSharedPublicationSettingsIfAvailable } = require('./coordinationCatalogService')
 const {
   buildConfiguredSlotProposalOptions,
   buildProposalOptionDisplay,
@@ -35,6 +35,7 @@ const {
   joinSlashPaths,
   normalizeSlashPath
 } = require('./staticDefensePublicationService')
+const { COORDINATION_VOTE_STATUSES } = require('../modules/coordination/status')
 
 const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
@@ -42,7 +43,7 @@ const DEFAULT_STATIC_VOTE_PATH_PREFIX = 'votes'
 const DEFAULT_STATIC_VOTE_SYNC_TIMEOUT_MS = 15000
 const STATIC_VOTE_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_VOTE_BOOTSTRAP -->'
 const STATIC_VOTE_IMPORT_PREFIX = 'static-vote'
-const VOTE_TPI_STATUSES = ['voting', 'pending_validation']
+const VOTE_TPI_STATUSES = COORDINATION_VOTE_STATUSES
 const ALLOWED_RESPONSE_MODES = new Set(['ok', 'proposal'])
 
 function compactText(value) {
@@ -1091,7 +1092,7 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
   }
 }
 
-function buildStaticVoteUnavailableHtml(year, title = 'Vote non disponible', message = 'Le module de vote est protege par lien personnel.') {
+function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', message = 'Le module de vote est accessible uniquement depuis le lien personnel transmis par email.') {
   const normalizedYear = parseYear(year)
 
   return `<!doctype html>
@@ -1109,9 +1110,11 @@ function buildStaticVoteUnavailableHtml(year, title = 'Vote non disponible', mes
       --muted: #526071;
       --line: #d8dee8;
       --panel: #fff;
-      --page: #f4f6f8;
+      --page: #f5f7fb;
       --accent: #0f766e;
       --accent-soft: #e7f5f1;
+      --info: #1d4ed8;
+      --info-soft: #eaf2ff;
     }
     * { box-sizing: border-box; }
     body {
@@ -1119,15 +1122,17 @@ function buildStaticVoteUnavailableHtml(year, title = 'Vote non disponible', mes
       min-height: 100vh;
       display: grid;
       place-items: center;
-      background: linear-gradient(180deg, #eef4f2 0, var(--page) 220px);
+      background: linear-gradient(180deg, #eaf1f4 0, #f8fafc 220px, var(--page) 100%);
       color: var(--ink);
     }
     main {
       width: min(560px, calc(100vw - 32px));
+      display: grid;
+      gap: 14px;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 30px;
+      padding: 28px;
       box-shadow: 0 24px 70px rgba(23, 32, 51, .10);
     }
     .vote-unavailable-kicker {
@@ -1143,15 +1148,25 @@ function buildStaticVoteUnavailableHtml(year, title = 'Vote non disponible', mes
       text-transform: uppercase;
       letter-spacing: .04em;
     }
-    h1 { margin: 16px 0 10px; font-size: 1.55rem; letter-spacing: 0; }
+    .vote-unavailable-status {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-left: 4px solid var(--info);
+      background: var(--info-soft);
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    h1 { margin: 0; font-size: 1.62rem; line-height: 1.12; letter-spacing: 0; }
     p { margin: 0; color: var(--muted); line-height: 1.55; }
   </style>
 </head>
 <body>
   <main>
-    <span class="vote-unavailable-kicker">Votes planning ${normalizedYear}</span>
+    <span class="vote-unavailable-kicker">Votes coordination ${normalizedYear}</span>
     <h1>${escapeHtml(title)}</h1>
     <p>${escapeHtml(message)}</p>
+    <p class="vote-unavailable-status">Aucun vote n'est affiche depuis l'adresse publique. Le contenu est charge uniquement apres validation du lien nominatif.</p>
   </main>
 </body>
 </html>`
@@ -1166,52 +1181,60 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>Votes planning ${normalizedYear}</title>
+  <title>Votes coordination ${normalizedYear}</title>
   <style>
     :root {
       color-scheme: light;
       font-family: Inter, "Segoe UI", Arial, sans-serif;
-      --ink: #172033;
-      --muted: #526071;
-      --line: #d7dee8;
+      --ink: #182235;
+      --muted: #5b6678;
+      --line: #d9e2ec;
       --panel: #fff;
-      --page: #f4f6f8;
-      --soft: #eef3f5;
+      --page: #f5f7fb;
+      --soft: #edf2f7;
       --accent: #0f766e;
       --accent-strong: #0b5e57;
-      --accent-soft: #e7f5f1;
+      --accent-soft: #e6f4f1;
+      --info: #1d4ed8;
+      --info-soft: #eaf2ff;
       --warning: #8a5a00;
       --warning-soft: #fff7e6;
       --danger: #b42318;
       --danger-soft: #fff1f0;
       --shadow: 0 18px 50px rgba(23, 32, 51, .08);
+      --card-shadow: 0 10px 28px rgba(23, 32, 51, .055);
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     body {
       margin: 0;
       min-height: 100vh;
-      background: linear-gradient(180deg, #eef4f2 0, #f7f8fa 230px, var(--page) 100%);
+      background: linear-gradient(180deg, #eaf1f4 0, #f8fafc 210px, var(--page) 100%);
       color: var(--ink);
     }
     button, input, textarea { font: inherit; }
     button { -webkit-tap-highlight-color: transparent; }
     .vote-shell {
-      width: min(1120px, calc(100vw - 28px));
+      width: min(1180px, calc(100vw - 28px));
       margin: 0 auto;
-      padding: 16px 0 28px;
+      padding: 20px 0 36px;
     }
     .vote-header {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 350px);
+      gap: 16px;
       align-items: stretch;
-      margin-bottom: 10px;
-      padding: 13px;
+      margin-bottom: 14px;
+      padding: 16px;
       background: rgba(255, 255, 255, .92);
       border: 1px solid rgba(215, 222, 232, .95);
       border-radius: 8px;
       box-shadow: var(--shadow);
+    }
+    .vote-header-main {
+      display: grid;
+      align-content: center;
+      gap: 8px;
     }
     .vote-kicker {
       display: inline-flex;
@@ -1226,12 +1249,27 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       letter-spacing: .04em;
       text-transform: uppercase;
     }
-    .vote-header h1 { margin: 7px 0 4px; font-size: 1.58rem; line-height: 1.08; letter-spacing: 0; }
+    .vote-header h1 { margin: 0; font-size: 1.72rem; line-height: 1.08; letter-spacing: 0; }
     .vote-header p { margin: 0; color: var(--muted); line-height: 1.35; }
+    .vote-viewer-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .vote-viewer-line::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(15, 118, 110, .12);
+      flex: 0 0 auto;
+    }
     .vote-summary {
       display: grid;
       align-content: center;
-      gap: 6px;
+      gap: 8px;
       padding: 10px;
       background: #f8faf9;
       border: 1px solid var(--line);
@@ -1251,18 +1289,94 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       width: 0%;
       height: 100%;
       border-radius: inherit;
-      background: var(--accent);
+      background: linear-gradient(90deg, var(--accent), var(--info));
       transition: width .18s ease;
     }
-    .vote-list { display: grid; gap: 8px; }
+    .vote-list { display: grid; gap: 16px; }
+    .vote-date-group {
+      display: grid;
+      gap: 8px;
+    }
+    .vote-date-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 10px;
+      padding: 2px 2px 0;
+    }
+    .vote-date-header h2 {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .vote-date-progress {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .vote-date-progress.is-complete {
+      background: var(--accent-soft);
+      border-color: rgba(15, 118, 110, .28);
+      color: var(--accent-strong);
+    }
+    .vote-date-cards {
+      display: grid;
+      gap: 10px;
+    }
+    .vote-period-group {
+      display: grid;
+      gap: 8px;
+    }
+    .vote-period-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .vote-period-header::after {
+      content: "";
+      height: 1px;
+      flex: 1 1 auto;
+      background: var(--line);
+    }
+    .vote-period-count {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: .74rem;
+      font-weight: 800;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .vote-period-cards {
+      display: grid;
+      gap: 10px;
+    }
     .vote-card {
       display: grid;
-      gap: 9px;
+      gap: 0;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 12px;
-      box-shadow: 0 12px 34px rgba(23, 32, 51, .055);
+      overflow: hidden;
+      box-shadow: var(--card-shadow);
     }
     .vote-card.is-submitted {
       border-color: rgba(15, 118, 110, .42);
@@ -1325,6 +1439,9 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       justify-content: space-between;
       gap: 10px;
       align-items: flex-start;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
     }
     .vote-reference {
       display: block;
@@ -1337,6 +1454,23 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     .vote-card h2 { margin: 0; font-size: 1.08rem; line-height: 1.25; letter-spacing: 0; }
     .vote-card p { margin: 4px 0 0; color: var(--muted); line-height: 1.42; }
+    .vote-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 7px;
+    }
+    .vote-card-meta span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 700;
+    }
     .vote-chip {
       display: inline-flex;
       align-items: center;
@@ -1356,6 +1490,26 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-section {
       border-top: 1px solid var(--line);
       padding-top: 8px;
+    }
+    .vote-card-main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(270px, 330px);
+      align-items: stretch;
+    }
+    .vote-card-content {
+      display: grid;
+      gap: 10px;
+      padding: 12px 14px;
+    }
+    .vote-card-side {
+      padding: 12px;
+      border-left: 1px solid var(--line);
+      background: #f8fafc;
+    }
+    .vote-card-content .vote-section:first-child,
+    .vote-card-side .vote-section {
+      border-top: 0;
+      padding-top: 0;
     }
     .vote-section h3 {
       margin: 0 0 5px;
@@ -1415,6 +1569,13 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-special-toggle:hover {
       border-color: rgba(15, 118, 110, .42);
     }
+    .vote-choice:focus-within,
+    .vote-proposal:focus-within,
+    .vote-special-toggle:focus-within,
+    .vote-only-availability:focus-within {
+      outline: 3px solid rgba(15, 118, 110, .18);
+      outline-offset: 2px;
+    }
     .vote-choice.is-selected,
     .vote-proposal.is-selected,
     .vote-special-toggle.is-selected,
@@ -1444,6 +1605,13 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-special-toggle strong {
       display: block;
       font-size: .9rem;
+      line-height: 1.3;
+    }
+    .vote-choice small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .78rem;
       line-height: 1.3;
     }
     .vote-proposal span span {
@@ -1623,7 +1791,8 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       align-items: center;
       gap: 8px;
       border-top: 1px solid var(--line);
-      padding-top: 8px;
+      padding: 10px 14px;
+      background: #fbfcfe;
     }
     .vote-status { color: var(--muted); font-size: .92rem; line-height: 1.4; }
     .vote-status.is-error { color: var(--danger); }
@@ -1653,6 +1822,19 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       .vote-shell { width: min(100vw - 20px, 1120px); padding: 12px 0 24px; }
       .vote-header { grid-template-columns: 1fr; padding: 12px; }
       .vote-header h1 { font-size: 1.42rem; }
+      .vote-date-header {
+        display: grid;
+        align-items: start;
+      }
+      .vote-date-progress {
+        width: fit-content;
+      }
+      .vote-card-main-grid { grid-template-columns: 1fr; }
+      .vote-card-side {
+        order: -1;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
       .vote-card-header,
       .vote-actions {
         display: grid;
@@ -1670,10 +1852,10 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
 <body>
   <div class="vote-shell">
     <header class="vote-header">
-      <div>
+      <div class="vote-header-main">
         <span class="vote-kicker">Lien personnel</span>
-        <h1>Votes planning ${normalizedYear}</h1>
-        <p id="vote-viewer">V&eacute;rification du lien personnel.</p>
+        <h1>Votes coordination ${normalizedYear}</h1>
+        <p id="vote-viewer" class="vote-viewer-line">V&eacute;rification du lien personnel.</p>
       </div>
       <aside class="vote-summary" aria-label="Resume des votes">
         <strong id="vote-count">0 / 0 r&eacute;ponses</strong>
@@ -1724,15 +1906,161 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           : 'ce candidat';
       }
 
+      function getFixedSlot(group) {
+        return group && group.fixedSlot ? group.fixedSlot : {};
+      }
+
+      function getFixedDateKey(group) {
+        var slot = getFixedSlot(group);
+        return String(slot.date || slot.dateLabel || slot.label || 'date-inconnue');
+      }
+
+      function getFixedDateLabel(group) {
+        var slot = getFixedSlot(group);
+        var label = slot.dateLabel || slot.label || '';
+        if (label.indexOf(' | ') !== -1) {
+          label = label.split(' | ')[0];
+        }
+        return label || 'Date à confirmer';
+      }
+
+      function getFixedSlotSortValue(group) {
+        var slot = getFixedSlot(group);
+        var start = String(slot.startTime || '');
+        var match = start.match(/^(\\d{1,2})(?::(\\d{2}))?/);
+        if (match) {
+          var hour = Number.parseInt(match[1], 10);
+          var minute = Number.parseInt(match[2] || '0', 10);
+          if (Number.isFinite(hour) && Number.isFinite(minute)) {
+            return (hour * 60) + minute;
+          }
+        }
+
+        var period = Number.parseInt(String(slot.period || ''), 10);
+        return Number.isFinite(period) ? period * 100 : Number.MAX_SAFE_INTEGER;
+      }
+
+      function getFixedPeriodKey(group) {
+        var slot = getFixedSlot(group);
+        var start = String(slot.startTime || '');
+        var match = start.match(/^(\\d{1,2})(?::(\\d{2}))?/);
+        if (match) {
+          var hour = Number.parseInt(match[1], 10);
+          if (Number.isFinite(hour)) {
+            return hour < 12 ? 'AM' : 'PM';
+          }
+        }
+
+        var period = Number.parseInt(String(slot.period || ''), 10);
+        if (Number.isFinite(period)) {
+          return period <= 4 ? 'AM' : 'PM';
+        }
+
+        return 'UNKNOWN';
+      }
+
+      function getFixedPeriodLabel(periodKey) {
+        if (periodKey === 'AM') {
+          return 'Matin';
+        }
+        if (periodKey === 'PM') {
+          return 'Après-midi';
+        }
+        return 'Horaire à confirmer';
+      }
+
+      function getFixedSlotTitle(slot) {
+        if (slot && slot.startTime && slot.endTime) {
+          return slot.startTime + ' - ' + slot.endTime;
+        }
+
+        if (slot && slot.dateLabel) {
+          return slot.dateLabel;
+        }
+
+        return slot && slot.label ? slot.label : 'Créneau';
+      }
+
+      function buildVoteDateGroups(voteGroups) {
+        var byDate = new Map();
+
+        (Array.isArray(voteGroups) ? voteGroups : [])
+          .map(function (group, index) {
+            return { group: group, index: index };
+          })
+          .sort(function (left, right) {
+            var leftDate = getFixedDateKey(left.group);
+            var rightDate = getFixedDateKey(right.group);
+            if (leftDate !== rightDate) {
+              return leftDate.localeCompare(rightDate, 'fr');
+            }
+
+            var leftTime = getFixedSlotSortValue(left.group);
+            var rightTime = getFixedSlotSortValue(right.group);
+            if (leftTime !== rightTime) {
+              return leftTime - rightTime;
+            }
+
+            return getTpiCandidateName(left.group).localeCompare(getTpiCandidateName(right.group), 'fr');
+          })
+          .forEach(function (entry) {
+            var key = getFixedDateKey(entry.group);
+            if (!byDate.has(key)) {
+              byDate.set(key, {
+                key: key,
+                label: getFixedDateLabel(entry.group),
+                entries: []
+              });
+            }
+            byDate.get(key).entries.push(entry);
+          });
+
+        return Array.from(byDate.values());
+      }
+
+      function buildVotePeriodGroups(entries) {
+        var order = ['AM', 'PM', 'UNKNOWN'];
+        var byPeriod = new Map();
+
+        (Array.isArray(entries) ? entries : []).forEach(function (entry) {
+          var key = getFixedPeriodKey(entry.group);
+          if (!byPeriod.has(key)) {
+            byPeriod.set(key, {
+              key: key,
+              label: getFixedPeriodLabel(key),
+              entries: []
+            });
+          }
+          byPeriod.get(key).entries.push(entry);
+        });
+
+        return Array.from(byPeriod.values()).sort(function (left, right) {
+          return order.indexOf(left.key) - order.indexOf(right.key);
+        });
+      }
+
       function isSubmitted(group) {
         var tpiId = getGroupTpiId(group);
         return tpiId ? submittedTpiIds.has(tpiId) : false;
       }
 
+      function updateDateGroupSummaries() {
+        Array.from(root.querySelectorAll('[data-date-group-key]')).forEach(function (section) {
+          var total = section.querySelectorAll('.vote-card').length;
+          var completed = section.querySelectorAll('.vote-card.is-submitted').length;
+          var remaining = Math.max(total - completed, 0);
+          var progress = section.querySelector('[data-date-progress]');
+          if (progress) {
+            progress.textContent = completed + ' / ' + total + ' ' + pluralize(total, 'réponse transmise', 'réponses transmises');
+            progress.classList.toggle('is-complete', total > 0 && remaining === 0);
+          }
+        });
+      }
+
       function setViewer() {
         var name = bootstrap.viewer && bootstrap.viewer.name ? bootstrap.viewer.name : '';
         viewer.textContent = name
-          ? 'Connecté: ' + name
+          ? 'Lien vérifié pour ' + name
           : 'Lien personnel valide.';
       }
 
@@ -1761,6 +2089,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         if (progressFill) {
           progressFill.style.width = percent + '%';
         }
+        updateDateGroupSummaries();
       }
 
       function buildSubmitUrl() {
@@ -1776,13 +2105,12 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var title = createTextElement(
           'strong',
           '',
-          slot && slot.dateLabel ? slot.dateLabel : (slot && slot.label ? slot.label : 'Créneau')
+          getFixedSlotTitle(slot)
         );
         var meta = document.createElement('div');
         meta.className = 'vote-slot-meta';
 
         [
-          slot && slot.startTime && slot.endTime ? slot.startTime + ' - ' + slot.endTime : '',
           slot && slot.roomName ? slot.roomName : '',
           slot && slot.period ? 'Période ' + slot.period : ''
         ].filter(Boolean).forEach(function (item) {
@@ -2232,7 +2560,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           updateSummary();
         } catch (error) {
           submitButton.disabled = false;
-          submitButton.textContent = 'Envoyer';
+          submitButton.textContent = 'Transmettre';
           setStatus(card, error && error.message ? error.message : 'Erreur lors de la transmission.', 'error');
         }
       }
@@ -2247,6 +2575,9 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         input.value = value;
         var copy = document.createElement('span');
         copy.append(createTextElement('strong', '', title));
+        if (description) {
+          copy.append(createTextElement('small', '', description));
+        }
         label.append(input, copy);
         return label;
       }
@@ -2338,28 +2669,39 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var subject = document.createElement('p');
         subject.textContent = group.tpi && group.tpi.subject ? group.tpi.subject : 'Sujet non renseigné';
         titleBlock.append(title, subject);
+        var meta = document.createElement('div');
+        meta.className = 'vote-card-meta';
+        [
+          group.tpi && group.tpi.classe ? group.tpi.classe : '',
+          group.tpi && group.tpi.site ? group.tpi.site : ''
+        ].filter(Boolean).forEach(function (item) {
+          meta.append(createTextElement('span', '', item));
+        });
+        if (meta.children.length) {
+          titleBlock.append(meta);
+        }
         var chip = document.createElement('span');
         chip.className = 'vote-chip';
         chip.dataset.chip = 'true';
-        chip.textContent = 'À répondre';
+        chip.textContent = 'À traiter';
         header.append(titleBlock, chip);
 
         var fixedSection = document.createElement('section');
         fixedSection.className = 'vote-section';
         var fixedTitle = document.createElement('h3');
-        fixedTitle.textContent = 'Date';
+        fixedTitle.textContent = 'Créneau proposé';
         fixedSection.append(fixedTitle, createSlotNode(group.fixedSlot, 'is-fixed'));
 
         var decisionSection = document.createElement('section');
         decisionSection.className = 'vote-section';
         var decisionTitle = document.createElement('h3');
-        decisionTitle.textContent = 'Réponse';
+        decisionTitle.textContent = 'Votre réponse';
 
         var mode = document.createElement('div');
         mode.className = 'vote-mode';
         mode.append(
-          createModeChoice(card, 'ok', 'Valider', 'La date proposée me convient.'),
-          createModeChoice(card, 'proposal', 'Proposer', 'Je demande un autre créneau.')
+          createModeChoice(card, 'ok', 'Garder ce créneau', 'La date proposée convient.'),
+          createModeChoice(card, 'proposal', 'Demander un autre créneau', 'Choisir une demi-journée ou une demande hors liste.')
         );
         decisionSection.append(decisionTitle, mode);
 
@@ -2368,7 +2710,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         proposalSection.dataset.proposalArea = 'true';
         proposalSection.hidden = true;
         var proposalTitle = document.createElement('h3');
-        proposalTitle.textContent = 'Options';
+        proposalTitle.textContent = 'Autres demi-journées';
         var proposalContext = document.createElement('p');
         proposalContext.className = 'vote-proposal-context';
         proposalContext.textContent = formatProposalContext(group);
@@ -2441,15 +2783,26 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var button = document.createElement('button');
         button.className = 'vote-submit';
         button.type = 'submit';
-        button.textContent = 'Envoyer';
+        button.textContent = 'Transmettre';
         button.disabled = false;
         actions.append(status, button);
 
+        var mainGrid = document.createElement('div');
+        mainGrid.className = 'vote-card-main-grid';
+        var content = document.createElement('div');
+        content.className = 'vote-card-content';
+        var side = document.createElement('aside');
+        side.className = 'vote-card-side';
+        side.setAttribute('aria-label', 'Créneau proposé');
+        side.append(fixedSection);
+
         if (isSpecialRequestAllowed(group)) {
-          card.append(header, fixedSection, decisionSection, proposalSection, special, remark, actions);
+          content.append(decisionSection, proposalSection, special, remark);
         } else {
-          card.append(header, fixedSection, decisionSection, proposalSection, remark, actions);
+          content.append(decisionSection, proposalSection, remark);
         }
+        mainGrid.append(content, side);
+        card.append(header, mainGrid, actions);
         card.addEventListener('change', function () {
           if (card.classList.contains('is-submitted')) {
             return;
@@ -2470,6 +2823,47 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         return card;
       }
 
+      function createVoteDateGroupNode(dateGroup) {
+        var section = document.createElement('section');
+        section.className = 'vote-date-group';
+        section.dataset.dateGroupKey = dateGroup.key;
+
+        var header = document.createElement('header');
+        header.className = 'vote-date-header';
+        var title = createTextElement('h2', '', dateGroup.label);
+        var progress = createTextElement('span', 'vote-date-progress', '');
+        progress.dataset.dateProgress = 'true';
+        header.append(title, progress);
+
+        var cards = document.createElement('div');
+        cards.className = 'vote-date-cards';
+
+        section.append(header, cards);
+        return section;
+      }
+
+      function createVotePeriodGroupNode(periodGroup) {
+        var section = document.createElement('section');
+        section.className = 'vote-period-group';
+        section.dataset.periodGroupKey = periodGroup.key;
+
+        var header = document.createElement('header');
+        header.className = 'vote-period-header';
+        header.append(
+          createTextElement('span', '', periodGroup.label),
+          createTextElement('span', 'vote-period-count', periodGroup.entries.length + ' TPI')
+        );
+
+        var cards = document.createElement('div');
+        cards.className = 'vote-period-cards';
+        periodGroup.entries.forEach(function (entry) {
+          cards.append(renderGroup(entry.group, entry.index));
+        });
+
+        section.append(header, cards);
+        return section;
+      }
+
       function render() {
         setViewer();
         updateSummary();
@@ -2483,8 +2877,16 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           return;
         }
 
-        groups.forEach(function (group, index) {
-          root.append(renderGroup(group, index));
+        buildVoteDateGroups(groups).forEach(function (dateGroup) {
+          var node = createVoteDateGroupNode(dateGroup);
+          var cards = node.querySelector('.vote-date-cards');
+          if (cards) {
+            cards.textContent = '';
+            buildVotePeriodGroups(dateGroup.entries).forEach(function (periodGroup) {
+              cards.append(createVotePeriodGroupNode(periodGroup));
+            });
+          }
+          root.append(node);
         });
         updateSummary();
       }
@@ -2539,7 +2941,7 @@ function staticVoteUnavailable(int $statusCode, string $title, string $message):
     header('Content-Type: text/html; charset=utf-8');
     $safeTitle = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
     $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#172033;font-family:Inter,Arial,sans-serif}main{width:min(520px,calc(100vw - 32px));background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;box-shadow:0 20px 60px rgba(23,32,51,.08)}h1{margin:0 0 10px;font-size:1.45rem}p{margin:0;color:#526071;line-height:1.55}</style></head><body><main><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p></main></body></html>';
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f5f7fb;--muted:#526071;--line:#d8dee8;--accent:#0f766e;--accent-soft:#e7f5f1;--info:#1d4ed8;--info-soft:#eaf2ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#eaf1f4 0,#f8fafc 220px,#f5f7fb 100%)}main{width:min(560px,calc(100vw - 32px));display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(23,32,51,.10)}.kicker{display:inline-flex;width:fit-content;min-height:28px;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}h1{margin:0;font-size:1.62rem;line-height:1.12;letter-spacing:0}p{margin:0;color:var(--muted);line-height:1.55}.status{padding:12px;border-left:4px solid var(--info);background:var(--info-soft);color:var(--muted);line-height:1.45}</style></head><body><main><span class="kicker">Votes coordination ${normalizedYear}</span><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p><p class="status">Aucun vote n&#039;est affiche depuis cette adresse sans validation du lien nominatif.</p></main></body></html>';
     exit;
 }
 
@@ -2951,14 +3353,14 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
 
 $staticVoteToken = isset($_GET['ml']) && is_string($_GET['ml']) ? trim($_GET['ml']) : '';
 if ($staticVoteToken === '' || strlen($staticVoteToken) < 32 || strlen($staticVoteToken) > 256) {
-    staticVoteUnavailable(403, 'Lien requis', 'Le vote planning est accessible uniquement avec un lien personnel.');
+    staticVoteUnavailable(403, 'Lien requis', 'Le vote coordination est accessible uniquement avec un lien personnel.');
 }
 
 $staticVoteTokenHash = hash('sha256', $staticVoteToken);
 $staticVoteAccessEntry = staticVoteFindAccessEntry($staticVoteAccessLinks, $staticVoteTokenHash);
 
 if ($staticVoteAccessEntry === null) {
-    staticVoteUnavailable(403, 'Acces refuse', 'Ce lien ne donne pas acces au vote planning.');
+    staticVoteUnavailable(403, 'Acces refuse', 'Ce lien ne donne pas acces au vote coordination.');
 }
 
 $staticVoteExpiresAt = isset($staticVoteAccessEntry['expiresAt']) && is_string($staticVoteAccessEntry['expiresAt'])
@@ -3921,7 +4323,7 @@ function normalizeStaticVoteArbitrageRecord(record = {}) {
   return normalized
 }
 
-function computeResolutionProposalStatusFromRecipients(proposal) {
+function computeResolutionProposalStatusFromRecipients(proposal, now = new Date()) {
   if (!proposal) {
     return 'sent'
   }
@@ -3944,11 +4346,42 @@ function computeResolutionProposalStatusFromRecipients(proposal) {
     return 'accepted'
   }
 
-  if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt <= new Date()) {
+  if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt <= now) {
     return 'expired'
   }
 
   return respondedCount > 0 ? 'partial' : 'sent'
+}
+
+async function guardStaticVoteArbitrageImportStatus(proposal, submittedAt = new Date()) {
+  const status = computeResolutionProposalStatusFromRecipients(proposal, submittedAt)
+
+  if (status === 'expired') {
+    if (proposal.status !== 'expired') {
+      proposal.status = 'expired'
+      await proposal.save()
+    }
+
+    return {
+      imported: false,
+      skipped: true,
+      reason: 'proposal_expired',
+      proposalId: toIdString(proposal),
+      status
+    }
+  }
+
+  if (['accepted', 'rejected', 'cancelled', 'failed'].includes(status)) {
+    return {
+      imported: false,
+      skipped: true,
+      reason: 'proposal_closed',
+      proposalId: toIdString(proposal),
+      status
+    }
+  }
+
+  return null
 }
 
 async function importStaticVoteArbitrageRecord(rawRecord, expectedYear) {
@@ -4013,6 +4446,14 @@ async function importStaticVoteArbitrageRecord(rawRecord, expectedYear) {
       reason: 'response_conflict',
       recordId: record.id,
       proposalId: toIdString(proposal)
+    }
+  }
+
+  const blockedStatus = await guardStaticVoteArbitrageImportStatus(proposal, record.submittedAt)
+  if (blockedStatus) {
+    return {
+      ...blockedStatus,
+      recordId: record.id
     }
   }
 

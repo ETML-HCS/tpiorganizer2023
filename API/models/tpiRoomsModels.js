@@ -10,6 +10,11 @@ const offreDataSchema = new mongoose.Schema({
   submit: [propositionSchema],
 })
 
+const constraintWarningSchema = new mongoose.Schema({
+  type: String,
+  message: String
+}, { _id: false })
+
 const tpiDataSchema = new mongoose.Schema({
   refTpi: {
     type: Number
@@ -38,6 +43,15 @@ const tpiDataSchema = new mongoose.Schema({
     personId: String,
     offres: offreDataSchema 
   },
+  isConstraintOverride: {
+    type: Boolean,
+    default: false
+  },
+  planningOverrideReason: {
+    type: String,
+    default: ''
+  },
+  constraintWarnings: [constraintWarningSchema],
 })
 
 const tpiRoomSchema = new mongoose.Schema({

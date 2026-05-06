@@ -13,10 +13,10 @@ const {
   normalizeRoleList,
   normalizeRoles
 } = require('./personRegistryService')
+const { ensurePersonShortId } = require('./personShortIdService')
 const {
-  ensurePersonShortId,
-  resetPersonShortIdSequence
-} = require('./personShortIdService')
+  STAKEHOLDER_IMPORT_COLUMN_MAPPINGS
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
 const DELIMITERS = ['\t', ';', ',']
 
@@ -78,22 +78,7 @@ function parseDelimitedLine(line, delimiter) {
   return result
 }
 
-const COLUMN_MAPPINGS = {
-  expert: 'name',
-  nom: 'name',
-  nomcomplet: 'name',
-  personne: 'name',
-  expertmail: 'email',
-  email: 'email',
-  mail: 'email',
-  adressemail: 'email',
-  tel: 'phone',
-  telephone: 'phone',
-  phone: 'phone',
-  mobile: 'phone',
-  site: 'site',
-  lieu: 'site'
-}
+const COLUMN_MAPPINGS = STAKEHOLDER_IMPORT_COLUMN_MAPPINGS
 
 function parsePeopleContent(content = '') {
   const rawContent = content.toString().replace(/\uFEFF/g, '').trim()
@@ -352,15 +337,6 @@ async function importPeopleFromContent(content, options = {}) {
   return results
 }
 
-async function purgeAllPeople() {
-  const result = await Person.deleteMany({})
-  await resetPersonShortIdSequence()
-
-  return {
-    deletedCount: result?.deletedCount || 0
-  }
-}
-
 module.exports = {
   COLUMN_MAPPINGS,
   ALLOWED_ROLES,
@@ -370,7 +346,6 @@ module.exports = {
   parsePeopleContent,
   mergePersonRecord,
   mergeRoles,
-  purgeAllPeople,
   normalizeRoleList,
   normalizeRoles,
   splitFullName

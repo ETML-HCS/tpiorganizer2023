@@ -17,6 +17,10 @@ const toUniqueSortedValues = (values) => {
   ).sort((left, right) => left.localeCompare(right))
 }
 
+export const isValidationWarningIssue = (issue = {}) =>
+  compactText(issue?.severity).toLowerCase() === "warning" ||
+  issue?.isConstraintOverride === true
+
 const toRoomModeLabel = (mode) => mode === "matu" ? "MATU" : ""
 
 export const buildValidationIssueKey = (issue = {}) => {
@@ -46,7 +50,7 @@ export const buildValidationIssueKey = (issue = {}) => {
   }
 
   if (type === "consecutive_limit") {
-    const slotLabels = toUniqueSortedValues(issue.slotLabels || issue.slotKeys).join("|")
+    const slotLabels = toUniqueSortedValues(issue.slotKeys || issue.slotLabels).join("|")
     return [
       type,
       compactText(issue.personName || issue.personId),
@@ -152,16 +156,19 @@ export const buildLocalValidationIssues = (analysis = {}) => {
     ...sequenceIssues,
     ...classMismatchIssues
   ]
+  const blockingIssues = issues.filter((issue) => !isValidationWarningIssue(issue))
 
   return {
     issues,
     summary: {
-      personOverlapCount: personOverlapIssues.length,
+      personOverlapCount: blockingIssues.filter((issue) => issue.type === "person_overlap").length,
       roomOverlapCount: 0,
-      sequenceViolationCount: sequenceIssues.length,
-      classMismatchCount: classMismatchIssues.length,
-      issueCount: issues.length,
-      hardConflictCount: issues.length
+      sequenceViolationCount: blockingIssues.filter((issue) => issue.type === "consecutive_limit").length,
+      classMismatchCount: blockingIssues.filter((issue) => issue.type === "room_class_mismatch").length,
+      issueCount: blockingIssues.length,
+      hardConflictCount: blockingIssues.length,
+      warningCount: issues.length - blockingIssues.length,
+      totalIssueCount: issues.length
     }
   }
 }
@@ -184,7 +191,9 @@ export const buildValidationResultFromSources = (year, validationResponse, local
   }
 
   const mergedIssues = Array.from(mergedIssuesMap.values())
-  const typeCounts = mergedIssues.reduce((acc, issue) => {
+  const blockingIssues = mergedIssues.filter((issue) => !isValidationWarningIssue(issue))
+  const warningIssues = mergedIssues.filter(isValidationWarningIssue)
+  const typeCounts = blockingIssues.reduce((acc, issue) => {
     const type = compactText(issue?.type)
     if (type) {
       acc[type] = (acc[type] || 0) + 1
@@ -201,9 +210,12 @@ export const buildValidationResultFromSources = (year, validationResponse, local
       roomOverlapCount: Number(typeCounts.room_overlap || 0),
       sequenceViolationCount: Number(typeCounts.consecutive_limit || 0),
       classMismatchCount: Number(typeCounts.room_class_mismatch || 0),
-      issueCount: mergedIssues.length,
-      hardConflictCount: mergedIssues.length,
-      isValid: mergedIssues.length === 0
+      issueCount: blockingIssues.length,
+      hardConflictCount: blockingIssues.length,
+      warningCount: warningIssues.length,
+      constraintOverrideWarningCount: warningIssues.filter((issue) => issue?.isConstraintOverride === true).length,
+      totalIssueCount: mergedIssues.length,
+      isValid: blockingIssues.length === 0
     },
     issues: mergedIssues
   }

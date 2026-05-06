@@ -2,10 +2,10 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const servicePath = require.resolve('../services/legacyPlanningBridgeService')
-const planningConfigService = require('../services/planningConfigService')
+const coordinationConfigService = require('../services/coordinationConfigService')
 const Person = require('../models/personModel')
 const Slot = require('../models/slotModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 require('../models/tpiModels')
 const TpiModelsYearPath = require.resolve('../models/tpiModels')
 const tpiRoomsModels = require('../models/tpiRoomsModels')
@@ -15,8 +15,8 @@ function clearLegacyPlanningBridgeService() {
   delete require.cache[servicePath]
 }
 
-test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configured planning sites', async () => {
-  const originalGetPlanningConfig = planningConfigService.getPlanningConfig
+test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configured coordination sites', async () => {
+  const originalGetPlanningConfig = coordinationConfigService.getPlanningConfig
   const originalPersonFind = Person.find
   const originalSlotDeleteMany = Slot.deleteMany
   const originalSlotCreate = Slot.create
@@ -33,7 +33,7 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
   let slotCreateCount = 0
   let voteInsertCount = 0
 
-  planningConfigService.getPlanningConfig = async () => ({
+  coordinationConfigService.getPlanningConfig = async () => ({
     siteConfigs: [
       {
         siteCode: 'ETML',
@@ -56,7 +56,7 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
   TpiPlanning.deleteMany = async () => ({ acknowledged: true })
   TpiPlanning.create = async () => {
     tpiCreateCount += 1
-    throw new Error('TpiPlanning.create should not be called for out-of-scope legacy entries.')
+    throw new Error('TpiPlanning.create should not be called for out-of-scope coordination entries.')
   }
 
   tpiRoomsModels.createTpiRoomModel = () => ({
@@ -124,7 +124,7 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
     assert.equal(slotCreateCount, 0)
     assert.equal(voteInsertCount, 0)
   } finally {
-    planningConfigService.getPlanningConfig = originalGetPlanningConfig
+    coordinationConfigService.getPlanningConfig = originalGetPlanningConfig
     Person.find = originalPersonFind
     Slot.deleteMany = originalSlotDeleteMany
     Slot.create = originalSlotCreate
@@ -147,7 +147,7 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
 })
 
 test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without stakeholder warnings', async () => {
-  const originalGetPlanningConfig = planningConfigService.getPlanningConfig
+  const originalGetPlanningConfig = coordinationConfigService.getPlanningConfig
   const originalPersonFind = Person.find
   const originalSlotDeleteMany = Slot.deleteMany
   const originalSlotCreate = Slot.create
@@ -165,7 +165,7 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
   let voteInsertCount = 0
   const warnings = []
 
-  planningConfigService.getPlanningConfig = async () => ({
+  coordinationConfigService.getPlanningConfig = async () => ({
     siteConfigs: [
       {
         siteCode: 'VENNES',
@@ -268,7 +268,7 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
     assert.equal(slotCreateCount, 0)
     assert.equal(voteInsertCount, 0)
   } finally {
-    planningConfigService.getPlanningConfig = originalGetPlanningConfig
+    coordinationConfigService.getPlanningConfig = originalGetPlanningConfig
     Person.find = originalPersonFind
     Slot.deleteMany = originalSlotDeleteMany
     Slot.create = originalSlotCreate
@@ -290,17 +290,17 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
   }
 })
 
-test('syncLegacyCatalogToPlanning creates missing planning drafts from planifiable legacy TPI', async () => {
-  const originalGetPlanningConfig = planningConfigService.getPlanningConfig
+test('syncLegacyCatalogToPlanning creates missing coordination drafts from planifiable legacy TPI', async () => {
+  const originalGetPlanningConfig = coordinationConfigService.getPlanningConfig
   const originalPersonFind = Person.find
   const originalTpiPlanningFind = TpiPlanning.find
   const originalTpiPlanningInsertMany = TpiPlanning.insertMany
   const originalTpiModelsModule = require.cache[TpiModelsYearPath]
 
-  let insertedPlanningDocs = []
+  let insertedCoordinationDocs = []
   let legacyBulkOperations = []
 
-  planningConfigService.getPlanningConfig = async () => ({
+  coordinationConfigService.getPlanningConfig = async () => ({
     siteConfigs: [
       {
         siteCode: 'ETML',
@@ -356,7 +356,7 @@ test('syncLegacyCatalogToPlanning creates missing planning drafts from planifiab
   })
 
   TpiPlanning.insertMany = async (docs) => {
-    insertedPlanningDocs = docs
+    insertedCoordinationDocs = docs
     return docs
   }
 
@@ -402,15 +402,15 @@ test('syncLegacyCatalogToPlanning creates missing planning drafts from planifiab
     assert.equal(summary.skippedExistingCount, 0)
     assert.equal(summary.skippedInvalidStakeholdersCount, 0)
     assert.equal(summary.outOfScopeCount, 0)
-    assert.equal(insertedPlanningDocs.length, 1)
-    assert.equal(insertedPlanningDocs[0].reference, 'TPI-2026-2247')
-    assert.equal(String(insertedPlanningDocs[0].candidat), '507f1f77bcf86cd799439011')
-    assert.equal(String(insertedPlanningDocs[0].expert1), '507f1f77bcf86cd799439012')
-    assert.equal(String(insertedPlanningDocs[0].expert2), '507f1f77bcf86cd799439013')
-    assert.equal(String(insertedPlanningDocs[0].chefProjet), '507f1f77bcf86cd799439014')
-    assert.equal(insertedPlanningDocs[0].status, 'draft')
-    assert.equal(insertedPlanningDocs[0].site, 'ETML')
-    assert.equal(insertedPlanningDocs[0].classe, 'INF1')
+    assert.equal(insertedCoordinationDocs.length, 1)
+    assert.equal(insertedCoordinationDocs[0].reference, 'TPI-2026-2247')
+    assert.equal(String(insertedCoordinationDocs[0].candidat), '507f1f77bcf86cd799439011')
+    assert.equal(String(insertedCoordinationDocs[0].expert1), '507f1f77bcf86cd799439012')
+    assert.equal(String(insertedCoordinationDocs[0].expert2), '507f1f77bcf86cd799439013')
+    assert.equal(String(insertedCoordinationDocs[0].chefProjet), '507f1f77bcf86cd799439014')
+    assert.equal(insertedCoordinationDocs[0].status, 'draft')
+    assert.equal(insertedCoordinationDocs[0].site, 'ETML')
+    assert.equal(insertedCoordinationDocs[0].classe, 'INF1')
     assert.equal(legacyBulkOperations.length, 1)
     assert.deepEqual(legacyBulkOperations[0].updateOne.update.$set, {
       candidatPersonId: '507f1f77bcf86cd799439011',
@@ -419,7 +419,7 @@ test('syncLegacyCatalogToPlanning creates missing planning drafts from planifiab
       bossPersonId: '507f1f77bcf86cd799439014'
     })
   } finally {
-    planningConfigService.getPlanningConfig = originalGetPlanningConfig
+    coordinationConfigService.getPlanningConfig = originalGetPlanningConfig
     Person.find = originalPersonFind
     TpiPlanning.find = originalTpiPlanningFind
     TpiPlanning.insertMany = originalTpiPlanningInsertMany

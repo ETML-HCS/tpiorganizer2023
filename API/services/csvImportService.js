@@ -4,7 +4,7 @@
  */
 
 const Person = require('../models/personModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const {
   buildNameVariants,
   splitNameParts,

@@ -19,6 +19,12 @@ import {
   formatPreferredSoutenanceChoiceLabel,
   getPreferredSoutenanceChoicesForPerson
 } from "../../utils/preferredSoutenanceUtils";
+import {
+  formatProjectLeadAvailabilityDayTitle,
+  getProjectLeadAvailabilityDayForDate,
+  getProjectLeadAvailabilityStateForDate,
+  isProjectLeadAvailabilityBlockingHalfDay
+} from "../../utils/projectLeadAvailability";
 
 const PREFERENCE_INDICATOR_COPY = Object.freeze({
   green: {
@@ -278,6 +284,54 @@ const formatDateKeyLabel = (value) => {
 
   const [year, month, day] = dateKey.split("-");
   return `${day}.${month}.${year}`;
+};
+
+const getHalfDayPeriodNumber = (halfDay) => {
+  if (halfDay === "morning") {
+    return 1;
+  }
+
+  if (halfDay === "afternoon") {
+    return 2;
+  }
+
+  return null;
+};
+
+const unavailableDateMatchesSlot = (entry, dateKey, period, halfDay) => {
+  if (!entry || normalizeDateKey(entry.date) !== dateKey) {
+    return false;
+  }
+
+  if (entry.allDay !== false) {
+    return true;
+  }
+
+  const periods = Array.isArray(entry.periods)
+    ? entry.periods
+    : [];
+  const normalizedPeriod = Number.parseInt(period, 10);
+  const halfDayPeriod = getHalfDayPeriodNumber(halfDay);
+
+  return periods.some((value) => {
+    const unavailablePeriod = Number.parseInt(value, 10);
+
+    if (!Number.isInteger(unavailablePeriod)) {
+      return false;
+    }
+
+    return unavailablePeriod === normalizedPeriod ||
+      (halfDayPeriod !== null && unavailablePeriod === halfDayPeriod);
+  });
+};
+
+const getProjectLeadUnavailableDateForSlot = (person, dateKey, period, halfDay) => {
+  if (!person || !dateKey) {
+    return null;
+  }
+
+  return (Array.isArray(person.unavailableDates) ? person.unavailableDates : [])
+    .find((entry) => unavailableDateMatchesSlot(entry, dateKey, period, halfDay)) || null;
 };
 
 const resolvePeriodStartMinutes = (period, scheduleContext = null) => {
@@ -673,6 +727,10 @@ const TpiCard = ({
     () => resolvePeriodHalfDay(resolvedRoomPeriod, roomScheduleContext),
     [resolvedRoomPeriod, roomScheduleContext]
   );
+  const roomWeekdayAvailabilityDay = useMemo(
+    () => getProjectLeadAvailabilityDayForDate(roomDateKey),
+    [roomDateKey]
+  );
   const stakeholderPreferenceEntries = useMemo(() => {
     const rawEntries = [
       {
@@ -826,9 +884,61 @@ const TpiCard = ({
     !hasExpert1Proposal &&
     !hasExpert2Proposal &&
     !hasBossProposal;
+  const bossAvailabilityForSlot = roomWeekdayAvailabilityDay
+    ? getProjectLeadAvailabilityStateForDate(bossRegistryPerson?.defaultAvailability, roomDateKey)
+    : "available";
+  const bossUnavailableDateForSlot = getProjectLeadUnavailableDateForSlot(
+    bossRegistryPerson,
+    roomDateKey,
+    resolvedRoomPeriod,
+    resolvedRoomHalfDay
+  );
+  const bossAvailabilityBlockedByWeekday =
+    Boolean(roomWeekdayAvailabilityDay) &&
+    Boolean(resolvedRoomHalfDay) &&
+    isProjectLeadAvailabilityBlockingHalfDay(bossAvailabilityForSlot, resolvedRoomHalfDay);
+  const hasBossAvailabilityConflict =
+    !isEditingTpiCard &&
+    !isEmptyCard &&
+    Boolean(bossRegistryPerson) &&
+    (bossAvailabilityBlockedByWeekday || Boolean(bossUnavailableDateForSlot));
+  const bossAvailabilityConflictTitle = hasBossAvailabilityConflict
+    ? [
+        "Chef de projet indisponible sur ce créneau.",
+        compactText(formatRegistryPersonLabel(bossRegistryPerson) || bossName)
+          ? `Chef: ${compactText(formatRegistryPersonLabel(bossRegistryPerson) || bossName)}`
+          : "",
+        bossAvailabilityBlockedByWeekday && roomWeekdayAvailabilityDay
+          ? formatProjectLeadAvailabilityDayTitle(roomWeekdayAvailabilityDay, bossAvailabilityForSlot)
+          : "",
+        bossUnavailableDateForSlot
+          ? bossUnavailableDateForSlot.allDay === false
+            ? "Exception: indisponible sur ce créneau."
+            : "Exception: indisponible toute la journée."
+          : "",
+        roomDateKey ? `Date planifiée: ${formatDateKeyLabel(roomDateKey)}` : "",
+        resolvedRoomPeriod ? `Créneau planifié: ${resolvedRoomPeriod}` : ""
+      ].filter(Boolean).join("\n")
+    : "";
   const validationErrorTitle = Array.isArray(validationErrorMessages) && validationErrorMessages.length > 0
     ? validationErrorMessages.join("\n")
     : undefined;
+  const constraintWarningMessages = Array.isArray(safeTpi.constraintWarnings)
+    ? safeTpi.constraintWarnings
+        .map((warning) => compactText(warning?.message || warning?.description))
+        .filter(Boolean)
+    : [];
+  const hasConstraintWarning =
+    !isEditingTpiCard &&
+    !isEmptyCard &&
+    (Boolean(safeTpi.isConstraintOverride) ||
+      constraintWarningMessages.length > 0 ||
+      Boolean(compactText(safeTpi.planningOverrideReason)));
+  const constraintWarningTitle = [
+    "TPI placé avec contrainte non respectée.",
+    ...constraintWarningMessages,
+    constraintWarningMessages.length === 0 ? compactText(safeTpi.planningOverrideReason) : ""
+  ].filter(Boolean).join("\n");
   const showHeaderMeta =
     !isEmptyCard &&
     normalizedDetailLevel >= 3 &&
@@ -984,6 +1094,10 @@ const TpiCard = ({
         isEmptyCard ? "is-empty" : ""
       } ${isDragging ? "dragging" : ""} ${
         !isEmptyCard && hasValidationError ? "has-validation-error" : ""
+      } ${
+        hasConstraintWarning ? "has-constraint-warning" : ""
+      } ${
+        hasBossAvailabilityConflict ? "has-boss-availability-conflict" : ""
       }`}
       title={!isEmptyCard && hasValidationError ? validationErrorTitle : undefined}
     >
@@ -1002,6 +1116,26 @@ const TpiCard = ({
             </span>
           ) : null}
         </span>
+      ) : null}
+
+      {hasConstraintWarning ? (
+        <span
+          className="tpi-card-constraint-warning-dot"
+          role="img"
+          tabIndex={0}
+          aria-label="TPI placé avec contrainte non respectée"
+          title={constraintWarningTitle}
+        />
+      ) : null}
+
+      {hasBossAvailabilityConflict ? (
+        <span
+          className="tpi-card-boss-unavailability-dot"
+          role="img"
+          tabIndex={0}
+          aria-label="Chef de projet indisponible sur ce créneau"
+          title={bossAvailabilityConflictTitle}
+        />
       ) : null}
 
       {showHeaderMeta ? (

@@ -2,43 +2,21 @@ const {
   personHasRole,
   resolveUniquePersonForRole
 } = require('./personRegistryService')
+const {
+  TPI_STAKEHOLDER_RELATIONS
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
 const PLACEHOLDER_EMPTY_VALUES = new Set(['null', 'undefined'])
 
-const LEGACY_TPI_STAKEHOLDER_FIELDS = Object.freeze([
-  {
-    role: 'candidat',
-    label: 'candidat',
-    idName: 'candidatPersonId',
-    getName(tpi) {
-      return tpi?.candidat
-    }
-  },
-  {
-    role: 'expert1',
-    label: 'expert1',
-    idName: 'expert1PersonId',
-    getName(tpi) {
-      return tpi?.experts?.['1'] ?? tpi?.experts?.[1] ?? tpi?.expert1
-    }
-  },
-  {
-    role: 'expert2',
-    label: 'expert2',
-    idName: 'expert2PersonId',
-    getName(tpi) {
-      return tpi?.experts?.['2'] ?? tpi?.experts?.[2] ?? tpi?.expert2
-    }
-  },
-  {
-    role: 'chef_projet',
-    label: 'chef_projet',
-    idName: 'bossPersonId',
-    getName(tpi) {
-      return tpi?.boss
-    }
-  }
-])
+const LEGACY_TPI_STAKEHOLDER_FIELDS = Object.freeze(
+  TPI_STAKEHOLDER_RELATIONS.map((relation) => Object.freeze({
+    role: relation.key,
+    label: relation.label,
+    idName: relation.legacyIdField,
+    registryRole: relation.registryRole,
+    getName: relation.getName
+  }))
+)
 
 function normalizeTextValue(value) {
   if (typeof value !== 'string') {

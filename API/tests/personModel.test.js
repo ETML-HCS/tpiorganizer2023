@@ -23,7 +23,7 @@ test('person.isAvailableOn returns true when no availability constraints are def
   assert.equal(person.isAvailableOn(new Date('2026-06-11T08:00:00.000Z'), 4), true)
 })
 
-test('person.isAvailableOn keeps explicit default availability constraints when they exist', () => {
+test('person.isAvailableOn interprets default availability as half-day constraints', () => {
   const person = buildPerson({
     defaultAvailability: [
       { dayOfWeek: 3, periods: [1, 2] }
@@ -32,7 +32,20 @@ test('person.isAvailableOn keeps explicit default availability constraints when 
   })
 
   assert.equal(person.isAvailableOn(new Date('2026-06-10T08:00:00.000Z'), 1), true)
-  assert.equal(person.isAvailableOn(new Date('2026-06-10T08:00:00.000Z'), 4), false)
+  assert.equal(person.isAvailableOn(new Date('2026-06-10T08:00:00.000Z'), 4, { numSlots: 8 }), true)
+  assert.equal(person.isAvailableOn(new Date('2026-06-10T08:00:00.000Z'), 5, { numSlots: 8 }), true)
+})
+
+test('person.isAvailableOn maps morning and afternoon to configured slot ranges', () => {
+  const person = buildPerson({
+    defaultAvailability: [
+      { dayOfWeek: 3, periods: [1] }
+    ],
+    unavailableDates: []
+  })
+
+  assert.equal(person.isAvailableOn(new Date('2026-06-10T08:00:00.000Z'), 4, { numSlots: 8 }), true)
+  assert.equal(person.isAvailableOn(new Date('2026-06-10T08:00:00.000Z'), 5, { numSlots: 8 }), false)
 })
 
 test('person.isAvailableOn lets explicit unavailableDates override the implicit fallback', () => {

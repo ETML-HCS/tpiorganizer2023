@@ -1,4 +1,12 @@
 const mongoose = require('mongoose')
+const {
+  DEFAULT_JOURNAL_STATUS,
+  DEFAULT_REPORT_STATUS,
+  DEFAULT_TPI_STATUS,
+  JOURNAL_STATUS_VALUES,
+  REPORT_STATUS_VALUES,
+  TPI_STATUS_VALUES
+} = require('../modules/gestionTpi/constants')
 
 // Définition du schéma pour les TPI
 const tpiSchema = new mongoose.Schema(
@@ -65,7 +73,58 @@ const tpiSchema = new mongoose.Schema(
       note: { type: Number }, // Note attribuée lors de l'évaluation (non obligatoire)
       lien: { type: String } // Lien vers l'évaluation (non obligatoire)
     },
-    salle: { type: String } // Salle de défense (non obligatoire)
+    salle: { type: String }, // Salle de défense (non obligatoire)
+    status: {
+      type: String,
+      enum: TPI_STATUS_VALUES,
+      default: DEFAULT_TPI_STATUS,
+      index: true
+    },
+    statusHistory: [{
+      from: { type: String, enum: TPI_STATUS_VALUES },
+      to: { type: String, enum: TPI_STATUS_VALUES },
+      at: { type: Date, default: Date.now },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: 'Person', default: null },
+      reason: { type: String }
+    }],
+    journal: {
+      status: {
+        type: String,
+        enum: JOURNAL_STATUS_VALUES,
+        default: DEFAULT_JOURNAL_STATUS
+      },
+      lastEntryAt: { type: Date },
+      url: { type: String },
+      notes: { type: String },
+      entries: [{
+        date: { type: Date },
+        title: { type: String },
+        comment: { type: String },
+        url: { type: String }
+      }]
+    },
+    rapport: {
+      status: {
+        type: String,
+        enum: REPORT_STATUS_VALUES,
+        default: DEFAULT_REPORT_STATUS
+      },
+      submittedAt: { type: Date },
+      dueAt: { type: Date },
+      url: { type: String },
+      feedback: { type: String }
+    },
+    validation: {
+      isValid: { type: Boolean, default: true },
+      lastValidatedAt: { type: Date },
+      issues: [{
+        type: { type: String },
+        severity: { type: String },
+        message: { type: String },
+        field: { type: String },
+        fields: [{ type: String }]
+      }]
+    }
   },
   {
     collection: 'tpiList'

@@ -2,17 +2,17 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useR
 import { createPortal } from "react-dom"
 import { DndProvider } from "react-dnd"
 import { HTML5Backend } from "react-dnd-html5-backend"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
 
 import TpiScheduleButtons from "./TpiScheduleButtons"
 import { showNotification } from "../Tools"
-import { personService, workflowPlanningService } from "../../services/planningService"
+import { personService, workflowCoordinationService } from "../../services/coordinationService"
 import { getTpiModels } from "../tpiControllers/TpiController"
 
 import {
   createTpiCollectionForYear,
-  publishSoutenancesFromPlanning,
+  publishSoutenancesFromPlanification,
   transmitToDatabase
 } from "../tpiControllers/TpiRoomsController"
 
@@ -21,6 +21,7 @@ import IconButtonContent from "../shared/IconButtonContent"
 import {
   AlertIcon,
   ArrowRightIcon,
+  CalendarIcon,
   CloseIcon,
   ConfigurationIcon,
   RefreshIcon,
@@ -54,7 +55,7 @@ import {
   getNonImportableTpiRefs
 } from "./tpiScheduleImportability"
 import { API_URL, IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../../config/appConfig"
-import { planningCatalogService, planningConfigService } from "../../services/planningService"
+import { coordinationCatalogService, coordinationConfigService } from "../../services/coordinationService"
 import {
   readJSONListValue,
   readStorageValue,
@@ -63,11 +64,16 @@ import {
   writeStorageValue
 } from "../../utils/storage"
 import {
+  getCoordinationYearFromSearch,
+  getPreferredCoordinationYear,
+  persistCoordinationYear
+} from "../../utils/coordinationYear"
+import {
   buildOptimizationToast,
   buildValidationToast,
   extractValidationResultFromError
 } from "../../utils/workflowFeedback"
-import { getPlanningPerimeterState } from "../../utils/planningScopeUtils"
+import { getPlanningPerimeterState } from "../../utils/coordinationScopeUtils"
 
 const apiUrl = API_URL
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== "test"
@@ -171,7 +177,7 @@ function buildPlanningRoomKey(site, date, roomName) {
   ].join("|")
 }
 
-function getInitialSelectedYear() {
+function getInitialSelectedYear(search = "") {
   const savedRooms = readJSONListValue(STORAGE_KEYS.ORGANIZER_DATA, [], [
     "organizerData"
   ])
@@ -181,16 +187,7 @@ function getInitialSelectedYear() {
     return inferredYear
   }
 
-  const storedYear = Number.parseInt(
-    readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ""),
-    10
-  )
-
-  if (Number.isInteger(storedYear)) {
-    return storedYear
-  }
-
-  return YEARS_CONFIG.getCurrentYear()
+  return getPreferredCoordinationYear(search)
 }
 
 function getInitialTpiCardDetailLevel() {
@@ -643,10 +640,15 @@ function mergePlanningConfigWithCatalogColors(config, catalogSiteConfigs = [], y
 }
 
 const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
+  const location = useLocation()
   const navigate = useNavigate()
-  const [selectedYear, setSelectedYear] = useState(() => getInitialSelectedYear())
+  const requestedYear = useMemo(
+    () => getCoordinationYearFromSearch(location.search),
+    [location.search]
+  )
+  const [selectedYear, setSelectedYear] = useState(() => getInitialSelectedYear(location.search))
   const [configData, setConfigData] = useState(() =>
-    buildPlanningConfigForYear({}, getInitialSelectedYear())
+    buildPlanningConfigForYear({}, getInitialSelectedYear(location.search))
   )
   const [catalogSiteConfigOverrides, setCatalogSiteConfigOverrides] = useState([])
   const effectiveConfigData = useMemo(
@@ -677,6 +679,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const roomsWrapModeBeforeFocusRef = useRef(null)
   const roomsContainerRef = useRef(null)
   const [workflowState, setWorkflowState] = useState("planning")
+  const [workflowPhases, setWorkflowPhases] = useState({})
   const [activeSnapshotVersion, setActiveSnapshotVersion] = useState(null)
   // Hash des salles au moment du dernier gel (pour détecter les modifications)
   const [roomsHashAtFreeze, setRoomsHashAtFreeze] = useState(null)
@@ -686,6 +689,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const staticVoteAutoSyncYearsRef = useRef(new Set())
+  const [hasLoadedLocalPlanning, setHasLoadedLocalPlanning] = useState(false)
   const [pendingYearChange, setPendingYearChange] = useState(null)
   const [isReplacingPlanningYear, setIsReplacingPlanningYear] = useState(false)
   const [isDeleteAllRoomsDialogOpen, setIsDeleteAllRoomsDialogOpen] = useState(false)
@@ -787,6 +791,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       const normalizedRooms = normalizeOrganizerRooms(savedRooms)
       setNewRooms(normalizedRooms)
     }
+
+    setHasLoadedLocalPlanning(true)
   }
 
   useEffect(() => {
@@ -806,7 +812,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     const loadPlanningConfig = async () => {
       try {
-        const remoteConfig = await planningConfigService.getByYear(year)
+        const remoteConfig = await coordinationConfigService.getByYear(year)
 
         if (!isCancelled) {
           setConfigData(buildPlanningConfigForYear(remoteConfig || fallbackConfig, year))
@@ -829,7 +835,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     let isCancelled = false
 
-    const shouldLoadPeopleRegistry = [0, 2, 3].includes(Number(tpiCardDetailLevel))
+    const shouldLoadPeopleRegistry = [0, 1, 2, 3].includes(Number(tpiCardDetailLevel))
 
     if (!shouldLoadPeopleRegistry || peopleRegistry !== null) {
       return undefined
@@ -923,8 +929,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const loadPlanningCatalog = async () => {
       try {
         const catalog =
-          typeof planningCatalogService?.getGlobal === "function"
-            ? await planningCatalogService.getGlobal()
+          typeof coordinationCatalogService?.getGlobal === "function"
+            ? await coordinationCatalogService.getGlobal()
             : null
 
         if (!isCancelled) {
@@ -949,10 +955,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   useEffect(() => {
     if (Number.isInteger(Number(selectedYear))) {
-      writeStorageValue(
-        STORAGE_KEYS.PLANNING_SELECTED_YEAR,
-        String(Number(selectedYear))
-      )
+      persistCoordinationYear(selectedYear)
     }
   }, [selectedYear])
 
@@ -1039,6 +1042,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         label: formatRoomDateLabel(value)
       }))
   }, [roomEntries])
+  const selectedRoomDateLabel = useMemo(() => {
+    const selectedDate = compactText(roomFilters.date)
+    if (!selectedDate) {
+      return "Toutes les dates"
+    }
+
+    return roomDateOptions.find((option) => option.value === selectedDate)?.label ||
+      formatRoomDateLabel(selectedDate) ||
+      selectedDate
+  }, [roomDateOptions, roomFilters.date])
 
   const roomNameOptions = useMemo(() => {
     const siteFilter = String(roomFilters.site || "").trim().toLowerCase()
@@ -1086,10 +1099,21 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [roomEntries, roomFilters])
 
   const updateRoomFilters = (patch) => {
-    setRoomFilters((prev) => ({
-      ...prev,
-      ...patch
-    }))
+    setRoomFilters((prev) => {
+      const nextFilters = {
+        ...prev,
+        ...patch
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(patch, "site") ||
+        Object.prototype.hasOwnProperty.call(patch, "date")
+      ) {
+        nextFilters.room = ""
+      }
+
+      return nextFilters
+    })
   }
 
   const clearRoomFilters = () => {
@@ -1307,11 +1331,11 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       }
 
       const [workflow, snapshot] = await Promise.all([
-        safePromise(workflowPlanningService.getYearState, year).catch((error) => {
-          console.warn("Erreur chargement état workflow:", error?.status, error?.message)
+        safePromise(workflowCoordinationService.getYearState, year).catch((error) => {
+          console.warn("Erreur chargement phases admin:", error?.status, error?.message)
           return null
         }),
-        safePromise(workflowPlanningService.getActiveSnapshot, year).catch((error) => {
+        safePromise(workflowCoordinationService.getActiveSnapshot, year).catch((error) => {
           // 404 = pas encore de snapshot, c'est normal
           if (error?.status === 404) {
             return null
@@ -1323,12 +1347,13 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
       const nextState = workflow?.state || "planning"
       setWorkflowState(nextState)
+      setWorkflowPhases(workflow?.phases || {})
 
       const snapshotVersion = snapshot?.version || null
       setActiveSnapshotVersion(snapshotVersion)
 
       if (shouldLogWorkflowDebug) {
-        console.log(`[Workflow] année=${year} state=${nextState} snapshot=v${snapshotVersion || "aucun"}`)
+        console.debug(`[Workflow] année=${year} state=${nextState} snapshot=v${snapshotVersion || "aucun"}`)
       }
 
     } catch (error) {
@@ -1342,12 +1367,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [refreshWorkflowContext, selectedYear])
 
   const refreshStaticPublicationStatus = useCallback(async (year) => {
-    if (typeof workflowPlanningService.getStaticPublicationStatus !== "function") {
+    if (typeof workflowCoordinationService.getStaticPublicationStatus !== "function") {
       return null
     }
 
     try {
-      const status = await workflowPlanningService.getStaticPublicationStatus(year)
+      const status = await workflowCoordinationService.getStaticPublicationStatus(year)
       setStaticPublicationInfo(status || null)
       return status
     } catch (error) {
@@ -1362,12 +1387,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [refreshStaticPublicationStatus, selectedYear])
 
   const refreshStaticVotePublicationStatus = useCallback(async (year) => {
-    if (typeof workflowPlanningService.getStaticVotePublicationStatus !== "function") {
+    if (typeof workflowCoordinationService.getStaticVotePublicationStatus !== "function") {
       return null
     }
 
     try {
-      const status = await workflowPlanningService.getStaticVotePublicationStatus(year)
+      const status = await workflowCoordinationService.getStaticVotePublicationStatus(year)
       setStaticVotePublicationInfo(status || null)
       return status
     } catch (error) {
@@ -1393,12 +1418,12 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }, [])
 
   const syncStaticVotePublicationSilently = useCallback(async (year, status = null) => {
-    if (typeof workflowPlanningService.syncStaticVotePublication !== "function") {
+    if (typeof workflowCoordinationService.syncStaticVotePublication !== "function") {
       return null
     }
 
     try {
-      const result = await workflowPlanningService.syncStaticVotePublication(year)
+      const result = await workflowCoordinationService.syncStaticVotePublication(year)
       applyStaticVoteSyncResult(result, {
         ...(status || {}),
         lastSyncMessage: "Synchronisation automatique au chargement."
@@ -1472,6 +1497,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           notify(message, "success")
         }
       }
+      const resultWarnings = Array.isArray(result?.warnings)
+        ? result.warnings.filter(Boolean)
+        : []
+      if (resultWarnings.length > 0) {
+        const displayedWarnings = resultWarnings.slice(0, 2).join(" ")
+        const suffix = resultWarnings.length > 2
+          ? ` (+${resultWarnings.length - 2} autre${resultWarnings.length > 3 ? "s" : ""})`
+          : ""
+        notify(`Action exécutée avec avertissement: ${displayedWarnings}${suffix}`, "warning", 6500)
+      }
       if (typeof onSuccess === "function") {
         onSuccess(result)
       }
@@ -1491,6 +1526,80 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }
 
+  const buildWorkflowGuidanceConfirm = (actionLabel, _expectedFlow, warnings = []) => {
+    const activeWarnings = warnings.filter(Boolean)
+    const intro = `Confirmer: ${actionLabel} ?`
+
+    if (activeWarnings.length === 0) {
+      return intro
+    }
+
+    return [
+      intro,
+      "",
+      ...activeWarnings.map((warning) => `- ${warning}`),
+      "",
+      "L'action reste sous contrôle admin."
+    ].join("\n")
+  }
+
+  const hasSnapshotForCurrentPlanning = Boolean(activeSnapshotVersion)
+  const currentPlanningHash = JSON.stringify(newRooms.map(r => ({
+    name: r.name,
+    date: r.date,
+    tpiCount: r.tpiDatas?.length || 0
+  })))
+  const hasStaleSnapshotForCurrentPlanning = Boolean(
+    roomsHashAtFreeze &&
+    currentPlanningHash &&
+    roomsHashAtFreeze !== currentPlanningHash
+  )
+  const hasBlockingValidationForCurrentPlanning = Boolean(
+    validationResult &&
+    Number(validationResult?.year) === Number(selectedYear) &&
+    validationResult?.summary?.isValid === false
+  )
+  const isWorkflowPhaseActive = useCallback((phase) => {
+    if (workflowPhases?.[phase] && typeof workflowPhases[phase].active === "boolean") {
+      return workflowPhases[phase].active
+    }
+
+    if (phase === "planning") {
+      return workflowState === "planning"
+    }
+
+    if (phase === "votes") {
+      return workflowState === "voting_open"
+    }
+
+    if (phase === "defenses") {
+      return workflowState === "published"
+    }
+
+    return false
+  }, [workflowPhases, workflowState])
+  const activeWorkflowPhaseLabel = useMemo(() => {
+    const labels = {
+      planning: "Planification",
+      votes: "Votes",
+      arbitrage: "Arbitrage",
+      defenses: "Défenses"
+    }
+    const activeLabels = Object.entries(workflowPhases || {})
+      .filter(([, value]) => value?.active === true)
+      .map(([phase]) => labels[phase] || phase)
+
+    if (activeLabels.length > 0) {
+      return activeLabels.join(", ")
+    }
+
+    return {
+      planning: "Planification",
+      voting_open: "Votes",
+      published: "Défenses"
+    }[workflowState] || "Aucune"
+  }, [workflowPhases, workflowState])
+
   const handleValidatePlanification = async () => {
     const loadingToastId = toast.loading(`Vérification ${selectedYear} en cours...`, {
       position: "top-center"
@@ -1509,7 +1618,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     const result = await executeWorkflowAction({
       actionKey: "validate",
-      run: () => workflowPlanningService.validatePlanification(selectedYear, false, roomsToValidate),
+      run: () => workflowCoordinationService.validatePlanification(selectedYear, false, roomsToValidate),
       successMessage: null,
       showSuccessNotification: false,
       showErrorNotification: false,
@@ -1559,19 +1668,23 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const result = await executeWorkflowAction({
       actionKey: "autoPlan",
       confirmMessage: `Reconstruire automatiquement la planification ${selectedYear} ? La version locale actuelle sera remplacée par la version générée selon la configuration annuelle.`,
-      run: () => workflowPlanningService.automatePlanification(selectedYear),
+      run: () => workflowCoordinationService.automatePlanification(selectedYear),
       successMessage: (payload) => {
         const summary = payload?.summary || {}
         const syncSummary = payload?.sync || {}
         const plannedCount = Number(summary.plannedCount || 0)
         const manualRequiredCount = Number(summary.manualRequiredCount || 0)
+        const constraintOverrideCount = Number(summary.constraintOverrideCount || 0)
         const roomCount = Number(summary.legacyRoomCount || summary.roomCount || 0)
         const syncCreatedCount = Number(syncSummary.createdCount || 0)
         const syncPrefix = syncCreatedCount > 0
           ? `${syncCreatedCount} TPI intégré(s) depuis GestionTPI dans le workflow. `
           : ''
+        const constraintSuffix = constraintOverrideCount > 0
+          ? ` ${constraintOverrideCount} TPI placé(s) avec alerte de contrainte.`
+          : ''
 
-        return `${syncPrefix}Planification automatique terminée: ${plannedCount} TPI placés, ${manualRequiredCount} manuel(s), ${roomCount} salle(s).`
+        return `${syncPrefix}Planification automatique terminée: ${plannedCount} TPI placés, ${manualRequiredCount} manuel(s), ${roomCount} salle(s).${constraintSuffix}`
       },
       onSuccess: (payload) => {
         if (payload?.validation) {
@@ -1613,7 +1726,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const result = await executeWorkflowAction({
       actionKey: "freeze",
       confirmMessage: `Confirmer le gel du snapshot ${selectedYear} ?`,
-      run: () => workflowPlanningService.freezePlanification(selectedYear, false, newRooms),
+      run: () => workflowCoordinationService.freezePlanification(selectedYear, false, newRooms),
       successMessage: (result) => {
         const version = result?.snapshot?.version || "?"
         const imported = result?.summary?.tpiCount || 0
@@ -1639,19 +1752,28 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }
 
   const handleOpenVotes = async () => {
+    const warnings = [
+      !hasSnapshotForCurrentPlanning
+        ? "Aucun snapshot actif n'est gelé."
+        : "",
+      hasStaleSnapshotForCurrentPlanning
+        ? "La planification locale a changé depuis le dernier snapshot."
+        : "",
+      hasBlockingValidationForCurrentPlanning
+        ? "La dernière vérification contient encore des erreurs."
+        : ""
+    ]
     const result = await executeWorkflowAction({
       actionKey: "startVotes",
-      confirmMessage: "Confirmer l ouverture de la campagne de votes ?",
-      run: () => workflowPlanningService.startVotes(selectedYear, newRooms),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "ouvrir la campagne de votes sans envoyer d emails",
+        "Planification -> Votes -> Défenses",
+        warnings
+      ),
+      run: () => workflowCoordinationService.startVotesWithoutEmails(selectedYear, newRooms),
       successMessage: (result) => {
         const tpiCount = result?.tpiCount || 0
-        const successfulEmails = result?.successfulEmails || 0
-        const totalEmails = result?.totalEmails || 0
-        const emailSuffix = successfulEmails < totalEmails
-          ? ` Attention: ${totalEmails - successfulEmails} envoi(s) ont échoué.`
-          : ''
-
-        return `Campagne ouverte: ${tpiCount} TPI synchronises, ${successfulEmails}/${totalEmails} emails envoyes.${emailSuffix}`
+        return `Campagne ouverte: ${tpiCount} TPI synchronisés, aucun email envoyé automatiquement.`
       },
       onError: (_message, error) => {
         const validationFromError = extractValidationResultFromError(selectedYear, error)
@@ -1664,17 +1786,31 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     if (result?.workflowState) {
       setWorkflowState(result.workflowState)
     }
+    if (result?.workflow?.phases) {
+      setWorkflowPhases(result.workflow.phases)
+    }
   }
 
   const handleOpenVotesWithoutEmails = async () => {
-    if (!IS_DEBUG) {
-      return
-    }
-
+    const warnings = [
+      !hasSnapshotForCurrentPlanning
+        ? "Aucun snapshot actif n'est gelé."
+        : "",
+      hasStaleSnapshotForCurrentPlanning
+        ? "La planification locale a changé depuis le dernier snapshot."
+        : "",
+      hasBlockingValidationForCurrentPlanning
+        ? "La dernière vérification contient encore des erreurs."
+        : ""
+    ]
     const result = await executeWorkflowAction({
       actionKey: "startVotesNoEmail",
-      confirmMessage: "Confirmer l ouverture de la campagne de votes sans envoyer d emails ?",
-      run: () => workflowPlanningService.startVotesWithoutEmails(selectedYear, newRooms),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "ouvrir la campagne de votes sans envoyer d emails",
+        "Planification -> Votes -> Défenses",
+        warnings
+      ),
+      run: () => workflowCoordinationService.startVotesWithoutEmails(selectedYear, newRooms),
       successMessage: (result) => {
         const tpiCount = result?.tpiCount || 0
         return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
@@ -1690,12 +1826,22 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     if (result?.workflowState) {
       setWorkflowState(result.workflowState)
     }
+    if (result?.workflow?.phases) {
+      setWorkflowPhases(result.workflow.phases)
+    }
   }
 
   const handleRemindVotes = async () => {
     await executeWorkflowAction({
       actionKey: "remindVotes",
-      run: () => workflowPlanningService.remindVotes(selectedYear),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "relancer les votes",
+        "Votes",
+        !isWorkflowPhaseActive("votes")
+          ? ["La phase Votes n'est pas active."]
+          : []
+      ),
+      run: () => workflowCoordinationService.remindVotes(selectedYear),
       successMessage: (result) =>
         `Relances envoyees: ${result?.emailsSucceeded || 0}/${result?.emailsSent || 0}.`
     })
@@ -1704,28 +1850,80 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleCloseVotes = async () => {
     await executeWorkflowAction({
       actionKey: "closeVotes",
-      confirmMessage: "Confirmer la cloture des votes ?",
-      run: () => workflowPlanningService.closeVotes(selectedYear),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "clore les votes",
+        "Votes",
+        !isWorkflowPhaseActive("votes")
+          ? ["La phase Votes n'est pas active."]
+          : []
+      ),
+      run: () => workflowCoordinationService.closeVotes(selectedYear),
       successMessage: (result) =>
-        `Cloture terminee: ${result?.confirmedCount || 0} confirmes, ${result?.manualRequiredCount || 0} manuels.`
+        `Clôture terminée: ${result?.confirmedCount || 0} confirmés, ${result?.manualRequiredCount || 0} manuels.`
     })
   }
 
+  const soutenanceSiteLinkOptions = useMemo(() => {
+    const publicUrl = typeof staticPublicationInfo?.publicUrl === "string"
+      ? staticPublicationInfo.publicUrl.trim()
+      : ""
+
+    return publicUrl
+      ? {
+          soutenanceLinkTarget: "publication",
+          soutenancePublicUrl: publicUrl
+        }
+      : {}
+  }, [staticPublicationInfo?.publicUrl])
+
   const handlePublishDefinitive = async () => {
-    await executeWorkflowAction({
+    const warnings = [
+      isWorkflowPhaseActive("votes")
+        ? "La phase Votes est encore active; les défenses seront publiées en parallèle."
+        : "",
+      hasStaleSnapshotForCurrentPlanning
+        ? "La planification locale a changé depuis le dernier snapshot."
+        : "",
+      hasBlockingValidationForCurrentPlanning
+        ? "La dernière vérification contient encore des erreurs."
+        : ""
+    ]
+    const result = await executeWorkflowAction({
       actionKey: "publish",
-      confirmMessage: "Confirmer la publication definitive ?",
-      run: () => workflowPlanningService.publishDefinitive(selectedYear),
-      successMessage: (result) =>
-        `${result?.message || "Publication terminee."} Liens: ${result?.sentLinks?.emailsSucceeded || 0}/${result?.sentLinks?.emailsSent || 0}.`
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "publier les défenses",
+        "Défenses",
+        warnings
+      ),
+      run: () => workflowCoordinationService.publishDefinitive(selectedYear, newRooms, soutenanceSiteLinkOptions),
+      successMessage: (result) => {
+        const sentLinks = result?.sentLinks
+        const linksLabel = sentLinks?.emailsSkipped
+          ? " Liens: non envoyés automatiquement."
+          : ` Liens: ${sentLinks?.emailsSucceeded || 0}/${sentLinks?.emailsSent || 0}.`
+        return `${result?.message || "Publication terminée."}${linksLabel}`
+      }
     })
+
+    if (result?.workflowState) {
+      setWorkflowState(result.workflowState)
+    }
+    if (result?.workflow?.phases) {
+      setWorkflowPhases(result.workflow.phases)
+    }
   }
 
   const handleDeactivatePublication = async () => {
     const result = await executeWorkflowAction({
       actionKey: "deactivatePublication",
-      confirmMessage: "Desactiver la publication des defenses et revenir aux votes ? Les liens de defense publies seront revoques.",
-      run: () => workflowPlanningService.deactivatePublication(selectedYear),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "revenir aux votes",
+        "Défenses",
+        !isWorkflowPhaseActive("defenses")
+          ? ["La phase Défenses n'est pas active."]
+          : []
+      ),
+      run: () => workflowCoordinationService.deactivatePublication(selectedYear),
       successMessage: (result) => {
         const reopenedCount = Number(result?.reopenedDirectPublicationCount || 0)
         const voteSuffix = reopenedCount > 0
@@ -1739,6 +1937,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         if (nextWorkflowState) {
           setWorkflowState(nextWorkflowState)
         }
+        if (result?.workflow?.phases) {
+          setWorkflowPhases(result.workflow.phases)
+        }
       }
     })
 
@@ -1746,21 +1947,70 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     if (nextWorkflowState) {
       setWorkflowState(nextWorkflowState)
     }
+    if (result?.workflow?.phases) {
+      setWorkflowPhases(result.workflow.phases)
+    }
+  }
+
+  const handleWorkflowPhaseToggle = async (phase, active) => {
+    const labels = {
+      planning: "Planification",
+      votes: "Votes",
+      arbitrage: "Arbitrage",
+      defenses: "Défenses"
+    }
+    const phaseLabel = labels[phase] || phase
+    const actionLabel = active ? "activer" : "désactiver"
+    const result = await executeWorkflowAction({
+      actionKey: "phaseToggle",
+      confirmMessage: `Confirmer: ${actionLabel} la phase "${phaseLabel}" pour ${selectedYear} ? Les données ne seront pas supprimées.`,
+      run: () => workflowCoordinationService.setPhaseActive(selectedYear, phase, active, {
+        reason: `Pilotage admin: ${actionLabel} ${phaseLabel}`
+      }),
+      successMessage: (result) => {
+        const nextActive = result?.active === true
+        return `Phase ${phaseLabel} ${nextActive ? "activée" : "désactivée"}.`
+      },
+      onSuccess: (result) => {
+        const nextWorkflowState = result?.workflow?.state
+        if (nextWorkflowState) {
+          setWorkflowState(nextWorkflowState)
+        }
+        if (result?.workflow?.phases) {
+          setWorkflowPhases(result.workflow.phases)
+        }
+      }
+    })
+
+    const nextWorkflowState = result?.workflow?.state
+    if (nextWorkflowState) {
+      setWorkflowState(nextWorkflowState)
+    }
+    if (result?.workflow?.phases) {
+      setWorkflowPhases(result.workflow.phases)
+    }
   }
 
   const handleSendSoutenanceLinks = async () => {
     await executeWorkflowAction({
       actionKey: "sendLinks",
-      run: () => workflowPlanningService.sendPublicationLinks(selectedYear),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        "envoyer les liens de défense",
+        "Défenses",
+        !isWorkflowPhaseActive("defenses")
+          ? ["La phase Défenses n'est pas active."]
+          : []
+      ),
+      run: () => workflowCoordinationService.sendPublicationLinks(selectedYear, soutenanceSiteLinkOptions),
       successMessage: (result) =>
-        `Liens défense envoyes: ${result?.sentLinks?.emailsSucceeded || 0}/${result?.sentLinks?.emailsSent || 0}.`
+        `Liens défense envoyés: ${result?.sentLinks?.emailsSucceeded || 0}/${result?.sentLinks?.emailsSent || 0}.`
     })
   }
 
   const handleGenerateStaticPublication = async () => {
     await executeWorkflowAction({
       actionKey: "staticGenerate",
-      run: () => workflowPlanningService.generateStaticPublication(selectedYear),
+      run: () => workflowCoordinationService.generateStaticPublication(selectedYear),
       successMessage: (result) =>
         `Page statique générée: ${result?.defenseCount || 0} défense(s), ${result?.roomCount || 0} salle(s).`,
       onSuccess: (result) => {
@@ -1790,7 +2040,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     await executeWorkflowAction({
       actionKey: "staticPublish",
       confirmMessage: `Publier la page statique générée sur ${publicationTargetLabel} par FTP ?`,
-      run: () => workflowPlanningService.publishStaticPublication(selectedYear),
+      run: () => workflowCoordinationService.publishStaticPublication(selectedYear),
       successMessage: (result) =>
         `Publication FTP réussie: ${result?.defenseCount || 0} défense(s) en ligne${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,
       onSuccess: (result) => {
@@ -1816,7 +2066,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleGenerateStaticVotePublication = async () => {
     await executeWorkflowAction({
       actionKey: "staticVoteGenerate",
-      run: () => workflowPlanningService.generateStaticVotePublication(selectedYear),
+      run: () => workflowCoordinationService.generateStaticVotePublication(selectedYear),
       successMessage: (result) =>
         `Mini-site vote généré: ${result?.groupCount || 0} vote(s), ${result?.accessLinkCount || 0} lien(s).`,
       onSuccess: (result) => {
@@ -1831,7 +2081,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     await executeWorkflowAction({
       actionKey: "staticVotePublish",
       confirmMessage: `Publier le mini-site vote généré sur ${publicationTargetLabel} par FTP ?`,
-      run: () => workflowPlanningService.publishStaticVotePublication(selectedYear),
+      run: () => workflowCoordinationService.publishStaticVotePublication(selectedYear),
       successMessage: (result) =>
         `Mini-site vote publié${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,
       onSuccess: (result) => {
@@ -1859,7 +2109,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleSyncStaticVotePublication = async () => {
     await executeWorkflowAction({
       actionKey: "staticVoteSync",
-      run: () => workflowPlanningService.syncStaticVotePublication(selectedYear),
+      run: () => workflowCoordinationService.syncStaticVotePublication(selectedYear),
       successMessage: (result) =>
         `Votes web synchronisés: ${result?.importedCount || 0}/${result?.receivedCount || 0} importé(s), ${result?.failedCount || 0} erreur(s).`,
       onSuccess: (result) => {
@@ -1879,7 +2129,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }
 
   const handleOpenVoteTracking = () => {
-    navigate(`/planning/${selectedYear}?tab=votes`)
+    navigate(`${ROUTES.COORDINATION}/${selectedYear}?tab=votes`)
   }
 
   const handleOpenVoteAccessPreview = useCallback(() => {
@@ -1899,14 +2149,14 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       : ROUTES.SOUTENANCES
 
     try {
-      const planningPublication = await publishSoutenancesFromPlanning(year)
+      const planningPublication = await publishSoutenancesFromPlanification(year)
 
       if (planningPublication?.count > 0) {
         if (Number.isInteger(normalizedYear)) {
           navigate(soutenancePageUrl)
         }
         notify(
-          `Les défenses confirmées ont été publiées depuis le planning. Voir: ${soutenancePageUrl}`,
+          `Les défenses confirmées ont été publiées depuis la planification. Voir: ${soutenancePageUrl}`,
           "success"
         )
         return
@@ -1933,7 +2183,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       }
 
       notify(
-        "Aucune défense confirmée dans le planning et aucune salle legacy à publier.",
+        "Aucune défense confirmée dans la planification et aucune salle legacy à publier.",
         "error"
       )
     } catch (error) {
@@ -1982,8 +2232,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       setIsDeleteAllRoomsDialogOpen(true)
       return false
     } catch (error) {
-      console.error("Erreur lors de la suppression complète du planning :", error)
-      notify(`Erreur lors de la suppression complète du planning : ${error.message}`, "error")
+      console.error("Erreur lors de la suppression complète de la planification :", error)
+      notify(`Erreur lors de la suppression complète de la planification : ${error.message}`, "error")
       return false
     }
   }
@@ -2008,7 +2258,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     clearLocalPlanningRooms()
     setIsDeleteAllRoomsDialogOpen(false)
-    notify(`${roomCount} salle(s) supprimée(s) du planning ${selectedYear}.`, "success")
+    notify(`${roomCount} salle(s) supprimée(s) de la planification ${selectedYear}.`, "success")
   }
 
   const handleRestartWorkflowYear = async () => {
@@ -2020,7 +2270,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     setIsResettingWorkflowYear(true)
 
     try {
-      const result = await workflowPlanningService.resetYear(selectedYear)
+      const result = await workflowCoordinationService.resetYear(selectedYear)
       const deleted = result?.deleted || {}
       const legacyDeletedCount = Array.isArray(deleted.legacyCollections)
         ? deleted.legacyCollections.reduce((total, item) => total + Number(item?.deletedCount || 0), 0)
@@ -2038,6 +2288,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
       clearLocalPlanningRooms()
       setWorkflowState(result?.workflow?.state || "planning")
+      setWorkflowPhases(result?.workflow?.phases || {})
       setActiveSnapshotVersion(null)
       setIsDeleteAllRoomsDialogOpen(false)
       await refreshWorkflowContext(selectedYear)
@@ -2221,7 +2472,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
 
     if (createdRooms.length === 0) {
-      notify("Le planning contient déjà toutes les salles configurées.", "info")
+      notify("La planification contient déjà toutes les salles configurées.", "info")
       return
     }
 
@@ -2229,7 +2480,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     setNewRooms(updatedRooms)
     writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, updatedRooms)
     notify(
-      `${createdRooms.length} salle(s) de planning générée(s) depuis Configuration.`,
+      `${createdRooms.length} salle(s) de planification générée(s) depuis Configuration.`,
       "success"
     )
   }, [effectiveConfigData, notify, roomCatalogBySite, roomEntries, selectedYear, soutenanceDates])
@@ -2459,6 +2710,14 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }
 
+  useEffect(() => {
+    if (!hasLoadedLocalPlanning || !requestedYear || requestedYear === Number(selectedYear)) {
+      return
+    }
+
+    handleYearChangeRequest(requestedYear)
+  }, [hasLoadedLocalPlanning, requestedYear, roomEntries.length, selectedYear])
+
   const handleTransmitToDatabase = async () => {
     let roomsData
 
@@ -2534,7 +2793,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         <TpiScheduleButtons
           configData={effectiveConfigData}
           selectedYear={selectedYear}
-          onYearChange={handleYearChangeRequest}
           availableYears={YEARS_CONFIG.getAvailableYears()}
           onToggleEditing={toggleEditing}
           onDeleteAllRooms={handleDeleteAllRooms}
@@ -2553,12 +2811,14 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           onValidatePlanification={handleValidatePlanification}
           onFreezeSnapshot={handleFreezeSnapshot}
           onOpenVotes={handleOpenVotes}
-          onOpenVotesWithoutEmails={IS_DEBUG ? handleOpenVotesWithoutEmails : null}
-          onOpenVoteAccessPreview={IS_DEBUG ? handleOpenVoteAccessPreview : null}
+          onOpenVotesWithoutEmails={handleOpenVotesWithoutEmails}
+          onOpenVoteAccessPreview={handleOpenVoteAccessPreview}
           onRemindVotes={handleRemindVotes}
           onCloseVotes={handleCloseVotes}
           onPublishDefinitive={handlePublishDefinitive}
           onDeactivatePublication={handleDeactivatePublication}
+          workflowPhases={workflowPhases}
+          onWorkflowPhaseToggle={handleWorkflowPhaseToggle}
           onSendSoutenanceLinks={handleSendSoutenanceLinks}
           onGenerateStaticPublication={handleGenerateStaticPublication}
           onPreviewStaticPublication={handlePreviewStaticPublication}
@@ -2608,6 +2868,54 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           toggleArrow={toggleArrow}
           isArrowUp={isArrowUp}
         />
+      ) : null}
+
+      {isRoomsFocusMode && roomDateOptions.length > 0 ? (
+        <div className="planning-focus-toolbar" role="toolbar" aria-label="Focus de planification">
+          <div className="planning-focus-toolbar-copy">
+            <CalendarIcon className="planning-focus-toolbar-icon" />
+            <div>
+              <strong>{selectedRoomDateLabel}</strong>
+              <span>
+                {visibleRooms.length}/{roomEntries.length} salle{roomEntries.length > 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+          <div className="planning-focus-toolbar-actions">
+            <select
+              className="planning-focus-date-select"
+              value={roomFilters.date || ""}
+              onChange={(event) => updateRoomFilters({ date: event.target.value })}
+              aria-label="Filtrer le focus par date"
+            >
+              <option value="">Toutes les dates</option>
+              {roomDateOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="planning-focus-toolbar-btn icon-button"
+              onClick={clearRoomFilters}
+              disabled={!(roomFilters.site || roomFilters.date || roomFilters.room)}
+              aria-label="Réinitialiser les filtres"
+              title="Réinitialiser les filtres"
+            >
+              <IconButtonContent label='Réinitialiser les filtres' icon={RefreshIcon} />
+            </button>
+            <button
+              type="button"
+              className="planning-focus-toolbar-btn primary icon-button"
+              onClick={() => setIsRoomsFocusMode(false)}
+              aria-label="Quitter le focus"
+              title="Quitter le focus"
+            >
+              <IconButtonContent label='Quitter le focus' icon={CloseIcon} />
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {Number.isInteger(pendingYearChange) && typeof document !== "undefined"
@@ -2724,7 +3032,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                 <div className="planning-year-change-copy">
                   <h3 id="planning-delete-rooms-title">Supprimer toutes les rooms ?</h3>
                   <p id="planning-delete-rooms-description">
-                    Choisis si c’est une erreur, un simple nettoyage local, ou un vrai redémarrage du workflow{" "}
+                    Choisis si c’est une erreur, un simple nettoyage local, ou une réinitialisation complète de l’année{" "}
                     <strong>{selectedYear}</strong>.
                   </p>
                 </div>
@@ -2735,8 +3043,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                     <strong>{roomEntries.length}</strong>
                   </div>
                   <div className="planning-year-change-summary-item">
-                    <span>Workflow</span>
-                    <strong>{workflowState}</strong>
+                    <span>Phases</span>
+                    <strong>{activeWorkflowPhaseLabel}</strong>
                   </div>
                   <div className="planning-year-change-summary-item">
                     <span>Snapshot</span>
@@ -2770,7 +3078,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                       <span>Rooms uniquement</span>
                     </span>
                     <span className="planning-delete-rooms-choice-detail">
-                      Efface seulement la vue locale; l’état workflow reste inchangé.
+                      Efface seulement la vue locale; les phases restent inchangées.
                     </span>
                   </button>
                   <button
@@ -2788,7 +3096,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                       <span>{isResettingWorkflowYear ? "Redémarrage..." : "Recommencer"}</span>
                     </span>
                     <span className="planning-delete-rooms-choice-detail">
-                      Réinitialise rooms, votes, snapshots, publication et état annuel.
+                      Réinitialise rooms, votes, snapshots, publication et phases annuelles.
                     </span>
                   </button>
                 </div>
@@ -2802,7 +3110,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         <div className='planning-empty-state'>
           <h2>Aucune salle chargée</h2>
           <p>
-            Aucun planning compatible en local.
+            Aucune planification compatible en local.
           </p>
           <p>Prépare dates, sites et salles dans Configuration.</p>
           <button
@@ -2814,15 +3122,15 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           >
             <IconButtonContent label='Ouvrir Configuration' icon={ConfigurationIcon} />
           </button>
-          {workflowState !== "planning" || activeSnapshotVersion ? (
+          {activeWorkflowPhaseLabel !== "Planification" || activeSnapshotVersion ? (
             <button
               type='button'
               className='icon-button'
               onClick={() => setIsDeleteAllRoomsDialogOpen(true)}
-              aria-label='Recommencer workflow'
-              title='Recommencer le workflow'
+              aria-label='Recommencer les phases'
+              title='Recommencer les phases'
             >
-              <IconButtonContent label='Recommencer workflow' icon={RefreshIcon} />
+              <IconButtonContent label='Recommencer phases' icon={RefreshIcon} />
             </button>
           ) : null}
         </div>

@@ -1,9 +1,69 @@
 const express = require('express')
 
-const magicLinkV2Service = require('../services/magicLinkV2Service')
+const accessLinkTokenService = require('../modules/accessLinks/tokenService')
+const { ACCESS_LINK_SOURCES } = require('../modules/accessLinks/constants')
 const legacyMagicLinkService = require('../services/magicLinkService')
+const staticVotePublicationService = require('../services/staticVotePublicationService')
 
 const router = express.Router()
+
+function getRequestBaseUrl(req) {
+  const origin = typeof req.get === 'function' ? req.get('origin') : ''
+  const fallback = `${req.protocol}://${req.get('host')}`
+  const value = typeof origin === 'string' && origin.trim()
+    ? origin.trim()
+    : fallback
+
+  return value.replace(/\/+$/, '')
+}
+
+async function findLinkedVoteAccess(link, person, req) {
+  if (link?.type !== 'soutenance' || !person?._id) {
+    return null
+  }
+
+  const commonQuery = {
+    year: link.year,
+    type: 'vote',
+    person,
+    scope: {
+      year: link.year,
+      kind: 'stakeholder_votes'
+    }
+  }
+  const requestBaseUrl = getRequestBaseUrl(req)
+  const staticVoteBaseUrl = await staticVotePublicationService
+    .getPublicUrl(link.year)
+    .catch(() => '')
+
+  let linkedVote = staticVoteBaseUrl
+    ? await accessLinkTokenService.findReusableMagicLink({
+      ...commonQuery,
+      sources: [ACCESS_LINK_SOURCES.ADMIN_STATIC_VOTE],
+      baseUrl: staticVoteBaseUrl
+    })
+    : null
+
+  if (!linkedVote?.url) {
+    linkedVote = await accessLinkTokenService.findReusableMagicLink({
+      ...commonQuery,
+      sources: [ACCESS_LINK_SOURCES.ADMIN_APP],
+      baseUrl: requestBaseUrl
+    })
+  }
+
+  if (!linkedVote?.url) {
+    return null
+  }
+
+  return {
+    url: linkedVote.url,
+    expiresAt: linkedVote.expiresAt || null,
+    maxUses: linkedVote.maxUses,
+    usageCount: linkedVote.usageCount,
+    availabilityStatus: linkedVote.availabilityStatus || 'available'
+  }
+}
 
 router.get('/resolve', async (req, res) => {
   const token = typeof req.query.token === 'string'
@@ -12,12 +72,14 @@ router.get('/resolve', async (req, res) => {
       ? req.query.ml.trim()
       : ''
 
-  if (!magicLinkV2Service.isTokenLooksValid(token)) {
+  if (!accessLinkTokenService.isTokenLooksValid(token)) {
     return res.status(400).json({ error: 'Token invalide.' })
   }
 
   try {
-    const resolved = await magicLinkV2Service.resolveMagicLink(token)
+    const resolved = await accessLinkTokenService.resolveMagicLink(token, {
+      request: req
+    })
     const { link, person } = resolved
 
     let sessionToken = null
@@ -41,6 +103,11 @@ router.get('/resolve', async (req, res) => {
       })
     }
 
+    const linkedVoteAccess = await findLinkedVoteAccess(link, person, req)
+    const viewerRoles = Array.isArray(person?.roles)
+      ? person.roles.map((role) => String(role || '').trim()).filter(Boolean)
+      : []
+
     return res.status(200).json({
       success: true,
       type: link.type,
@@ -53,8 +120,13 @@ router.get('/resolve', async (req, res) => {
       viewer: {
         personId: link.personId ? String(link.personId) : null,
         name: link.personName || null,
-        email: link.recipientEmail || null
-      }
+        email: link.recipientEmail || null,
+        roles: viewerRoles,
+        isAdmin: viewerRoles.includes('admin'),
+        voteAccessUrl: linkedVoteAccess?.url || null,
+        voteAccessExpiresAt: linkedVoteAccess?.expiresAt || null
+      },
+      linkedVoteAccess
     })
   } catch (error) {
     const statusCode = error.statusCode || 500

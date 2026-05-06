@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs')
 const { loadTestApp } = require('./helpers/loadTestApp')
 const Person = require('../models/personModel')
 const TpiModelsYear = require('../models/tpiModels')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 
 async function startServer(app) {
@@ -145,7 +145,7 @@ test('GET /api/tpi-dossier/:year/:ref returns a merged dossier for a workflow re
           _id: 'planning-1',
           reference: 'TPI-2026-042',
           status: 'voting',
-          sujet: 'Sujet planning',
+          sujet: 'Sujet coordination',
           candidat: { firstName: 'Alice', lastName: 'Martin' },
           expert1: { firstName: 'Bob', lastName: 'Expert' },
           expert2: { firstName: 'Carla', lastName: 'Expert' },

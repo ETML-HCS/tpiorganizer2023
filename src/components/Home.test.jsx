@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 
 import Home from './Home'
 import { STORAGE_KEYS, YEARS_CONFIG } from '../config/appConfig'
-import * as planningServices from '../services/planningService'
+import * as coordinationServices from '../services/coordinationService'
 
 jest.mock('react-toastify', () => ({
   toast: {
@@ -27,15 +27,12 @@ jest.mock('../config/appConfig', () => {
 
 function LocationDisplay() {
   const location = useLocation()
-  return <div data-testid='location-display'>{location.pathname}</div>
+  return <div data-testid='location-display'>{`${location.pathname}${location.search}`}</div>
 }
 
 describe('Home', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    jest.spyOn(planningServices.workflowPlanningService, 'getYearState').mockResolvedValue({
-      state: 'planning'
-    })
   })
 
   afterEach(() => {
@@ -58,7 +55,7 @@ describe('Home', () => {
             }
           />
           <Route path='/planification' element={<LocationDisplay />} />
-          <Route path='/planning/:year' element={<LocationDisplay />} />
+          <Route path='/coordination/:year' element={<LocationDisplay />} />
         </Routes>
       </MemoryRouter>
     )
@@ -69,13 +66,15 @@ describe('Home', () => {
     fireEvent.click(screen.getByRole('button', { name: /planification/i }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('location-display')).toHaveTextContent('/planification')
+      expect(screen.getByTestId('location-display')).toHaveTextContent(
+        `/planification?year=${targetYear}`
+      )
     })
 
-    expect(window.localStorage.getItem(STORAGE_KEYS.PLANNING_SELECTED_YEAR)).toBe(targetYear)
+    expect(window.localStorage.getItem(STORAGE_KEYS.COORDINATION_SELECTED_YEAR)).toBe(targetYear)
   })
 
-  test('redirige le raccourci planning vers le dashboard votes de l année active', async () => {
+  test('redirige le raccourci coordination vers le dashboard votes de l année active', async () => {
     const currentYear = YEARS_CONFIG.getCurrentYear()
     const targetYear = String(
       YEARS_CONFIG.getAvailableYears().find((year) => year !== currentYear) || currentYear
@@ -93,7 +92,7 @@ describe('Home', () => {
               </>
             }
           />
-          <Route path='/planning/:year' element={<LocationDisplay />} />
+          <Route path='/coordination/:year' element={<LocationDisplay />} />
         </Routes>
       </MemoryRouter>
     )
@@ -102,13 +101,13 @@ describe('Home', () => {
       target: { value: targetYear }
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /^Planning/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Coordination/i }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('location-display')).toHaveTextContent(`/planning/${targetYear}`)
+      expect(screen.getByTestId('location-display')).toHaveTextContent(`/coordination/${targetYear}`)
     })
 
-    expect(window.localStorage.getItem(STORAGE_KEYS.PLANNING_SELECTED_YEAR)).toBe(targetYear)
+    expect(window.localStorage.getItem(STORAGE_KEYS.COORDINATION_SELECTED_YEAR)).toBe(targetYear)
   })
 
   test('redirige le raccourci défenses vers l année courante par défaut', async () => {
@@ -143,8 +142,11 @@ describe('Home', () => {
     })
   })
 
-  test('désactive les actions de vote tant que les votes ne sont pas ouverts', async () => {
-    const targetYear = String(YEARS_CONFIG.getCurrentYear())
+  test("ouvre le module liens d'accès sans paramètre d'année", async () => {
+    const currentYear = YEARS_CONFIG.getCurrentYear()
+    const targetYear = String(
+      YEARS_CONFIG.getAvailableYears().find((year) => year !== currentYear) || currentYear
+    )
 
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -158,25 +160,64 @@ describe('Home', () => {
               </>
             }
           />
+          <Route path='/acces-liens' element={<LocationDisplay />} />
         </Routes>
       </MemoryRouter>
     )
 
-    await waitFor(() => {
-      expect(planningServices.workflowPlanningService.getYearState).toHaveBeenCalledWith(targetYear)
-      expect(screen.getByRole('button', { name: /liens de vote/i })).toBeDisabled()
-      expect(screen.getByRole('button', { name: /emails vote/i })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/année active/i), {
+      target: { value: targetYear }
     })
 
-    expect(screen.getAllByText(/votes ouverts uniquement/i)).toHaveLength(2)
+    fireEvent.click(screen.getByRole('link', { name: /liens d'accès/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-display')).toHaveTextContent(
+        '/acces-liens'
+      )
+    })
   })
 
-  test('autorise le mode test vote quand les votes sont ouverts', async () => {
-    const targetYear = String(YEARS_CONFIG.getCurrentYear())
-    planningServices.workflowPlanningService.getYearState.mockResolvedValueOnce({
-      state: 'voting_open'
+  test("passe l'année active aux modules d'administration", async () => {
+    const currentYear = YEARS_CONFIG.getCurrentYear()
+    const targetYear = String(
+      YEARS_CONFIG.getAvailableYears().find((year) => year !== currentYear) || currentYear
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route
+            path='/'
+            element={
+              <>
+                <Home />
+                <LocationDisplay />
+              </>
+            }
+          />
+          <Route path='/gestion-tpi' element={<LocationDisplay />} />
+          <Route path='/parties-prenantes' element={<LocationDisplay />} />
+          <Route path='/evaluation' element={<LocationDisplay />} />
+          <Route path='/configuration' element={<LocationDisplay />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByLabelText(/année active/i), {
+      target: { value: targetYear }
     })
 
+    fireEvent.click(screen.getByRole('link', { name: /gestion tpi/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-display')).toHaveTextContent(
+        `/gestion-tpi?year=${targetYear}`
+      )
+    })
+  })
+
+  test('laisse les actions de test vote disponibles sans verrou de phase', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <Routes>
@@ -193,10 +234,26 @@ describe('Home', () => {
       </MemoryRouter>
     )
 
-    await waitFor(() => {
-      expect(planningServices.workflowPlanningService.getYearState).toHaveBeenCalledWith(targetYear)
-      expect(screen.getByRole('button', { name: /emails vote/i })).toBeEnabled()
-    })
+    expect(screen.getByRole('button', { name: /liens de vote/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /emails vote/i })).toBeEnabled()
+  })
+
+  test('ouvre le mode test vote depuis l accueil debug', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route
+            path='/'
+            element={
+              <>
+                <Home />
+                <LocationDisplay />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    )
 
     const voteTestButton = screen.getByRole('button', { name: /emails vote/i })
 

@@ -4,9 +4,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
 import ResolutionProposalPage from './ResolutionProposalPage'
-import { resolutionProposalService } from '../../services/planningService'
+import { resolutionProposalService } from '../../services/coordinationService'
 
-jest.mock('../../services/planningService', () => ({
+jest.mock('../../services/coordinationService', () => ({
   resolutionProposalService: {
     getPublic: jest.fn(),
     respondPublic: jest.fn()

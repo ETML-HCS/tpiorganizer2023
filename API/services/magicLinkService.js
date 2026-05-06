@@ -153,7 +153,7 @@ function verifyAnySessionToken(token) {
       return normalizeAuthenticatedUser(decoded, 'app')
     }
 
-    return normalizeAuthenticatedUser(decoded, 'planning')
+    return normalizeAuthenticatedUser(decoded, 'coordination')
   } catch (planningError) {
     try {
       const decoded = verifyAppSessionToken(token)
@@ -168,7 +168,7 @@ function verifyAnySessionToken(token) {
  * Middleware d'authentification pour les routes protégées
  */
 function authMiddleware(req, res, next) {
-  if (process.env.SKIP_PLANNING_AUTH === 'true') {
+  if (process.env.SKIP_COORDINATION_AUTH === 'true' || process.env.SKIP_PLANNING_AUTH === 'true') {
     return next()
   }
   

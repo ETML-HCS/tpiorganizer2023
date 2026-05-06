@@ -640,7 +640,7 @@
   color: var(--soutenance-text-muted);
 }
 
-/* Planning (sans scroll horizontal) */
+/* Planification (sans scroll horizontal) */
 .tpi-soutenance-page .soutenance-time-grid {
   width: 100%;
 }
@@ -1059,12 +1059,39 @@
   cursor: pointer;
 }
 
+.tpi-soutenance-page .soutenance-person-vote-button {
+  min-height: 36px;
+  border: 1px solid #0f766e;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #f8fafc;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .tpi-soutenance-page .soutenance-person-ical-button:hover {
   background: #1f2937;
 }
 
+.tpi-soutenance-page .soutenance-person-vote-button:hover {
+  background: #115e59;
+  color: #ffffff;
+}
+
 .tpi-soutenance-page .soutenance-person-ical-button:focus-visible {
   outline: 2px solid #0f172a;
+  outline-offset: 2px;
+}
+
+.tpi-soutenance-page .soutenance-person-vote-button:focus-visible {
+  outline: 2px solid #0f766e;
   outline-offset: 2px;
 }
 

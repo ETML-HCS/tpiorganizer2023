@@ -141,4 +141,40 @@ describe("tpiScheduleValidationMarkers", () => {
     expect(markers[slotA101P1].messages[0]).toMatch(/Ada Lovelace est affecté à plusieurs TPI/)
     expect(markers[slotA102P1].messages[0]).toMatch(/Ada Lovelace est affecté à plusieurs TPI/)
   })
+
+  it("ne transforme pas un avertissement d override en erreur visuelle", () => {
+    const rooms = [
+      makeRoom({
+        date: "2026-06-10",
+        name: "A101",
+        cards: [
+          makeCard("TPI-001", "Alice Martin", "Grace Hopper", "Expert 2", "Boss 1")
+        ]
+      })
+    ]
+
+    const markers = buildValidationMarkers(rooms, {
+      issues: [
+        {
+          type: "consecutive_limit",
+          severity: "warning",
+          isConstraintOverride: true,
+          personName: "Grace Hopper",
+          slotKeys: ["2026-06-10|1"],
+          message: "Grace Hopper a 5 TPI consécutifs."
+        }
+      ]
+    })
+
+    const slotA101P1 = buildPlanningSlotKey({
+      dateValue: "2026-06-10",
+      period: 1,
+      site: "ETML",
+      roomName: "A101"
+    })
+
+    expect(markers[slotA101P1]).toBeDefined()
+    expect(markers[slotA101P1].hasError).toBe(false)
+    expect(markers[slotA101P1].hasWarning).toBe(true)
+  })
 })

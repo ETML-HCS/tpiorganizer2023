@@ -8,8 +8,13 @@ import React, {
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify"
 import { IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG, ROUTES } from "../config/appConfig"
-import { authPlanningService, workflowPlanningService } from "../services/planningService"
-import { readStorageValue, writeStorageValue } from "../utils/storage"
+import { authCoordinationService, workflowCoordinationService } from "../services/coordinationService"
+import { writeStorageValue } from "../utils/storage"
+import {
+  appendCoordinationYearQuery,
+  getPreferredCoordinationYear,
+  persistCoordinationYear
+} from "../utils/coordinationYear"
 import IconButtonContent from "./shared/IconButtonContent"
 import {
   ArrowRightIcon,
@@ -59,18 +64,18 @@ const HomeIcon = ({ name, className }) => {
 const PRIMARY_ITEMS = [
   {
     name: "Planification",
-    special: "planningWorkflow",
+    special: "coordinationWorkflow",
     icon: "workflow",
     tone: "primary",
     description: "Préparer les créneaux.",
     actionLabel: "Ouvrir"
   },
   {
-    name: "Planning",
-    special: "planningVotes",
+    name: "Coordination",
+    special: "coordination",
     icon: "clipboard",
     tone: "accent",
-    description: "Suivre votes et publication.",
+    description: "Suivre votes, arbitrages et publication.",
     actionLabel: "Ouvrir"
   },
   {
@@ -130,7 +135,8 @@ const ADMIN_ITEMS = [
     icon: "key",
     tone: "neutral",
     description: "Liens vote et défense.",
-    actionLabel: "Ouvrir"
+    actionLabel: "Ouvrir",
+    includeYear: false
   }
 ]
 
@@ -141,8 +147,7 @@ const DEV_ACCESS_ITEMS = [
     description: "Générer les liens vote sans email.",
     meta: "Année + référence",
     icon: "vote",
-    requiresEmail: false,
-    requiredWorkflowState: "voting_open"
+    requiresEmail: false
   },
   {
     dialog: "voteTest",
@@ -150,8 +155,7 @@ const DEV_ACCESS_ITEMS = [
     description: "Envoyer un test vote.",
     meta: "Année + email",
     icon: "mail",
-    requiresEmail: true,
-    requiredWorkflowState: "voting_open"
+    requiresEmail: true
   },
   {
     dialog: "soutenanceTest",
@@ -159,13 +163,13 @@ const DEV_ACCESS_ITEMS = [
     description: "Envoyer un test défense.",
     meta: "Année + email",
     icon: "mailOff",
-    requiresEmail: true,
-    requiredWorkflowState: "published"
+    requiresEmail: true
   }
 ]
 
 const getModuleActionHint = (item, activeYear) => {
-  const yearHint = item.special && activeYear ? ` (${activeYear})` : ""
+  const shouldIncludeYear = item.includeYear !== false
+  const yearHint = shouldIncludeYear && activeYear ? ` (${activeYear})` : ""
   const actionText = item.actionLabel || "Ouvrir"
 
   return item.description
@@ -175,11 +179,15 @@ const getModuleActionHint = (item, activeYear) => {
 
 const ActionCard = ({ item, onOpenDialog, activeYear, delayMs = 0 }) => {
   const cardStyle = { "--home-card-delay": `${delayMs}ms` }
-  const actionLabel = item.special && activeYear
+  const shouldIncludeYear = item.includeYear !== false
+  const actionLabel = shouldIncludeYear && activeYear
     ? `${item.actionLabel} ${activeYear}`
     : item.actionLabel
   const actionHint = getModuleActionHint(item, activeYear)
   const targetYear = activeYear || String(YEARS_CONFIG.getCurrentYear())
+  const linkTarget = shouldIncludeYear
+    ? appendCoordinationYearQuery(item.link, targetYear)
+    : item.link
 
   const content = (
     <>
@@ -227,7 +235,7 @@ const ActionCard = ({ item, onOpenDialog, activeYear, delayMs = 0 }) => {
 
   return (
     <Link
-      to={item.link}
+      to={linkTarget}
       className={`home-card home-card-${item.tone}`}
       style={cardStyle}
       aria-label={actionHint}
@@ -302,39 +310,8 @@ async function copyToClipboard(value) {
 const getDevAccessItem = (dialog) =>
   DEV_ACCESS_ITEMS.find((item) => item.dialog === dialog) || null
 
-const WORKFLOW_STATE_REQUIREMENT_LABELS = {
-  voting_open: "Votes ouverts uniquement",
-  published: "Après publication"
-}
-
-const WORKFLOW_STATE_REQUIREMENT_MESSAGES = {
-  voting_open: "Disponible uniquement quand les votes sont ouverts.",
-  published: "Disponible uniquement après publication."
-}
-
-const getWorkflowStateRequirementLabel = (requiredState) =>
-  WORKFLOW_STATE_REQUIREMENT_LABELS[requiredState] || "Indisponible"
-
-const getWorkflowStateRequirementMessage = (requiredState) =>
-  WORKFLOW_STATE_REQUIREMENT_MESSAGES[requiredState] || "Action indisponible pour le moment."
-
 const getDefaultActiveYear = () => {
-  const storedYear = Number.parseInt(
-    readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ""),
-    10
-  )
-
-  if (YEARS_CONFIG.isSupportedYear(storedYear)) {
-    return String(storedYear)
-  }
-
-  const currentYear = YEARS_CONFIG.getCurrentYear()
-  if (YEARS_CONFIG.isSupportedYear(currentYear)) {
-    return String(currentYear)
-  }
-
-  const years = generateYears()
-  return years.length > 0 ? String(years[years.length - 1]) : String(currentYear)
+  return String(getPreferredCoordinationYear())
 }
 
 const DevAccessMenu = ({
@@ -644,7 +621,6 @@ const Home = () => {
   const [isSendingDevAccess, setIsSendingDevAccess] = useState(false)
   const [devAccessPayload, setDevAccessPayload] = useState(null)
   const [activeYear, setActiveYear] = useState(getDefaultActiveYear)
-  const [workflowState, setWorkflowState] = useState(null)
 
   const availableYears = useMemo(() => generateYears().slice().reverse(), [])
 
@@ -653,35 +629,7 @@ const Home = () => {
       return
     }
 
-    writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, activeYear)
-  }, [activeYear])
-
-  useEffect(() => {
-    if (!IS_DEBUG || !activeYear) {
-      setWorkflowState(null)
-      return undefined
-    }
-
-    let isCancelled = false
-    setWorkflowState(null)
-
-    workflowPlanningService.getYearState(activeYear)
-      .then((workflow) => {
-        if (isCancelled) {
-          return
-        }
-
-        setWorkflowState(typeof workflow?.state === "string" ? workflow.state : null)
-      })
-      .catch(() => {
-        if (!isCancelled) {
-          setWorkflowState(null)
-        }
-      })
-
-    return () => {
-      isCancelled = true
-    }
+    persistCoordinationYear(activeYear)
   }, [activeYear])
 
   useEffect(() => {
@@ -711,30 +659,30 @@ const Home = () => {
   }, [])
 
   const handleActiveYearChange = useCallback((event) => {
-    const nextYear = event.target.value
+    const nextYear = persistCoordinationYear(event.target.value)
 
     if (!nextYear) {
       return
     }
 
-    setActiveYear(nextYear)
+    setActiveYear(String(nextYear))
   }, [])
 
   const handlePrimaryAccess = useCallback(
     (accessType) => {
       const year = activeYear || String(YEARS_CONFIG.getCurrentYear())
 
-      if (accessType === "planningWorkflow") {
-        authPlanningService.clearSession()
-        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
-        navigate(ROUTES.PLANIFICATION)
+      if (accessType === "coordinationWorkflow") {
+        authCoordinationService.clearSession()
+        writeStorageValue(STORAGE_KEYS.COORDINATION_SELECTED_YEAR, String(year))
+        navigate(appendCoordinationYearQuery(ROUTES.PLANIFICATION, year))
         return
       }
 
-      if (accessType === "planningVotes") {
-        authPlanningService.clearSession()
-        writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(year))
-        navigate(`/planning/${year}`)
+      if (accessType === "coordination") {
+        authCoordinationService.clearSession()
+        writeStorageValue(STORAGE_KEYS.COORDINATION_SELECTED_YEAR, String(year))
+        navigate(`${ROUTES.COORDINATION}/${year}`)
         return
       }
 
@@ -773,15 +721,15 @@ const Home = () => {
 
       try {
         const result = isVoteLinks
-          ? await workflowPlanningService.createDevVoteLinks(year, window.location.origin, {
+          ? await workflowCoordinationService.createDevVoteLinks(year, window.location.origin, {
               reference
             })
           : isVoteTest
-          ? await workflowPlanningService.sendDevVoteEmails(year, email, {
+          ? await workflowCoordinationService.sendDevVoteEmails(year, email, {
               reference,
               baseUrl: window.location.origin
             })
-          : await workflowPlanningService.sendDevSoutenanceEmails(year, email, {
+          : await workflowCoordinationService.sendDevSoutenanceEmails(year, email, {
               reference,
               baseUrl: window.location.origin
             })
@@ -830,14 +778,10 @@ const Home = () => {
         <div className='home-intro-copy'>
           <span className='home-intro-eyebrow'>
             <HomeIcon name='dashboard' className='home-intro-eyebrow-icon' />
-            Accueil
+            Tableau de bord TPI
           </span>
 
-          <h1>Accès rapide aux modules</h1>
-
-          <p>
-            Choisissez l'année, puis ouvrez le module utile.
-          </p>
+          <h1>Piloter les TPI {activeYear}</h1>
         </div>
 
         <div className='home-intro-aside' aria-label='Contexte'>
@@ -856,7 +800,6 @@ const Home = () => {
               ))}
             </select>
           </label>
-          <span className='home-intro-years'>{availableYears.length} années disponibles</span>
         </div>
       </section>
 
@@ -874,6 +817,7 @@ const Home = () => {
         description=''
         items={ADMIN_ITEMS}
         onOpenDialog={handleOpenDialog}
+        activeYear={activeYear}
         delayBase={190}
       />
 
@@ -886,25 +830,15 @@ const Home = () => {
 
           <div className='home-dev-grid'>
             {DEV_ACCESS_ITEMS.map((item, index) => {
-              const isLocked =
-                Boolean(item.requiredWorkflowState) &&
-                workflowState !== item.requiredWorkflowState
-              const availabilityLabel = isLocked
-                ? getWorkflowStateRequirementLabel(item.requiredWorkflowState)
-                : item.meta
-              const availabilityMessage = isLocked
-                ? getWorkflowStateRequirementMessage(item.requiredWorkflowState)
-                : null
-
               return (
                 <button
                   key={item.dialog}
                   type='button'
                   className='home-dev-action'
-                  title={availabilityMessage || item.meta}
+                  title={item.meta}
                   style={{ "--home-card-delay": `${320 + index * 45}ms` }}
                   onClick={() => handleOpenDialog(item.dialog)}
-                  disabled={isSendingDevAccess || isLocked}
+                  disabled={isSendingDevAccess}
                 >
                   <span className='home-dev-action-icon'>
                     <HomeIcon name={item.icon || "test"} className='home-card-svg' />
@@ -915,7 +849,7 @@ const Home = () => {
                     <span>{item.description}</span>
                   </span>
 
-                  <span className='home-dev-action-meta'>{availabilityLabel}</span>
+                  <span className='home-dev-action-meta'>{item.meta}</span>
                 </button>
               )
             })}

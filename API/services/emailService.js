@@ -4,36 +4,64 @@
  */
 
 const nodemailer = require('nodemailer')
-const { normalizeEmailSettings } = require('./planningCatalogService')
+const { normalizeEmailSettings } = require('./coordinationCatalogService')
+const {
+  formatTpiStakeholderRoleLabel
+} = require('../modules/stakeholders/stakeholderDefinitions')
+
+function normalizeSmtpPort(value) {
+  const parsed = Number.parseInt(String(value || ''), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 587
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value || ''), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function getSmtpTransportConfig(env = process.env) {
+  const port = normalizeSmtpPort(env.SMTP_PORT || (env.NODE_ENV === 'production' ? 465 : 587))
+
+  return {
+    host: sanitizeHeaderText(env.SMTP_HOST),
+    port,
+    secure: port === 465,
+    user: sanitizeHeaderText(env.SMTP_USER),
+    pass: String(env.SMTP_PASS || ''),
+    connectionTimeout: normalizePositiveInteger(env.SMTP_CONNECTION_TIMEOUT_MS, 10000),
+    greetingTimeout: normalizePositiveInteger(env.SMTP_GREETING_TIMEOUT_MS, 10000),
+    socketTimeout: normalizePositiveInteger(env.SMTP_SOCKET_TIMEOUT_MS, 30000)
+  }
+}
 
 // Configuration du transporteur (à adapter selon l'environnement)
 const createTransporter = () => {
-  // En développement, utiliser un service de test comme Ethereal ou Mailtrap
-  if (process.env.NODE_ENV === 'development') {
-    return nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-      port: process.env.SMTP_PORT || 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    })
+  const config = getSmtpTransportConfig()
+  const missing = []
+
+  if (!config.host) missing.push('SMTP_HOST')
+  if (!config.user) missing.push('SMTP_USER')
+  if (!config.pass) missing.push('SMTP_PASS')
+
+  if (missing.length > 0) {
+    const error = new Error(`Configuration SMTP incomplète: ${missing.join(', ')}.`)
+    error.code = 'SMTP_CONFIG_MISSING'
+    throw error
   }
-  
-  // En production, utiliser un vrai service SMTP
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT || 465,
-    secure: true,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    connectionTimeout: config.connectionTimeout,
+    greetingTimeout: config.greetingTimeout,
+    socketTimeout: config.socketTimeout,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      user: config.user,
+      pass: config.pass
     }
   })
 }
-
-const transporter = createTransporter()
 
 function sanitizeHeaderText(value) {
   if (value === null || value === undefined) {
@@ -131,6 +159,189 @@ function formatLinkValidityLabel(hours) {
   }
 
   return `${parsed} heure${parsed > 1 ? 's' : ''}`
+}
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function normalizeEmailRoleList(roles = []) {
+  return (Array.isArray(roles) ? roles : [roles])
+    .map((role) => String(role || '').trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function buildSoutenanceResponseDeadlineCopy(data = {}) {
+  if (data.responseDeadlineCopy) {
+    return String(data.responseDeadlineCopy).trim()
+  }
+
+  const audience = String(data.recipientAudience || '').trim().toLowerCase()
+  const roles = normalizeEmailRoleList(data.recipientRoles)
+
+  if (audience === 'cdp' || roles.includes('chef_projet')) {
+    return 'Merci de faire votre retour dans les 3 jours uniquement si une modification est indispensable.'
+  }
+
+  if (
+    audience === 'expert' ||
+    roles.includes('expert') ||
+    roles.includes('expert1') ||
+    roles.includes('expert2')
+  ) {
+    return 'Merci de faire votre retour dans les 5 jours maximum uniquement si une modification est indispensable.'
+  }
+
+  return ''
+}
+
+function buildAdminSoutenanceViewUrl(value) {
+  const rawUrl = String(value || '').trim()
+
+  if (!rawUrl) {
+    return ''
+  }
+
+  try {
+    const url = new URL(rawUrl)
+    url.searchParams.set('view', 'admin')
+    return url.toString()
+  } catch (error) {
+    return rawUrl
+  }
+}
+
+function buildSoutenanceAccessEmail(data) {
+  const brandName = escapeHtml(data.brandName || 'TPI Organizer')
+  const recipientName = escapeHtml(data.recipientName || '')
+  const year = escapeHtml(data.year)
+  const deadline = escapeHtml(data.deadline)
+  const magicLinkUrl = escapeHtml(data.magicLinkUrl)
+  const recipientRoles = Array.isArray(data.recipientRoles)
+    ? data.recipientRoles.map((role) => String(role || '').trim().toLowerCase()).filter(Boolean)
+    : []
+  const isAdminRecipient = data.isAdmin === true || recipientRoles.includes('admin')
+  const adminGeneralViewUrl = escapeHtml(buildAdminSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl))
+  const responseDeadlineCopy = buildSoutenanceResponseDeadlineCopy(data)
+  const responseDeadlineCopyHtml = escapeHtml(responseDeadlineCopy)
+  const responseDeadlineHtml = responseDeadlineCopyHtml
+    ? `<p style="margin:0 0 14px; font-size:15px; line-height:23px; color:#0f172a;"><strong style="color:#0f766e;">${responseDeadlineCopyHtml}</strong></p>`
+    : ''
+  const adminAccessHtml = isAdminRecipient
+    ? `<p style="margin:0 0 14px; color:#1e40af; font-size:15px; line-height:24px;"><strong>Accès administrateur:</strong> ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.</p><p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;"><a href="${adminGeneralViewUrl}" style="color:#1d4ed8; font-weight:700;">Ouvrir la vue générale admin</a></p>`
+    : ''
+  const responseDeadlineText = responseDeadlineCopy
+    ? `\n      ${responseDeadlineCopy}\n`
+    : ''
+  const adminAccessText = isAdminRecipient
+    ? `\n      Accès administrateur: ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.\n      Vue générale admin: ${buildAdminSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl)}\n`
+    : ''
+
+  return {
+    subject: `[${data.brandName || 'TPI Organizer'}] Horaire des défenses TPI ${data.year}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Horaire des défenses TPI ${year}</title>
+      </head>
+      <body style="margin:0; padding:0; background:#f3f6f8; color:#172033; font-family:Arial, Helvetica, sans-serif;">
+        <div style="display:none; max-height:0; overflow:hidden; color:#f3f6f8; opacity:0;">L’horaire des défenses TPI ${year} est publié. Consultez votre vue personnelle.</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#f3f6f8;">
+          <tr>
+            <td align="center" style="padding:32px 16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; max-width:640px; border-collapse:separate; border-spacing:0; background:#ffffff; border:1px solid #dbe5ec; border-radius:14px; overflow:hidden; box-shadow:0 12px 30px rgba(15, 23, 42, 0.08);">
+                <tr>
+                  <td style="height:6px; line-height:6px; background:#0f766e; font-size:1px;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="padding:26px 30px 20px; background:#ffffff;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                      <tr>
+                        <td style="padding:0;">
+                          <div style="display:inline-block; margin:0 0 12px; padding:5px 10px; border-radius:999px; background:#ecfdf5; color:#0f766e; font-size:12px; line-height:16px; font-weight:700; text-transform:uppercase;">${brandName}</div>
+                          <h1 style="margin:0; color:#0f172a; font-size:25px; line-height:32px; font-weight:700;">Horaire des défenses TPI ${year}</h1>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 30px 30px;">
+                    <p style="margin:0 0 16px; color:#172033; font-size:16px; line-height:25px;">Bonjour ${recipientName},</p>
+                    <p style="margin:0 0 24px; color:#334155; font-size:16px; line-height:26px;">L’horaire des défenses TPI ${year} est publié. Vous pouvez consulter votre vue personnelle avec le lien ci-dessous.</p>
+
+                    <table role="presentation" align="center" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin:0 auto 26px;">
+                      <tr>
+                        <td style="border-radius:10px; background:#0f766e;">
+                          <a href="${magicLinkUrl}" style="display:inline-block; background:#0f766e; color:#ffffff; text-decoration:none; font-weight:700; font-size:16px; line-height:20px; padding:14px 22px; border-radius:10px;">Voir mon horaire</a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate; border-spacing:0; margin:0 0 24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                      <tr>
+                        <td style="padding:18px 20px;">
+                          <p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;">Ce lien donne aussi accès au téléchargement iCal et, si nécessaire, au formulaire de demande de modification.</p>
+                          ${adminAccessHtml}
+                          ${responseDeadlineHtml}
+                          <p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;">Merci de considérer l’horaire comme définitif. Une demande de modification ne doit être déposée qu’en cas d’empêchement réel et important, après avoir vérifié qu’aucune adaptation de votre côté n’est possible.</p>
+                          <p style="margin:0; color:#334155; font-size:15px; line-height:24px;">Les possibilités de déplacement sont très limitées. Toute demande sera examinée, mais aucune modification ne peut être garantie.</p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; border-top:1px solid #e5edf3;">
+                      <tr>
+                        <td style="padding:18px 0 0;">
+                          <p style="margin:0 0 8px; color:#526072; font-size:14px; line-height:21px;"><strong style="color:#172033;">Validité du lien:</strong> ${deadline}</p>
+                          <p style="margin:0 0 20px; color:#64748b; font-size:13px; line-height:20px;">Ce lien est personnel et ne doit pas être partagé.</p>
+                          <p style="margin:0; color:#334155; font-size:15px; line-height:23px;">Meilleures salutations</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `,
+    text: `
+      Horaire des défenses TPI ${data.year}
+
+      Bonjour ${data.recipientName},
+
+      L’horaire des défenses TPI ${data.year} est publié. Vous pouvez consulter votre vue personnelle avec le lien ci-dessous.
+
+      Ouvrir ma vue personnelle:
+      ${data.magicLinkUrl}
+
+      Ce lien donne aussi accès au téléchargement iCal et, si nécessaire, au formulaire de demande de modification.
+      ${adminAccessText}
+      ${responseDeadlineText}
+
+      Merci de considérer l’horaire comme définitif. Une demande de modification ne doit être déposée qu’en cas d’empêchement réel et important, après avoir vérifié qu’aucune adaptation de votre côté n’est possible.
+
+      Les possibilités de déplacement sont très limitées. Toute demande sera examinée, mais aucune modification ne peut être garantie.
+
+      Validité du lien: ${data.deadline}
+      Ce lien est personnel.
+    `
+  }
 }
 
 function buildTemplateData(data = {}, options = {}) {
@@ -237,49 +448,7 @@ const emailTemplates = {
   /**
    * Email d'acces a la vue finale des défenses
    */
-  soutenanceAccess: (data) => ({
-    subject: `[${data.brandName || 'TPI Organizer'}] Acces Défenses ${data.year}`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #0d47a1; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9f9f9; }
-          .button { display: inline-block; padding: 12px 24px; background: #1976d2; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
-          .deadline { color: #d32f2f; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🎓 Défenses publiees</h1>
-          </div>
-          <div class="content">
-            <p>Bonjour ${data.recipientName},</p>
-            <p>La version definitive des défenses ${data.year} est disponible.</p>
-            <p style="text-align: center;">
-              <a href="${data.magicLinkUrl}" class="button">Ouvrir ma vue Défenses</a>
-            </p>
-            <p class="deadline">Validite du lien: ${data.deadline}</p>
-            <p><small>Ce lien est personnel et ne doit pas etre partage.</small></p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `,
-    text: `
-      Défenses publiees ${data.year}
-
-      Bonjour ${data.recipientName},
-
-      La version definitive des défenses est disponible.
-      Ouvrir ma vue: ${data.magicLinkUrl}
-      Validite du lien: ${data.deadline}
-    `
-  }),
+  soutenanceAccess: buildSoutenanceAccessEmail,
 
   /**
    * Email avec un magic link unique pour tous les votes d'une partie prenante.
@@ -558,9 +727,9 @@ const emailTemplates = {
               
               <h4>👥 Participants</h4>
               <ul>
-                <li>Expert 1: ${data.expert1}</li>
-                <li>Expert 2: ${data.expert2}</li>
-                <li>Chef de projet: ${data.chefProjet}</li>
+                <li>${formatTpiStakeholderRoleLabel('expert1')}: ${data.expert1}</li>
+                <li>${formatTpiStakeholderRoleLabel('expert2')}: ${data.expert2}</li>
+                <li>${formatTpiStakeholderRoleLabel('chef_projet')}: ${data.chefProjet}</li>
               </ul>
             </div>
             
@@ -586,9 +755,9 @@ const emailTemplates = {
       Salle: ${data.room}
       Site: ${data.site}
       
-      Expert 1: ${data.expert1}
-      Expert 2: ${data.expert2}
-      Chef de projet: ${data.chefProjet}
+      ${formatTpiStakeholderRoleLabel('expert1')}: ${data.expert1}
+      ${formatTpiStakeholderRoleLabel('expert2')}: ${data.expert2}
+      ${formatTpiStakeholderRoleLabel('chef_projet')}: ${data.chefProjet}
     `
   }),
 
@@ -661,12 +830,17 @@ async function sendEmail(to, template, data, options = {}) {
     fromArbitrage: options.fromArbitrage === true
   })
   
+  let transporter
+
   try {
+    transporter = createTransporter()
     const info = await transporter.sendMail(mailOptions)
     return { success: true, messageId: info.messageId }
   } catch (error) {
     console.error('Erreur envoi email:', error)
     return { success: false, error: error.message }
+  } finally {
+    transporter?.close?.()
   }
 }
 
@@ -683,7 +857,7 @@ async function sendVoteRequests(tpi, magicLinks, options = {}) {
       candidateName,
       tpiReference: tpi.reference,
       tpiSubject: tpi.sujet,
-      role: link.role === 'expert1' || link.role === 'expert2' ? 'Expert' : 'Chef de projet',
+      role: formatTpiStakeholderRoleLabel(link.role),
       slots: link.slots,
       deadline: tpi.votingSession.deadline.toLocaleDateString('fr-CH'),
       magicLinkUrl: link.url
@@ -761,6 +935,7 @@ async function sendSoutenanceConfirmations(tpi, slot, recipients, options = {}) 
 module.exports = {
   buildConfiguredSender,
   buildTemplateData,
+  getSmtpTransportConfig,
   formatLinkValidityLabel,
   buildMailOptions,
   sendEmail,

@@ -2,13 +2,14 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const mongoose = require('mongoose')
 
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const Vote = require('../models/voteModel')
 const {
   ResolutionProposal
 } = require('../models/resolutionProposalModel')
 const emailService = require('../services/emailService')
+const coordinationConfigService = require('../services/coordinationConfigService')
 const resolutionProposalService = require('../services/resolutionProposalService')
 const { makeQueryResult, withStubSandbox } = require('./helpers/stubSandbox')
 
@@ -109,6 +110,67 @@ test('createResolutionProposal envoie une proposition aux rôles concernés', as
     assert.equal(sentEmails[0].template, 'resolutionProposal')
     assert.match(sentEmails[0].data.magicLinkUrl, /^https:\/\/example\.test\/arbitrage-2026\//)
     assert.equal(result.recipients[0].publicUrl, sentEmails[0].data.magicLinkUrl)
+  })
+})
+
+test('createResolutionProposal utilise la durée de liens configurée pour l année', async () => {
+  await withStubSandbox(async (sandbox) => {
+    const tpiId = new mongoose.Types.ObjectId()
+    const slotId = new mongoose.Types.ObjectId()
+    const tpi = {
+      _id: tpiId,
+      year: 2026,
+      reference: 'TPI-2026-CONFIG',
+      status: 'voting',
+      sujet: 'Sujet configuré',
+      candidat: buildPerson('Camille', 'Test', 'candidate@example.com'),
+      expert1: buildPerson('Alice', 'Expert', 'alice@example.com'),
+      expert2: buildPerson('Benoit', 'Expert', 'benoit@example.com'),
+      chefProjet: buildPerson('Claire', 'Projet', 'claire@example.com'),
+      proposedSlots: [{ slot: slotId }]
+    }
+    const slot = {
+      _id: slotId,
+      date: new Date('2026-06-15T00:00:00.000Z'),
+      period: 'morning',
+      room: { name: 'A101' }
+    }
+    let createdPayload = null
+
+    sandbox.replace(TpiPlanning, 'findById', () => makeQueryResult(tpi))
+    sandbox.replace(Slot, 'findById', () => makeQueryResult(slot))
+    sandbox.replace(coordinationConfigService, 'getPlanningConfigIfAvailable', async (year) => {
+      assert.equal(year, 2026)
+      return {
+        accessLinkSettings: {
+          voteLinkValidityHours: 6
+        }
+      }
+    })
+    sandbox.replace(ResolutionProposal, 'create', async (payload) => {
+      createdPayload = payload
+      return {
+        _id: new mongoose.Types.ObjectId(),
+        ...payload,
+        recipients: payload.recipients.map((recipient) => ({ ...recipient })),
+        save: async function save() {
+          return this
+        }
+      }
+    })
+    sandbox.replace(emailService, 'sendEmail', async () => ({ success: true }))
+
+    const before = Date.now()
+    await resolutionProposalService.createResolutionProposal({
+      tpiId,
+      slotId,
+      baseUrl: 'https://example.test'
+    })
+    const after = Date.now()
+
+    assert.ok(createdPayload.expiresAt instanceof Date)
+    assert.ok(createdPayload.expiresAt.getTime() >= before + 6 * 60 * 60 * 1000)
+    assert.ok(createdPayload.expiresAt.getTime() <= after + 6 * 60 * 60 * 1000 + 1000)
   })
 })
 
@@ -356,6 +418,49 @@ test('createResolutionProposal signale un échec email avant de marquer transmis
 
     assert.equal(proposal.status, 'failed')
     assert.equal(proposal.saveCalls, 1)
+  })
+})
+
+test('getPublicResolutionProposal refuse un lien expiré sans exposer la proposition', async () => {
+  await withStubSandbox(async (sandbox) => {
+    const token = 'public-token-expired'
+    const tokenHash = resolutionProposalService.hashToken(token)
+    let saveCount = 0
+    const proposal = {
+      _id: new mongoose.Types.ObjectId(),
+      year: 2026,
+      tpiPlanning: new mongoose.Types.ObjectId(),
+      tpiReference: 'TPI-2026-EXPIRED',
+      candidateName: 'Camille Test',
+      subject: 'Sujet expiré',
+      proposedSlot: new mongoose.Types.ObjectId(),
+      proposedSlotSnapshot: { label: '15.06.2026 · Matin · A101' },
+      status: 'sent',
+      recipients: [{
+        role: 'expert1',
+        name: 'Alice Expert',
+        email: 'alice@example.com',
+        tokenHash,
+        responseStatus: 'pending'
+      }],
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000),
+      createdAt: new Date(),
+      sentAt: new Date(),
+      save: async function save() {
+        saveCount += 1
+        return this
+      }
+    }
+
+    sandbox.replace(ResolutionProposal, 'findOne', () => makeQueryResult(proposal))
+
+    await assert.rejects(
+      () => resolutionProposalService.getPublicResolutionProposal(token),
+      /Cette proposition est expirée/
+    )
+
+    assert.equal(proposal.status, 'expired')
+    assert.equal(saveCount, 1)
   })
 })
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router-dom"
 
 import { soutenancesService } from "../../services/apiService"
-import { workflowPlanningService } from "../../services/planningService"
+import { workflowCoordinationService } from "../../services/coordinationService"
 import { getStoredAuthToken } from "../../utils/storage"
 import { showNotification } from "../Tools"
 import {
@@ -31,11 +31,18 @@ const useToken = () => {
     .find((value) => typeof value === "string" && value.trim())
     ?.trim() || ""
   const magicLinkToken = queryParams.get("ml")?.trim() || ""
+  const viewParam = String(queryParams.get("view") || queryParams.get("mode") || "").trim().toLowerCase()
+  const adminViewParam = String(queryParams.get("adminView") || queryParams.get("admin") || "").trim().toLowerCase()
 
   return {
     legacyToken,
     magicLinkToken,
-    focusReference: queryParams.get("focus") || ""
+    focusReference: queryParams.get("focus") || "",
+    adminGeneralViewRequested:
+      viewParam === "admin" ||
+      viewParam === "general" ||
+      adminViewParam === "1" ||
+      adminViewParam === "true"
   }
 }
 
@@ -218,44 +225,63 @@ const doesTpiMatchViewer = (tpi, viewer = null) => {
   return names.some(name => normalizeText(name).includes(normalizedViewer))
 }
 
-export const filterRooms = (rooms, filters, magicLinkViewer = null) =>
+const isAdminViewer = (viewer = null) => (
+  viewer?.isAdmin === true ||
+  (Array.isArray(viewer?.roles) && viewer.roles.some((role) => normalizeText(role) === "admin"))
+)
+
+const getEffectiveFilters = (filters = {}, adminGeneralView = false) => {
+  if (!adminGeneralView) {
+    return filters
+  }
+
+  return {
+    ...defaultFilters,
+    date: filters.date || "",
+    classType: filters.classType || ""
+  }
+}
+
+export const filterRooms = (rooms, filters, magicLinkViewer = null, adminGeneralView = false) =>
   rooms.flatMap((room) => {
-    if (filters.classType && getRoomClassFilterValue(room) !== filters.classType) {
+    const effectiveFilters = getEffectiveFilters(filters, adminGeneralView)
+
+    if (effectiveFilters.classType && getRoomClassFilterValue(room) !== effectiveFilters.classType) {
       return []
     }
 
     const filteredTpis = room.tpiDatas.filter((tpi) => {
-      if (!doesTpiMatchViewer(tpi, magicLinkViewer)) {
+      if (!adminGeneralView && !doesTpiMatchViewer(tpi, magicLinkViewer)) {
         return false
       }
 
       return (
-        (!filters.nameRoom || room.name === filters.nameRoom) &&
-        (!filters.site || room.site === filters.site) &&
-        (!filters.date || formatDate(room.date) === filters.date) &&
-        (!filters.reference || matchesReferenceFilter(filters.reference, tpi.refTpi)) &&
-        (!filters.candidate ||
-          tpi.candidat.toLowerCase().includes(filters.candidate.toLowerCase())) &&
-        (!filters.experts ||
-          tpi.expert1?.name.toLowerCase().includes(filters.experts.toLowerCase()) ||
+        (!effectiveFilters.nameRoom || room.name === effectiveFilters.nameRoom) &&
+        (!effectiveFilters.site || room.site === effectiveFilters.site) &&
+        (!effectiveFilters.date || formatDate(room.date) === effectiveFilters.date) &&
+        (!effectiveFilters.reference || matchesReferenceFilter(effectiveFilters.reference, tpi.refTpi)) &&
+        (!effectiveFilters.candidate ||
+          tpi.candidat.toLowerCase().includes(effectiveFilters.candidate.toLowerCase())) &&
+        (!effectiveFilters.experts ||
+          tpi.expert1?.name.toLowerCase().includes(effectiveFilters.experts.toLowerCase()) ||
           tpi.expert2?.name
             .toLowerCase()
-            .includes(filters.experts.toLowerCase())) &&
-        (!filters.projectManagerButton ||
+            .includes(effectiveFilters.experts.toLowerCase())) &&
+        (!effectiveFilters.projectManagerButton ||
           tpi.expert1?.name
             .toLowerCase()
-            .includes(filters.projectManagerButton.toLowerCase()) ||
+            .includes(effectiveFilters.projectManagerButton.toLowerCase()) ||
           tpi.expert2?.name
             .toLowerCase()
-            .includes(filters.projectManagerButton.toLowerCase()) ||
+            .includes(effectiveFilters.projectManagerButton.toLowerCase()) ||
           tpi.boss?.name
             .toLowerCase()
-            .includes(filters.projectManagerButton.toLowerCase())) &&
-        (!filters.projectManager ||
+            .includes(effectiveFilters.projectManagerButton.toLowerCase())) &&
+        (!effectiveFilters.projectManager ||
           (tpi.boss?.name &&
             tpi.boss.name
               .toLowerCase()
-              .includes(filters.projectManager.toLowerCase())))
+              .includes(effectiveFilters.projectManager.toLowerCase())))
       )
     })
 
@@ -278,18 +304,19 @@ export const isFilterApplied = (filters) =>
   filters.projectManagerButton !== ""
 
 export const useSoutenanceData = (year) => {
-  const { legacyToken: token, magicLinkToken, focusReference } = useToken()
+  const { legacyToken: token, magicLinkToken, focusReference, adminGeneralViewRequested } = useToken()
   const [soutenanceData, setSoutenanceData] = useState([])
   const [expertOrBoss, setExpertOrBoss] = useState(null)
   const [listOfExpertsOrBoss, setListOfExpertsOrBoss] = useState([])
   const [magicLinkViewer, setMagicLinkViewer] = useState(null)
+  const [adminGeneralView, setAdminGeneralView] = useState(adminGeneralViewRequested)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filters, setFilters] = useState(defaultFilters)
 
   const filteredData = useMemo(
-    () => filterRooms(soutenanceData, filters, magicLinkViewer),
-    [soutenanceData, filters, magicLinkViewer]
+    () => filterRooms(soutenanceData, filters, magicLinkViewer, adminGeneralView),
+    [soutenanceData, filters, magicLinkViewer, adminGeneralView]
   )
 
   const uniqueSalles = useMemo(() => {
@@ -346,7 +373,8 @@ export const useSoutenanceData = (year) => {
       const [rooms, experts] = await Promise.all([
         fetchSoutenanceData(year, {
           ml: magicLinkToken || undefined,
-          token: token || undefined
+          token: token || undefined,
+          view: adminGeneralView ? "admin" : undefined
         }),
         fetchTpiListExperts()
       ])
@@ -364,7 +392,7 @@ export const useSoutenanceData = (year) => {
     } finally {
       setIsLoading(false)
     }
-  }, [year, magicLinkToken, token])
+  }, [year, magicLinkToken, token, adminGeneralView])
 
   useEffect(() => {
     loadData().catch(console.error)
@@ -376,23 +404,32 @@ export const useSoutenanceData = (year) => {
     const resolveMagicLink = async () => {
       if (!magicLinkToken) {
         setMagicLinkViewer(null)
+        setAdminGeneralView(false)
         return
       }
 
       setMagicLinkViewer(null)
 
       try {
-        const resolved = await workflowPlanningService.resolveMagicLink(magicLinkToken)
+        const resolved = await workflowCoordinationService.resolveMagicLink(magicLinkToken)
         if (!isCancelled && resolved?.type === "soutenance") {
           if (resolved?.year && String(resolved.year) !== String(year)) {
             setError(`Ce lien cible l annee ${resolved.year} et non ${year}.`)
             return
           }
 
-          setMagicLinkViewer(resolved.viewer || null)
+          const linkedVoteAccessUrl = resolved?.linkedVoteAccess?.url || resolved?.viewer?.voteAccessUrl || ""
+          const viewer = {
+            ...(resolved.viewer || {}),
+            voteAccessUrl: linkedVoteAccessUrl || null,
+            voteAccessExpiresAt: resolved?.linkedVoteAccess?.expiresAt || resolved?.viewer?.voteAccessExpiresAt || null
+          }
+          setMagicLinkViewer(viewer)
+          setAdminGeneralView(adminGeneralViewRequested && isAdminViewer(viewer))
         }
       } catch (resolveError) {
         if (!isCancelled) {
+          setAdminGeneralView(false)
           setError(resolveError?.data?.error || "Lien magique invalide ou expire")
         }
       }
@@ -403,7 +440,7 @@ export const useSoutenanceData = (year) => {
     return () => {
       isCancelled = true
     }
-  }, [magicLinkToken, year])
+  }, [magicLinkToken, year, adminGeneralViewRequested])
 
   useEffect(() => {
     if (magicLinkViewer?.personId || magicLinkViewer?.name) {
@@ -533,6 +570,9 @@ export const useSoutenanceData = (year) => {
     schedule,
     displayedSchedule,
     isFilterApplied: isFilterApplied(filters),
-    aggregatedICalPersonLabel
+    aggregatedICalPersonLabel,
+    adminGeneralView,
+    setAdminGeneralView,
+    isAdminMagicLinkViewer: isAdminViewer(magicLinkViewer)
   }
 }

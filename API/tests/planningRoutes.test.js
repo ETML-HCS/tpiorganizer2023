@@ -1,6 +1,6 @@
 /**
  * Tests des routes de planification (voting, conflits, calendrier)
- * Teste les flux critiques identifiés comme TODOs
+ * Teste les flux critiques de coordination.
  */
 
 const test = require('node:test')
@@ -23,10 +23,10 @@ const Vote = require('../models/voteModel')
 const schedulingService = require('../services/schedulingService')
 
 // ============================================
-// Tests: Resend Vote Requests (TODO#1)
+// Tests: renvoi des demandes de vote
 // ============================================
 
-test('POST /api/planning/tpi/:id/resend-votes successfully resends voting requests', async () => {
+test('POST /api/coordination/tpi/:id/resend-votes successfully resends voting requests', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -34,7 +34,7 @@ test('POST /api/planning/tpi/:id/resend-votes successfully resends voting reques
     AUTH_PASS_HASH: bcrypt.hashSync('admin', 4),
     AUTH_SESSION_SECRET: 'test-auth-secret',
     JWT_SECRET: 'test-jwt-secret',
-    SKIP_PLANNING_AUTH: 'true',
+    SKIP_COORDINATION_AUTH: 'true',
     NODE_ENV: 'development',
     SMTP_HOST: 'smtp.ethereal.email',
     SMTP_PORT: '587',
@@ -49,7 +49,7 @@ test('POST /api/planning/tpi/:id/resend-votes successfully resends voting reques
   try {
     // Test: resend-votes endpoint exists and requires auth
     // Note: Ce test nécessite une BDD mockée - adaptez selon votre setup
-    const response = await fetch(`${baseUrl}/api/planning/tpi/test-id/resend-votes`, {
+    const response = await fetch(`${baseUrl}/api/coordination/tpi/test-id/resend-votes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     })
@@ -64,7 +64,7 @@ test('POST /api/planning/tpi/:id/resend-votes successfully resends voting reques
   }
 })
 
-test('POST /api/planning/tpi/:id/resend-votes requires authentication', async () => {
+test('POST /api/coordination/tpi/:id/resend-votes requires authentication', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_SESSION_SECRET: 'test-auth-secret',
     JWT_SECRET: 'test-jwt-secret'
@@ -73,7 +73,7 @@ test('POST /api/planning/tpi/:id/resend-votes requires authentication', async ()
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/tpi/test-id/resend-votes`, {
+    const response = await fetch(`${baseUrl}/api/coordination/tpi/test-id/resend-votes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
       // NO Authorization header
@@ -90,21 +90,21 @@ test('POST /api/planning/tpi/:id/resend-votes requires authentication', async ()
 })
 
 // ============================================
-// Tests: Loading Availability (TODO#2)
+// Tests: chargement des disponibilités
 // ============================================
 
-test('GET /api/planning/availability/:year/:tpiId returns available slots', async () => {
+test('GET /api/coordination/availability/:year/:tpiId returns available slots', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_SESSION_SECRET: 'test-auth-secret',
     JWT_SECRET: 'test-jwt-secret',
-    SKIP_PLANNING_AUTH: 'true'
+    SKIP_COORDINATION_AUTH: 'true'
   })
 
   const { server, baseUrl } = await startServer(app)
 
   try {
     // Test: availability endpoint exists
-    const response = await fetch(`${baseUrl}/api/planning/availability/2026/test-tpi-id`, {
+    const response = await fetch(`${baseUrl}/api/coordination/availability/2026/test-tpi-id`, {
       method: 'GET'
     })
 
@@ -118,7 +118,7 @@ test('GET /api/planning/availability/:year/:tpiId returns available slots', asyn
   }
 })
 
-test('POST /api/planning/tpi/:id/move-to-slot/:slotId/simulate retourne la simulation de déplacement', async () => {
+test('POST /api/coordination/tpi/:id/move-to-slot/:slotId/simulate retourne la simulation de déplacement', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const tpiId = new mongoose.Types.ObjectId().toString()
@@ -141,7 +141,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId/simulate retourne la simul
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/tpi/${tpiId}/move-to-slot/${slotId}/simulate`, {
+    const response = await fetch(`${baseUrl}/api/coordination/tpi/${tpiId}/move-to-slot/${slotId}/simulate`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -162,7 +162,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId/simulate retourne la simul
   }
 })
 
-test('POST /api/planning/tpi/:id/move-to-slot/:slotId retourne 409 quand le déplacement est bloqué', async () => {
+test('POST /api/coordination/tpi/:id/move-to-slot/:slotId retourne 409 quand le déplacement est bloqué', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const tpiId = new mongoose.Types.ObjectId().toString()
@@ -190,7 +190,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId retourne 409 quand le dép
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/tpi/${tpiId}/move-to-slot/${slotId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/tpi/${tpiId}/move-to-slot/${slotId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -216,7 +216,7 @@ test('POST /api/planning/tpi/:id/move-to-slot/:slotId retourne 409 quand le dép
   }
 })
 
-test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates existing choices', async () => {
+test('POST /api/coordination/votes/:id/preferred-soutenance-choice deduplicates existing choices', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const voteId = new mongoose.Types.ObjectId()
@@ -259,7 +259,7 @@ test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates exis
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/${voteId}/preferred-soutenance-choice`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/${voteId}/preferred-soutenance-choice`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -285,7 +285,7 @@ test('POST /api/planning/votes/:id/preferred-soutenance-choice deduplicates exis
   }
 })
 
-test('POST /api/planning/votes/:id/preferred-soutenance-choice précise une date idéale existante', async () => {
+test('POST /api/coordination/votes/:id/preferred-soutenance-choice précise une date idéale existante', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const voteId = new mongoose.Types.ObjectId()
@@ -326,7 +326,7 @@ test('POST /api/planning/votes/:id/preferred-soutenance-choice précise une date
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/${voteId}/preferred-soutenance-choice`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/${voteId}/preferred-soutenance-choice`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -386,14 +386,14 @@ test('Invalid TPI ID should return proper error', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_SESSION_SECRET: 'test-auth-secret',
     JWT_SECRET: 'test-jwt-secret',
-    SKIP_PLANNING_AUTH: 'true'
+    SKIP_COORDINATION_AUTH: 'true'
   })
 
   const { server, baseUrl } = await startServer(app)
 
   try {
     // Test avec un ID invalide (pas MongoDB ObjectId valide)
-    const response = await fetch(`${baseUrl}/api/planning/tpi/invalid-id/resend-votes`, {
+    const response = await fetch(`${baseUrl}/api/coordination/tpi/invalid-id/resend-votes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     })
@@ -458,7 +458,7 @@ test('Database connection should use secure config', async () => {
   restoreEnv()
 })
 
-test('GET /api/planning/catalog returns 503 when database config is unavailable', async () => {
+test('GET /api/coordination/catalog returns 503 when database config is unavailable', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_SESSION_SECRET: 'test-auth-secret',
     JWT_SECRET: 'test-jwt-secret',
@@ -472,7 +472,7 @@ test('GET /api/planning/catalog returns 503 when database config is unavailable'
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/catalog`)
+    const response = await fetch(`${baseUrl}/api/coordination/catalog`)
 
     assert.equal(response.status, 503)
     const error = await response.json()
@@ -483,7 +483,7 @@ test('GET /api/planning/catalog returns 503 when database config is unavailable'
   }
 })
 
-test('GET /api/planning/config/:year returns 503 when database config is unavailable', async () => {
+test('GET /api/coordination/config/:year returns 503 when database config is unavailable', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_SESSION_SECRET: 'test-auth-secret',
     JWT_SECRET: 'test-jwt-secret',
@@ -497,7 +497,7 @@ test('GET /api/planning/config/:year returns 503 when database config is unavail
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/config/2026`)
+    const response = await fetch(`${baseUrl}/api/coordination/config/2026`)
 
     assert.equal(response.status, 503)
     const error = await response.json()

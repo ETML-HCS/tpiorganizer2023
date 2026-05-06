@@ -7,6 +7,7 @@ export const buildValidationToast = (year, result) => {
   const sequenceViolationCount = Number(summary.sequenceViolationCount || 0)
   const importIssueCount = Number(summary.importIssueCount || 0)
   const unplannedTpiCount = Number(summary.unplannedTpiCount || 0)
+  const warningCount = Number(summary.warningCount || summary.constraintOverrideWarningCount || 0)
   const issueCount = Number(summary.issueCount || hardConflictCount)
 
   if (issueCount > 0) {
@@ -45,9 +46,17 @@ export const buildValidationToast = (year, result) => {
     }
   }
 
+  if (warningCount > 0) {
+    return {
+      level: 'warning',
+      message: `Vérification ${year} terminée: planification valide avec ${warningCount} avertissement(s) de contrainte indiqué(s) sur les cartes.`,
+      toastId: `workflow-validate-${year}`
+    }
+  }
+
   return {
     level: 'success',
-    message: `Vérification ${year} terminée: planning valide, aucune contrainte bloquante détectée.`,
+    message: `Vérification ${year} terminée: planification valide, aucune contrainte bloquante détectée.`,
     toastId: `workflow-validate-${year}`
   }
 }

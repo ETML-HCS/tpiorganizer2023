@@ -1,7 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const PlanningConfig = require('../models/planningConfigModel')
+const PlanningConfig = require('../models/coordinationConfigModel')
 const PublicationVersion = require('../models/publicationVersionModel')
 const {
   enrichLegacyTpisWithDerivedDates
@@ -15,7 +15,7 @@ test('enrichLegacyTpisWithDerivedDates falls back when optional context queries 
 
   PlanningConfig.findOne = () => ({
     lean: async () => {
-      throw new Error('planning timeout')
+      throw new Error('planification timeout')
     }
   })
 

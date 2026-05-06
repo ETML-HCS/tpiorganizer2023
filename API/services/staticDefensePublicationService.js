@@ -1,19 +1,34 @@
+const crypto = require('crypto')
 const fs = require('fs')
 const net = require('net')
 const path = require('path')
 const { rootDir } = require('../config/loadEnv')
 const { listPublishedSoutenances } = require('./publishedSoutenanceService')
 const { MagicLink } = require('../models/magicLinkModel')
-const { getSharedPublicationSettingsIfAvailable } = require('./planningCatalogService')
+const Person = require('../models/personModel')
+const { getSharedPublicationSettingsIfAvailable } = require('./coordinationCatalogService')
+const { ACCESS_LINK_SOURCES } = require('../modules/accessLinks/constants')
 const {
   getPublicationDeploymentConfigIfAvailable
 } = require('./publicationDeploymentConfigService')
+const {
+  formatTpiStakeholderRoleLabel
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
 const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
 const FTP_RESPONSE_TIMEOUT_MS = 15000
 const DEFAULT_STATIC_PUBLIC_PATH_PREFIX = 'soutenances'
+const STATIC_VOTE_LINK_CIPHER = 'aes-256-gcm'
+const STATIC_VOTE_LINK_KEY_PREFIX = 'tpi-static-defense-linked-vote:'
 const STATIC_MAGIC_LINK_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_MAGIC_LINK_BOOTSTRAP -->'
+const STATIC_ROLE_LABELS = Object.freeze({
+  candidat: formatTpiStakeholderRoleLabel('candidat'),
+  expert1: formatTpiStakeholderRoleLabel('expert1'),
+  expert2: formatTpiStakeholderRoleLabel('expert2'),
+  chefProjet: formatTpiStakeholderRoleLabel('chef_projet')
+})
+const STATIC_SLOT_NAME_MAX_LENGTH = 24
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -442,6 +457,39 @@ async function getConfiguredPublicBaseUrl(deploymentConfig = null) {
   )
 }
 
+async function getConfiguredVotePublicBaseUrl(deploymentConfig = null) {
+  const configuredDeploymentUrl = compactText(deploymentConfig?.publicBaseUrl)
+  const publicationSettings = await getSharedPublicationSettingsIfAvailable()
+  const configuredCatalogUrl = compactText(publicationSettings?.publicBaseUrl)
+  const configuredEnvUrl = compactText(
+    process.env.STATIC_VOTE_PUBLIC_BASE_URL ||
+    process.env.STATIC_PUBLIC_BASE_URL ||
+    process.env.PUBLIC_SITE_BASE_URL
+  )
+  const normalizedDefaultUrl = normalizePublicBaseUrl(DEFAULT_PUBLIC_BASE_URL)
+  const normalizedDeploymentUrl = configuredDeploymentUrl
+    ? normalizePublicBaseUrl(configuredDeploymentUrl)
+    : ''
+  const normalizedCatalogUrl = configuredCatalogUrl
+    ? normalizePublicBaseUrl(configuredCatalogUrl)
+    : ''
+
+  if (normalizedDeploymentUrl && normalizedDeploymentUrl !== normalizedDefaultUrl) {
+    return normalizedDeploymentUrl
+  }
+
+  if (normalizedCatalogUrl && normalizedCatalogUrl !== normalizedDefaultUrl) {
+    return normalizedCatalogUrl
+  }
+
+  return normalizePublicBaseUrl(
+    configuredEnvUrl ||
+    normalizedDeploymentUrl ||
+    normalizedCatalogUrl ||
+    DEFAULT_PUBLIC_BASE_URL
+  )
+}
+
 async function getPublicUrl(year, deploymentConfig = null) {
   const baseUrl = compactText(
     await getConfiguredPublicBaseUrl(deploymentConfig)
@@ -535,6 +583,20 @@ function getRoomClassBadgeClass(roomClassLabel) {
   return ''
 }
 
+function normalizeRoomClassModeValue(value) {
+  const normalizedValue = compactText(value).toLowerCase()
+
+  if (normalizedValue === 'matu') {
+    return 'matu'
+  }
+
+  if (normalizedValue === 'special') {
+    return 'special'
+  }
+
+  return ''
+}
+
 function buildStaticRoomStyle(room) {
   const color = normalizeOptionalSoutenanceColor(room?.configSite)
 
@@ -585,7 +647,7 @@ function rowsToRooms(rows = []) {
         site: row.site || '',
         name: row.room || '',
         date: row.date || '',
-        roomClassMode: String(row.classType || '').toLowerCase(),
+        roomClassMode: normalizeRoomClassModeValue(row.classType),
         configSite: {},
         tpiDatas: []
       })
@@ -675,8 +737,113 @@ body {
   white-space: nowrap;
 }
 
+.static-soutenance-page .static-admin-filters {
+  padding: var(--soutenance-space-2);
+}
+
+.static-soutenance-page .static-admin-filters .soutenance-toolbar-filters {
+  justify-content: flex-start;
+}
+
+.static-soutenance-page .static-admin-view-toggle {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.static-soutenance-page .static-admin-view-toggle[aria-pressed="true"] {
+  border-color: #0f766e;
+  background: #0f766e;
+}
+
 .static-soutenance-page .static-hidden {
   display: none !important;
+}
+
+.static-soutenance-page .static-print-schedule {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .tpi-soutenance-page.static-soutenance-page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .static-soutenance-page .soutenance-toolbar,
+  .static-soutenance-page #focus-banner,
+  .static-soutenance-page #soutenances,
+  .static-soutenance-page #static-person-ical {
+    display: none !important;
+  }
+
+  .static-soutenance-page .static-print-schedule {
+    display: block !important;
+    color: #111827;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .static-soutenance-page .static-print-title {
+    margin: 0 0 3mm;
+    color: #111827;
+    font-size: 15pt;
+    line-height: 1.2;
+  }
+
+  .static-soutenance-page .static-print-meta {
+    margin: 0 0 5mm;
+    color: #4b5563;
+    font-size: 9pt;
+  }
+
+  .static-soutenance-page .static-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+
+  .static-soutenance-page .static-print-table th,
+  .static-soutenance-page .static-print-table td {
+    padding: 2.4mm 2mm;
+    border: 1px solid #d1d5db;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .static-soutenance-page .static-print-table th {
+    background: #f3f4f6;
+    color: #111827;
+    font-weight: 700;
+  }
+
+  .static-soutenance-page .static-print-table tr {
+    break-inside: avoid;
+  }
+
+  .static-soutenance-page .static-print-time {
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  .static-soutenance-page .static-print-location strong,
+  .static-soutenance-page .static-print-location span {
+    display: block;
+  }
+
+  .static-soutenance-page .static-print-location span {
+    color: #4b5563;
+    font-size: 8pt;
+  }
+
+  .static-soutenance-page .static-print-empty {
+    margin: 0;
+    color: #4b5563;
+    font-size: 10pt;
+  }
 }
 
 `
@@ -721,6 +888,36 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       </div>
     </header>
 
+    <section
+      class="soutenance-toolbar static-admin-filters static-hidden"
+      id="static-admin-filters"
+      aria-label="Filtres de la vue générale admin"
+    >
+      <div class="soutenance-toolbar-filters">
+        <label class="soutenance-filter-block">
+          <select
+            id="static-admin-filter-date"
+            aria-label="Filtrer la vue admin par date"
+            disabled
+          >
+            <option value="">Date</option>
+          </select>
+        </label>
+        <label class="soutenance-filter-block">
+          <select
+            id="static-admin-filter-class-type"
+            aria-label="Filtrer la vue admin par type de classe"
+            disabled
+          >
+            <option value="">Type</option>
+            <option value="matu">MATU</option>
+            <option value="special">SPECIAL</option>
+            <option value="noBadge">Sans badge</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
     <section class="soutenance-focus-banner static-hidden" id="focus-banner">
       <div>
         <strong id="focus-title"></strong>
@@ -744,8 +941,14 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       </section>
     </div>
 
+    <section
+      class="static-print-schedule"
+      id="static-print-schedule"
+      aria-label="Horaires à imprimer"
+    ></section>
+
     <section class="soutenance-person-ical static-hidden" id="static-person-ical">
-      <p>Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.</p>
+      <p id="static-person-actions-copy">Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.</p>
       <div class="soutenance-person-ical-actions">
         <button
           type="button"
@@ -756,6 +959,21 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         >
           <span id="static-person-ical-label">Télécharger votre iCal</span>
         </button>
+        <a
+          class="soutenance-person-vote-button static-hidden"
+          id="static-person-vote-link"
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Demander une modification</a>
+        <button
+          type="button"
+          class="soutenance-person-ical-button static-admin-view-toggle static-hidden"
+          id="static-admin-view-toggle"
+          aria-label="Afficher la vue générale administrateur"
+          aria-pressed="false"
+          disabled
+        >Vue générale admin</button>
       </div>
     </section>
   </div>
@@ -783,7 +1001,16 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       var personIcalNode = document.getElementById('static-person-ical');
       var personIcalButton = document.getElementById('static-person-ical-download');
       var personIcalLabel = document.getElementById('static-person-ical-label');
+      var personActionsCopy = document.getElementById('static-person-actions-copy');
+      var personVoteLink = document.getElementById('static-person-vote-link');
+      var adminViewToggle = document.getElementById('static-admin-view-toggle');
+      var adminFiltersNode = document.getElementById('static-admin-filters');
+      var adminDateFilter = document.getElementById('static-admin-filter-date');
+      var adminClassTypeFilter = document.getElementById('static-admin-filter-class-type');
+      var printScheduleNode = document.getElementById('static-print-schedule');
+      var SLOT_NAME_MAX_LENGTH = ${STATIC_SLOT_NAME_MAX_LENGTH};
       var currentPersonIcalEvents = [];
+      var adminGeneralView = false;
       var filters = {
         site: '',
         date: '',
@@ -809,6 +1036,30 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           .replace(/'/g, '&#39;');
       }
 
+      function truncateSlotName(value) {
+        var text = String(value || '');
+        if (text.length <= SLOT_NAME_MAX_LENGTH) {
+          return {
+            text: text,
+            isTruncated: false
+          };
+        }
+
+        return {
+          text: text.substring(0, SLOT_NAME_MAX_LENGTH - 3) + '...',
+          isTruncated: true
+        };
+      }
+
+      function renderSlotName(value) {
+        var originalText = String(value || '');
+        var truncated = truncateSlotName(originalText);
+        var className = truncated.isTruncated ? 'truncated-text' : 'nameTpi';
+        var title = truncated.isTruncated ? ' title="' + html(originalText) + '"' : '';
+
+        return '<span class="' + className + '"' + title + '>' + html(truncated.text) + '</span>';
+      }
+
       function normalizeReference(value) {
         return normalizeText(value).replace(/^tpi-\\d{4}-/i, '');
       }
@@ -821,6 +1072,111 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         return Boolean(normalizedFilter && normalizedReference && (
           normalizedFilter === normalizedReference || rawFilter === rawReference
         ));
+      }
+
+      function isAdminViewer(viewer) {
+        if (!viewer) {
+          return false;
+        }
+
+        if (viewer.isAdmin === true) {
+          return true;
+        }
+
+        var roles = Array.isArray(viewer.roles) ? viewer.roles : [];
+        return roles.some(function (role) {
+          return String(role || '').trim().toLowerCase() === 'admin';
+        });
+      }
+
+      function isAdminGeneralViewActive() {
+        return Boolean(adminGeneralView && isAdminViewer(magicLinkViewer));
+      }
+
+      function getEffectiveFilters() {
+        if (!isAdminGeneralViewActive()) {
+          return filters;
+        }
+
+        return {
+          site: '',
+          date: filters.date,
+          reference: '',
+          candidate: '',
+          experts: '',
+          projectManagerButton: '',
+          projectManager: '',
+          classType: filters.classType,
+          nameRoom: ''
+        };
+      }
+
+      function getUniqueAdminDateOptions() {
+        var seen = new Set();
+        return rooms.reduce(function (options, room) {
+          var label = (room._static && room._static.dateLabel) || room.date || '';
+          if (!label || seen.has(label)) {
+            return options;
+          }
+
+          seen.add(label);
+          options.push(label);
+          return options;
+        }, []);
+      }
+
+      function populateAdminFilters() {
+        if (adminDateFilter) {
+          adminDateFilter.innerHTML = '<option value="">Date</option>' + getUniqueAdminDateOptions()
+            .map(function (date) {
+              return '<option value="' + html(date) + '">' + html(date) + '</option>';
+            })
+            .join('');
+        }
+      }
+
+      function setSelectValue(select, value) {
+        if (!select) {
+          return;
+        }
+
+        select.value = value || '';
+        if (select.value !== (value || '')) {
+          select.value = '';
+        }
+      }
+
+      function updateFilterQueryParam(name, value) {
+        if (!window.history || typeof window.history.replaceState !== 'function') {
+          return;
+        }
+
+        var nextUrl = new URL(window.location.href);
+        if (value) {
+          nextUrl.searchParams.set(name, value);
+        } else {
+          nextUrl.searchParams.delete(name);
+        }
+        queryParams = new URLSearchParams(nextUrl.search);
+        window.history.replaceState({}, '', nextUrl.toString());
+      }
+
+      function syncAdminFilters() {
+        var isGeneralView = isAdminGeneralViewActive();
+
+        if (adminFiltersNode) {
+          adminFiltersNode.classList.toggle('static-hidden', !isGeneralView);
+        }
+
+        if (adminDateFilter) {
+          adminDateFilter.disabled = !isGeneralView;
+          setSelectValue(adminDateFilter, filters.date);
+        }
+
+        if (adminClassTypeFilter) {
+          adminClassTypeFilter.disabled = !isGeneralView;
+          setSelectValue(adminClassTypeFilter, filters.classType);
+        }
       }
 
       function getRoomSlots(room) {
@@ -914,12 +1270,13 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       }
 
       function shouldShowEmptySlots() {
-        if (magicLinkViewer || magicLinkPending || magicLinkError) {
+        if ((magicLinkViewer && !isAdminGeneralViewActive()) || magicLinkPending || magicLinkError) {
           return false;
         }
 
-        var activeKeys = Object.keys(filters).filter(function (key) {
-          return filters[key];
+        var effectiveFilters = getEffectiveFilters();
+        var activeKeys = Object.keys(effectiveFilters).filter(function (key) {
+          return effectiveFilters[key];
         });
         var structural = new Set(['date', 'nameRoom', 'classType']);
         return activeKeys.length === 0 || activeKeys.every(function (key) {
@@ -928,10 +1285,11 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       }
 
       function roomMatches(room) {
-        if (filters.classType && ((room._static && room._static.classFilterValue) || 'noBadge') !== filters.classType) return false;
-        if (filters.nameRoom && room.name !== filters.nameRoom) return false;
-        if (filters.site && room.site !== filters.site) return false;
-        if (filters.date && ((room._static && room._static.dateLabel) !== filters.date && room.date !== filters.date)) return false;
+        var effectiveFilters = getEffectiveFilters();
+        if (effectiveFilters.classType && ((room._static && room._static.classFilterValue) || 'noBadge') !== effectiveFilters.classType) return false;
+        if (effectiveFilters.nameRoom && room.name !== effectiveFilters.nameRoom) return false;
+        if (effectiveFilters.site && room.site !== effectiveFilters.site) return false;
+        if (effectiveFilters.date && ((room._static && room._static.dateLabel) !== effectiveFilters.date && room.date !== effectiveFilters.date)) return false;
         return true;
       }
 
@@ -957,20 +1315,21 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       }
 
       function tpiMatches(tpi) {
+        var effectiveFilters = getEffectiveFilters();
         if (!tpi) return false;
         if (magicLinkPending || magicLinkError) return false;
-        if (!doesTpiMatchViewer(tpi, magicLinkViewer)) return false;
-        if (filters.reference && !matchesReferenceFilter(filters.reference, tpi.refTpi)) return false;
-        if (filters.candidate && !normalizeText(tpi.candidat).includes(normalizeText(filters.candidate))) return false;
-        if (filters.experts && !(
-          normalizeText(tpi.expert1 && tpi.expert1.name).includes(normalizeText(filters.experts)) ||
-          normalizeText(tpi.expert2 && tpi.expert2.name).includes(normalizeText(filters.experts))
+        if (!isAdminGeneralViewActive() && !doesTpiMatchViewer(tpi, magicLinkViewer)) return false;
+        if (effectiveFilters.reference && !matchesReferenceFilter(effectiveFilters.reference, tpi.refTpi)) return false;
+        if (effectiveFilters.candidate && !normalizeText(tpi.candidat).includes(normalizeText(effectiveFilters.candidate))) return false;
+        if (effectiveFilters.experts && !(
+          normalizeText(tpi.expert1 && tpi.expert1.name).includes(normalizeText(effectiveFilters.experts)) ||
+          normalizeText(tpi.expert2 && tpi.expert2.name).includes(normalizeText(effectiveFilters.experts))
         )) return false;
-        if (filters.projectManager && !normalizeText(tpi.boss && tpi.boss.name).includes(normalizeText(filters.projectManager))) return false;
-        if (filters.projectManagerButton && !(
-          normalizeText(tpi.expert1 && tpi.expert1.name).includes(normalizeText(filters.projectManagerButton)) ||
-          normalizeText(tpi.expert2 && tpi.expert2.name).includes(normalizeText(filters.projectManagerButton)) ||
-          normalizeText(tpi.boss && tpi.boss.name).includes(normalizeText(filters.projectManagerButton))
+        if (effectiveFilters.projectManager && !normalizeText(tpi.boss && tpi.boss.name).includes(normalizeText(effectiveFilters.projectManager))) return false;
+        if (effectiveFilters.projectManagerButton && !(
+          normalizeText(tpi.expert1 && tpi.expert1.name).includes(normalizeText(effectiveFilters.projectManagerButton)) ||
+          normalizeText(tpi.expert2 && tpi.expert2.name).includes(normalizeText(effectiveFilters.projectManagerButton)) ||
+          normalizeText(tpi.boss && tpi.boss.name).includes(normalizeText(effectiveFilters.projectManagerButton))
         )) return false;
         return true;
       }
@@ -1041,9 +1400,9 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         var eventSummary = 'Défense TPI ' + (tpi.refTpi || 'sans-référence') + ' - ' + (tpi.candidat || '');
         var eventDescription = [
           'Défense de TPI ' + (tpi.candidat || ''),
-          'Expert 1: ' + ((tpi.expert1 && tpi.expert1.name) || ''),
-          'Expert 2: ' + ((tpi.expert2 && tpi.expert2.name) || ''),
-          'Encadrant: ' + ((tpi.boss && tpi.boss.name) || '')
+          ${JSON.stringify(STATIC_ROLE_LABELS.expert1)} + ': ' + ((tpi.expert1 && tpi.expert1.name) || ''),
+          ${JSON.stringify(STATIC_ROLE_LABELS.expert2)} + ': ' + ((tpi.expert2 && tpi.expert2.name) || ''),
+          ${JSON.stringify(STATIC_ROLE_LABELS.chefProjet)} + ': ' + ((tpi.boss && tpi.boss.name) || '')
         ].join(String.fromCharCode(10));
         var location = [room.site, room.name].filter(Boolean).join(' - ');
 
@@ -1145,15 +1504,93 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         URL.revokeObjectURL(url);
       }
 
+      function updateAdminViewQueryParam() {
+        if (!window.history || typeof window.history.replaceState !== 'function') {
+          return;
+        }
+
+        var nextUrl = new URL(window.location.href);
+        if (isAdminGeneralViewActive()) {
+          nextUrl.searchParams.set('view', 'admin');
+          nextUrl.searchParams.delete('mode');
+          nextUrl.searchParams.delete('admin');
+          nextUrl.searchParams.delete('adminView');
+        } else {
+          nextUrl.searchParams.delete('view');
+          nextUrl.searchParams.delete('mode');
+          nextUrl.searchParams.delete('admin');
+          nextUrl.searchParams.delete('adminView');
+        }
+
+        queryParams = new URLSearchParams(nextUrl.search);
+        window.history.replaceState({}, '', nextUrl.toString());
+      }
+
+      function setAdminGeneralView(nextValue) {
+        adminGeneralView = Boolean(nextValue && isAdminViewer(magicLinkViewer));
+        updateAdminViewQueryParam();
+        render();
+      }
+
+      function syncAdminViewToggle() {
+        if (!adminViewToggle) {
+          return;
+        }
+
+        var hasAdminAccess = isAdminViewer(magicLinkViewer);
+        var isGeneralView = isAdminGeneralViewActive();
+
+        adminViewToggle.classList.toggle('static-hidden', !hasAdminAccess);
+        adminViewToggle.disabled = !hasAdminAccess;
+        adminViewToggle.setAttribute('aria-pressed', isGeneralView ? 'true' : 'false');
+        adminViewToggle.textContent = isGeneralView ? 'Vue personnelle' : 'Vue générale admin';
+        adminViewToggle.setAttribute(
+          'aria-label',
+          isGeneralView
+            ? 'Revenir à votre vue personnelle'
+            : 'Afficher la vue générale administrateur'
+        );
+        adminViewToggle.title = isGeneralView
+          ? 'Revenir à votre vue personnelle'
+          : 'Afficher toutes les défenses; seuls date et type de classe restent pris en compte.';
+      }
+
       function syncPersonIcal() {
         var personRooms = getMagicLinkViewerRooms();
         currentPersonIcalEvents = collectIcalEvents(personRooms);
-        var shouldShow = Boolean(magicLinkViewer && currentPersonIcalEvents.length > 0);
+        var hasIcalEvents = currentPersonIcalEvents.length > 0;
+        var voteAccessUrl = magicLinkViewer && magicLinkViewer.voteAccessUrl ? String(magicLinkViewer.voteAccessUrl) : '';
+        var hasVoteAccess = Boolean(voteAccessUrl);
+        var hasAdminAccess = isAdminViewer(magicLinkViewer);
+        var shouldShow = Boolean(magicLinkViewer && (hasIcalEvents || hasVoteAccess || hasAdminAccess));
 
         personIcalNode.classList.toggle('static-hidden', !shouldShow);
-        personIcalButton.disabled = !shouldShow;
+        personIcalButton.disabled = !hasIcalEvents;
+        personIcalButton.classList.toggle('static-hidden', !hasIcalEvents);
+        personVoteLink.classList.toggle('static-hidden', !hasVoteAccess);
+        syncAdminViewToggle();
 
-        if (shouldShow) {
+        if (hasVoteAccess) {
+          personVoteLink.href = voteAccessUrl;
+          personVoteLink.setAttribute(
+            'aria-label',
+            'Demander une modification de créneau pour ' + (magicLinkViewer.name || 'vos défenses')
+          );
+        } else {
+          personVoteLink.href = '#';
+        }
+
+        if (personActionsCopy) {
+          personActionsCopy.textContent = hasAdminAccess
+            ? (isAdminGeneralViewActive()
+              ? 'Vue générale active. Vous pouvez revenir à votre vue personnelle.'
+              : 'Votre lien administrateur permet aussi d afficher la vue générale.')
+            : hasVoteAccess
+              ? 'Télécharger votre iCal ou demander une modification de créneau.'
+              : 'Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.';
+        }
+
+        if (hasIcalEvents) {
           personIcalButton.setAttribute(
             'aria-label',
             'Télécharger votre iCal Outlook pour ' + (magicLinkViewer.name || 'vos défenses')
@@ -1162,9 +1599,89 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         }
       }
 
+      function collectPrintRows(sourceRooms) {
+        return sourceRooms.flatMap(function (room) {
+          return getRoomSlots(room)
+            .filter(function (slot) {
+              return Boolean(slot.tpiData && slot.tpiData.refTpi);
+            })
+            .map(function (slot) {
+              var displayedSlot = slot.displayedSlot || getDisplayedSlot(slot.tpiData, buildSchedule(room), slot.index);
+              var tpi = slot.tpiData || {};
+              return {
+                date: (room._static && room._static.dateLabel) || room.date || '',
+                time: formatTimeRange(displayedSlot.startTime, displayedSlot.endTime),
+                site: room.site || '',
+                room: room.name || '',
+                candidate: tpi.candidat || tpi.refTpi || 'Défense',
+                sortKey: [
+                  room.date || '',
+                  displayedSlot.startTime || '',
+                  room.site || '',
+                  room.name || '',
+                  tpi.candidat || ''
+                ].join('|')
+              };
+            });
+        }).sort(function (left, right) {
+          return left.sortKey.localeCompare(right.sortKey, 'fr');
+        });
+      }
+
+      function renderPrintSchedule(filteredRooms) {
+        if (!printScheduleNode) {
+          return;
+        }
+
+        var rows = collectPrintRows(filteredRooms);
+        var title = magicLinkViewer && magicLinkViewer.name
+          ? 'Horaires de ' + magicLinkViewer.name
+          : 'Horaires des défenses ' + payload.year;
+        var meta = rows.length + ' défense' + (rows.length > 1 ? 's' : '');
+
+        if (magicLinkPending) {
+          printScheduleNode.innerHTML =
+            '<h1 class="static-print-title">Horaires des défenses ' + html(payload.year) + '</h1>' +
+            '<p class="static-print-empty">Lien magique en cours de vérification.</p>';
+          return;
+        }
+
+        if (magicLinkError) {
+          printScheduleNode.innerHTML =
+            '<h1 class="static-print-title">Horaires des défenses ' + html(payload.year) + '</h1>' +
+            '<p class="static-print-empty">' + html(magicLinkError) + '</p>';
+          return;
+        }
+
+        if (rows.length === 0) {
+          printScheduleNode.innerHTML =
+            '<h1 class="static-print-title">' + html(title) + '</h1>' +
+            '<p class="static-print-empty">Aucun horaire à imprimer.</p>';
+          return;
+        }
+
+        printScheduleNode.innerHTML =
+          '<h1 class="static-print-title">' + html(title) + '</h1>' +
+          '<p class="static-print-meta">' + html(meta) + '</p>' +
+          '<table class="static-print-table">' +
+          '<thead><tr><th>Date</th><th>Horaire</th><th>Salle</th><th>Candidat</th></tr></thead>' +
+          '<tbody>' +
+          rows.map(function (row) {
+            var siteHtml = row.site ? '<span>' + html(row.site) + '</span>' : '';
+            return '<tr>' +
+              '<td>' + html(row.date) + '</td>' +
+              '<td class="static-print-time">' + html(row.time) + '</td>' +
+              '<td class="static-print-location"><strong>' + html(row.room || 'Salle à confirmer') + '</strong>' + siteHtml + '</td>' +
+              '<td>' + html(row.candidate) + '</td>' +
+              '</tr>';
+          }).join('') +
+          '</tbody></table>';
+      }
+
       function isAnyFilterApplied() {
-        return Boolean(magicLinkViewer || magicLinkPending || magicLinkError) || Object.keys(filters).some(function (key) {
-          return Boolean(filters[key]);
+        var effectiveFilters = getEffectiveFilters();
+        return Boolean((magicLinkViewer && !isAdminGeneralViewActive()) || magicLinkPending || magicLinkError) || Object.keys(effectiveFilters).some(function (key) {
+          return Boolean(effectiveFilters[key]);
         });
       }
 
@@ -1234,7 +1751,8 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         var stakeholderIcons = (room.configSite && room.configSite.stakeholderIcons) || {};
         var hasRange = Boolean(displayedSlot.startTime && displayedSlot.endTime);
         var time = formatTimeRange(displayedSlot.startTime, displayedSlot.endTime);
-        var selectedClass = filters.reference && matchesReferenceFilter(filters.reference, tpi.refTpi) ? ' is-selected' : '';
+        var effectiveFilters = getEffectiveFilters();
+        var selectedClass = effectiveFilters.reference && matchesReferenceFilter(effectiveFilters.reference, tpi.refTpi) ? ' is-selected' : '';
         var filterlessClass = !anyFilterApplied ? ' is-filterless' : '';
         var timeHtml = hasRange
           ? '<span>' + html(displayedSlot.startTime) + '</span><span aria-hidden="true">-</span><span>' + html(displayedSlot.endTime) + '</span>'
@@ -1253,13 +1771,13 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         return '<div class="tpi-data tpi-slot' + filterlessClass + selectedClass + '" id="' + html(tpi.id) + '" style="--slot-reveal-index:' + visibleIndex + '" title="' + html(room.site + '\\n' + ((room._static && room._static.dateLabel) || '') + '\\n' + time) + '">' +
           '<div class="slot-time-row"><div class="slot-time' + (!anyFilterApplied ? ' slot-time--header' : '') + (hasRange ? ' slot-time--range' : '') + '">' + timeHtml + '</div></div>' +
           '<div class="tpi-row-block tpi-row-block--candidate" style="grid-template-columns:auto minmax(0, 1fr) auto">' +
-          roleIcon('candidate', 'Candidat', stakeholderIcons) + '<span class="slot-value"><span class="nameTpi">' + html(tpi.candidat) + '</span></span><span class="stakeholder-icon-spacer" aria-hidden="true"></span></div>' +
+          roleIcon('candidate', ${JSON.stringify(STATIC_ROLE_LABELS.candidat)}, stakeholderIcons) + '<span class="slot-value">' + renderSlotName(tpi.candidat) + '</span><span class="stakeholder-icon-spacer" aria-hidden="true"></span></div>' +
           '<div class="tpi-row-block" style="grid-template-columns:auto minmax(0, 1fr) minmax(var(--soutenance-grid-actions), auto)">' +
-          roleIcon('expert1', 'Expert 1', stakeholderIcons) + '<span class="slot-value"><span class="nameTpi">' + html(tpi.expert1 && tpi.expert1.name) + '</span></span><span></span></div>' +
+          roleIcon('expert1', ${JSON.stringify(STATIC_ROLE_LABELS.expert1)}, stakeholderIcons) + '<span class="slot-value">' + renderSlotName(tpi.expert1 && tpi.expert1.name) + '</span><span></span></div>' +
           '<div class="tpi-row-block" style="grid-template-columns:auto minmax(0, 1fr) minmax(var(--soutenance-grid-actions), auto)">' +
-          roleIcon('expert2', 'Expert 2', stakeholderIcons) + '<span class="slot-value"><span class="nameTpi">' + html(tpi.expert2 && tpi.expert2.name) + '</span></span><span></span></div>' +
+          roleIcon('expert2', ${JSON.stringify(STATIC_ROLE_LABELS.expert2)}, stakeholderIcons) + '<span class="slot-value">' + renderSlotName(tpi.expert2 && tpi.expert2.name) + '</span><span></span></div>' +
           '<div class="tpi-row-block" style="grid-template-columns:auto minmax(0, 1fr) minmax(var(--soutenance-grid-actions), auto)">' +
-          roleIcon('projectManager', 'Chef de projet', stakeholderIcons) + '<span class="slot-value"><span class="nameTpi">' + html(tpi.boss && tpi.boss.name) + '</span></span><span></span></div>' +
+          roleIcon('projectManager', ${JSON.stringify(STATIC_ROLE_LABELS.chefProjet)}, stakeholderIcons) + '<span class="slot-value">' + renderSlotName(tpi.boss && tpi.boss.name) + '</span><span></span></div>' +
           '</div>';
       }
 
@@ -1307,6 +1825,13 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         }
       }
 
+      function shouldOpenAdminGeneralViewFromUrl() {
+        var viewParam = normalizeText(queryParams.get('view') || queryParams.get('mode') || '');
+        var adminParam = normalizeText(queryParams.get('admin') || queryParams.get('adminView') || '');
+
+        return viewParam === 'admin' || viewParam === 'general' || adminParam === '1' || adminParam === 'true';
+      }
+
       function renderFocusBanner(filteredRooms) {
         if (magicLinkPending) {
           focusBanner.className = 'soutenance-focus-banner is-ready';
@@ -1319,6 +1844,13 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           focusBanner.className = 'soutenance-focus-banner is-missing';
           focusTitle.textContent = 'Lien magique invalide';
           focusText.textContent = magicLinkError;
+          return;
+        }
+
+        if (isAdminGeneralViewActive()) {
+          focusBanner.className = 'soutenance-focus-banner is-ready';
+          focusTitle.textContent = 'Vue générale admin';
+          focusText.textContent = 'Toutes les défenses publiées sont affichées. Seuls les filtres date et type de classe restent appliqués.';
           return;
         }
 
@@ -1359,7 +1891,9 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         }, 0);
         resultCount.textContent = magicLinkPending ? 'Vérification du lien...' : count + ' défense(s)';
         renderFocusBanner(filteredRooms);
+        renderPrintSchedule(filteredRooms);
         syncPersonIcal();
+        syncAdminFilters();
       }
 
       function getResponsiveColumns() {
@@ -1404,6 +1938,9 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           }
 
           magicLinkViewer = data.viewer || null;
+          if (shouldOpenAdminGeneralViewFromUrl()) {
+            adminGeneralView = isAdminViewer(magicLinkViewer);
+          }
         } catch (error) {
           magicLinkError = error && error.message ? error.message : 'Lien magique invalide ou expiré.';
         } finally {
@@ -1412,7 +1949,9 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         }
       }
 
+      populateAdminFilters();
       readUrlFilters();
+      adminGeneralView = shouldOpenAdminGeneralViewFromUrl() && isAdminViewer(magicLinkViewer);
       function triggerStaticPrint() {
         var printButton = document.getElementById('static-print');
         var originalLabel = printButton ? printButton.textContent : '';
@@ -1439,6 +1978,19 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
 
       document.getElementById('static-print').addEventListener('click', triggerStaticPrint);
       personIcalButton.addEventListener('click', downloadPersonIcal);
+      adminViewToggle.addEventListener('click', function () {
+        setAdminGeneralView(!isAdminGeneralViewActive());
+      });
+      adminDateFilter.addEventListener('change', function () {
+        filters.date = adminDateFilter.value || '';
+        updateFilterQueryParam('date', filters.date);
+        render();
+      });
+      adminClassTypeFilter.addEventListener('change', function () {
+        filters.classType = adminClassTypeFilter.value || '';
+        updateFilterQueryParam('classType', filters.classType);
+        render();
+      });
       window.addEventListener('resize', render);
       render();
       resolveMagicLink();
@@ -1496,6 +2048,192 @@ function buildStaticAccessDeniedHtml(year) {
 </html>`
 }
 
+function isStoredMagicLinkUsable(link, now = new Date()) {
+  if (!link || link.revokedAt) {
+    return false
+  }
+
+  const expiresAt = link.expiresAt ? new Date(link.expiresAt) : null
+  if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt <= now) {
+    return false
+  }
+
+  const maxUses = Number(link.maxUses || 0)
+  const usageCount = Number(link.usageCount || 0)
+
+  return maxUses <= 0 || usageCount < maxUses
+}
+
+function buildStoredMagicLinkUrl(baseUrl, redirectPath, token) {
+  const rawToken = compactText(token)
+  const normalizedBase = compactText(baseUrl).replace(/\/+$/, '')
+  const rawPath = compactText(redirectPath)
+
+  if (!rawToken || !normalizedBase || !rawPath) {
+    return ''
+  }
+
+  try {
+    const normalizedPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`
+    const url = new URL(normalizedPath, `${normalizedBase}/`)
+    url.searchParams.set('ml', rawToken)
+    return url.toString()
+  } catch (error) {
+    return ''
+  }
+}
+
+function deriveLinkedVoteKey(rawDefenseToken) {
+  return crypto
+    .createHash('sha256')
+    .update(`${STATIC_VOTE_LINK_KEY_PREFIX}${compactText(rawDefenseToken)}`)
+    .digest()
+}
+
+function encryptLinkedVoteAccessUrl(voteUrl, rawDefenseToken) {
+  const normalizedVoteUrl = compactText(voteUrl)
+  const normalizedDefenseToken = compactText(rawDefenseToken)
+
+  if (!normalizedVoteUrl || !normalizedDefenseToken) {
+    return null
+  }
+
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv(
+    STATIC_VOTE_LINK_CIPHER,
+    deriveLinkedVoteKey(normalizedDefenseToken),
+    iv
+  )
+  const encrypted = Buffer.concat([
+    cipher.update(normalizedVoteUrl, 'utf8'),
+    cipher.final()
+  ])
+  const tag = cipher.getAuthTag()
+
+  return {
+    cipher: STATIC_VOTE_LINK_CIPHER,
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+    value: encrypted.toString('base64')
+  }
+}
+
+function getLinkedVoteSourceRank(link = {}) {
+  const source = compactText(link?.scope?.source)
+
+  if (source === ACCESS_LINK_SOURCES.ADMIN_STATIC_VOTE) {
+    return 0
+  }
+
+  if (source === ACCESS_LINK_SOURCES.ADMIN_APP) {
+    return 1
+  }
+
+  return 2
+}
+
+function getLinkCreatedAtTime(link = {}) {
+  const date = link?.createdAt ? new Date(link.createdAt) : null
+  return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0
+}
+
+function isBetterLinkedVoteCandidate(candidate, current) {
+  if (!current) {
+    return true
+  }
+
+  const candidateRank = getLinkedVoteSourceRank(candidate)
+  const currentRank = getLinkedVoteSourceRank(current)
+
+  if (candidateRank !== currentRank) {
+    return candidateRank < currentRank
+  }
+
+  return getLinkCreatedAtTime(candidate) > getLinkCreatedAtTime(current)
+}
+
+async function buildLinkedVoteAccessByPersonId(year, deploymentConfig = null) {
+  const normalizedYear = parseYear(year)
+  const now = new Date()
+  const baseUrl = await getConfiguredVotePublicBaseUrl(deploymentConfig)
+  const links = await MagicLink.find({
+    type: 'vote',
+    year: normalizedYear,
+    revokedAt: null,
+    expiresAt: { $gt: now },
+    'scope.source': {
+      $in: [
+        ACCESS_LINK_SOURCES.ADMIN_APP,
+        ACCESS_LINK_SOURCES.ADMIN_STATIC_VOTE
+      ]
+    }
+  })
+    .select('+rawToken tokenHash personId personName recipientEmail redirectPath expiresAt maxUses usageCount scope createdAt revokedAt')
+    .sort({ createdAt: -1 })
+    .lean()
+
+  const byPersonId = new Map()
+
+  for (const link of Array.isArray(links) ? links : []) {
+    const personId = link?.personId ? String(link.personId) : ''
+
+    if (!personId || !isStoredMagicLinkUsable(link, now)) {
+      continue
+    }
+
+    const rawToken = compactText(link.rawToken)
+    const voteUrl = buildStoredMagicLinkUrl(baseUrl, link.redirectPath || `/coordination/${normalizedYear}`, rawToken)
+
+    if (!voteUrl) {
+      continue
+    }
+
+    const current = byPersonId.get(personId)
+    if (isBetterLinkedVoteCandidate(link, current?.link)) {
+      byPersonId.set(personId, {
+        link,
+        url: voteUrl,
+        expiresAt: link.expiresAt instanceof Date
+          ? link.expiresAt.toISOString()
+          : new Date(link.expiresAt).toISOString()
+      })
+    }
+  }
+
+  return byPersonId
+}
+
+async function buildPublicationAccessRolesByPersonId(personIds = []) {
+  const uniquePersonIds = Array.from(
+    new Set(
+      (Array.isArray(personIds) ? personIds : [])
+        .map((personId) => compactText(personId))
+        .filter(Boolean)
+    )
+  )
+
+  if (uniquePersonIds.length === 0) {
+    return new Map()
+  }
+
+  const people = await Person.find({
+    _id: { $in: uniquePersonIds }
+  })
+    .select('roles')
+    .lean()
+
+  return new Map(
+    (Array.isArray(people) ? people : [])
+      .filter((person) => person?._id)
+      .map((person) => [
+        String(person._id),
+        Array.isArray(person.roles)
+          ? person.roles.map((role) => compactText(role)).filter(Boolean)
+          : []
+      ])
+  )
+}
+
 function buildStaticDefensePhp({ html, year, accessLinks = [] }) {
   const accessPayload = Array.isArray(accessLinks) ? accessLinks : []
   const normalizedYear = parseYear(year)
@@ -1518,6 +2256,58 @@ function staticPublicationDeny(int $statusCode = 403): void
 ${buildStaticAccessDeniedHtml(normalizedYear)}
 STATIC_DENIED_HTML;
     exit;
+}
+
+function staticPublicationText($value): string
+{
+    if ($value === null) {
+        return '';
+    }
+
+    if (is_scalar($value)) {
+        return trim((string) $value);
+    }
+
+    return '';
+}
+
+function staticPublicationDecryptLinkedVoteUrl(array $accessEntry, string $rawDefenseToken): string
+{
+    if (!function_exists('openssl_decrypt')) {
+        return '';
+    }
+
+    $voteAccess = isset($accessEntry['voteAccess']) && is_array($accessEntry['voteAccess'])
+        ? $accessEntry['voteAccess']
+        : [];
+    $encrypted = isset($voteAccess['encryptedUrl']) && is_array($voteAccess['encryptedUrl'])
+        ? $voteAccess['encryptedUrl']
+        : [];
+
+    if (staticPublicationText($encrypted['cipher'] ?? '') !== '${STATIC_VOTE_LINK_CIPHER}') {
+        return '';
+    }
+
+    $iv = base64_decode(staticPublicationText($encrypted['iv'] ?? ''), true);
+    $tag = base64_decode(staticPublicationText($encrypted['tag'] ?? ''), true);
+    $cipherText = base64_decode(staticPublicationText($encrypted['value'] ?? ''), true);
+
+    if ($iv === false || $tag === false || $cipherText === false) {
+        return '';
+    }
+
+    $key = hash('sha256', '${STATIC_VOTE_LINK_KEY_PREFIX}' . $rawDefenseToken, true);
+    $decrypted = openssl_decrypt($cipherText, '${STATIC_VOTE_LINK_CIPHER}', $key, OPENSSL_RAW_DATA, $iv, $tag);
+
+    if (!is_string($decrypted) || $decrypted === '') {
+        return '';
+    }
+
+    if (!preg_match('/^https?:\\/\\//i', $decrypted)) {
+        return '';
+    }
+
+    return $decrypted;
 }
 
 $staticToken = isset($_GET['ml']) && is_string($_GET['ml']) ? trim($_GET['ml']) : '';
@@ -1556,7 +2346,17 @@ $staticViewer = [
     'personId' => $staticAccessEntry['personId'] ?? null,
     'name' => $staticAccessEntry['name'] ?? null,
     'email' => $staticAccessEntry['email'] ?? null,
+    'roles' => isset($staticAccessEntry['roles']) && is_array($staticAccessEntry['roles'])
+        ? array_values($staticAccessEntry['roles'])
+        : [],
+    'isAdmin' => ($staticAccessEntry['isAdmin'] ?? false) === true,
 ];
+$staticLinkedVoteUrl = staticPublicationDecryptLinkedVoteUrl($staticAccessEntry, $staticToken);
+
+if ($staticLinkedVoteUrl !== '') {
+    $staticViewer['voteAccessUrl'] = $staticLinkedVoteUrl;
+    $staticViewer['voteAccessExpiresAt'] = $staticAccessEntry['voteAccess']['expiresAt'] ?? null;
+}
 
 $staticMagicLinkBootstrap = '<script>window.__STATIC_MAGIC_LINK_VALIDATED__=true;window.__STATIC_MAGIC_LINK_VIEWER__=' .
     json_encode($staticViewer, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) .
@@ -1570,17 +2370,21 @@ $staticMagicLinkBootstrap = '<script>window.__STATIC_MAGIC_LINK_VALIDATED__=true
   )}`
 }
 
-async function listStaticPublicationAccessLinks(year) {
+async function listStaticPublicationAccessLinks(year, deploymentConfig = null) {
   const normalizedYear = parseYear(year)
   const now = new Date()
+  const linkedVoteAccessByPersonId = await buildLinkedVoteAccessByPersonId(normalizedYear, deploymentConfig)
   const links = await MagicLink.find({
     type: 'soutenance',
     year: normalizedYear,
     revokedAt: null,
     expiresAt: { $gt: now }
   })
-    .select('tokenHash personId personName recipientEmail expiresAt maxUses usageCount')
+    .select('+rawToken tokenHash personId personName recipientEmail expiresAt maxUses usageCount')
     .lean()
+  const rolesByPersonId = await buildPublicationAccessRolesByPersonId(
+    (Array.isArray(links) ? links : []).map((link) => link?.personId)
+  )
 
   return (Array.isArray(links) ? links : [])
     .filter((link) => {
@@ -1593,23 +2397,43 @@ async function listStaticPublicationAccessLinks(year) {
       const usageCount = Number(link?.usageCount || 0)
       return maxUses <= 0 || usageCount < maxUses
     })
-    .map((link) => ({
-      year: normalizedYear,
-      hash: compactText(link.tokenHash),
-      personId: link.personId ? String(link.personId) : null,
-      name: compactText(link.personName) || null,
-      email: compactText(link.recipientEmail) || null,
-      expiresAt: link.expiresAt instanceof Date
-        ? link.expiresAt.toISOString()
-        : new Date(link.expiresAt).toISOString()
-    }))
+    .map((link) => {
+      const personId = link.personId ? String(link.personId) : ''
+      const roles = rolesByPersonId.get(personId) || []
+      const linkedVoteAccess = personId ? linkedVoteAccessByPersonId.get(personId) : null
+      const encryptedVoteUrl = linkedVoteAccess?.url
+        ? encryptLinkedVoteAccessUrl(linkedVoteAccess.url, link.rawToken)
+        : null
+
+      return {
+        year: normalizedYear,
+        hash: compactText(link.tokenHash),
+        personId: personId || null,
+        name: compactText(link.personName) || null,
+        email: compactText(link.recipientEmail) || null,
+        roles,
+        isAdmin: roles.includes('admin'),
+        expiresAt: link.expiresAt instanceof Date
+          ? link.expiresAt.toISOString()
+          : new Date(link.expiresAt).toISOString(),
+        ...(encryptedVoteUrl
+          ? {
+            voteAccess: {
+              encryptedUrl: encryptedVoteUrl,
+                expiresAt: linkedVoteAccess.expiresAt || null,
+                source: compactText(linkedVoteAccess.link?.scope?.source) || null
+              }
+            }
+          : {})
+      }
+    })
 }
 
-async function writeStaticPublicationAccessFiles({ year, html }) {
+async function writeStaticPublicationAccessFiles({ year, html, deploymentConfig = null }) {
   const normalizedYear = parseYear(year)
   const phpIndexPath = getPhpIndexPath(normalizedYear)
   const deniedIndexPath = getDeniedIndexPath(normalizedYear)
-  const accessLinks = await listStaticPublicationAccessLinks(normalizedYear)
+  const accessLinks = await listStaticPublicationAccessLinks(normalizedYear, deploymentConfig)
 
   await fs.promises.writeFile(
     phpIndexPath,
@@ -1697,7 +2521,8 @@ async function generateStaticDefensesSite(year) {
   await fs.promises.writeFile(indexPath, html, 'utf8')
   const accessFiles = await writeStaticPublicationAccessFiles({
     year: normalizedYear,
-    html
+    html,
+    deploymentConfig
   })
   manifest.accessLinkCount = accessFiles.accessLinkCount
   manifest.phpIndexPath = phpIndexPath
@@ -2013,7 +2838,8 @@ async function publishStaticDefensesSite(year) {
   const html = await fs.promises.readFile(status.indexPath, 'utf8')
   const accessFiles = await writeStaticPublicationAccessFiles({
     year: normalizedYear,
-    html
+    html,
+    deploymentConfig
   })
   const remoteDir = normalizeRemoteDir(normalizedYear, deploymentConfig)
   const publishedAt = new Date().toISOString()
@@ -2061,6 +2887,7 @@ module.exports = {
   getIndexPath,
   getStaticPublicationStatus,
   joinSlashPaths,
+  listStaticPublicationAccessLinks,
   normalizeSlashPath,
   publishStaticDefensesSite
 }

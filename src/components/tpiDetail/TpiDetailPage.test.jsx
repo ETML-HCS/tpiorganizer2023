@@ -104,15 +104,15 @@ describe('TpiDetailPage', () => {
     })
 
     expect(await screen.findByText(/dossier tpi-2026-2163/i)).toBeInTheDocument()
-    expect(screen.getByText(/lecture croisée gestiontpi \/ planning/i)).toBeInTheDocument()
+    expect(screen.getByText(/lecture croisée gestiontpi \/ coordination/i)).toBeInTheDocument()
     expect(screen.getByText(/dossier prêt/i)).toBeInTheDocument()
     expect(screen.getAllByText('Alice Martin').length).toBeGreaterThan(0)
     expect(screen.getByText('Sujet legacy', { selector: 'strong' })).toBeInTheDocument()
     expect(screen.getByText('Entreprise', { selector: 'strong' })).toBeInTheDocument()
     expect(screen.getAllByText(/A101/).length).toBeGreaterThan(0)
-    expect(screen.getByRole('link', { name: /voir dans planning/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /voir dans coordination/i })).toHaveAttribute(
       'href',
-      '/planning/2026?tab=list&focus=TPI-2026-2163'
+      '/coordination/2026?tab=list&focus=TPI-2026-2163'
     )
     expect(screen.getByRole('link', { name: /modifier dans gestion tpi/i })).toHaveAttribute(
       'href',
@@ -128,7 +128,7 @@ describe('TpiDetailPage', () => {
     )
   })
 
-  it('propose une création préremplie dans GestionTPI quand seule la fiche Planning existe', async () => {
+  it('propose une création préremplie dans GestionTPI quand seule la fiche Coordination existe', async () => {
     tpiDossierService.getByRef.mockResolvedValue({
       year: 2026,
       identifiers: {
@@ -145,7 +145,7 @@ describe('TpiDetailPage', () => {
         data: {
           reference: 'TPI-2026-999',
           status: 'draft',
-          sujet: 'Sujet planning only',
+          sujet: 'Sujet coordination only',
           candidat: { _id: 'candidate-1', firstName: 'Alice', lastName: 'Martin' },
           expert1: { _id: 'expert-1', firstName: 'Bob', lastName: 'Expert' },
           expert2: { _id: 'expert-2', firstName: 'Carla', lastName: 'Expert' },
@@ -171,7 +171,7 @@ describe('TpiDetailPage', () => {
         issues: [
           {
             type: 'planning_tpi_missing_legacy',
-            message: 'Fiche présente dans Planning mais absente de GestionTPI.'
+            message: 'Fiche présente dans Coordination mais absente de GestionTPI.'
           }
         ]
       }
@@ -279,7 +279,7 @@ describe('TpiDetailPage', () => {
           exists: true,
           data: {
             status: 'draft',
-            sujet: 'Sujet planning direct',
+            sujet: 'Sujet coordination direct',
             candidat: { _id: 'candidate-1', firstName: 'Alice', lastName: 'Martin' },
             expert1: { _id: 'expert-1', firstName: 'Bob', lastName: 'Expert' },
             expert2: { _id: 'expert-2', firstName: 'Carla', lastName: 'Expert' },
@@ -319,7 +319,7 @@ describe('TpiDetailPage', () => {
             candidat: 'Alice Martin',
             experts: { 1: 'Bob Expert', 2: 'Carla Expert' },
             boss: 'Diane Boss',
-            sujet: 'Sujet planning direct'
+            sujet: 'Sujet coordination direct'
           },
           stakeholderState: {
             isComplete: true,
@@ -332,7 +332,7 @@ describe('TpiDetailPage', () => {
           exists: true,
           data: {
             status: 'draft',
-            sujet: 'Sujet planning direct'
+            sujet: 'Sujet coordination direct'
           },
           votes: [],
           voteSummary: {
@@ -369,7 +369,7 @@ describe('TpiDetailPage', () => {
           refTpi: '777',
           candidat: 'Alice Martin',
           boss: 'Diane Boss',
-          sujet: 'Sujet planning direct'
+          sujet: 'Sujet coordination direct'
         }),
         '2026',
         { validationMode: 'manual' }
@@ -542,7 +542,7 @@ describe('TpiDetailPage', () => {
     expect(await screen.findByText(/fiche gestiontpi mise à jour depuis la vue détail/i)).toBeInTheDocument()
   })
 
-  it('propose de reprendre les valeurs planning dans l édition rapide', async () => {
+  it('propose de reprendre les valeurs coordination dans l édition rapide', async () => {
     tpiDossierService.getByRef.mockResolvedValue({
       year: 2026,
       identifiers: {
@@ -584,7 +584,7 @@ describe('TpiDetailPage', () => {
         exists: true,
         data: {
           status: 'draft',
-          sujet: 'Sujet planning',
+          sujet: 'Sujet coordination',
           classe: 'CID4A',
           site: 'ETML',
           entreprise: {
@@ -620,13 +620,13 @@ describe('TpiDetailPage', () => {
     const quickEditForm = await screen.findByTestId('tpi-detail-quick-edit-form')
     const quickEditFormQueries = within(quickEditForm)
 
-    fireEvent.click(screen.getByRole('button', { name: /reprendre toutes les valeurs planning/i }))
+    fireEvent.click(screen.getByRole('button', { name: /reprendre toutes les valeurs coordination/i }))
 
     await waitFor(() => {
       expect(quickEditFormQueries.getByLabelText('Classe')).toHaveValue('CID4A')
       expect(quickEditFormQueries.getByLabelText('Entreprise')).toHaveValue('Entreprise')
       expect(quickEditFormQueries.getByLabelText('Site')).toHaveValue('ETML')
-      expect(quickEditFormQueries.getByLabelText('Sujet')).toHaveValue('Sujet planning')
+      expect(quickEditFormQueries.getByLabelText('Sujet')).toHaveValue('Sujet coordination')
     })
   })
 })

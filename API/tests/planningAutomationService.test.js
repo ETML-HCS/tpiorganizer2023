@@ -7,7 +7,7 @@ const {
   buildLegacyRoomsFromAutomaticSlots,
   computeAutomaticAssignments,
   resolveTaskAllowedDateKeys
-} = require('../services/planningAutomationService')
+} = require('../services/coordinationAutomationService')
 
 function makeSiteContext(overrides = {}) {
   return {
@@ -266,7 +266,7 @@ test('computeAutomaticAssignments respecte la limite configurable de TPI consecu
   assert.deepEqual(assignedPeriods, [1, 2, 4])
 })
 
-test('computeAutomaticAssignments passe en manuel quand la limite consecutive ne laisse aucun creneau', () => {
+test('computeAutomaticAssignments place avec alerte quand la limite consecutive ne laisse aucun creneau strict', () => {
   const siteContext = makeSiteContext({
     numSlots: 3,
     maxConsecutiveTpi: 2
@@ -284,10 +284,12 @@ test('computeAutomaticAssignments passe en manuel quand la limite consecutive ne
   )
 
   const result = computeAutomaticAssignments(tasks)
+  const forcedAssignment = result.assignments.find((assignment) => assignment.constraintIssues?.length > 0)
 
-  assert.equal(result.assignments.length, 2)
-  assert.equal(result.manualRequired.length, 1)
-  assert.match(result.manualRequired[0].reason, /Aucun créneau valide/i)
+  assert.equal(result.assignments.length, 3)
+  assert.equal(result.manualRequired.length, 0)
+  assert.ok(forcedAssignment)
+  assert.equal(forcedAssignment.constraintIssues[0].type, 'consecutive_limit')
 })
 
 test('computeAutomaticAssignments interdit le meme participant sur deux salles au meme moment', () => {
@@ -546,7 +548,41 @@ test('computeAutomaticAssignments respecte les indisponibilites declarees des pa
   assert.equal(result.assignments[0].placement.period, 2)
 })
 
-test('computeAutomaticAssignments marque manuel quand un participant est indisponible partout', () => {
+test('computeAutomaticAssignments traduit les disponibilites demi-journees sur les creneaux du site', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 8
+  })
+  const afternoonOnlyBoss = new Person({
+    firstName: 'Diane',
+    lastName: 'Boss',
+    email: 'diane.afternoon@example.com',
+    roles: ['chef_projet'],
+    defaultAvailability: [
+      { dayOfWeek: 3, periods: [2] }
+    ]
+  })
+  const task = makeTask(1, siteContext, {
+    participants: [
+      makeParticipant('cand-1', 'Candidate One', { role: 'candidat' }),
+      makeParticipant('expert-a-1', 'Expert A One', { role: 'expert1' }),
+      makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+      {
+        personId: String(afternoonOnlyBoss._id),
+        personName: 'Diane Boss',
+        role: 'chefProjet',
+        person: afternoonOnlyBoss
+      }
+    ]
+  })
+
+  const result = computeAutomaticAssignments([task])
+
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments.length, 1)
+  assert.equal(result.assignments[0].placement.period, 5)
+})
+
+test('computeAutomaticAssignments place avec alerte quand un participant est indisponible partout', () => {
   const siteContext = makeSiteContext({
     numSlots: 2
   })
@@ -564,9 +600,34 @@ test('computeAutomaticAssignments marque manuel quand un participant est indispo
 
   const result = computeAutomaticAssignments([task])
 
-  assert.equal(result.assignments.length, 0)
-  assert.equal(result.manualRequired.length, 1)
-  assert.equal(result.manualRequired[0].reference, 'TPI-2026-001')
+  assert.equal(result.assignments.length, 1)
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.assignments[0].constraintIssues[0].type, 'availability_override')
+  assert.match(result.assignments[0].constraintIssues[0].description, /Disponibilité ignorée/i)
+})
+
+test('computeAutomaticAssignments ne bloque pas sur une indisponibilite du chef de projet', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 1
+  })
+  const task = makeTask(1, siteContext, {
+    participants: [
+      makeParticipant('cand-1', 'Candidate One', { role: 'candidat' }),
+      makeParticipant('expert-a-1', 'Expert A One', { role: 'expert1' }),
+      makeParticipant('expert-b-1', 'Expert B One', { role: 'expert2' }),
+      makeParticipant('boss-1', 'Boss One', {
+        role: 'chefProjet',
+        isAvailableOn: () => false
+      })
+    ]
+  })
+
+  const result = computeAutomaticAssignments([task])
+
+  assert.equal(result.assignments.length, 1)
+  assert.equal(result.manualRequired.length, 0)
+  assert.equal(result.constraintOverrideCount, 0)
+  assert.deepEqual(result.assignments[0].constraintIssues || [], [])
 })
 
 test('computeAutomaticAssignments treats participants without declared availability as unconstrained', () => {
@@ -649,4 +710,33 @@ test('buildLegacyRoomsFromAutomaticSlots reconstruit le format legacy attendu pa
   assert.equal(legacyRooms[0].tpiDatas[0].id, 'TPI-2026-2163')
   assert.equal(legacyRooms[0].tpiDatas[1].refTpi, null)
   assert.equal(legacyRooms[0].tpiDatas[2].refTpi, null)
+})
+
+test('buildLegacyRoomsFromAutomaticSlots propage les avertissements de contrainte', () => {
+  const siteContext = makeSiteContext({
+    numSlots: 1
+  })
+  const task = makeTask(1, siteContext, { reference: 'TPI-2026-2164' })
+  const tasks = [{
+    ...task,
+    automaticPlanningWarnings: [{
+      type: 'availability_override',
+      description: 'Disponibilité ignorée: Expert indisponible.'
+    }]
+  }]
+  const computation = computeAutomaticAssignments([task])
+  const slotDocuments = buildAutomaticSlotDocuments(
+    computation.assignments,
+    computation.generatedRoomsBySiteDate
+  )
+
+  const legacyRooms = buildLegacyRoomsFromAutomaticSlots(2026, slotDocuments, tasks)
+
+  assert.equal(legacyRooms[0].tpiDatas[0].refTpi, '2164')
+  assert.equal(legacyRooms[0].tpiDatas[0].isConstraintOverride, true)
+  assert.equal(legacyRooms[0].tpiDatas[0].planningOverrideReason, 'Disponibilité ignorée: Expert indisponible.')
+  assert.deepEqual(legacyRooms[0].tpiDatas[0].constraintWarnings, [{
+    type: 'availability_override',
+    message: 'Disponibilité ignorée: Expert indisponible.'
+  }])
 })

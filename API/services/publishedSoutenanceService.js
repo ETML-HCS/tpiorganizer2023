@@ -1,12 +1,12 @@
 const { createCustomTpiRoomModel } = require('../models/tpiRoomsModels')
 const PublicationVersion = require('../models/publicationVersionModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const TpiModelsYear = require('../models/tpiModels')
 const { MagicLink } = require('../models/magicLinkModel')
-const { getSharedPlanningCatalog } = require('./planningCatalogService')
-const { getPlanningConfig } = require('./planningConfigService')
-const { inferTpiClassMode } = require('./roomClassCompatibilityService')
+const { getSharedPlanningCatalog } = require('./coordinationCatalogService')
+const { getPlanningConfig } = require('./coordinationConfigService')
+const { inferRoomClassMode, inferTpiClassMode } = require('./roomClassCompatibilityService')
 const { buildLegacyRefFilter } = require('./legacyTpiDateEnrichmentService')
 
 const DEFAULT_STAKEHOLDER_ICONS = {
@@ -41,6 +41,139 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizeClassToken(value) {
+  return compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
+}
+
+function normalizeDateKey(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isFinite(date?.getTime?.())) {
+    return date.toISOString().slice(0, 10)
+  }
+
+  const raw = compactText(value)
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/)
+  return match ? match[1] : raw.slice(0, 10)
+}
+
+function normalizePublishedRoomClassMode(value) {
+  const token = normalizeClassToken(value)
+
+  if (!token) {
+    return null
+  }
+
+  if (['MATU', 'M', 'MIN', 'MATURITE'].includes(token) || token.startsWith('MATU') || token.startsWith('MIN') || /^M\d+/.test(token)) {
+    return 'matu'
+  }
+
+  if (['SPECIAL', 'SPECIALE'].includes(token) || token.startsWith('SPECIAL')) {
+    return 'special'
+  }
+
+  return null
+}
+
+function isMatuClassToken(value) {
+  const token = normalizeClassToken(value)
+  return token === 'M' || token === 'MATU' || token.startsWith('M')
+}
+
+function isSpecialClassToken(value) {
+  const token = normalizeClassToken(value)
+  return token === 'SPECIAL' || token === 'SPECIALE' || token.startsWith('SPECIAL')
+}
+
+function findPlanningDateEntry(planningConfig, dateValue) {
+  const dateKey = normalizeDateKey(dateValue)
+  if (!dateKey) {
+    return null
+  }
+
+  return (Array.isArray(planningConfig?.soutenanceDates) ? planningConfig.soutenanceDates : [])
+    .find((entry) => normalizeDateKey(entry?.date || entry?.value || entry) === dateKey) || null
+}
+
+function inferPublishedRoomClassModeFromDateEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null
+  }
+
+  const classes = Array.isArray(entry.classes) ? entry.classes : []
+
+  if (entry.min === true || classes.some(isMatuClassToken)) {
+    return 'matu'
+  }
+
+  if (
+    entry.special === true ||
+    entry.other === true ||
+    classes.some(isSpecialClassToken)
+  ) {
+    return 'special'
+  }
+
+  return null
+}
+
+function inferPublishedRoomClassModeFromRoom(room = {}, planningConfig = null) {
+  const explicitMode = normalizePublishedRoomClassMode(
+    room.roomClassMode ||
+    room.classMode ||
+    room.type
+  )
+
+  if (explicitMode) {
+    return explicitMode
+  }
+
+  if (room.min === true || room.isMatu === true) {
+    return 'matu'
+  }
+
+  if (room.special === true || room.isSpecial === true) {
+    return 'special'
+  }
+
+  const dateMode = inferPublishedRoomClassModeFromDateEntry(
+    findPlanningDateEntry(planningConfig, room.date)
+  )
+
+  if (dateMode) {
+    return dateMode
+  }
+
+  return normalizePublishedRoomClassMode(inferRoomClassMode(room))
+}
+
+function inferPublishedTpiClassMode(tpiOrClass) {
+  const rawClass = typeof tpiOrClass === 'string'
+    ? tpiOrClass
+    : tpiOrClass?.classe || tpiOrClass?.classType || tpiOrClass?.typeClasse
+  const explicitMode = normalizePublishedRoomClassMode(rawClass)
+
+  if (explicitMode) {
+    return explicitMode
+  }
+
+  if (normalizeClassToken(rawClass)) {
+    return 'noBadge'
+  }
+
+  const legacyMode = inferTpiClassMode(tpiOrClass)
+  return legacyMode === 'nonM'
+    ? 'noBadge'
+    : normalizePublishedRoomClassMode(legacyMode)
 }
 
 function normalizeSoutenanceColor(value) {
@@ -236,7 +369,7 @@ async function loadPlanningConfigSafe(year) {
   try {
     return await getPlanningConfig(year)
   } catch (error) {
-    console.error('Erreur chargement configuration planning pour publication défenses:', error)
+    console.error('Erreur chargement configuration de planification pour publication défenses:', error)
     return null
   }
 }
@@ -310,20 +443,47 @@ function inferPublishedRoomClassModeFromEntries(entries = []) {
   const detectedModes = Array.from(
     new Set(
       (Array.isArray(entries) ? entries : [])
-        .map((entry) => inferTpiClassMode(entry?.tpi || entry))
+        .map((entry) => inferPublishedTpiClassMode(entry?.tpi || entry))
         .filter(Boolean)
     )
   )
 
-  return detectedModes.length === 1 ? detectedModes[0] : null
+  return detectedModes.length === 1 && detectedModes[0] !== 'noBadge'
+    ? detectedModes[0]
+    : null
 }
 
-async function publishConfirmedPlanningSoutenances(year) {
-  return await publishConfirmedPlanningSoutenancesVersioned(year)
+function enrichPublishedRoomsClassModes(rooms = [], planningConfig = null) {
+  return cloneRooms(rooms).map((room) => {
+    const roomClassMode = inferPublishedRoomClassModeFromRoom(room, planningConfig)
+
+    if (!roomClassMode) {
+      return room
+    }
+
+    return {
+      ...room,
+      roomClassMode
+    }
+  })
+}
+
+async function publishConfirmedPlanningSoutenances(year, user = null) {
+  return await publishConfirmedPlanningSoutenancesVersioned(year, user)
 }
 
 function cloneRooms(rooms) {
   return JSON.parse(JSON.stringify(Array.isArray(rooms) ? rooms : []))
+}
+
+function countPublishedTpis(rooms = []) {
+  return (Array.isArray(rooms) ? rooms : []).reduce((total, room) => {
+    const tpiCount = Array.isArray(room?.tpiDatas)
+      ? room.tpiDatas.filter((tpiData) => tpiData?.refTpi || tpiData?.id).length
+      : 0
+
+    return total + tpiCount
+  }, 0)
 }
 
 function normalizeViewerName(name) {
@@ -651,7 +811,10 @@ async function buildPublishedRoomsFromConfirmedTpis(year) {
         site: room.site,
         date: room.date,
         name: room.name,
-        roomClassMode: inferPublishedRoomClassModeFromEntries(sortedSlots),
+        roomClassMode: (
+          inferPublishedRoomClassModeFromRoom(room, planningConfig) ||
+          inferPublishedRoomClassModeFromEntries(sortedSlots)
+        ),
         configSite: buildRoomConfig(
           sortedSlots[0].slot,
           totalSlots,
@@ -750,6 +913,7 @@ async function publishConfirmedPlanningSoutenancesVersioned(year, user = null) {
     },
     rooms,
     source: {
+      origin: 'confirmed_planning',
       confirmedTpiCount,
       roomsCount: rooms.length
     }
@@ -809,6 +973,54 @@ async function rollbackPublicationVersion(year, version) {
 
   return {
     publicationVersion: targetVersion.toObject()
+  }
+}
+
+async function publishRoomsAsSoutenancesVersioned(year, rooms, user = null, source = {}) {
+  const normalizedYear = parseInt(year, 10)
+  const planningConfig = await loadPlanningConfigSafe(normalizedYear)
+  const publishedRooms = enrichPublishedRoomsClassModes(rooms, planningConfig)
+  const version = await getNextPublicationVersion(normalizedYear)
+  const roomCount = publishedRooms.length
+  const tpiCount = countPublishedTpis(publishedRooms)
+
+  await PublicationVersion.updateMany(
+    { year: normalizedYear, isActive: true },
+    { $set: { isActive: false } }
+  )
+
+  const publicationVersion = await PublicationVersion.create({
+    year: normalizedYear,
+    version,
+    isActive: true,
+    publishedAt: new Date(),
+    publishedBy: {
+      id: user?.id ? String(user.id) : null,
+      email: typeof user?.email === 'string' ? user.email : null
+    },
+    rooms: publishedRooms,
+    source: {
+      ...source,
+      confirmedTpiCount: tpiCount,
+      roomsCount: roomCount
+    }
+  })
+
+  try {
+    await syncLegacyPublishedRooms(normalizedYear, publishedRooms)
+  } catch (error) {
+    console.error('Erreur synchro collection legacy défenses:', error)
+  }
+
+  try {
+    await syncPublishedSoutenancesToTpiCatalog(normalizedYear, publishedRooms)
+  } catch (error) {
+    console.error('Erreur synchro collection tpiList défenses:', error)
+  }
+
+  return {
+    rooms: publishedRooms,
+    publicationVersion: publicationVersion.toObject()
   }
 }
 
@@ -963,7 +1175,8 @@ async function listPublishedSoutenances(year, options = {}) {
   const planningConfig = await loadPlanningConfigSafe(normalizedYear)
 
   if (activeVersion?.rooms) {
-    const scheduledRooms = enrichPublishedRoomsScheduleConfig(activeVersion.rooms, planningConfig)
+    const classModeRooms = enrichPublishedRoomsClassModes(activeVersion.rooms, planningConfig)
+    const scheduledRooms = enrichPublishedRoomsScheduleConfig(classModeRooms, planningConfig)
     return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledRooms, appearance), {
       personId: options.viewerPersonId || null,
       name: options.viewerName || null,
@@ -974,7 +1187,8 @@ async function listPublishedSoutenances(year, options = {}) {
   const DataRooms = getSoutenanceModel(normalizedYear)
   const legacyRooms = await DataRooms.find().lean()
 
-  const scheduledLegacyRooms = enrichPublishedRoomsScheduleConfig(legacyRooms, planningConfig)
+  const classModeLegacyRooms = enrichPublishedRoomsClassModes(legacyRooms, planningConfig)
+  const scheduledLegacyRooms = enrichPublishedRoomsScheduleConfig(classModeLegacyRooms, planningConfig)
   return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledLegacyRooms, appearance), {
     personId: options.viewerPersonId || null,
     name: options.viewerName || null,
@@ -984,10 +1198,12 @@ async function listPublishedSoutenances(year, options = {}) {
 
 async function publishSoutenanceRoom(year, roomData) {
   const DataRooms = getSoutenanceModel(year)
+  const planningConfig = await loadPlanningConfigSafe(year)
+  const [publishedRoom] = enrichPublishedRoomsClassModes([roomData], planningConfig)
 
   return await DataRooms.findOneAndUpdate(
-    { idRoom: roomData.idRoom },
-    roomData,
+    { idRoom: publishedRoom.idRoom },
+    publishedRoom,
     {
       new: true,
       runValidators: true,
@@ -1082,6 +1298,7 @@ async function updateActivePublicationOffersByLegacyId(year, tpiLegacyId, expert
 
 module.exports = {
   getSoutenanceModel,
+  enrichPublishedRoomsClassModes,
   enrichPublishedRoomsAppearance,
   enrichPublishedRoomsScheduleConfig,
   filterPublishedRooms,
@@ -1089,6 +1306,7 @@ module.exports = {
   listPublishedSoutenances,
   publishSoutenanceRoom,
   publishConfirmedPlanningSoutenances,
+  publishRoomsAsSoutenances: publishRoomsAsSoutenancesVersioned,
   syncPublishedSoutenancesToTpiCatalog,
   getActivePublicationVersion,
   getPublicationVersion,

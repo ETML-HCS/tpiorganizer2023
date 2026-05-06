@@ -2,7 +2,6 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const WorkflowAuditEvent = require('../models/workflowAuditEventModel')
-const PlanningSnapshot = require('../models/planningSnapshotModel')
 const { WorkflowYear } = require('../models/workflowYearModel')
 const workflowService = require('../services/workflowService')
 
@@ -14,100 +13,34 @@ function patchMethod(target, key, implementation) {
   }
 }
 
-test('workflow states list includes expected states', () => {
+test('workflow phases list includes independent admin phases', () => {
   assert.deepEqual(
-    workflowService.WORKFLOW_STATES,
-    ['planning', 'voting_open', 'published']
+    workflowService.WORKFLOW_PHASES,
+    ['planning', 'votes', 'arbitrage', 'defenses']
   )
 })
 
-test('transition matrix allows only forward workflow', () => {
-  assert.equal(workflowService.isTransitionAllowed('planning', 'voting_open'), true)
-  assert.equal(workflowService.isTransitionAllowed('voting_open', 'published'), true)
-
-  assert.equal(workflowService.isTransitionAllowed('planning', 'published'), false)
-  assert.equal(
-    workflowService.isTransitionAllowed('planning', 'published', { allowDirectPublication: true }),
-    true
-  )
-  assert.equal(workflowService.isTransitionAllowed('published', 'planning'), false)
-  assert.equal(workflowService.isTransitionAllowed('published', 'voting_open'), false)
-  assert.equal(
-    workflowService.isTransitionAllowed('published', 'voting_open', { allowReopenVotesFromPublication: true }),
-    true
-  )
+test('normalizes legacy state names to phases', () => {
+  assert.equal(workflowService.normalizeWorkflowPhase('planning'), 'planning')
+  assert.equal(workflowService.normalizeWorkflowPhase('voting_open'), 'votes')
+  assert.equal(workflowService.normalizeWorkflowPhase('published'), 'defenses')
+  assert.equal(workflowService.normalizeWorkflowPhase('arbitrage'), 'arbitrage')
+  assert.equal(workflowService.isWorkflowPhase('draft'), false)
 })
 
-test('isWorkflowState validates allowed values only', () => {
-  assert.equal(workflowService.isWorkflowState('planning'), true)
-  assert.equal(workflowService.isWorkflowState('voting_open'), true)
-  assert.equal(workflowService.isWorkflowState('published'), true)
-
-  assert.equal(workflowService.isWorkflowState('draft'), false)
-  assert.equal(workflowService.isWorkflowState(''), false)
-  assert.equal(workflowService.isWorkflowState(null), false)
-})
-
-test('transitionWorkflowYear blocks vote opening without active planning snapshot', async () => {
+test('setWorkflowPhaseActive activates one phase without disabling others', async () => {
   const workflow = {
     year: 2026,
     state: 'planning',
+    activePhases: ['planning'],
     planningAt: new Date('2026-01-10T08:00:00.000Z'),
     votingOpenedAt: null,
+    arbitrageOpenedAt: null,
     publishedAt: null,
-    lastTransitionAt: new Date('2026-01-10T08:00:00.000Z'),
+    lastPhaseChangeAt: new Date('2026-01-10T08:00:00.000Z'),
     createdAt: new Date('2026-01-10T08:00:00.000Z'),
     updatedAt: new Date('2026-01-10T08:00:00.000Z'),
-    transitions: [],
-    save: async function save() {
-      return this
-    }
-  }
-
-  const restore = [
-    patchMethod(WorkflowYear, 'findOne', async () => workflow),
-    patchMethod(PlanningSnapshot, 'findOne', () => ({
-      select() {
-        return {
-          lean: async () => null
-        }
-      }
-    }))
-  ]
-
-  try {
-    await assert.rejects(
-      () => workflowService.transitionWorkflowYear({
-        year: 2026,
-        targetState: 'voting_open',
-        user: { id: 'admin-1', email: 'admin@example.com', roles: ['admin'] }
-      }),
-      (error) => {
-        assert.equal(error.name, 'WorkflowTransitionError')
-        assert.equal(error.details.reason, 'missing_planning_snapshot')
-        assert.equal(error.details.currentState, 'planning')
-        assert.equal(error.details.targetState, 'voting_open')
-        return true
-      }
-    )
-  } finally {
-    while (restore.length > 0) {
-      restore.pop()()
-    }
-  }
-})
-
-test('transitionWorkflowYear records the transition and audit metadata on success', async () => {
-  const workflow = {
-    year: 2026,
-    state: 'planning',
-    planningAt: new Date('2026-01-10T08:00:00.000Z'),
-    votingOpenedAt: null,
-    publishedAt: null,
-    lastTransitionAt: new Date('2026-01-10T08:00:00.000Z'),
-    createdAt: new Date('2026-01-10T08:00:00.000Z'),
-    updatedAt: new Date('2026-01-10T08:00:00.000Z'),
-    transitions: [],
+    phaseEvents: [],
     save: async function save() {
       return this
     }
@@ -116,18 +49,6 @@ test('transitionWorkflowYear records the transition and audit metadata on succes
 
   const restore = [
     patchMethod(WorkflowYear, 'findOne', async () => workflow),
-    patchMethod(PlanningSnapshot, 'findOne', () => ({
-      select() {
-        return {
-          lean: async () => ({
-            _id: 'snapshot-1',
-            version: 3,
-            hash: 'hash-123',
-            frozenAt: new Date('2026-03-10T12:00:00.000Z')
-          })
-        }
-      }
-    })),
     patchMethod(WorkflowAuditEvent, 'create', async (payload) => {
       auditEvents.push(payload)
       return payload
@@ -135,29 +56,26 @@ test('transitionWorkflowYear records the transition and audit metadata on succes
   ]
 
   try {
-    const result = await workflowService.transitionWorkflowYear({
+    const result = await workflowService.setWorkflowPhaseActive({
       year: 2026,
-      targetState: 'voting_open',
-      user: { id: 'admin-1', email: 'admin@example.com', roles: ['admin'] }
+      phase: 'votes',
+      active: true,
+      user: { id: 'admin-1', email: 'admin@example.com', roles: ['admin'] },
+      reason: 'Ouverture admin'
     })
 
     assert.equal(result.changed, true)
     assert.equal(result.workflow.state, 'voting_open')
-    assert.deepEqual(result.workflow.allowedTransitions, ['published'])
+    assert.deepEqual(result.workflow.activePhases, ['planning', 'votes'])
+    assert.equal(result.workflow.phases.planning.active, true)
+    assert.equal(result.workflow.phases.votes.active, true)
     assert.ok(workflow.votingOpenedAt instanceof Date)
-    assert.ok(workflow.lastTransitionAt instanceof Date)
-    assert.equal(workflow.transitions.length, 1)
-    assert.equal(workflow.transitions[0].from, 'planning')
-    assert.equal(workflow.transitions[0].to, 'voting_open')
-    assert.equal(workflow.transitions[0].actorId, 'admin-1')
-    assert.equal(workflow.transitions[0].actorEmail, 'admin@example.com')
+    assert.equal(workflow.phaseEvents.length, 1)
+    assert.equal(workflow.phaseEvents[0].phase, 'votes')
+    assert.equal(workflow.phaseEvents[0].active, true)
     assert.equal(auditEvents.length, 1)
-    assert.equal(auditEvents[0].action, 'workflow.transition')
-    assert.deepEqual(auditEvents[0].payload, {
-      from: 'planning',
-      to: 'voting_open'
-    })
-    assert.equal(auditEvents[0].success, true)
+    assert.equal(auditEvents[0].action, 'workflow.phase.toggle')
+    assert.deepEqual(auditEvents[0].payload.activePhases, ['planning', 'votes'])
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -165,63 +83,42 @@ test('transitionWorkflowYear records the transition and audit metadata on succes
   }
 })
 
-test('transitionWorkflowYear can reopen votes from publication and clears publishedAt', async () => {
+test('setWorkflowPhaseActive deactivates a phase while leaving the rest active', async () => {
   const workflow = {
     year: 2026,
     state: 'published',
+    activePhases: ['votes', 'defenses'],
     planningAt: new Date('2026-01-10T08:00:00.000Z'),
     votingOpenedAt: new Date('2026-03-15T08:00:00.000Z'),
+    arbitrageOpenedAt: null,
     publishedAt: new Date('2026-04-20T08:00:00.000Z'),
-    lastTransitionAt: new Date('2026-04-20T08:00:00.000Z'),
+    lastPhaseChangeAt: new Date('2026-04-20T08:00:00.000Z'),
     createdAt: new Date('2026-01-10T08:00:00.000Z'),
     updatedAt: new Date('2026-04-20T08:00:00.000Z'),
-    transitions: [],
+    phaseEvents: [],
     save: async function save() {
       return this
     }
   }
-  const auditEvents = []
 
   const restore = [
     patchMethod(WorkflowYear, 'findOne', async () => workflow),
-    patchMethod(PlanningSnapshot, 'findOne', () => ({
-      select() {
-        return {
-          lean: async () => ({
-            _id: 'snapshot-2',
-            version: 4,
-            hash: 'hash-456',
-            frozenAt: new Date('2026-03-20T12:00:00.000Z')
-          })
-        }
-      }
-    })),
-    patchMethod(WorkflowAuditEvent, 'create', async (payload) => {
-      auditEvents.push(payload)
-      return payload
-    })
+    patchMethod(WorkflowAuditEvent, 'create', async (payload) => payload)
   ]
 
   try {
-    const result = await workflowService.transitionWorkflowYear({
+    const result = await workflowService.setWorkflowPhaseActive({
       year: 2026,
-      targetState: 'voting_open',
-      user: { id: 'admin-2', email: 'admin2@example.com', roles: ['admin'] },
-      allowReopenVotesFromPublication: true
+      phase: 'defenses',
+      active: false,
+      user: { id: 'admin-2', email: 'admin2@example.com', roles: ['admin'] }
     })
 
     assert.equal(result.changed, true)
+    assert.deepEqual(result.workflow.activePhases, ['votes'])
     assert.equal(result.workflow.state, 'voting_open')
-    assert.equal(workflow.state, 'voting_open')
-    assert.equal(workflow.publishedAt, null)
-    assert.equal(workflow.transitions.length, 1)
-    assert.equal(workflow.transitions[0].from, 'published')
-    assert.equal(workflow.transitions[0].to, 'voting_open')
-    assert.equal(auditEvents.length, 1)
-    assert.deepEqual(auditEvents[0].payload, {
-      from: 'published',
-      to: 'voting_open'
-    })
+    assert.equal(result.workflow.phases.defenses.active, false)
+    assert.equal(result.workflow.phases.votes.active, true)
   } finally {
     while (restore.length > 0) {
       restore.pop()()

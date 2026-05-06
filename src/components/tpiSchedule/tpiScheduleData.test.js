@@ -10,7 +10,7 @@ describe('tpiScheduleData', () => {
     expect(buildPlanningJsonExportFileName('2027')).toBe('tpiOrganizer_planning_2027.json')
   })
 
-  test('propage la couleur planning du site dans la configuration de salle', () => {
+  test('propage la couleur planification du site dans la configuration de salle', () => {
     const config = buildPlanningConfigForYear(
       {
         siteConfigs: [

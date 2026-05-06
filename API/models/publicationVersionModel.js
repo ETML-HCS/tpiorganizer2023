@@ -29,6 +29,7 @@ const publicationVersionSchema = new mongoose.Schema({
     default: []
   },
   source: {
+    origin: { type: String, default: 'confirmed_planning' },
     confirmedTpiCount: { type: Number, default: 0 },
     roomsCount: { type: Number, default: 0 }
   },

@@ -11,8 +11,6 @@ const app = express()
 //#endregion
 
 //#region : models
-const { Evaluation, TpiEvalCollection } = require('./models/tpiEvalModel')
-
 const { createCustomTpiRoomModel } = require('./models/tpiRoomsModels')
 const {
   listPublishedSoutenances,
@@ -33,8 +31,9 @@ const legacyUsersRoutes = require('./routes/legacyUsersRoutes')
 const legacyAdminRoutes = require('./routes/legacyAdminRoutes')
 const legacyExpertsRoutes = require('./routes/legacyExpertsRoutes')
 const legacySoutenanceRoutes = require('./routes/legacySoutenanceRoutes') // Backward compatibility for legacy tokens
+const gestionTpiRoutes = require('./routes/gestionTpiRoutes')
 const magicLinkRoutes = require('./routes/magicLinkRoutes')
-const planningRoutes = require('./routes/planningRoutes')
+const coordinationRoutes = require('./routes/coordinationRoutes')
 const tpiDossierRoutes = require('./routes/tpiDossierRoutes')
 const workflowRoutes = require('./routes/workflowRoutes')
 const importRoutes = require('./routes/importRoutes')
@@ -78,6 +77,7 @@ app.use('/api/auth', authLimiter)
 // Legacy auth & admin routes
 app.use('/api/auth', legacyAuthRoutes)
 app.use('/api', legacyUsersRoutes)
+app.use('/api', gestionTpiRoutes)
 app.use('/api', legacyAdminRoutes)
 app.use('/api', legacyExpertsRoutes)
 app.use('/api', tpiDossierRoutes)
@@ -88,8 +88,9 @@ app.use('/api/magic-link', magicLinkRoutes)
 // Défenses (backward compatible with legacy tokens + new magic links)
 app.use('/api', legacySoutenanceRoutes)
 
-// Planning workflow (modern system)
-app.use('/api/planning', planningRoutes)
+// Coordination workflow (modern system). /api/planning remains as a legacy alias.
+app.use('/api/coordination', coordinationRoutes)
+app.use('/api/planning', coordinationRoutes)
 app.use('/api/workflow', workflowRoutes)
 app.use('/api/import', importRoutes)
 
@@ -98,10 +99,6 @@ app.get('/', (req, res) => {
 })
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
-app.post('/api/send-email', async (req, res) => {
-  res.status(501).json({ message: 'Endpoint not implemented.' })
-})
-
 // Définir un endpoint pour récupérer le contenu d'un fichier PDF
 app.get('/api/get-pdf', async (req, res) => {
   try {
@@ -127,90 +124,6 @@ app.get('/api/get-pdf', async (req, res) => {
   } catch (error) {
     console.error('Erreur lors de la récupération du fichier PDF:', error)
     res.status(500).send('Erreur lors de la récupération du fichier PDF')
-  }
-})
-
-// routes pour les évaluations (tpiEval)
-
-// Route POST pour sauvegarder une nouvelle évaluation
-app.post('/save-tpiEval', requireNonEmptyBody("Données d'évaluation requises."), async (req, res) => {
-  try {
-    // Extraire les données de la requête
-    const evaluationData = req.body
-
-    if (!evaluationData.year) {
-      return res.status(400).json({ message: 'Année requise.' })
-    }
-
-    // Vérifier si la collection pour l'année donnée existe déjà
-    let evalCollection = await TpiEvalCollection.findOne({
-      year: evaluationData.year
-    })
-
-    // Si la collection n'existe pas, la créer
-    if (!evalCollection) {
-      // Utiliser evaluationData.year pour définir l'année
-      evalCollection = new TpiEvalCollection({ year: evaluationData.year })
-    }
-
-    // Créer une nouvelle instance d'évaluation avec les données reçues
-    const newEvaluation = new Evaluation(evaluationData)
-
-    // Sauvegarder la nouvelle évaluation dans la base de données
-    const savedEvaluation = await newEvaluation.save()
-
-    // Ajouter l'identifiant de la nouvelle évaluation à la collection d'évaluations de l'année correspondante
-    evalCollection.evaluations.push(savedEvaluation._id)
-    await evalCollection.save()
-
-    // Envoyer la nouvelle évaluation sauvegardée en tant que réponse
-    res.status(201).json(savedEvaluation)
-  } catch (error) {
-    // En cas d'erreur, envoyer un code d'état 500 (Internal Server Error) avec le message d'erreur
-    res.status(500).json({ message: error.message })
-  }
-})
-
-// Route GET pour récupérer la collection d'évaluations pour une année donnée
-app.get('/load-tpiEvals/:year', requireYearParam('year'), async (req, res) => {
-  try {
-    // Extraire l'année de la requête
-    const { year } = req.validatedParams
-
-    // Trouver la collection d'évaluations pour l'année spécifiée
-    const evalCollection = await TpiEvalCollection.findOne({ year }).populate(
-      'evaluations'
-    )
-
-    // Vérifier si la collection existe
-    if (!evalCollection) {
-      return res.status(404).json({
-        message: "Aucune collection d'évaluations trouvée pour cette année."
-      })
-    }
-
-    // Récupérer les évaluations associées à cette collection
-    const evaluations = evalCollection.evaluations
-
-    // Envoyer les évaluations récupérées en tant que réponse
-    res.status(200).json(evaluations)
-  } catch (error) {
-    // En cas d'erreur, envoyer un code d'état 500 (Internal Server Error) avec le message d'erreur
-    res.status(500).json({ message: error.message })
-  }
-})
-
-// Route GET pour récupérer les années des collections d'évaluations disponibles
-app.get('/available-years', async (req, res) => {
-  try {
-    // Récupérer les années des collections d'évaluations existantes dans la base de données
-    const availableYears = await TpiEvalCollection.distinct('year')
-
-    // Envoyer les années disponibles en tant que réponse
-    res.status(200).json(availableYears)
-  } catch (error) {
-    // En cas d'erreur, envoyer un code d'état 500 (Internal Server Error) avec le message d'erreur
-    res.status(500).json({ message: error.message })
   }
 })
 

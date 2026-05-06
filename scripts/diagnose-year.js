@@ -23,13 +23,15 @@ async function diagnose(year = 2026) {
   console.log('✅ Connecté à la BDD\n')
 
   try {
-    // 1. Workflow état
+    // 1. Phases admin
     const workflow = await WorkflowYearModel.WorkflowYear.findOne({ year })
-    console.log('\n📋 Workflow:')
-    console.log(`   État: ${workflow?.state || 'NON INITIALISÉ'}`)
+    console.log('\n📋 Phases admin:')
+    console.log(`   État legacy dérivé: ${workflow?.state || 'NON INITIALISÉ'}`)
     if (workflow) {
+      console.log(`   Phases actives: ${(workflow.activePhases || []).join(', ') || 'aucune'}`)
       console.log(`   Planning at: ${workflow.planningAt}`)
       console.log(`   Voting opened at: ${workflow.votingOpenedAt}`)
+      console.log(`   Arbitrage opened at: ${workflow.arbitrageOpenedAt}`)
       console.log(`   Published at: ${workflow.publishedAt}`)
     }
 

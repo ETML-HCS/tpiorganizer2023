@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
 import PlanningDashboard from './PlanningDashboard'
-import * as planningServices from '../../services/planningService'
+import * as coordinationServices from '../../services/coordinationService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
 import { ROUTES } from '../../config/appConfig'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
@@ -26,16 +26,20 @@ jest.mock('react-toastify', () => ({
   }
 }))
 
-jest.mock('./PlanningCalendar', () => () => <div>Calendrier</div>)
-
 jest.mock('./TpiPlanningList', () => ({ tpis, onSelectTpi }) => (
-  Array.isArray(tpis) && tpis.length > 0 ? (
-    <button type='button' onClick={() => onSelectTpi(tpis[0])}>
-      Sélectionner un TPI
-    </button>
-  ) : (
-    <div>Liste planning</div>
-  )
+  <div>
+    <div data-testid='mock-tpi-count'>{Array.isArray(tpis) ? tpis.length : 0}</div>
+    <div data-testid='mock-tpi-refs'>
+      {Array.isArray(tpis) ? tpis.map((tpi) => tpi.reference).filter(Boolean).join(', ') : ''}
+    </div>
+    {Array.isArray(tpis) && tpis.length > 0 ? (
+      <button type='button' onClick={() => onSelectTpi(tpis[0])}>
+        Sélectionner un TPI
+      </button>
+    ) : (
+      <div>Liste coordination</div>
+    )}
+  </div>
 ))
 
 jest.mock('./VotingPanel', () => () => <div>Votes</div>)
@@ -45,7 +49,6 @@ jest.mock('./ConflictResolver', () => ({ focusTpiId }) => (
     {focusTpiId ? <span>Focus résolution {focusTpiId}</span> : null}
   </div>
 ))
-jest.mock('./ImportPanel', () => () => <div>Import</div>)
 jest.mock('../shared/PageToolbar', () => ({ children, title }) => (
   <div>
     <h1>{title}</h1>
@@ -75,7 +78,7 @@ function renderDashboard({
 
 function buildVoteProposalTpi(overrides = {}) {
   return {
-    _id: 'planning-vote-1',
+    _id: 'coordination-vote-1',
     reference: 'TPI-2026-042',
     status: 'voting',
     sujet: 'Sujet vote',
@@ -175,14 +178,14 @@ function buildVoteProposalTpi(overrides = {}) {
 describe('PlanningDashboard', () => {
   beforeEach(() => {
     Object.values(toast).forEach((mockFn) => mockFn.mockClear())
-    jest.spyOn(planningServices.planningCatalogService, 'getGlobal').mockResolvedValue({ sites: [] })
-    jest.spyOn(planningServices.planningConfigService, 'getByYear').mockResolvedValue({ classTypes: [], siteConfigs: [] })
-    jest.spyOn(planningServices.tpiPlanningService, 'getByYear').mockResolvedValue([
+    jest.spyOn(coordinationServices.coordinationCatalogService, 'getGlobal').mockResolvedValue({ sites: [] })
+    jest.spyOn(coordinationServices.coordinationConfigService, 'getByYear').mockResolvedValue({ classTypes: [], siteConfigs: [] })
+    jest.spyOn(coordinationServices.tpiCoordinationService, 'getByYear').mockResolvedValue([
       {
-        _id: 'planning-1',
+        _id: 'coordination-1',
         reference: 'TPI-2026-001',
         status: 'draft',
-        sujet: 'Sujet planning',
+        sujet: 'Sujet coordination',
         candidat: { firstName: 'Alice', lastName: 'Durand' },
         expert1: { firstName: 'Bob', lastName: 'Expert' },
         expert2: { firstName: 'Carla', lastName: 'Expert' },
@@ -206,62 +209,66 @@ describe('PlanningDashboard', () => {
         }
       }
     ])
-    jest.spyOn(planningServices.tpiPlanningService, 'forceSlot').mockResolvedValue({
+    jest.spyOn(coordinationServices.tpiCoordinationService, 'forceSlot').mockResolvedValue({
       success: true
     })
-    jest.spyOn(planningServices.tpiPlanningService, 'simulateMoveToSlot').mockResolvedValue({
+    jest.spyOn(coordinationServices.tpiCoordinationService, 'simulateMoveToSlot').mockResolvedValue({
       success: true,
       canMove: true,
       status: 'clear',
       message: 'Déplacement possible sans conflit détecté.',
-      tpi: { _id: 'planning-vote-1', reference: 'TPI-2026-042' },
+      tpi: { _id: 'coordination-vote-1', reference: 'TPI-2026-042' },
       currentSlot: { _id: 'slot-fixed', label: '10.06.2026 · 08:00-12:00 · A101' },
       targetSlot: { _id: 'slot-alt', label: '11.06.2026 · 13:00-17:00 · B202' },
       conflicts: [],
       swapCandidate: null
     })
-    jest.spyOn(planningServices.tpiPlanningService, 'moveToSlot').mockResolvedValue({
+    jest.spyOn(coordinationServices.tpiCoordinationService, 'moveToSlot').mockResolvedValue({
       success: true
     })
-    jest.spyOn(planningServices.voteService, 'addProposalToPreferences').mockResolvedValue({
+    jest.spyOn(coordinationServices.voteService, 'addProposalToPreferences').mockResolvedValue({
       success: true,
       added: true,
       voter: { name: 'Carla Expert' }
     })
-    jest.spyOn(planningServices.resolutionProposalService, 'create').mockResolvedValue({
+    jest.spyOn(coordinationServices.resolutionProposalService, 'create').mockResolvedValue({
       success: true,
       proposal: {
         id: 'resolution-proposal-1',
         status: 'sent'
       }
     })
-    jest.spyOn(planningServices.slotService, 'getCalendar').mockResolvedValue([])
-    jest.spyOn(planningServices.workflowPlanningService, 'getYearState').mockResolvedValue({ state: 'planning' })
-    jest.spyOn(planningServices.workflowPlanningService, 'getActiveSnapshot').mockResolvedValue(null)
-    jest.spyOn(planningServices.workflowPlanningService, 'getStaticVotePublicationStatus').mockResolvedValue({
+    jest.spyOn(coordinationServices.slotService, 'getCalendar').mockResolvedValue([])
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'getYearState').mockResolvedValue({ state: 'planning' })
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'getActiveSnapshot').mockResolvedValue(null)
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'getStaticPublicationStatus').mockResolvedValue({
+      available: false,
+      publicUrl: ''
+    })
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'getStaticVotePublicationStatus').mockResolvedValue({
       available: false,
       publicUrl: 'https://tpi26.ch/votes-2026/',
       syncSecretConfigured: false
     })
-    jest.spyOn(planningServices.workflowPlanningService, 'generateStaticVotePublication').mockResolvedValue({
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'generateStaticVotePublication').mockResolvedValue({
       success: true,
       available: true,
       groupCount: 1,
       accessLinkCount: 1,
       syncSecretConfigured: true
     })
-    jest.spyOn(planningServices.workflowPlanningService, 'publishStaticVotePublication').mockResolvedValue({
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'publishStaticVotePublication').mockResolvedValue({
       success: true,
       available: true,
       publicUrl: 'https://tpi26.ch/votes-2026/'
     })
-    jest.spyOn(planningServices.workflowPlanningService, 'syncStaticVotePublication').mockResolvedValue({
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'syncStaticVotePublication').mockResolvedValue({
       success: true,
       receivedCount: 1,
       importedCount: 1,
       failedCount: 0
     })
-    jest.spyOn(planningServices.workflowPlanningService, 'startVotesWithoutEmails').mockResolvedValue({
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'startVotesWithoutEmails').mockResolvedValue({
       success: true,
       workflowState: 'voting_open',
       tpiCount: 1,
@@ -271,7 +278,7 @@ describe('PlanningDashboard', () => {
       emailsSkipped: true,
       details: []
     })
-    jest.spyOn(planningServices.workflowPlanningService, 'automatePlanification').mockResolvedValue({
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'automatePlanification').mockResolvedValue({
       success: true,
       summary: {
         totalTpis: 1,
@@ -300,41 +307,41 @@ describe('PlanningDashboard', () => {
     fireEvent.click(await screen.findByRole('button', { name: /sélectionner un tpi/i }))
 
     expect(await screen.findByRole('dialog', { name: /tpi-2026-001/i })).toBeInTheDocument()
-    expect(screen.getByText(/fiche planning/i)).toBeInTheDocument()
+    expect(screen.getByText(/fiche coordination/i)).toBeInTheDocument()
     expect(screen.getByText('Alice Durand', { selector: '.panel-candidate' })).toBeInTheDocument()
-    expect(screen.getByText('Sujet planning', { selector: '.panel-subject' })).toBeInTheDocument()
+    expect(screen.getByText('Sujet coordination', { selector: '.panel-subject' })).toBeInTheDocument()
     expect(screen.getByText(/participants/i, { selector: 'h4' })).toBeInTheDocument()
     expect(screen.getByText(/votes/i, { selector: 'h4' })).toBeInTheDocument()
-    expect(screen.queryByText(/lecture croisée gestiontpi \/ planning/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/lecture croisée gestiontpi \/ coordination/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/navigation interne de la fiche/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /fiche complète/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
   })
 
   test('synchronise automatiquement les votes du mini-site au chargement admin', async () => {
-    planningServices.workflowPlanningService.getStaticVotePublicationStatus.mockResolvedValueOnce({
+    coordinationServices.workflowCoordinationService.getStaticVotePublicationStatus.mockResolvedValueOnce({
       available: true,
       publicUrl: 'https://tpi26.ch/votes-2026/',
       syncSecretConfigured: true
     })
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     await waitFor(() => {
-      expect(planningServices.workflowPlanningService.syncStaticVotePublication).toHaveBeenCalledWith('2026')
+      expect(coordinationServices.workflowCoordinationService.syncStaticVotePublication).toHaveBeenCalledWith('2026')
     })
-    expect(await screen.findByText(/Planning 2026/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Coordination 2026/i)).toBeInTheDocument()
   })
 
-  test('reste stable quand les services de planning renvoient des listes vides ou nulles', async () => {
-    planningServices.planningCatalogService.getGlobal.mockResolvedValue(null)
-    planningServices.planningConfigService.getByYear.mockResolvedValue(null)
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue(null)
-    planningServices.slotService.getCalendar.mockResolvedValue(null)
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue(null)
-    planningServices.workflowPlanningService.getActiveSnapshot.mockResolvedValue(null)
+  test('reste stable quand les services de coordination renvoient des listes vides ou nulles', async () => {
+    coordinationServices.coordinationCatalogService.getGlobal.mockResolvedValue(null)
+    coordinationServices.coordinationConfigService.getByYear.mockResolvedValue(null)
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue(null)
+    coordinationServices.slotService.getCalendar.mockResolvedValue(null)
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue(null)
+    coordinationServices.workflowCoordinationService.getActiveSnapshot.mockResolvedValue(null)
     tpiController.getTpiModels.mockResolvedValue(null)
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.queryByText(/workflow planification/i)).not.toBeInTheDocument()
@@ -343,7 +350,7 @@ describe('PlanningDashboard', () => {
   })
 
   test('applique automatiquement un focus transmis par la fiche TPI', async () => {
-    renderDashboard({ initialEntries: ['/planning/2026?tab=list&focus=TPI-2026-001'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=list&focus=TPI-2026-001'] })
 
     expect(await screen.findByDisplayValue('TPI-2026-001')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /tpi-2026-001/i })).toBeInTheDocument()
@@ -352,10 +359,61 @@ describe('PlanningDashboard', () => {
   })
 
   test('signale explicitement un focus sans résultat visible', async () => {
-    renderDashboard({ initialEntries: ['/planning/2026?tab=list&focus=TPI-2026-999'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=list&focus=TPI-2026-999'] })
 
     expect(await screen.findByDisplayValue('TPI-2026-999')).toBeInTheDocument()
     expect(screen.getByText(/aucun tpi visible ne correspond/i)).toBeInTheDocument()
+  })
+
+  test('filtre la coordination par date de défense', async () => {
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
+      {
+        _id: 'coordination-date-1',
+        reference: 'TPI-2026-010',
+        status: 'confirmed',
+        candidat: { firstName: 'Alice', lastName: 'Durand' },
+        proposedSlots: [
+          {
+            slot: {
+              _id: 'slot-10',
+              date: '2026-06-10T08:00:00.000Z',
+              startTime: '08:00',
+              room: { name: 'A101' }
+            }
+          }
+        ]
+      },
+      {
+        _id: 'coordination-date-2',
+        reference: 'TPI-2026-012',
+        status: 'confirmed',
+        candidat: { firstName: 'Nora', lastName: 'Martin' },
+        proposedSlots: [
+          {
+            slot: {
+              _id: 'slot-12',
+              date: '2026-06-12T08:00:00.000Z',
+              startTime: '08:00',
+              room: { name: 'B202' }
+            }
+          }
+        ]
+      }
+    ])
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=list'] })
+
+    expect(await screen.findByTestId('mock-tpi-refs')).toHaveTextContent('TPI-2026-010')
+    expect(screen.getByTestId('mock-tpi-refs')).toHaveTextContent('TPI-2026-012')
+
+    fireEvent.change(screen.getByLabelText('Filtrer par date de défense'), {
+      target: { value: '2026-06-12' }
+    })
+
+    expect(screen.getByTestId('mock-tpi-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('mock-tpi-refs')).toHaveTextContent('TPI-2026-012')
+    expect(screen.getByTestId('mock-tpi-refs')).not.toHaveTextContent('TPI-2026-010')
+    expect(screen.getByText(/Date: ven., 12.06.2026/i)).toBeInTheDocument()
   })
 
   test('ne rend plus le bloc workflow admin', async () => {
@@ -368,28 +426,28 @@ describe('PlanningDashboard', () => {
 
   test('ouvre les votes sans emails depuis le cockpit votes debug', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
-    planningServices.workflowPlanningService.getActiveSnapshot.mockResolvedValue({
+    coordinationServices.workflowCoordinationService.getActiveSnapshot.mockResolvedValue({
       version: 2,
       isActive: true
     })
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', { name: /ouvrir votes sans emails/i }))
 
     await waitFor(() => {
-      expect(planningServices.workflowPlanningService.startVotesWithoutEmails).toHaveBeenCalledWith('2026')
+      expect(coordinationServices.workflowCoordinationService.startVotesWithoutEmails).toHaveBeenCalledWith('2026')
     })
 
     confirmSpy.mockRestore()
   })
 
   test('ouvre l aperçu des liens vote depuis le cockpit votes debug', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
     const targetYear = '2026'
 
     renderDashboard({
-      initialEntries: [`/planning/${targetYear}?tab=votes`],
+      initialEntries: [`/coordination/${targetYear}?tab=votes`],
       year: targetYear,
       children: <LocationDisplay />
     })
@@ -405,10 +463,10 @@ describe('PlanningDashboard', () => {
 
   test('affiche le cockpit admin de campagne avec la file des votes a relancer', async () => {
     jest.spyOn(window, 'confirm').mockReturnValue(true)
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       {
-        _id: 'planning-vote-1',
+        _id: 'coordination-vote-1',
         reference: 'TPI-2026-042',
         status: 'voting',
         sujet: 'Sujet vote',
@@ -505,7 +563,7 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /réponses reçues/i })).toBeInTheDocument()
@@ -531,7 +589,7 @@ describe('PlanningDashboard', () => {
     }))
 
     await waitFor(() => {
-      expect(planningServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
+      expect(coordinationServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
     })
 
     fireEvent.click(screen.getByRole('button', {
@@ -540,8 +598,8 @@ describe('PlanningDashboard', () => {
 
     expect(await screen.findByRole('dialog', { name: /test de déplacement/i })).toBeInTheDocument()
     expect(screen.getAllByText(/11\.06\.2026 · après-midi · B202/i).length).toBeGreaterThan(0)
-    expect(planningServices.tpiPlanningService.simulateMoveToSlot).toHaveBeenCalledWith(
-      'planning-vote-1',
+    expect(coordinationServices.tpiCoordinationService.simulateMoveToSlot).toHaveBeenCalledWith(
+      'coordination-vote-1',
       'slot-alt'
     )
     expect(await screen.findByText(/déplacement possible sans conflit détecté/i)).toBeInTheDocument()
@@ -558,8 +616,8 @@ describe('PlanningDashboard', () => {
       expect(window.confirm).toHaveBeenCalled()
     })
     await waitFor(() => {
-      expect(planningServices.tpiPlanningService.moveToSlot).toHaveBeenCalledWith(
-        'planning-vote-1',
+      expect(coordinationServices.tpiCoordinationService.moveToSlot).toHaveBeenCalledWith(
+        'coordination-vote-1',
         'slot-alt',
         expect.stringMatching(/Carla Expert/i)
       )
@@ -567,11 +625,11 @@ describe('PlanningDashboard', () => {
   })
 
   test('masque les TPI sans réponse dans le cockpit de votes', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       buildVoteProposalTpi(),
       buildVoteProposalTpi({
-        _id: 'planning-vote-empty',
+        _id: 'coordination-vote-empty',
         reference: 'TPI-2026-099',
         voteRoleStatus: {
           expert1: { decision: 'pending', responseMode: 'pending' },
@@ -613,7 +671,7 @@ describe('PlanningDashboard', () => {
       })
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.getByText('TPI-2026-042')).toBeInTheDocument()
@@ -622,10 +680,10 @@ describe('PlanningDashboard', () => {
   })
 
   test('garde une file filtrée vide quand aucun TPI avec réponse ne correspond', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       buildVoteProposalTpi({
-        _id: 'planning-vote-ready',
+        _id: 'coordination-vote-ready',
         reference: 'TPI-2026-READY',
         voteRoleStatus: {
           expert1: { decision: 'accepted', responseMode: 'ok' },
@@ -643,7 +701,7 @@ describe('PlanningDashboard', () => {
       })
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     expect(await screen.findByText('TPI-2026-READY')).toBeInTheDocument()
 
@@ -654,8 +712,8 @@ describe('PlanningDashboard', () => {
   })
 
   test('affiche les commentaires seule disponibilité et contrainte dure dans le suivi des votes', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       buildVoteProposalTpi({
         voteStats: {
           totalVotes: 3,
@@ -734,7 +792,7 @@ describe('PlanningDashboard', () => {
       })
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
     expect(screen.getByText(/1 contrainte/i)).toBeInTheDocument()
@@ -769,8 +827,8 @@ describe('PlanningDashboard', () => {
   })
 
   test('vérifie aussi les contraintes dures portées par le statut du rôle', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       buildVoteProposalTpi({
         voteRoleStatus: {
           expert1: { decision: 'accepted', responseMode: 'ok' },
@@ -794,7 +852,7 @@ describe('PlanningDashboard', () => {
       })
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', { name: /vérifier contraintes/i }))
 
@@ -804,8 +862,8 @@ describe('PlanningDashboard', () => {
   })
 
   test('transmet une proposition d arbitrage depuis un dossier bloquant', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       buildVoteProposalTpi({
         voteRoleStatus: {
           expert1: { decision: 'accepted', responseMode: 'ok' },
@@ -821,7 +879,7 @@ describe('PlanningDashboard', () => {
       })
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /transmettre une proposition d.arbitrage pour tpi-2026-042/i
@@ -831,8 +889,8 @@ describe('PlanningDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: /transmettre la proposition d.arbitrage pour tpi-2026-042/i }))
 
     await waitFor(() => {
-      expect(planningServices.resolutionProposalService.create).toHaveBeenCalledWith(
-        'planning-vote-1',
+      expect(coordinationServices.resolutionProposalService.create).toHaveBeenCalledWith(
+        'coordination-vote-1',
         expect.objectContaining({
           slotId: 'slot-alt',
           recipientRoles: ['chef_projet'],
@@ -844,8 +902,8 @@ describe('PlanningDashboard', () => {
   })
 
   test('génère les liens DEV sans fermer la modale d arbitrage', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       buildVoteProposalTpi({
         voteRoleStatus: {
           expert1: { decision: 'accepted', responseMode: 'ok' },
@@ -860,7 +918,7 @@ describe('PlanningDashboard', () => {
         }
       })
     ])
-    planningServices.resolutionProposalService.create.mockResolvedValueOnce({
+    coordinationServices.resolutionProposalService.create.mockResolvedValueOnce({
       success: true,
       proposal: {
         id: 'resolution-proposal-dev',
@@ -883,7 +941,7 @@ describe('PlanningDashboard', () => {
       }
     })
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /transmettre une proposition d.arbitrage pour tpi-2026-042/i
@@ -893,8 +951,8 @@ describe('PlanningDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: /transmettre la proposition d.arbitrage pour tpi-2026-042/i }))
 
     await waitFor(() => {
-      expect(planningServices.resolutionProposalService.create).toHaveBeenCalledWith(
-        'planning-vote-1',
+      expect(coordinationServices.resolutionProposalService.create).toHaveBeenCalledWith(
+        'coordination-vote-1',
         expect.objectContaining({
           devMode: true
         })
@@ -909,14 +967,14 @@ describe('PlanningDashboard', () => {
   })
 
   test('affiche le blocage quand un déplacement proposé crée un conflit', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
-    planningServices.tpiPlanningService.simulateMoveToSlot.mockResolvedValueOnce({
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+    coordinationServices.tpiCoordinationService.simulateMoveToSlot.mockResolvedValueOnce({
       success: false,
       canMove: false,
       status: 'blocked',
       message: 'Conflit détecté sur le créneau proposé.',
-      tpi: { _id: 'planning-vote-1', reference: 'TPI-2026-042' },
+      tpi: { _id: 'coordination-vote-1', reference: 'TPI-2026-042' },
       currentSlot: { _id: 'slot-fixed', label: '10.06.2026 · 08:00-12:00 · A101' },
       targetSlot: { _id: 'slot-alt', label: '11.06.2026 · 13:00-17:00 · B202' },
       conflicts: [
@@ -925,7 +983,7 @@ describe('PlanningDashboard', () => {
       swapCandidate: null
     })
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026 .* après-midi .* b202/i
@@ -944,16 +1002,16 @@ describe('PlanningDashboard', () => {
 
     fireEvent.click(blockedMoveButton)
 
-    expect(await screen.findByText(/focus résolution planning-vote-1/i)).toBeInTheDocument()
-    expect(planningServices.tpiPlanningService.moveToSlot).not.toHaveBeenCalled()
+    expect(await screen.findByText(/focus résolution coordination-vote-1/i)).toBeInTheDocument()
+    expect(coordinationServices.tpiCoordinationService.moveToSlot).not.toHaveBeenCalled()
   })
 
   test('n applique pas le déplacement proposé quand la confirmation admin est annulée', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false)
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026 .* après-midi .* b202/i
@@ -966,26 +1024,26 @@ describe('PlanningDashboard', () => {
         expect.stringMatching(/Confirmer le déplacement de TPI-2026-042 vers 11\.06\.2026/i)
       )
     })
-    expect(planningServices.tpiPlanningService.moveToSlot).not.toHaveBeenCalled()
+    expect(coordinationServices.tpiCoordinationService.moveToSlot).not.toHaveBeenCalled()
   })
 
   test('signale une préférence déjà présente dans les dates idéales', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
-    planningServices.voteService.addProposalToPreferences.mockResolvedValueOnce({
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+    coordinationServices.voteService.addProposalToPreferences.mockResolvedValueOnce({
       success: true,
       added: false,
       voter: { name: 'Carla Expert' }
     })
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /enregistrer 11\.06\.2026 .* b202 comme date idéale de carla expert/i
     }))
 
     await waitFor(() => {
-      expect(planningServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
+      expect(coordinationServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
     })
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Carla Expert: préférence déjà présente dans ses dates idéales.')
@@ -994,10 +1052,10 @@ describe('PlanningDashboard', () => {
   })
 
   test('ouvre la résolution depuis une ligne de vote à traiter', async () => {
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       {
-        _id: 'planning-manual-1',
+        _id: 'coordination-manual-1',
         reference: 'TPI-2026-077',
         status: 'manual_required',
         sujet: 'Sujet manuel',
@@ -1064,22 +1122,22 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', {
       name: /résoudre le créneau manuel de tpi-2026-077 depuis la file/i
     }))
 
     expect(await screen.findByRole('heading', { name: /créneaux à résoudre/i })).toBeInTheDocument()
-    expect(screen.getByText(/focus résolution planning-manual-1/i)).toBeInTheDocument()
+    expect(screen.getByText(/focus résolution coordination-manual-1/i)).toBeInTheDocument()
   })
 
   test('permet de confirmer directement un créneau depuis le détail des votes admin', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
-    planningServices.workflowPlanningService.getYearState.mockResolvedValue({ state: 'voting_open' })
-    planningServices.tpiPlanningService.getByYear.mockResolvedValue([
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
       {
-        _id: 'planning-ready-1',
+        _id: 'coordination-ready-1',
         reference: 'TPI-2026-088',
         status: 'voting',
         sujet: 'Sujet consensus',
@@ -1146,13 +1204,13 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     fireEvent.click(await screen.findByRole('button', { name: /valider 12\.06\.2026 .* tpi-2026-088/i }))
 
     await waitFor(() => {
-      expect(planningServices.tpiPlanningService.forceSlot).toHaveBeenCalledWith(
-        'planning-ready-1',
+      expect(coordinationServices.tpiCoordinationService.forceSlot).toHaveBeenCalledWith(
+        'coordination-ready-1',
         'slot-consensus',
         expect.stringMatching(/consensus 3\/3/i)
       )
@@ -1162,7 +1220,7 @@ describe('PlanningDashboard', () => {
   })
 
   test('n affiche pas les TPI legacy non importés hors des sites configurés', async () => {
-    planningServices.planningConfigService.getByYear.mockResolvedValue({
+    coordinationServices.coordinationConfigService.getByYear.mockResolvedValue({
       classTypes: [],
       siteConfigs: [
         { siteCode: 'ETML', active: true }
@@ -1171,7 +1229,7 @@ describe('PlanningDashboard', () => {
     tpiController.getTpiModels.mockResolvedValue([
       {
         refTpi: '9001',
-        candidat: 'Alice Hors Planning',
+        candidat: 'Alice Hors Coordination',
         site: 'CFPV',
         expert1: { name: '' },
         expert2: { name: '' },
@@ -1179,14 +1237,14 @@ describe('PlanningDashboard', () => {
       }
     ])
 
-    renderDashboard({ initialEntries: ['/planning/2026?tab=votes'] })
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
     await waitFor(() => {
-      expect(planningServices.planningConfigService.getByYear).toHaveBeenCalledWith('2026')
+      expect(coordinationServices.coordinationConfigService.getByYear).toHaveBeenCalledWith('2026')
     })
 
     expect(await screen.findByRole('heading', { name: /campagne de votes 2026/i })).toBeInTheDocument()
-    expect(screen.queryByText(/Perimetre Planning 2026/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Perimetre Coordination 2026/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/1 TPI hors site/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Sites planifies: ETML/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/CFPV: 1/i)).not.toBeInTheDocument()

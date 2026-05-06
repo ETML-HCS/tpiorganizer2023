@@ -51,8 +51,8 @@ function patchMethod(target, key, implementation) {
 }
 
 function addPublishedScheduleDependencyPatches(restore) {
-  const PlanningConfig = require('../models/planningConfigModel')
-  const PlanningSharedCatalog = require('../models/planningSharedCatalogModel')
+  const PlanningConfig = require('../models/coordinationConfigModel')
+  const PlanningSharedCatalog = require('../models/coordinationSharedCatalogModel')
 
   restore.push(
     patchMethod(PlanningSharedCatalog, 'findOne', () => ({
@@ -137,6 +137,98 @@ test('GET /api/defenses/:year returns the full published schedule for an admin s
     assert.equal(payload.length, 1)
     assert.equal(payload[0].name, 'A101')
     assert.equal(payload[0].tpiDatas[0].refTpi, 'TPI-2026-001')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('GET /api/defenses/:year affiche la version du lien en vue generale admin', async () => {
+  const { app, restoreEnv } = createTestContext()
+  const PublicationVersion = require('../models/publicationVersionModel')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
+  const publicationQueries = []
+  const restore = [
+    patchMethod(accessLinkTokenService, 'resolveMagicLink', async () => ({
+      link: {
+        type: 'soutenance',
+        year: 2026,
+        personId: 'admin-1',
+        personName: 'Ada Admin',
+        scope: {
+          publicationVersion: 4
+        }
+      },
+      person: {
+        _id: 'admin-1',
+        roles: ['admin']
+      }
+    })),
+    patchMethod(PublicationVersion, 'findOne', query => {
+      publicationQueries.push(query)
+
+      if (query?.version === 4) {
+        return {
+          lean: async () => ({
+            year: 2026,
+            version: 4,
+            isActive: false,
+            rooms: [
+              {
+                idRoom: 101,
+                name: 'A101',
+                tpiDatas: [
+                  {
+                    id: 'A101_0',
+                    refTpi: 'TPI-2026-001',
+                    candidat: 'Alice Candidate',
+                    expert1: { personId: 'admin-1', name: 'Ada Admin' },
+                    expert2: { name: 'Noa Expert' },
+                    boss: { name: 'Paul Chef' }
+                  },
+                  {
+                    id: 'A101_1',
+                    refTpi: 'TPI-2026-002',
+                    candidat: 'Bob Candidate',
+                    expert1: { personId: 'other-1', name: 'Other Expert' },
+                    expert2: { name: 'Noa Expert' },
+                    boss: { name: 'Paul Chef' }
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      }
+
+      return {
+        sort: () => ({
+          lean: async () => ({
+            year: 2026,
+            version: 5,
+            isActive: true,
+            rooms: []
+          })
+        })
+      }
+    })
+  ]
+  addPublishedScheduleDependencyPatches(restore)
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/defenses/2026?ml=admin-token&view=admin`)
+    const payload = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(payload.length, 1)
+    assert.equal(payload[0].tpiDatas.length, 2)
+    assert.equal(payload[0].tpiDatas[0].refTpi, 'TPI-2026-001')
+    assert.equal(payload[0].tpiDatas[1].refTpi, 'TPI-2026-002')
+    assert.deepEqual(publicationQueries[0], { year: 2026, version: 4 })
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -285,12 +377,12 @@ test('PUT /api/soutenances/:year/rooms/:roomId/tpis/:tpiDataId/offres/:expertOrB
   }
 })
 
-test('POST /api/soutenances/:year/publish-from-planning requires authentication', async () => {
+test('POST /api/soutenances/:year/publish-from-planification requires authentication', async () => {
   const { app, restoreEnv } = createTestContext()
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/soutenances/2026/publish-from-planning`, {
+    const response = await fetch(`${baseUrl}/api/soutenances/2026/publish-from-planification`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({})

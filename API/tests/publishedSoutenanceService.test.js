@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
+  enrichPublishedRoomsClassModes,
   enrichPublishedRoomsAppearance,
   enrichPublishedRoomsScheduleConfig,
   filterPublishedRooms,
@@ -224,6 +225,39 @@ test('inferPublishedRoomClassModeFromEntries returns matu only for homogeneous M
     ]),
     null
   )
+
+  assert.equal(
+    inferPublishedRoomClassModeFromEntries([
+      { tpi: { classe: 'CFC3' } },
+      { tpi: { classe: 'FPA4' } }
+    ]),
+    null
+  )
+})
+
+test('enrichPublishedRoomsClassModes restaure le type depuis les dates configurées', () => {
+  const rooms = enrichPublishedRoomsClassModes(
+    [
+      { idRoom: 1, date: '2026-06-10', name: 'A101', tpiDatas: [] },
+      { idRoom: 2, date: '2026-06-11', name: 'A102', tpiDatas: [] },
+      { idRoom: 3, date: '2026-06-12', name: 'A103', tpiDatas: [] },
+      { idRoom: 4, date: '2026-06-13', name: 'A104', roomClassMode: 'nonM', tpiDatas: [] },
+      { idRoom: 5, date: '2026-06-14', name: 'A105', special: true, tpiDatas: [] }
+    ],
+    {
+      soutenanceDates: [
+        { date: '2026-06-10', classes: ['MATU', 'M'] },
+        { date: '2026-06-11', special: true },
+        { date: '2026-06-12', classes: ['CFC', 'C'] }
+      ]
+    }
+  )
+
+  assert.equal(rooms[0].roomClassMode, 'matu')
+  assert.equal(rooms[1].roomClassMode, 'special')
+  assert.equal(rooms[2].roomClassMode, undefined)
+  assert.equal(rooms[3].roomClassMode, 'nonM')
+  assert.equal(rooms[4].roomClassMode, 'special')
 })
 
 test('syncPublishedSoutenancesToTpiCatalog updates défense dates in the TPI catalog', async () => {

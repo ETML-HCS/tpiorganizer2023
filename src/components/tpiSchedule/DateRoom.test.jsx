@@ -156,7 +156,7 @@ describe('DateRoom', () => {
     expect(screen.getAllByTestId('tpi-slot')[1]).toHaveAttribute('data-room-period', '2')
   })
 
-  test('applique la couleur de planning configurée pour un site non legacy', () => {
+  test('applique la couleur de planification configurée pour un site non legacy', () => {
     render(
       <DateRoom
         roomData={{

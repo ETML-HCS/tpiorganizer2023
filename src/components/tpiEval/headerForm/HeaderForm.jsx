@@ -187,7 +187,7 @@ const HeaderLine = ({ isVisible, searchCandidat }) => {
   const handleSearchClick = () => {
     // Obtenir l'année à partir de l'élément DOM avec l'ID 'yearTpi'
     const yearElement = document.querySelector("#yearTpi");
-    const year = yearElement.value; // Récupérer la valeur de l'élément
+    const year = yearElement?.value || yearElement?.textContent || ""; // Récupérer la valeur de l'élément
 
     // Vérifier si l'année est valide
     if (year.trim() === "") {

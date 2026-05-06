@@ -157,7 +157,7 @@ test('POST /api/workflow/:year/votes/start enforces admin role', async () => {
   }
 })
 
-test('POST /api/workflow/:year/votes/start accepts skipEmails in debug mode', async () => {
+test('POST /api/workflow/:year/votes/start forces skipEmails in debug mode', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -167,20 +167,85 @@ test('POST /api/workflow/:year/votes/start accepts skipEmails in debug mode', as
   })
 
   const workflowService = require('../services/workflowService')
-  const planningValidationService = require('../services/planningValidationService')
+  const coordinationValidationService = require('../services/coordinationValidationService')
   const votingCampaignService = require('../services/votingCampaignService')
-  const TpiPlanning = require('../models/tpiPlanningModel')
+  const TpiPlanning = require('../models/tpiCoordinationModel')
 
   let receivedOptions = null
   const restore = [
     patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'voting_open' })),
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La route votes/start ne doit pas ouvrir de phase automatiquement.')
+    }),
     patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
-    patchMethod(planningValidationService, 'getActiveSnapshot', async () => null),
+    patchMethod(coordinationValidationService, 'getActiveSnapshot', async () => null),
     patchMethod(TpiPlanning, 'countDocuments', async () => 1),
     patchMethod(votingCampaignService, 'startVotesCampaign', async (_year, _baseUrl, options = {}) => {
       receivedOptions = options
       return {
         tpiCount: 2,
+        totalEmails: 0,
+        successfulEmails: 0,
+        failedEmails: 0,
+        emailsSkipped: true,
+        details: []
+      }
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/votes/start`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ skipEmails: false })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.emailsSkipped, true)
+    assert.deepEqual(receivedOptions, { skipEmails: true })
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/votes/start accepts skipEmails outside debug mode', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret,
+    REACT_APP_DEBUG: 'false'
+  })
+
+  const workflowService = require('../services/workflowService')
+  const coordinationValidationService = require('../services/coordinationValidationService')
+  const votingCampaignService = require('../services/votingCampaignService')
+  const TpiPlanning = require('../models/tpiCoordinationModel')
+
+  let startVotesCalled = false
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'voting_open' })),
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La route votes/start ne doit pas ouvrir de phase automatiquement.')
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(coordinationValidationService, 'getActiveSnapshot', async () => null),
+    patchMethod(TpiPlanning, 'countDocuments', async () => 1),
+    patchMethod(votingCampaignService, 'startVotesCampaign', async () => {
+      startVotesCalled = true
+      return {
+        tpiCount: 0,
         totalEmails: 0,
         successfulEmails: 0,
         failedEmails: 0,
@@ -206,7 +271,7 @@ test('POST /api/workflow/:year/votes/start accepts skipEmails in debug mode', as
     const body = await response.json()
     assert.equal(body.success, true)
     assert.equal(body.emailsSkipped, true)
-    assert.deepEqual(receivedOptions, { skipEmails: true })
+    assert.equal(startVotesCalled, true)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -216,7 +281,7 @@ test('POST /api/workflow/:year/votes/start accepts skipEmails in debug mode', as
   }
 })
 
-test('POST /api/workflow/:year/votes/start rejects skipEmails outside debug mode', async () => {
+test('POST /api/workflow/:year/votes/start keeps admin phases unchanged', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -225,20 +290,31 @@ test('POST /api/workflow/:year/votes/start rejects skipEmails outside debug mode
     REACT_APP_DEBUG: 'false'
   })
 
+  const workflowService = require('../services/workflowService')
+  const coordinationValidationService = require('../services/coordinationValidationService')
   const votingCampaignService = require('../services/votingCampaignService')
+  const TpiPlanning = require('../models/tpiCoordinationModel')
 
-  let startVotesCalled = false
   const restore = [
-    patchMethod(votingCampaignService, 'startVotesCampaign', async () => {
-      startVotesCalled = true
-      return {
-        tpiCount: 0,
-        totalEmails: 0,
-        successfulEmails: 0,
-        failedEmails: 0,
-        details: []
-      }
-    })
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({
+      state: 'published',
+      activePhases: ['defenses'],
+      phases: { defenses: { active: true } }
+    })),
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La route votes/start ne doit pas ouvrir de phase automatiquement.')
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(coordinationValidationService, 'getActiveSnapshot', async () => ({ version: 3 })),
+    patchMethod(TpiPlanning, 'countDocuments', async () => 1),
+    patchMethod(votingCampaignService, 'startVotesCampaign', async () => ({
+      tpiCount: 1,
+      totalEmails: 0,
+      successfulEmails: 0,
+      failedEmails: 0,
+      emailsSkipped: true,
+      details: []
+    }))
   ]
 
   const { server, baseUrl } = await startServer(app)
@@ -253,10 +329,11 @@ test('POST /api/workflow/:year/votes/start rejects skipEmails outside debug mode
       body: JSON.stringify({ skipEmails: true })
     })
 
-    assert.equal(response.status, 403)
+    assert.equal(response.status, 200)
     const body = await response.json()
-    assert.equal(body.error, 'L ouverture des votes sans emails est indisponible hors mode debug.')
-    assert.equal(startVotesCalled, false)
+    assert.equal(body.success, true)
+    assert.equal(body.workflowState, 'published')
+    assert.deepEqual(body.activePhases, ['defenses'])
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -374,6 +451,68 @@ test('POST /api/workflow/:year/access-links/generate enforces admin role', async
   }
 })
 
+test('GET /api/workflow/:year/access-links/logs retourne les logs admin filtres', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
+  const calls = []
+  const restore = [
+    patchMethod(accessLinkTokenService, 'listAccessLogs', async (params) => {
+      calls.push(params)
+      return [
+        {
+          id: 'log-1',
+          year: 2026,
+          type: 'vote',
+          status: 'success'
+        }
+      ]
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/api/workflow/2026/access-links/logs?type=vote&status=success&limit=25`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    )
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.year, 2026)
+    assert.deepEqual(body.logs, [
+      {
+        id: 'log-1',
+        year: 2026,
+        type: 'vote',
+        status: 'success'
+      }
+    ])
+    assert.deepEqual(calls[0], {
+      year: 2026,
+      type: 'vote',
+      status: 'success',
+      personId: '',
+      limit: 25
+    })
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/access-links/generate rejects publication target without public URL', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
@@ -383,8 +522,10 @@ test('POST /api/workflow/:year/access-links/generate rejects publication target 
   })
 
   const workflowService = require('../services/workflowService')
+  const staticDefensePublicationService = require('../services/staticDefensePublicationService')
   const restore = [
-    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published' }))
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published' })),
+    patchMethod(staticDefensePublicationService, 'getStaticPublicationStatus', async () => ({ publicUrl: '' }))
   ]
   const { server, baseUrl } = await startServer(app)
 
@@ -410,7 +551,117 @@ test('POST /api/workflow/:year/access-links/generate rejects publication target 
   }
 })
 
-test('POST /api/workflow/:year/publication/deactivate disables publication and reopens votes', async () => {
+test('POST /api/workflow/:year/access-links/generate orchestre la generation globale et les mini-sites', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+  const accessLinkPreviewModule = require('../modules/accessLinks/previewService')
+  let previewPayload = null
+  const restorePreview = [
+    patchMethod(accessLinkPreviewModule, 'buildAccessLinkPreview', async (payload) => {
+      previewPayload = payload
+      return {
+        year: payload.year,
+        linksGenerated: true,
+        hasGeneratedLinks: true,
+        summary: {
+          peopleCount: 0,
+          voteLinkCount: 0,
+          voteGeneratedLinkCount: 0,
+          soutenanceLinkCount: 0,
+          soutenanceGeneratedLinkCount: 0,
+          arbitrageLinkCount: 0,
+          generatedLinkCount: 0
+        },
+        contexts: {
+          vote: {},
+          soutenance: {},
+          arbitrage: {}
+        },
+        people: []
+      }
+    })
+  ]
+
+  const workflowService = require('../services/workflowService')
+  const coordinationConfigService = require('../services/coordinationConfigService')
+  const staticVotePublicationService = require('../services/staticVotePublicationService')
+  const staticDefensePublicationService = require('../services/staticDefensePublicationService')
+  const calls = []
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'planning', phases: {} })),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(coordinationConfigService, 'getPlanningConfigIfAvailable', async () => ({ accessLinkSettings: {} })),
+    patchMethod(staticVotePublicationService, 'getStaticVoteLinkTarget', async () => ({
+      baseUrl: 'https://votes.example.ch',
+      redirectPath: '/votes-2026/'
+    })),
+    patchMethod(staticVotePublicationService, 'generateStaticVotesSite', async (year) => {
+      calls.push(`vote-generate-${year}`)
+      return { publicUrl: 'https://votes.example.ch/votes-2026/' }
+    }),
+    patchMethod(staticVotePublicationService, 'publishStaticVotesSite', async (year) => {
+      calls.push(`vote-publish-${year}`)
+      return { publicUrl: 'https://votes.example.ch/votes-2026/', publishedAt: '2026-05-05T10:00:00.000Z' }
+    }),
+    patchMethod(staticDefensePublicationService, 'generateStaticDefensesSite', async (year) => {
+      calls.push(`defense-generate-${year}`)
+      return { publicUrl: 'https://publication.example.ch/defenses/' }
+    }),
+    patchMethod(staticDefensePublicationService, 'publishStaticDefensesSite', async (year) => {
+      calls.push(`defense-publish-${year}`)
+      return { publicUrl: 'https://publication.example.ch/defenses/', publishedAt: '2026-05-05T10:00:00.000Z' }
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/generate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        voteLinkTarget: 'static',
+        votePublicUrl: 'https://votes.example.ch/votes-2026/',
+        soutenanceLinkTarget: 'publication',
+        soutenancePublicUrl: 'https://publication.example.ch/defenses/'
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(previewPayload.generateLinks, true)
+    assert.equal(previewPayload.workflowFreeModeEnabled, true)
+    assert.equal(previewPayload.autoPublishSoutenance, true)
+    assert.equal(previewPayload.voteLinkTarget, 'static')
+    assert.equal(previewPayload.soutenanceLinkTarget, 'publication')
+    assert.deepEqual(calls, [
+      'vote-generate-2026',
+      'vote-publish-2026',
+      'defense-generate-2026',
+      'defense-publish-2026'
+    ])
+    assert.equal(body.publicationRefresh.votePublication.publicUrl, 'https://votes.example.ch/votes-2026/')
+    assert.equal(body.publicationRefresh.soutenancePublication.publicUrl, 'https://publication.example.ch/defenses/')
+    assert.deepEqual(body.warnings, [])
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    while (restorePreview.length > 0) {
+      restorePreview.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/publication/deactivate keeps phase control manual', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -422,10 +673,12 @@ test('POST /api/workflow/:year/publication/deactivate disables publication and r
   const publishedSoutenanceService = require('../services/publishedSoutenanceService')
   const votingCampaignService = require('../services/votingCampaignService')
 
-  let transitionArgs = null
-  let startVotesArgs = null
   const restore = [
-    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published' })),
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({
+      state: 'published',
+      activePhases: ['defenses'],
+      phases: { defenses: { active: true } }
+    })),
     patchMethod(workflowService, 'hasActivePlanningSnapshot', async () => ({ version: 2 })),
     patchMethod(publishedSoutenanceService, 'deactivatePublication', async () => ({
       deactivatedPublicationCount: 1,
@@ -434,26 +687,11 @@ test('POST /api/workflow/:year/publication/deactivate disables publication and r
       reopenedDirectPublicationCount: 2,
       deactivatedAt: '2026-05-02T12:00:00.000Z'
     })),
-    patchMethod(votingCampaignService, 'startVotesCampaign', async (...args) => {
-      startVotesArgs = args
-      return {
-        tpiCount: 2,
-        totalEmails: 0,
-        successfulEmails: 0,
-        failedEmails: 0,
-        emailsSkipped: true,
-        details: []
-      }
+    patchMethod(votingCampaignService, 'startVotesCampaign', async () => {
+      throw new Error('La désactivation de publication ne doit pas relancer les votes automatiquement.')
     }),
-    patchMethod(workflowService, 'transitionWorkflowYear', async (args) => {
-      transitionArgs = args
-      return {
-        changed: true,
-        workflow: {
-          year: args.year,
-          state: 'voting_open'
-        }
-      }
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La désactivation de publication ne doit pas modifier les phases automatiquement.')
     }),
     patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
   ]
@@ -472,15 +710,12 @@ test('POST /api/workflow/:year/publication/deactivate disables publication and r
     assert.equal(response.status, 200)
     const body = await response.json()
     assert.equal(body.success, true)
-    assert.equal(body.workflowState, 'voting_open')
+    assert.equal(body.workflowState, 'published')
+    assert.deepEqual(body.activePhases, ['defenses'])
     assert.equal(body.deactivatedPublicationCount, 1)
     assert.equal(body.revokedSoutenanceLinks, 4)
     assert.equal(body.reopenedDirectPublicationCount, 2)
-    assert.equal(body.voteCampaign.tpiCount, 2)
-    assert.equal(startVotesArgs[0], 2026)
-    assert.deepEqual(startVotesArgs[2], { skipEmails: true })
-    assert.equal(transitionArgs.targetState, 'voting_open')
-    assert.equal(transitionArgs.allowReopenVotesFromPublication, true)
+    assert.equal(body.voteCampaign, null)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -782,7 +1017,7 @@ test('POST /api/workflow/:year/publication/publish enforces admin role', async (
   }
 })
 
-test('POST /api/workflow/:year/publication/publish waits until all votes are resolved', async () => {
+test('POST /api/workflow/:year/publication/publish publishes with warning when votes are unresolved', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -791,14 +1026,39 @@ test('POST /api/workflow/:year/publication/publish waits until all votes are res
   })
 
   const workflowService = require('../services/workflowService')
-  const TpiPlanning = require('../models/tpiPlanningModel')
+  const publishedSoutenanceService = require('../services/publishedSoutenanceService')
+  const votingCampaignService = require('../services/votingCampaignService')
+  const TpiPlanning = require('../models/tpiCoordinationModel')
+  let sentLinksVersion = null
+  let sentLinksOptions = null
   const restore = [
-    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'voting_open' })),
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({
+      state: 'voting_open',
+      activePhases: ['votes'],
+      phases: { votes: { active: true } }
+    })),
     patchMethod(TpiPlanning, 'countDocuments', async (query) => {
       assert.equal(query.year, 2026)
       assert.deepEqual(query.status.$in, ['voting', 'pending_validation', 'manual_required'])
       return 1
-    })
+    }),
+    patchMethod(publishedSoutenanceService, 'publishConfirmedPlanningSoutenances', async () => ({
+      rooms: [{ idRoom: 1 }],
+      publicationVersion: { version: 7 }
+    })),
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La publication ne doit pas ouvrir la phase défenses automatiquement.')
+    }),
+    patchMethod(votingCampaignService, 'sendSoutenanceLinksForYear', async (year, baseUrl, version, options) => {
+      sentLinksVersion = version
+      sentLinksOptions = options
+      return {
+        emailsSent: 0,
+        emailsSucceeded: 0,
+        emailsSkipped: true
+      }
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
   ]
 
   const { server, baseUrl } = await startServer(app)
@@ -812,14 +1072,20 @@ test('POST /api/workflow/:year/publication/publish waits until all votes are res
       }
     })
 
-    assert.equal(response.status, 409)
+    assert.equal(response.status, 200)
     const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.roomsCount, 1)
+    assert.equal(body.publicationVersion.version, 7)
+    assert.equal(body.sentLinks.emailsSkipped, true)
+    assert.equal(sentLinksVersion, 7)
+    assert.equal(sentLinksOptions.skipEmails, true)
+    assert.equal(body.workflowState, 'voting_open')
+    assert.deepEqual(body.activePhases, ['votes'])
     assert.equal(
-      body.error,
-      'Publication bloquee tant que des TPI restent en vote ou en intervention manuelle.'
+      body.warnings[0],
+      '1 TPI restent en vote ou en intervention manuelle: publication forcée par l\'admin.'
     )
-    assert.equal(body.details.blockingCount, 1)
-    assert.deepEqual(body.details.blockingStatuses, ['voting', 'pending_validation', 'manual_required'])
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -829,7 +1095,7 @@ test('POST /api/workflow/:year/publication/publish waits until all votes are res
   }
 })
 
-test('POST /api/workflow/:year/publication/publish can publish directly from a validated planning snapshot', async () => {
+test('POST /api/workflow/:year/publication/publish can publish the current admin planification rooms', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -838,11 +1104,108 @@ test('POST /api/workflow/:year/publication/publish can publish directly from a v
   })
 
   const workflowService = require('../services/workflowService')
-  const planningValidationService = require('../services/planningValidationService')
+  const publishedSoutenanceService = require('../services/publishedSoutenanceService')
+  const votingCampaignService = require('../services/votingCampaignService')
+  const TpiPlanning = require('../models/tpiCoordinationModel')
+  const legacyRooms = [
+    {
+      idRoom: 123,
+      name: 'A101',
+      site: 'ETML',
+      date: '2026-06-10',
+      tpiDatas: [
+        {
+          id: 'room-a_1',
+          refTpi: 'TPI-2026-001',
+          candidat: 'Alice Candidate',
+          expert1: { name: 'Expert One' },
+          expert2: { name: 'Expert Two' },
+          boss: { name: 'Chef Projet' }
+        }
+      ]
+    }
+  ]
+  let publishRoomsPayload = null
+  let sentLinksPayload = null
+
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({
+      state: 'planning',
+      activePhases: ['planning'],
+      phases: { planning: { active: true } }
+    })),
+    patchMethod(TpiPlanning, 'countDocuments', async () => 0),
+    patchMethod(publishedSoutenanceService, 'publishRoomsAsSoutenances', async (year, rooms, user, source) => {
+      publishRoomsPayload = { year, rooms, user, source }
+      return {
+        rooms,
+        publicationVersion: { version: 9 }
+      }
+    }),
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La publication ne doit pas ouvrir la phase défenses automatiquement.')
+    }),
+    patchMethod(votingCampaignService, 'sendSoutenanceLinksForYear', async (year, baseUrl, publicationVersion, options) => {
+      sentLinksPayload = { year, baseUrl, publicationVersion, options }
+      return {
+        emailsSent: 0,
+        emailsSucceeded: 0,
+        emailsSkipped: true
+      }
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/publish`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ legacyRooms })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.roomsCount, 1)
+    assert.equal(body.publicationVersion.version, 9)
+    assert.equal(publishRoomsPayload.year, 2026)
+    assert.deepEqual(publishRoomsPayload.rooms, legacyRooms)
+    assert.equal(publishRoomsPayload.source.origin, 'admin_current_planning')
+    assert.equal(sentLinksPayload.publicationVersion, 9)
+    assert.deepEqual(sentLinksPayload.options.publicationRooms, legacyRooms)
+    assert.equal(sentLinksPayload.options.skipEmails, true)
+    assert.equal(body.workflowState, 'planning')
+    assert.deepEqual(body.activePhases, ['planning'])
+    assert.match(body.message, /planification courante/)
+    assert.ok(body.warnings.includes('Publication générée depuis la planification courante fournie par l\'admin.'))
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/publication/publish can publish directly from a validated planification snapshot', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const coordinationValidationService = require('../services/coordinationValidationService')
   const schedulingService = require('../services/schedulingService')
   const publishedSoutenanceService = require('../services/publishedSoutenanceService')
   const votingCampaignService = require('../services/votingCampaignService')
-  const TpiPlanning = require('../models/tpiPlanningModel')
+  const TpiPlanning = require('../models/tpiCoordinationModel')
 
   const tpiId = '507f1f77bcf86cd799439012'
   const slotId = '507f1f77bcf86cd799439013'
@@ -858,18 +1221,22 @@ test('POST /api/workflow/:year/publication/publish can publish directly from a v
     ]
   }
   const confirmCalls = []
-  let transitionPayload = null
+  let directSentLinksOptions = null
 
   const restore = [
-    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'planning' })),
-    patchMethod(planningValidationService, 'getActiveSnapshot', async () => snapshot),
-    patchMethod(planningValidationService, 'validatePlanningForYear', async () => ({
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({
+      state: 'planning',
+      activePhases: ['planning'],
+      phases: { planning: { active: true } }
+    })),
+    patchMethod(coordinationValidationService, 'getActiveSnapshot', async () => snapshot),
+    patchMethod(coordinationValidationService, 'validatePlanningForYear', async () => ({
       year: 2026,
       summary: { isValid: true, issueCount: 0 },
       issues: [],
       entries: snapshot.entries
     })),
-    patchMethod(planningValidationService, 'isValidationAlignedWithSnapshot', () => true),
+    patchMethod(coordinationValidationService, 'isValidationAlignedWithSnapshot', () => true),
     patchMethod(TpiPlanning, 'find', (query) => {
       assert.equal(query.year, 2026)
       assert.deepEqual(query._id.$in, [tpiId])
@@ -902,17 +1269,17 @@ test('POST /api/workflow/:year/publication/publish can publish directly from a v
       rooms: [{ idRoom: 1 }],
       publicationVersion: { version: 2 }
     })),
-    patchMethod(workflowService, 'transitionWorkflowYear', async (payload) => {
-      transitionPayload = payload
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async () => {
+      throw new Error('La publication directe ne doit pas ouvrir la phase défenses automatiquement.')
+    }),
+    patchMethod(votingCampaignService, 'sendSoutenanceLinksForYear', async (_year, _baseUrl, _publicationVersion, options) => {
+      directSentLinksOptions = options
       return {
-        changed: true,
-        workflow: { state: 'published' }
+        emailsSent: 0,
+        emailsSucceeded: 0,
+        emailsSkipped: true
       }
     }),
-    patchMethod(votingCampaignService, 'sendSoutenanceLinksForYear', async () => ({
-      emailsSent: 4,
-      emailsSucceeded: 4
-    })),
     patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {})
   ]
 
@@ -942,8 +1309,10 @@ test('POST /api/workflow/:year/publication/publish can publish directly from a v
     assert.equal(confirmCalls[0].receivedTpiId, tpiId)
     assert.equal(confirmCalls[0].receivedSlotId, slotId)
     assert.equal(confirmCalls[0].options.historyAction, 'slot_confirmed_direct_publication')
-    assert.equal(transitionPayload.targetState, 'published')
-    assert.equal(transitionPayload.allowDirectPublication, true)
+    assert.equal(body.sentLinks.emailsSkipped, true)
+    assert.equal(directSentLinksOptions.skipEmails, true)
+    assert.equal(body.workflowState, 'planning')
+    assert.deepEqual(body.activePhases, ['planning'])
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -1007,7 +1376,7 @@ test('POST /api/workflow/:year/reset validates confirmation phrase', async () =>
   }
 })
 
-test('POST /api/workflow/:year/reset resets workflow and returns planning state', async () => {
+test('POST /api/workflow/:year/reset resets workflow and returns planification state', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -1036,7 +1405,8 @@ test('POST /api/workflow/:year/reset resets workflow and returns planning state'
     patchMethod(workflowService, 'getWorkflowYearState', async year => ({
       year,
       state: 'planning',
-      allowedTransitions: ['voting_open']
+      activePhases: ['planning'],
+      phases: { planning: { active: true } }
     }))
   ]
 
@@ -1067,61 +1437,7 @@ test('POST /api/workflow/:year/reset resets workflow and returns planning state'
   }
 })
 
-test('POST /api/workflow/:year/transition requires authentication', async () => {
-  const jwtSecret = 'test-jwt-secret'
-  const { app, restoreEnv } = loadTestApp({
-    NODE_ENV: 'development',
-    JWT_SECRET: jwtSecret
-  })
-
-  const { server, baseUrl } = await startServer(app)
-
-  try {
-    const response = await fetch(`${baseUrl}/api/workflow/2026/transition`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ targetState: 'voting_open' })
-    })
-
-    assert.equal(response.status, 401)
-  } finally {
-    await closeServer(server)
-    restoreEnv()
-  }
-})
-
-test('POST /api/workflow/:year/transition enforces admin role', async () => {
-  const jwtSecret = 'test-jwt-secret'
-  const token = buildSessionToken(jwtSecret, ['expert1'])
-  const { app, restoreEnv } = loadTestApp({
-    NODE_ENV: 'development',
-    JWT_SECRET: jwtSecret
-  })
-
-  const { server, baseUrl } = await startServer(app)
-
-  try {
-    const response = await fetch(`${baseUrl}/api/workflow/2026/transition`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ targetState: 'voting_open' })
-    })
-
-    assert.equal(response.status, 403)
-    const body = await response.json()
-    assert.equal(body.error, 'Acc\u00e8s non autoris\u00e9')
-  } finally {
-    await closeServer(server)
-    restoreEnv()
-  }
-})
-
-test('POST /api/workflow/:year/transition validates targetState', async () => {
+test('POST /api/workflow/:year/phases/:phase toggles an admin phase', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -1129,22 +1445,54 @@ test('POST /api/workflow/:year/transition validates targetState', async () => {
     JWT_SECRET: jwtSecret
   })
 
+  const workflowService = require('../services/workflowService')
+  let receivedPayload = null
+  const restore = [
+    patchMethod(workflowService, 'setWorkflowPhaseActive', async payload => {
+      receivedPayload = payload
+      return {
+        changed: true,
+        phase: payload.phase,
+        active: payload.active,
+        workflow: {
+          year: payload.year,
+          state: 'voting_open',
+          activePhases: ['planning', 'votes'],
+          phases: {
+            planning: { active: true },
+            votes: { active: true }
+          }
+        }
+      }
+    })
+  ]
+
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/workflow/2026/transition`, {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/phases/votes`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ targetState: 'invalid_state' })
+      body: JSON.stringify({ active: true, reason: 'Ouverture admin' })
     })
 
-    assert.equal(response.status, 400)
+    assert.equal(response.status, 200)
     const body = await response.json()
-    assert.equal(body.error, 'Etat workflow invalide.')
+    assert.equal(body.success, true)
+    assert.equal(body.phase, 'votes')
+    assert.equal(body.active, true)
+    assert.deepEqual(body.activePhases, ['planning', 'votes'])
+    assert.equal(receivedPayload.year, 2026)
+    assert.equal(receivedPayload.phase, 'votes')
+    assert.equal(receivedPayload.active, true)
+    assert.equal(receivedPayload.reason, 'Ouverture admin')
   } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
     await closeServer(server)
     restoreEnv()
   }

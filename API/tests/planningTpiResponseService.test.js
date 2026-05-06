@@ -2,10 +2,10 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const mongoose = require('mongoose')
 
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const {
   toPlanningTpiResponseObject
-} = require('../services/planningTpiResponseService')
+} = require('../services/coordinationTpiResponseService')
 
 test('toPlanningTpiResponseObject allows computed vote fields to be serialized', () => {
   const personId = new mongoose.Types.ObjectId()

@@ -64,88 +64,67 @@ describe('TpiList', () => {
     mockTpiForm.mockClear()
   })
 
-  it('reactivates the missing stakeholder filter when the year changes to a list with gaps', async () => {
-    const completeList = [
-      buildTpi({
-        refTpi: '2163',
-        candidat: 'Chasi Sanchez Dario Jhesuanj',
-        expert1: 'Alain Pittet',
-        expert2: 'Karim Bourahla'
-      })
-    ]
-
-    const listWithMissingExpert = [
-      buildTpi({
-        refTpi: '2060',
-        candidat: 'Scordato Alessio',
-        expert1: '',
-        expert2: 'Volkan Sutcu'
-      }),
-      buildTpi({
-        refTpi: '2163',
-        candidat: 'Chasi Sanchez Dario Jhesuanj',
-        expert1: 'Alain Pittet',
-        expert2: 'Karim Bourahla'
-      })
-    ]
-
-    const { rerender } = renderWithRouter(
+  it('filters the list from the external missing stakeholder filter', () => {
+    renderWithRouter(
       <TpiList
-        tpiList={completeList}
+        tpiList={[
+          buildTpi({
+            refTpi: '2060',
+            candidat: 'Scordato Alessio',
+            expert1: '',
+            expert2: 'Volkan Sutcu'
+          }),
+          buildTpi({
+            refTpi: '2163',
+            candidat: 'Chasi Sanchez Dario Jhesuanj',
+            expert1: 'Alain Pittet',
+            expert2: 'Karim Bourahla'
+          })
+        ]}
         onSave={() => {}}
         year={2026}
+        stakeholderFilter='missing'
         planningSiteConfigs={defaultPlanningSiteConfigs}
       />
     )
 
+    expect(screen.queryByRole('region', { name: /qualité/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /manquantes/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /incorrectes/i })).not.toBeInTheDocument()
-
-    rerender(
-      <MemoryRouter>
-        <TpiList
-          tpiList={listWithMissingExpert}
-          onSave={() => {}}
-          year={2025}
-          planningSiteConfigs={defaultPlanningSiteConfigs}
-        />
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /manquantes/i })).toHaveClass('active')
-    })
-
     expect(screen.getByText('Scordato Alessio')).toBeInTheDocument()
     expect(screen.queryByText('Chasi Sanchez Dario Jhesuanj')).not.toBeInTheDocument()
   })
 
-  it('shows the incorrect stakeholder filter when links are missing but names are complete', () => {
-    const listWithLinkIssueOnly = [
-      {
-        ...buildTpi({
-          refTpi: '2163',
-          candidat: 'Chasi Sanchez Dario Jhesuanj',
-          expert1: 'Alain Pittet',
-          expert2: 'Karim Bourahla'
-        }),
-        candidatPersonId: null
-      }
-    ]
-
+  it('filters stakeholder link issues when names are complete', () => {
     renderWithRouter(
       <TpiList
-        tpiList={listWithLinkIssueOnly}
+        tpiList={[
+          {
+            ...buildTpi({
+              refTpi: '2163',
+              candidat: 'Chasi Sanchez Dario Jhesuanj',
+              expert1: 'Alain Pittet',
+              expert2: 'Karim Bourahla'
+            }),
+            candidatPersonId: null
+          },
+          buildTpi({
+            refTpi: '2164',
+            candidat: 'Dossier Complet',
+            expert1: 'Alain Pittet',
+            expert2: 'Karim Bourahla'
+          })
+        ]}
         onSave={() => {}}
         year={2026}
+        stakeholderFilter='issues'
         planningSiteConfigs={defaultPlanningSiteConfigs}
       />
     )
 
     expect(screen.queryByRole('button', { name: /manquantes/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /incorrectes/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /manquantes/i })).not.toBeInTheDocument()
     expect(screen.getByText('Chasi Sanchez Dario Jhesuanj')).toBeInTheDocument()
+    expect(screen.queryByText('Dossier Complet')).not.toBeInTheDocument()
   })
 
   it('does not flag a link issue when the API already marks stakeholders as resolved', () => {
@@ -421,7 +400,7 @@ describe('TpiList', () => {
     expect(screen.queryByText(/liaison pp à compléter/i)).not.toBeInTheDocument()
   })
 
-  it('filters the list by planning perimeter', () => {
+  it('filters the list by coordination perimeter', () => {
     renderWithRouter(
       <TpiList
         tpiList={[
@@ -442,13 +421,12 @@ describe('TpiList', () => {
         ]}
         onSave={() => {}}
         year={2026}
+        planningScopeFilter='out-of-scope'
         planningSiteConfigs={[
           { siteCode: 'ETML', label: 'ETML', active: true }
         ]}
       />
     )
-
-    fireEvent.click(screen.getByRole('button', { name: /hors pér/i }))
 
     expect(screen.getByText('Bruno CFPV')).toBeInTheDocument()
     expect(screen.queryByText('Alice ETML')).not.toBeInTheDocument()

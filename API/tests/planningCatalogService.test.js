@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const {
   buildDefaultPlanningCatalog,
   normalizeStoredCatalog
-} = require('../services/planningCatalogService')
+} = require('../services/coordinationCatalogService')
 
 test('buildDefaultPlanningCatalog retourne un catalogue partage vide et reutilisable', () => {
   const catalog = buildDefaultPlanningCatalog()

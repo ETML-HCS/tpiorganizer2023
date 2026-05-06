@@ -1,7 +1,7 @@
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import ConflictResolver from './ConflictResolver'
-import { tpiPlanningService } from '../../services/planningService'
+import { tpiCoordinationService } from '../../services/coordinationService'
 
 jest.mock('../shared/InlineIcons', () => {
   const React = require('react')
@@ -27,8 +27,8 @@ jest.mock('../shared/InlineIcons', () => {
   }
 })
 
-jest.mock('../../services/planningService', () => ({
-  tpiPlanningService: {
+jest.mock('../../services/coordinationService', () => ({
+  tpiCoordinationService: {
     resendVotes: jest.fn()
   }
 }))
@@ -65,7 +65,7 @@ const buildConflict = () => ({
 
 describe('ConflictResolver', () => {
   beforeEach(() => {
-    tpiPlanningService.resendVotes.mockResolvedValue({ emailsSent: 3 })
+    tpiCoordinationService.resendVotes.mockResolvedValue({ emailsSent: 3 })
     const alertMock = jest.fn()
     global.alert = alertMock
     window.alert = alertMock
@@ -105,7 +105,7 @@ describe('ConflictResolver', () => {
     fireEvent.click(screen.getByRole('button', { name: /Renvoyer les demandes de vote/i }))
 
     await waitFor(() => {
-      expect(tpiPlanningService.resendVotes).toHaveBeenCalledWith(
+      expect(tpiCoordinationService.resendVotes).toHaveBeenCalledWith(
         '507f1f77bcf86cd799439011',
         { fromArbitrage: true }
       )

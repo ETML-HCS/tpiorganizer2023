@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { voteService } from '../../services/planningService'
+import { voteService } from '../../services/coordinationService'
 import BinaryToggle from '../shared/BinaryToggle'
 import {
   AlertIcon,
@@ -339,7 +339,7 @@ function getProposalCardLabel(option) {
     return '½ journée'
   }
 
-  return option?.source === 'existing_vote' ? 'Déjà proposé' : 'Planning'
+  return option?.source === 'existing_vote' ? 'Déjà proposé' : 'Coordination'
 }
 
 function getProposalCardTitle(option, isSelected) {

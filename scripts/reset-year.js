@@ -1,4 +1,4 @@
-// Script pour reset l'état d'une année et permettre un nouveau gel
+// Script pour réinitialiser les données et les phases d'une année.
 require('dotenv').config()
 const path = require('path')
 const mongoose = require('mongoose')
@@ -34,16 +34,18 @@ async function resetYear(year = 2026) {
   const deletedTpi = await TpiPlanning.deleteMany({ year })
   console.log(`📁 tpiPlannings supprimés: ${deletedTpi.deletedCount}`)
 
-  // 5. Remettre le workflow en état 'planning'
+  // 5. Remettre les phases admin au minimum de préparation
   const workflow = await WorkflowYearModel.WorkflowYear.findOne({ year })
   if (workflow) {
     workflow.state = 'planning'
+    workflow.activePhases = ['planning']
     workflow.votingOpenedAt = null
+    workflow.arbitrageOpenedAt = null
     workflow.publishedAt = null
     await workflow.save()
-    console.log(`📋 Workflow remis à: planning`)
+    console.log(`📋 Phases remises à: planning`)
   } else {
-    console.log(`📋 Workflow: NON INITIALISÉ (sera créé au prochain gel)`)
+    console.log(`📋 Phases: NON INITIALISÉES (seront créées à la prochaine action)`)
   }
 
   console.log('\n✅ RESET terminé !')

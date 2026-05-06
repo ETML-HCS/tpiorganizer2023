@@ -221,7 +221,7 @@ describe("planningCapacityUtils", () => {
     expect(overview.sites[0].roomGap).toBe(0)
   })
 
-  it("sizes from configured défense dates even when fixed planning dates already exist", () => {
+  it("sizes from configured défense dates even when fixed planification dates already exist", () => {
     const overview = buildPlanningRoomSizingOverview({
       tpis: Array.from({ length: 9 }, (_, index) => ({
         site: "SEBEILLON",

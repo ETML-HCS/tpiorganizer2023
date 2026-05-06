@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
 const Person = require('../models/personModel')
-const PlanningConfig = require('../models/planningConfigModel')
+const PlanningConfig = require('../models/coordinationConfigModel')
 const PublicationVersion = require('../models/publicationVersionModel')
 const TpiModelsYear = require('../models/tpiModels')
 
@@ -30,7 +30,7 @@ async function login(baseUrl) {
   return await response.json()
 }
 
-test('GET /api/get-tpi requires authentication', async () => {
+test('GET /api/gestion-tpi/:year/tpis requires authentication', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -43,7 +43,7 @@ test('GET /api/get-tpi requires authentication', async () => {
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/get-tpi`)
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/tpis`)
     const payload = await response.json()
 
     assert.equal(response.status, 401)
@@ -54,7 +54,7 @@ test('GET /api/get-tpi requires authentication', async () => {
   }
 })
 
-test('GET /api/get-tpi returns 400 when year is missing and token is valid', async () => {
+test('GET /api/gestion-tpi/:year/tpis rejects invalid years', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -69,7 +69,7 @@ test('GET /api/get-tpi returns 400 when year is missing and token is valid', asy
   try {
     const loginPayload = await login(baseUrl)
 
-    const response = await fetch(`${baseUrl}/api/get-tpi`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/20xx/tpis`, {
       headers: {
         Authorization: `Bearer ${loginPayload.token}`
       }
@@ -77,14 +77,14 @@ test('GET /api/get-tpi returns 400 when year is missing and token is valid', asy
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.equal(payload.error, 'Année manquante.')
+    assert.equal(payload.error, 'Année invalide.')
   } finally {
     await new Promise(resolve => server.close(resolve))
     restoreEnv()
   }
 })
 
-test('GET /api/get-tpi backfills missing stakeholder links from the people registry', async () => {
+test('GET /api/gestion-tpi/:year/tpis backfills missing stakeholder links from the people registry', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -206,7 +206,7 @@ test('GET /api/get-tpi backfills missing stakeholder links from the people regis
       return { modifiedCount: operations.length }
     }
 
-    const response = await fetch(`${baseUrl}/api/get-tpi?year=2026`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/tpis`, {
       headers: {
         Authorization: `Bearer ${loginPayload.token}`
       }
@@ -256,7 +256,7 @@ test('GET /api/get-tpi backfills missing stakeholder links from the people regis
   }
 })
 
-test('GET /api/tpi/:year/byCandidate/:candidateName returns 400 when candidate name is blank', async () => {
+test('GET /api/gestion-tpi/:year/by-candidate/:candidateName returns 400 when candidate name is blank', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -271,7 +271,7 @@ test('GET /api/tpi/:year/byCandidate/:candidateName returns 400 when candidate n
   try {
     const loginPayload = await login(baseUrl)
 
-    const response = await fetch(`${baseUrl}/api/tpi/2026/byCandidate/%20`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/by-candidate/%20`, {
       headers: {
         Authorization: `Bearer ${loginPayload.token}`
       }
@@ -286,7 +286,7 @@ test('GET /api/tpi/:year/byCandidate/:candidateName returns 400 when candidate n
   }
 })
 
-test('POST /api/save-tpi/:year links participant ids when the names match the people registry', async () => {
+test('POST /api/gestion-tpi/:year/tpis links participant ids when the names match the people registry', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -351,7 +351,7 @@ test('POST /api/save-tpi/:year links participant ids when the names match the pe
       return { _id: 'saved-tpi', ...update }
     }
 
-    const response = await fetch(`${baseUrl}/api/save-tpi/2026`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/tpis`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${loginPayload.token}`,
@@ -385,7 +385,7 @@ test('POST /api/save-tpi/:year links participant ids when the names match the pe
   }
 })
 
-test('POST /api/save-tpi/:year rejects manual creation when stakeholders are not validated in the referential', async () => {
+test('POST /api/gestion-tpi/:year/tpis rejects manual creation when stakeholders are not validated in the referential', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -443,7 +443,7 @@ test('POST /api/save-tpi/:year rejects manual creation when stakeholders are not
       return null
     }
 
-    const response = await fetch(`${baseUrl}/api/save-tpi/2026`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/tpis`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${loginPayload.token}`,
@@ -474,7 +474,7 @@ test('POST /api/save-tpi/:year rejects manual creation when stakeholders are not
   }
 })
 
-test('POST /api/save-tpi/:year treats literal null stakeholder placeholders as missing data', async () => {
+test('POST /api/gestion-tpi/:year/tpis treats literal null stakeholder placeholders as missing data', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -532,7 +532,7 @@ test('POST /api/save-tpi/:year treats literal null stakeholder placeholders as m
       return null
     }
 
-    const response = await fetch(`${baseUrl}/api/save-tpi/2026`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/tpis`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${loginPayload.token}`,
@@ -563,7 +563,7 @@ test('POST /api/save-tpi/:year treats literal null stakeholder placeholders as m
   }
 })
 
-test('POST /api/delete-tpi-year/:year requires confirmation', async () => {
+test('POST /api/gestion-tpi/:year/delete requires confirmation', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',
     AUTH_PASS_PLAIN: '',
@@ -578,7 +578,7 @@ test('POST /api/delete-tpi-year/:year requires confirmation', async () => {
   try {
     const loginPayload = await login(baseUrl)
 
-    const response = await fetch(`${baseUrl}/api/delete-tpi-year/2026`, {
+    const response = await fetch(`${baseUrl}/api/gestion-tpi/2026/delete`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${loginPayload.token}`,

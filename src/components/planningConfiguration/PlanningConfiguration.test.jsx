@@ -4,21 +4,22 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import PlanningConfiguration from './PlanningConfiguration'
 import {
   publicationDeploymentConfigService,
-  planningCatalogService,
-  planningConfigService
-} from '../../services/planningService'
+  coordinationCatalogService,
+  coordinationConfigService
+} from '../../services/coordinationService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
+import accessLinkPolicy from '../../../shared/accessLinkPolicy.json'
 
-jest.mock('../../services/planningService', () => ({
+jest.mock('../../services/coordinationService', () => ({
   publicationDeploymentConfigService: {
     get: jest.fn(),
     save: jest.fn()
   },
-  planningCatalogService: {
+  coordinationCatalogService: {
     getGlobal: jest.fn(),
     saveGlobal: jest.fn()
   },
-  planningConfigService: {
+  coordinationConfigService: {
     getByYear: jest.fn(),
     saveByYear: jest.fn()
   }
@@ -118,6 +119,10 @@ const mockPublicationDeploymentConfig = {
   votePublicPath: '/votes-{year}'
 }
 
+const buildDefaultAccessLinkSettings = () => ({
+  ...accessLinkPolicy.defaultSettings
+})
+
 const mockYearConfig = {
   year: 2026,
   schemaVersion: 2,
@@ -130,14 +135,7 @@ const mockYearConfig = {
     maxVoteReminders: 1,
     voteReminderCooldownHours: 24
   },
-  accessLinkSettings: {
-    defaultVoteLinkTarget: 'app',
-    defaultSoutenanceLinkTarget: 'app',
-    voteLinkValidityHours: 168,
-    voteLinkMaxUses: 20,
-    soutenanceLinkValidityHours: 96,
-    soutenanceLinkMaxUses: 60
-  },
+  accessLinkSettings: buildDefaultAccessLinkSettings(),
   classTypes: [
     {
       id: 'annual-cfc',
@@ -179,14 +177,7 @@ const mockYearConfigWithCustomTypes = {
     maxVoteReminders: 1,
     voteReminderCooldownHours: 24
   },
-  accessLinkSettings: {
-    defaultVoteLinkTarget: 'app',
-    defaultSoutenanceLinkTarget: 'app',
-    voteLinkValidityHours: 168,
-    voteLinkMaxUses: 20,
-    soutenanceLinkValidityHours: 96,
-    soutenanceLinkMaxUses: 60
-  },
+  accessLinkSettings: buildDefaultAccessLinkSettings(),
   classTypes: [
     {
       id: 'annual-cfc',
@@ -248,10 +239,10 @@ describe('PlanningConfiguration', () => {
       hasPassword: Boolean(payload.password) || (payload.clearPassword === true ? false : mockPublicationDeploymentConfig.hasPassword),
       password: undefined
     }))
-    planningCatalogService.getGlobal.mockResolvedValue(mockCatalog)
-    planningCatalogService.saveGlobal.mockImplementation(async (payload) => payload)
-    planningConfigService.getByYear.mockResolvedValue(mockYearConfig)
-    planningConfigService.saveByYear.mockImplementation(async (_year, payload) => payload)
+    coordinationCatalogService.getGlobal.mockResolvedValue(mockCatalog)
+    coordinationCatalogService.saveGlobal.mockImplementation(async (payload) => payload)
+    coordinationConfigService.getByYear.mockResolvedValue(mockYearConfig)
+    coordinationConfigService.saveByYear.mockImplementation(async (_year, payload) => payload)
     tpiController.getTpiModels.mockResolvedValue([])
   })
 
@@ -522,7 +513,7 @@ describe('PlanningConfiguration', () => {
   })
 
   test('supprime un type custom sans supprimer les autres types', async () => {
-    planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
+    coordinationConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
 
     render(<PlanningConfiguration />)
 
@@ -540,7 +531,7 @@ describe('PlanningConfiguration', () => {
   })
 
   test('replie un type en affichant uniquement sa ligne de résumé', async () => {
-    planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
+    coordinationConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
 
     render(<PlanningConfiguration />)
 
@@ -561,7 +552,7 @@ describe('PlanningConfiguration', () => {
   })
 
   test('rappelle le format SPECIAL au survol des dates de défense', async () => {
-    planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
+    coordinationConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
 
     render(<PlanningConfiguration />)
 
@@ -573,7 +564,7 @@ describe('PlanningConfiguration', () => {
   })
 
   test("ouvre et replie tous les types depuis la section Types", async () => {
-    planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
+    coordinationConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
 
     render(<PlanningConfiguration />)
 
@@ -723,10 +714,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningCatalogService.saveGlobal).not.toHaveBeenCalled()
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationCatalogService.saveGlobal).not.toHaveBeenCalled()
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         siteConfigs: expect.arrayContaining([
@@ -753,9 +744,9 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         workflowSettings: {
@@ -792,9 +783,9 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         workflowSettings: {
@@ -835,9 +826,9 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         accessLinkSettings: {
@@ -846,7 +837,8 @@ describe('PlanningConfiguration', () => {
           voteLinkValidityHours: 72,
           voteLinkMaxUses: 12,
           soutenanceLinkValidityHours: 240,
-          soutenanceLinkMaxUses: 90
+          soutenanceLinkMaxUses: 90,
+          workflowFreeModeEnabled: false
         }
       })
     )
@@ -865,9 +857,9 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         siteConfigs: expect.arrayContaining([
@@ -893,9 +885,9 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         siteConfigs: expect.arrayContaining([
@@ -922,10 +914,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalledTimes(1)
-      expect(planningConfigService.saveByYear).toHaveBeenCalledTimes(1)
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalledTimes(1)
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalledTimes(1)
     })
-    expect(planningCatalogService.saveGlobal).toHaveBeenCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenCalledWith(
       expect.objectContaining({
         sites: expect.arrayContaining([
           expect.objectContaining({
@@ -935,7 +927,7 @@ describe('PlanningConfiguration', () => {
         ])
       })
     )
-    expect(planningConfigService.saveByYear).toHaveBeenCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenCalledWith(
       2026,
       expect.objectContaining({
         siteConfigs: expect.arrayContaining([
@@ -948,19 +940,19 @@ describe('PlanningConfiguration', () => {
     )
   })
 
-  test('enregistre la couleur planning du site dans le catalogue', async () => {
+  test('enregistre la couleur planification du site dans le catalogue', async () => {
     render(<PlanningConfiguration />)
 
     await openSiteGeneral()
-    const colorInput = await screen.findByLabelText('Couleur planning')
+    const colorInput = await screen.findByLabelText('Couleur planification du site ETML')
     fireEvent.change(colorInput, { target: { value: '#14532d' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sites: expect.arrayContaining([
           expect.objectContaining({
@@ -997,10 +989,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         emailSettings: {
           senderName: 'Commission TPI',
@@ -1025,7 +1017,7 @@ describe('PlanningConfiguration', () => {
 
     await waitFor(() => {
       expect(publicationDeploymentConfigService.save).toHaveBeenCalled()
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
     expect(publicationDeploymentConfigService.save).toHaveBeenLastCalledWith(
@@ -1034,7 +1026,7 @@ describe('PlanningConfiguration', () => {
       })
     )
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         publicationSettings: {
           publicBaseUrl: 'https://publication.example.ch'
@@ -1066,7 +1058,7 @@ describe('PlanningConfiguration', () => {
       target: { value: '/var/www/tpi26.ch' }
     })
     fireEvent.change(within(publicationCard).getByLabelText('Dossier défenses'), {
-      target: { value: 'planning-{year}' }
+      target: { value: 'defenses-{year}' }
     })
     fireEvent.change(within(publicationCard).getByLabelText('Dossier votes'), {
       target: { value: 'votes-{year}' }
@@ -1089,14 +1081,14 @@ describe('PlanningConfiguration', () => {
         password: 'secret-value',
         clearPassword: false,
         remoteDir: '/var/www/tpi26.ch',
-        staticRemoteDir: 'planning-{year}',
-        defenseRemoteDir: 'planning-{year}',
+        staticRemoteDir: 'defenses-{year}',
+        defenseRemoteDir: 'defenses-{year}',
         voteRemoteDir: 'votes-{year}',
         defensePublicPath: '/soutenances-{year}',
         votePublicPath: '/votes-{year}'
       })
     )
-    expect(planningCatalogService.saveGlobal).not.toHaveBeenCalled()
+    expect(coordinationCatalogService.saveGlobal).not.toHaveBeenCalled()
   })
 
   test('enregistre la couleur TPI du site dans le catalogue', async () => {
@@ -1108,10 +1100,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sites: expect.arrayContaining([
           expect.objectContaining({
@@ -1132,10 +1124,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sites: expect.arrayContaining([
           expect.objectContaining({
@@ -1156,10 +1148,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sites: expect.arrayContaining([
           expect.objectContaining({
@@ -1197,10 +1189,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         stakeholderIcons: expect.objectContaining({
           candidate: 'candidate-green',
@@ -1233,10 +1225,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         stakeholderIcons: expect.objectContaining({
           expert1: 'helmet-green'
@@ -1261,7 +1253,7 @@ describe('PlanningConfiguration', () => {
   })
 
   test("n'enregistre plus un type supprimé", async () => {
-    planningConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
+    coordinationConfigService.getByYear.mockResolvedValueOnce(mockYearConfigWithCustomTypes)
 
     render(<PlanningConfiguration />)
 
@@ -1270,10 +1262,10 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningConfigService.saveByYear).toHaveBeenCalled()
+      expect(coordinationConfigService.saveByYear).toHaveBeenCalled()
     })
 
-    expect(planningConfigService.saveByYear).toHaveBeenLastCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenLastCalledWith(
       2026,
       expect.objectContaining({
         classTypes: expect.not.arrayContaining([
@@ -1291,15 +1283,15 @@ describe('PlanningConfiguration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(planningCatalogService.saveGlobal).toHaveBeenCalled()
+      expect(coordinationCatalogService.saveGlobal).toHaveBeenCalled()
     })
 
-    expect(planningCatalogService.saveGlobal).toHaveBeenLastCalledWith(
+    expect(coordinationCatalogService.saveGlobal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sites: []
       })
     )
-    expect(planningConfigService.saveByYear).toHaveBeenLastCalledWith(
+    expect(coordinationConfigService.saveByYear).toHaveBeenLastCalledWith(
       2026,
       expect.objectContaining({
         siteConfigs: []

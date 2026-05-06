@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react"
 import { useLocation, useParams } from "react-router-dom"
 import { soutenancesService } from "../../services/apiService"
-import { planningConfigService } from "../../services/planningService"
+import { coordinationConfigService } from "../../services/coordinationService"
 import { showNotification } from "../Tools.jsx"
 import { buildPlanningConfigForYear } from "../tpiSchedule/tpiScheduleData"
 import {
@@ -36,7 +36,7 @@ const CreneauPropositionPopup = ({
 
     const loadConfig = async () => {
       try {
-        const config = await planningConfigService.getByYear(year)
+        const config = await coordinationConfigService.getByYear(year)
 
         if (!isCancelled) {
           setSoutenanceDateOptions(normalizeSoutenanceDateEntries(config?.soutenanceDates || []))

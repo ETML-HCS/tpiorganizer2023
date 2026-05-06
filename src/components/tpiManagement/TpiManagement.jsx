@@ -9,17 +9,25 @@ import { createTpiModel, updateTpiModel } from '../tpiControllers/TpiController.
 import { extractLegacyRefFromWorkflowReference } from '../tpiDetail/tpiDetailUtils.js'
 import { getPlanningClassPeriod } from '../tpiPlanning/planningClassUtils.js'
 import { YEARS_CONFIG } from '../../config/appConfig'
-import { planningCatalogService, planningConfigService } from '../../services/planningService'
-import { getPlanningPerimeterState } from '../../utils/planningScopeUtils.js'
+import { coordinationCatalogService, coordinationConfigService } from '../../services/coordinationService'
 import {
-  hasMissingStakeholders,
-  shouldDisplayTag,
-  splitTags
-} from './tpiManagementUtils.js'
+  getCoordinationYearFromSearch,
+  getPreferredCoordinationYear,
+  persistCoordinationYear
+} from '../../utils/coordinationYear.js'
+import { getPlanningPerimeterState } from '../../utils/coordinationScopeUtils.js'
+import { getStakeholderIssues } from './tpiManagementUtils.js'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules.js'
 
 import '../../css/tpiManagement/tpiManagementStyle.css'
 
 const generateAvailableYears = () => YEARS_CONFIG.getAvailableYears()
+const REQUIRED_TPI_RELATIONS_LABEL = [
+  getTpiRelationRoleLabel('candidat'),
+  getTpiRelationRoleLabel('expert1'),
+  getTpiRelationRoleLabel('expert2'),
+  getTpiRelationRoleLabel('chef_projet')
+].join(', ')
 
 const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   const location = useLocation()
@@ -31,8 +39,10 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
   const [planningSiteConfigs, setPlanningSiteConfigs] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [year, setYear] = useState(() => new Date().getFullYear())
+  const [year, setYear] = useState(() => getPreferredCoordinationYear(location.search))
   const [searchTerm, setSearchTerm] = useState('')
+  const [planningScopeFilter, setPlanningScopeFilter] = useState('all')
+  const [stakeholderFilter, setStakeholderFilter] = useState('all')
   const fetchRequestIdRef = useRef(0)
 
   const availableYears = useMemo(
@@ -40,10 +50,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     []
   )
   const requestedYear = useMemo(() => {
-    const params = new URLSearchParams(location.search)
-    const value = Number.parseInt(params.get('year'), 10)
-
-    return Number.isInteger(value) ? value : null
+    return getCoordinationYearFromSearch(location.search)
   }, [location.search])
   const requestedFocus = useMemo(() => {
     const params = new URLSearchParams(location.search)
@@ -92,6 +99,51 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     }
   }, [planningCatalogSites, planningClassTypes, requestedPrefillTpi])
 
+  const planningScopeStats = useMemo(() => {
+    return tpiList.reduce(
+      (stats, tpi) => {
+        const planningPerimeter = getPlanningPerimeterState(tpi, planningSiteConfigs, year)
+
+        if (planningPerimeter.isPlanifiable) {
+          stats.planifiable += 1
+        } else {
+          stats.outOfScope += 1
+        }
+
+        stats.total += 1
+        return stats
+      },
+      { planifiable: 0, outOfScope: 0, total: 0 }
+    )
+  }, [planningSiteConfigs, tpiList, year])
+
+  const stakeholderStats = useMemo(() => {
+    return tpiList.reduce(
+      (stats, tpi) => {
+        const planningPerimeter = getPlanningPerimeterState(tpi, planningSiteConfigs, year)
+
+        stats.total += 1
+
+        if (!planningPerimeter.isPlanifiable) {
+          return stats
+        }
+
+        const stakeholderIssues = getStakeholderIssues(tpi)
+
+        if (stakeholderIssues.missingStakeholders.length > 0) {
+          stats.missing += 1
+        }
+
+        if (stakeholderIssues.hasIssues) {
+          stats.issues += 1
+        }
+
+        return stats
+      },
+      { missing: 0, issues: 0, total: 0 }
+    )
+  }, [planningSiteConfigs, tpiList, year])
+
   const fetchData = useCallback(async () => {
     const requestId = fetchRequestIdRef.current + 1
     fetchRequestIdRef.current = requestId
@@ -101,11 +153,11 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     try {
       const [data, catalog, config] = await Promise.all([
         getTpiFromServer(year),
-        planningCatalogService.getGlobal().catch((err) => {
+        coordinationCatalogService.getGlobal().catch((err) => {
           console.error('Erreur lors du chargement du catalogue central:', err)
           return null
         }),
-        planningConfigService.getByYear(year).catch((err) => {
+        coordinationConfigService.getByYear(year).catch((err) => {
           if (err?.status !== 404) {
             console.error('Erreur lors du chargement de la configuration annuelle:', err)
           }
@@ -159,7 +211,38 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
 
     setYear(requestedYear)
     setNewTpi(false)
+    setPlanningScopeFilter('all')
+    setStakeholderFilter('all')
   }, [availableYears, requestedYear, year])
+
+  useEffect(() => {
+    persistCoordinationYear(year)
+  }, [year])
+
+  useEffect(() => {
+    setPlanningScopeFilter('all')
+    setStakeholderFilter('all')
+  }, [year])
+
+  useEffect(() => {
+    if (planningScopeFilter === 'planifiable' && planningScopeStats.planifiable === 0) {
+      setPlanningScopeFilter('all')
+    }
+
+    if (planningScopeFilter === 'out-of-scope' && planningScopeStats.outOfScope === 0) {
+      setPlanningScopeFilter('all')
+    }
+  }, [planningScopeFilter, planningScopeStats.outOfScope, planningScopeStats.planifiable])
+
+  useEffect(() => {
+    if (stakeholderFilter === 'missing' && stakeholderStats.missing === 0) {
+      setStakeholderFilter('all')
+    }
+
+    if (stakeholderFilter === 'issues' && stakeholderStats.issues === 0) {
+      setStakeholderFilter('all')
+    }
+  }, [stakeholderFilter, stakeholderStats.issues, stakeholderStats.missing])
 
   useEffect(() => {
     setSearchTerm(requestedFocus)
@@ -230,75 +313,6 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
     [fetchData, year]
   )
 
-  const handleYearChange = useCallback((selectedYear) => {
-    setYear(Number(selectedYear))
-    setNewTpi(false)
-  }, [])
-
-  const overviewStats = useMemo(() => {
-    const uniqueCompanies = new Set()
-    const uniqueTags = new Set()
-    let plannedSoutenances = 0
-    let missingStakeholdersCount = 0
-    let planifiableCount = 0
-    let outOfScopeCount = 0
-
-    tpiList.forEach((tpi) => {
-      const planningPerimeter = getPlanningPerimeterState(tpi, planningSiteConfigs, year)
-
-      if (tpi?.lieu?.entreprise) {
-        uniqueCompanies.add(tpi.lieu.entreprise)
-      }
-
-      if (tpi?.dates?.soutenance) {
-        plannedSoutenances += 1
-      }
-
-      splitTags(tpi?.tags)
-        .filter(shouldDisplayTag)
-        .forEach((tag) => uniqueTags.add(tag))
-
-      if (planningPerimeter.isPlanifiable) {
-        planifiableCount += 1
-      } else {
-        outOfScopeCount += 1
-      }
-
-      if (planningPerimeter.isPlanifiable && hasMissingStakeholders(tpi)) {
-        missingStakeholdersCount += 1
-      }
-    })
-
-    return {
-      companies: uniqueCompanies.size,
-      tags: uniqueTags.size,
-      soutenances: plannedSoutenances,
-      missingStakeholders: missingStakeholdersCount,
-      planifiable: planifiableCount,
-      outOfScope: outOfScopeCount
-    }
-  }, [planningSiteConfigs, tpiList, year])
-
-  const overviewChips = useMemo(
-    () => [
-      { label: 'TPI', value: tpiList.length, tone: 'neutral' },
-      { label: 'Entr.', value: overviewStats.companies || 0, tone: 'neutral' },
-      { label: 'Déf.', value: overviewStats.soutenances || 0, tone: 'neutral' },
-      { label: 'Planif.', value: overviewStats.planifiable || 0, tone: 'success' },
-      {
-        label: 'PP',
-        value: overviewStats.missingStakeholders || 0,
-        tone: overviewStats.missingStakeholders > 0 ? 'warning' : 'neutral'
-      },
-      {
-        label: 'Hors pér.',
-        value: overviewStats.outOfScope || 0,
-        tone: overviewStats.outOfScope > 0 ? 'scope' : 'neutral'
-      }
-    ],
-    [overviewStats, tpiList.length]
-  )
-
   return (
     <>
       <TpiManagementButtons
@@ -314,54 +328,95 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
       <div className='container tpi-management-page'>
         <section className='tpi-management-hero' aria-labelledby='tpi-management-title'>
           <div className='tpi-management-hero-copy'>
-            <span className='tpi-management-kicker'>Catalogue TPI</span>
-            <h1 id='tpi-management-title'>Fiches de l&apos;année {year}</h1>
-
-            <div className='tpi-management-chips' aria-label='Contexte'>
-              {overviewChips.map((chip) => (
-                <span
-                  key={chip.label}
-                  className={`tpi-management-chip tpi-management-chip-${chip.tone}`.trim()}
-                >
-                  <strong>{chip.value}</strong>
-                  <span>{chip.label}</span>
-                </span>
-              ))}
-              {requestedFocus ? (
-                <span className='tpi-management-chip tpi-management-chip-focus'>
-                  <strong>{requestedFocus}</strong>
-                  <span>{requestedEditRef ? 'Édition ciblée' : requestedCreate ? 'Création ciblée' : 'Focus'}</span>
-                </span>
-              ) : null}
-            </div>
+            <h1 id='tpi-management-title'>Catalogue {year}</h1>
           </div>
 
           <div className='tpi-management-hero-side'>
-            <div className='tpi-management-year-panel'>
-              <span className='tpi-management-year-label'>Millésime</span>
-              <div className='tpi-management-year-picker'>
-                {availableYears.map((availableYear) => (
-                  <button
-                    key={availableYear}
-                    type='button'
-                    onClick={() => handleYearChange(availableYear)}
-                    className={year === availableYear ? 'active' : ''}
-                    aria-pressed={year === availableYear}
-                  >
-                    {availableYear}
-                  </button>
-                ))}
+            {planningScopeStats.total > 0 ? (
+              <div className='tpi-management-planning-filter' role='group' aria-label='Filtre périmètre coordination'>
+                <button
+                  type='button'
+                  className={planningScopeFilter === 'planifiable' ? 'active' : ''}
+                  onClick={() => setPlanningScopeFilter('planifiable')}
+                  aria-pressed={planningScopeFilter === 'planifiable'}
+                >
+                  Planif.
+                  <strong>{planningScopeStats.planifiable}</strong>
+                </button>
+                <button
+                  type='button'
+                  className={planningScopeFilter === 'out-of-scope' ? 'active' : ''}
+                  onClick={() => setPlanningScopeFilter('out-of-scope')}
+                  aria-pressed={planningScopeFilter === 'out-of-scope'}
+                >
+                  Hors pér.
+                  <strong>{planningScopeStats.outOfScope}</strong>
+                </button>
+                <button
+                  type='button'
+                  className={planningScopeFilter === 'all' ? 'active' : ''}
+                  onClick={() => setPlanningScopeFilter('all')}
+                  aria-pressed={planningScopeFilter === 'all'}
+                >
+                  Tout
+                  <strong>{planningScopeStats.total}</strong>
+                </button>
               </div>
+            ) : null}
+
+            {stakeholderStats.issues > 0 ? (
+              <div className='tpi-management-stakeholder-filter' role='group' aria-label='Filtre parties prenantes'>
+                {stakeholderStats.missing > 0 ? (
+                  <button
+                    type='button'
+                    className={stakeholderFilter === 'missing' ? 'active' : ''}
+                    onClick={() => setStakeholderFilter('missing')}
+                    aria-pressed={stakeholderFilter === 'missing'}
+                  >
+                    PP manquantes
+                    <strong>{stakeholderStats.missing}</strong>
+                  </button>
+                ) : null}
+                <button
+                  type='button'
+                  className={stakeholderFilter === 'issues' ? 'active' : ''}
+                  onClick={() => setStakeholderFilter('issues')}
+                  aria-pressed={stakeholderFilter === 'issues'}
+                >
+                  PP incorrectes
+                  <strong>{stakeholderStats.issues}</strong>
+                </button>
+                <button
+                  type='button'
+                  className={stakeholderFilter === 'all' ? 'active' : ''}
+                  onClick={() => setStakeholderFilter('all')}
+                  aria-pressed={stakeholderFilter === 'all'}
+                >
+                  Toutes
+                  <strong>{stakeholderStats.total}</strong>
+                </button>
+              </div>
+            ) : null}
+
+            <label className='tpi-management-search-panel' htmlFor='heroTpiSearchInput'>
+              <span className='tpi-management-search-label'>Recherche</span>
               <input
                 id='heroTpiSearchInput'
                 type='search'
                 className='tpi-management-hero-search'
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder='Rechercher'
+                placeholder='Référence, candidat, classe'
                 aria-label='Rechercher un TPI'
               />
-            </div>
+            </label>
+
+            {requestedFocus ? (
+              <div className='tpi-management-focus-panel' aria-label='Dossier ciblé'>
+                <span>{requestedEditRef ? 'Édition ciblée' : requestedCreate ? 'Création ciblée' : 'Focus'}</span>
+                <strong>{requestedFocus}</strong>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -372,7 +427,7 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
                 <span className='tpi-management-toolbar-label'>Creation</span>
                 <h2>Nouveau TPI</h2>
               </div>
-              <p>Candidat, deux experts et chef de projet requis.</p>
+              <p>{REQUIRED_TPI_RELATIONS_LABEL} requis.</p>
             </div>
 
             <TpiForm
@@ -416,6 +471,10 @@ const TpiManagement = ({ toggleArrow, isArrowUp }) => {
             planningClassTypes={planningClassTypes}
             planningSoutenanceDates={planningSoutenanceDates}
             planningSiteConfigs={planningSiteConfigs}
+            planningScopeFilter={planningScopeFilter}
+            onPlanningScopeFilterChange={setPlanningScopeFilter}
+            stakeholderFilter={stakeholderFilter}
+            onStakeholderFilterChange={setStakeholderFilter}
           />
         )}
       </section>

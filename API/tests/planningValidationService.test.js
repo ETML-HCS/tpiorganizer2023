@@ -6,7 +6,7 @@ const {
   buildUnplannedTpiIssues,
   buildValidationIssues,
   isValidationAlignedWithSnapshot
-} = require('../services/planningValidationService')
+} = require('../services/coordinationValidationService')
 
 function buildPerson(id, firstName, lastName) {
   return { _id: id, firstName, lastName }
@@ -80,6 +80,51 @@ test('buildValidationIssues reports a sequence overflow after 4 consecutive TPI'
   ])
 })
 
+test('buildValidationIssues classe une sequence couverte par override comme avertissement', () => {
+  const person = buildPerson('person-2a', 'Grace', 'Hopper')
+
+  const slots = Array.from({ length: 5 }, (_, index) => ({
+    date: '2026-06-11',
+    period: index + 1,
+    status: 'confirmed',
+    room: { site: 'ETML', name: `A10${index + 1}` },
+    assignedTpi: {
+      reference: `TPI-11${index + 1}`
+    },
+    assignments: {
+      expert1: person
+    }
+  }))
+  const entries = slots.map((slot, index) => ({
+    reference: slot.assignedTpi.reference,
+    slot: {
+      dateKey: '2026-06-11',
+      period: index + 1,
+      room: slot.room
+    },
+    conflicts: index === 2
+      ? [{
+          type: 'consecutive_limit',
+          involvedPersons: [person._id],
+          description: 'Limite de TPI consécutifs ignorée.'
+        }]
+      : [],
+    participants: [
+      { role: 'expert1', personId: person._id, fullName: 'Grace Hopper' }
+    ]
+  }))
+
+  const result = buildValidationIssues(entries, slots)
+
+  assert.equal(result.issueCount, 0)
+  assert.equal(result.warningCount, 1)
+  assert.equal(result.constraintOverrideWarningCount, 1)
+  assert.equal(result.issues[0].type, 'consecutive_limit')
+  assert.equal(result.issues[0].severity, 'warning')
+  assert.equal(result.issues[0].isConstraintOverride, true)
+  assert.deepEqual(result.issues[0].overrideReferences, ['TPI-113'])
+})
+
 test('buildValidationIssues utilise la limite consecutive configuree par site', () => {
   const person = buildPerson('person-2b', 'Grace', 'Hopper')
   const slots = Array.from({ length: 4 }, (_, index) => ({
@@ -148,7 +193,7 @@ test('buildValidationIssues respecte les pauses meme si les slots arrivent desor
   assert.equal(result.issueCount, 0)
 })
 
-test('buildValidationIssues returns no issue when planning is valid', () => {
+test('buildValidationIssues returns no issue when planification is valid', () => {
   const person = buildPerson('person-3', 'Linus', 'Torvalds')
 
   const entries = [
@@ -330,7 +375,7 @@ test('buildLegacyConsistencyIssues reports unresolved stakeholders that must be 
   assert.match(result[0].message, /Parties prenantes/)
 })
 
-test('buildLegacyConsistencyIssues ignores legacy TPI outside configured planning sites', () => {
+test('buildLegacyConsistencyIssues ignores legacy TPI outside configured coordination sites', () => {
   const result = buildLegacyConsistencyIssues({
     year: 2026,
     legacyTpis: [

@@ -4,6 +4,14 @@ import {
   getSoutenanceDateBadgeLabel,
   normalizeSoutenanceDateEntries
 } from '../tpiSchedule/soutenanceDateUtils.js'
+import {
+  DEFAULT_JOURNAL_STATUS,
+  DEFAULT_REPORT_STATUS,
+  DEFAULT_TPI_STATUS,
+  getJournalStatusLabel,
+  getReportStatusLabel,
+  getTpiStatusLabel
+} from '../../constants/tpiLifecycle.js'
 
 const toDateObject = (value) => {
   if (!value) {
@@ -1144,7 +1152,17 @@ export const normalizeTpiForForm = (tpiToLoad) => {
       dateRenduFinal: '',
       lienDepot: '',
       noteEvaluation: '',
-      lienEvaluation: ''
+      lienEvaluation: '',
+      status: DEFAULT_TPI_STATUS,
+      journalStatus: DEFAULT_JOURNAL_STATUS,
+      journalLastEntryAt: '',
+      journalUrl: '',
+      journalNotes: '',
+      rapportStatus: DEFAULT_REPORT_STATUS,
+      rapportSubmittedAt: '',
+      rapportDueAt: '',
+      rapportUrl: '',
+      rapportFeedback: ''
     }
   }
 
@@ -1196,7 +1214,17 @@ export const normalizeTpiForForm = (tpiToLoad) => {
       toFormValue(
         tpiToLoad.evaluation?.lien ??
         tpiToLoad.lienEvaluation
-      )
+      ),
+    status: toFormValue(tpiToLoad.status) || DEFAULT_TPI_STATUS,
+    journalStatus: toFormValue(tpiToLoad.journal?.status) || DEFAULT_JOURNAL_STATUS,
+    journalLastEntryAt: formatInputDate(tpiToLoad.journal?.lastEntryAt),
+    journalUrl: toFormValue(tpiToLoad.journal?.url),
+    journalNotes: toFormValue(tpiToLoad.journal?.notes),
+    rapportStatus: toFormValue(tpiToLoad.rapport?.status) || DEFAULT_REPORT_STATUS,
+    rapportSubmittedAt: formatInputDate(tpiToLoad.rapport?.submittedAt),
+    rapportDueAt: formatInputDate(tpiToLoad.rapport?.dueAt),
+    rapportUrl: toFormValue(tpiToLoad.rapport?.url),
+    rapportFeedback: toFormValue(tpiToLoad.rapport?.feedback)
   }
 }
 
@@ -1382,7 +1410,56 @@ export const normalizeTpiForSave = (formData) => {
       note: Number.isFinite(noteValue) ? noteValue : null,
       lien: normalizeOptionalText(formData.lienEvaluation)
     },
-    salle: normalizeOptionalText(formData.salle)
+    salle: normalizeOptionalText(formData.salle),
+    status: normalizeOptionalText(formData.status) || DEFAULT_TPI_STATUS,
+    journal: {
+      status: normalizeOptionalText(formData.journalStatus) || DEFAULT_JOURNAL_STATUS,
+      lastEntryAt: toSaveValue(formData.journalLastEntryAt),
+      url: normalizeOptionalText(formData.journalUrl),
+      notes: normalizeOptionalText(formData.journalNotes)
+    },
+    rapport: {
+      status: normalizeOptionalText(formData.rapportStatus) || DEFAULT_REPORT_STATUS,
+      submittedAt: toSaveValue(formData.rapportSubmittedAt),
+      dueAt: toSaveValue(formData.rapportDueAt),
+      url: normalizeOptionalText(formData.rapportUrl),
+      feedback: normalizeOptionalText(formData.rapportFeedback)
+    }
+  }
+}
+
+export const getTpiLifecycleSummary = (tpi = {}) => {
+  const status = normalizeOptionalText(tpi?.lifecycle?.status || tpi?.status) || DEFAULT_TPI_STATUS
+  const journalStatus = normalizeOptionalText(tpi?.journal?.status) || DEFAULT_JOURNAL_STATUS
+  const rapportStatus = normalizeOptionalText(tpi?.rapport?.status) || DEFAULT_REPORT_STATUS
+  const validationIssues = Array.isArray(tpi?.validation?.issues) ? tpi.validation.issues : []
+  const issueCount = Number(
+    tpi?.lifecycle?.blockingIssueCount ??
+    validationIssues.filter((entry) => entry?.severity === 'error').length
+  )
+  const warningCount = Number(
+    tpi?.lifecycle?.warningCount ??
+    validationIssues.filter((entry) => entry?.severity === 'warning').length
+  )
+
+  return {
+    status,
+    label: getTpiStatusLabel(status),
+    journalStatus,
+    journalLabel: getJournalStatusLabel(journalStatus),
+    rapportStatus,
+    rapportLabel: getReportStatusLabel(rapportStatus),
+    issueCount,
+    warningCount,
+    tone: issueCount > 0
+      ? 'danger'
+      : warningCount > 0
+        ? 'warning'
+        : status === 'completed'
+          ? 'success'
+          : status === 'cancelled'
+            ? 'muted'
+            : 'neutral'
   }
 }
 

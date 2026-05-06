@@ -1,9 +1,9 @@
 import React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import VotingPanel from './VotingPanel'
-import { voteService } from '../../services/planningService'
+import { voteService } from '../../services/coordinationService'
 
-jest.mock('../../services/planningService', () => ({
+jest.mock('../../services/coordinationService', () => ({
   voteService: {
     respondToVote: jest.fn()
   }

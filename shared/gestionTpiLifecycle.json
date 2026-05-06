@@ -1,0 +1,67 @@
+{
+  "statuses": {
+    "draft": "Brouillon",
+    "stakeholders_pending": "Parties prenantes a completer",
+    "ready_for_planning": "Pret pour coordination",
+    "imported_to_planning": "Integre a la coordination",
+    "defense_scheduled": "Defense planifiee",
+    "journal_review": "Journal a suivre",
+    "report_review": "Rapport a suivre",
+    "completed": "Termine",
+    "cancelled": "Annule"
+  },
+  "transitions": {
+    "draft": [
+      "stakeholders_pending",
+      "ready_for_planning",
+      "cancelled"
+    ],
+    "stakeholders_pending": [
+      "ready_for_planning",
+      "cancelled"
+    ],
+    "ready_for_planning": [
+      "imported_to_planning",
+      "cancelled"
+    ],
+    "imported_to_planning": [
+      "defense_scheduled",
+      "journal_review",
+      "report_review",
+      "completed",
+      "cancelled"
+    ],
+    "defense_scheduled": [
+      "journal_review",
+      "report_review",
+      "completed",
+      "cancelled"
+    ],
+    "journal_review": [
+      "report_review",
+      "completed",
+      "cancelled"
+    ],
+    "report_review": [
+      "completed",
+      "cancelled"
+    ],
+    "completed": [],
+    "cancelled": [
+      "draft"
+    ]
+  },
+  "journalStatuses": {
+    "not_started": "Non demarre",
+    "in_progress": "En cours",
+    "review_required": "A verifier",
+    "validated": "Valide"
+  },
+  "reportStatuses": {
+    "not_started": "Non demarre",
+    "draft": "Brouillon",
+    "submitted": "Depose",
+    "validated": "Valide",
+    "rejected": "A corriger"
+  }
+}

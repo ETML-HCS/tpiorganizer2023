@@ -2,9 +2,9 @@ import React from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 
 import TpiForm from './TpiForm.jsx'
-import { personService } from '../../services/planningService'
+import { personService } from '../../services/coordinationService'
 
-jest.mock('../../services/planningService', () => ({
+jest.mock('../../services/coordinationService', () => ({
   personService: {
     getAll: jest.fn()
   }

@@ -1,28 +1,39 @@
 const mongoose = require('mongoose')
 
 const WorkflowAuditEvent = require('../models/workflowAuditEventModel')
-const PlanningSnapshot = require('../models/planningSnapshotModel')
-const { WorkflowYear, WORKFLOW_STATES } = require('../models/workflowYearModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const PlanningSnapshot = require('../models/coordinationSnapshotModel')
+const { WorkflowYear, WORKFLOW_PHASES } = require('../models/workflowYearModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const Vote = require('../models/voteModel')
 const PublicationVersion = require('../models/publicationVersionModel')
 const { MagicLink } = require('../models/magicLinkModel')
+const { AccessLinkLog } = require('../models/accessLinkLogModel')
 
-const WORKFLOW_TRANSITIONS = Object.freeze({
-  planning: ['voting_open'],
-  voting_open: ['published'],
-  published: []
+const LEGACY_STATE_PHASES = Object.freeze({
+  planning: 'planning',
+  voting_open: 'votes',
+  published: 'defenses'
 })
-
-class WorkflowTransitionError extends Error {
-  constructor(message, details = {}) {
-    super(message)
-    this.name = 'WorkflowTransitionError'
-    this.statusCode = 409
-    this.details = details
-  }
-}
+const WORKFLOW_PHASE_ALIASES = Object.freeze({
+  planning: 'planning',
+  planification: 'planning',
+  preparation: 'planning',
+  vote: 'votes',
+  votes: 'votes',
+  voting: 'votes',
+  voting_open: 'votes',
+  arbitrage: 'arbitrage',
+  arbitration: 'arbitrage',
+  defense: 'defenses',
+  defenses: 'defenses',
+  defence: 'defenses',
+  defences: 'defenses',
+  soutenance: 'defenses',
+  soutenances: 'defenses',
+  publication: 'defenses',
+  published: 'defenses'
+})
 
 function normalizeActor(user) {
   return {
@@ -32,35 +43,109 @@ function normalizeActor(user) {
   }
 }
 
-function getAllowedTransitions(state) {
-  return WORKFLOW_TRANSITIONS[state] || []
+function normalizeWorkflowPhase(value) {
+  const normalized = typeof value === 'string'
+    ? value.trim().toLowerCase()
+    : ''
+
+  return WORKFLOW_PHASE_ALIASES[normalized] || null
 }
 
-function isWorkflowState(value) {
-  return typeof value === 'string' && WORKFLOW_STATES.includes(value)
+function isWorkflowPhase(value) {
+  return Boolean(normalizeWorkflowPhase(value))
 }
 
-function isTransitionAllowed(from, to, options = {}) {
-  if (options?.allowDirectPublication === true && from === 'planning' && to === 'published') {
-    return true
+function normalizeActivePhases(workflow = {}) {
+  const phases = Array.isArray(workflow?.activePhases)
+    ? workflow.activePhases
+    : null
+
+  if (phases) {
+    return Array.from(new Set(
+      phases
+        .map((phase) => normalizeWorkflowPhase(phase))
+        .filter(Boolean)
+    ))
   }
 
-  if (options?.allowReopenVotesFromPublication === true && from === 'published' && to === 'voting_open') {
-    return true
+  const legacyPhase = LEGACY_STATE_PHASES[workflow?.state]
+  return legacyPhase ? [legacyPhase] : ['planning']
+}
+
+function getLegacyStateFromPhases(activePhases = []) {
+  const active = new Set(
+    (Array.isArray(activePhases) ? activePhases : [])
+      .map((phase) => normalizeWorkflowPhase(phase))
+      .filter(Boolean)
+  )
+
+  if (active.has('defenses')) {
+    return 'published'
   }
 
-  return getAllowedTransitions(from).includes(to)
+  if (active.has('votes') || active.has('arbitrage')) {
+    return 'voting_open'
+  }
+
+  return 'planning'
+}
+
+function isWorkflowPhaseActive(workflow = {}, phase) {
+  const normalizedPhase = normalizeWorkflowPhase(phase)
+  if (!normalizedPhase) {
+    return false
+  }
+
+  return normalizeActivePhases(workflow).includes(normalizedPhase)
+}
+
+function getPhaseActivatedAt(workflow, phase) {
+  if (phase === 'planning') {
+    return workflow.planningAt
+  }
+
+  if (phase === 'votes') {
+    return workflow.votingOpenedAt
+  }
+
+  if (phase === 'arbitrage') {
+    return workflow.arbitrageOpenedAt
+  }
+
+  if (phase === 'defenses') {
+    return workflow.publishedAt
+  }
+
+  return null
+}
+
+function buildPhaseMap(workflow) {
+  const active = new Set(normalizeActivePhases(workflow))
+
+  return WORKFLOW_PHASES.reduce((acc, phase) => {
+    acc[phase] = {
+      active: active.has(phase),
+      activatedAt: getPhaseActivatedAt(workflow, phase) || null
+    }
+    return acc
+  }, {})
 }
 
 function toPublicWorkflow(workflow) {
+  const activePhases = normalizeActivePhases(workflow)
+  const state = getLegacyStateFromPhases(activePhases)
+
   return {
     year: workflow.year,
-    state: workflow.state,
-    allowedTransitions: getAllowedTransitions(workflow.state),
+    state,
+    legacyState: workflow.state || state,
+    activePhases,
+    phases: buildPhaseMap(workflow),
     planningAt: workflow.planningAt,
     votingOpenedAt: workflow.votingOpenedAt,
+    arbitrageOpenedAt: workflow.arbitrageOpenedAt,
     publishedAt: workflow.publishedAt,
-    lastTransitionAt: workflow.lastTransitionAt,
+    lastPhaseChangeAt: workflow.lastPhaseChangeAt,
     createdAt: workflow.createdAt,
     updatedAt: workflow.updatedAt
   }
@@ -108,8 +193,9 @@ async function getOrCreateWorkflow(year) {
     return await WorkflowYear.create({
       year,
       state: 'planning',
+      activePhases: ['planning'],
       planningAt: now,
-      lastTransitionAt: now
+      lastPhaseChangeAt: now
     })
   } catch (error) {
     if (error?.code === 11000) {
@@ -128,79 +214,68 @@ async function getWorkflowYearState(year) {
   return toPublicWorkflow(workflow)
 }
 
-async function transitionWorkflowYear({
+async function setWorkflowPhaseActive({
   year,
-  targetState,
+  phase,
+  active,
   user,
-  allowDirectPublication = false,
-  allowReopenVotesFromPublication = false
+  reason = ''
 }) {
-  if (!isWorkflowState(targetState)) {
-    throw new Error('Etat workflow invalide.')
+  const normalizedPhase = normalizeWorkflowPhase(phase)
+  if (!normalizedPhase) {
+    throw new Error('Phase workflow invalide.')
   }
 
   const workflow = await getOrCreateWorkflow(year)
-  const currentState = workflow.state
+  const currentPhases = normalizeActivePhases(workflow)
+  const currentlyActive = currentPhases.includes(normalizedPhase)
+  const nextActive = active === true
 
-  if (currentState === targetState) {
+  if (currentlyActive === nextActive) {
     return {
       changed: false,
+      phase: normalizedPhase,
+      active: nextActive,
       workflow: toPublicWorkflow(workflow)
     }
   }
 
-  if (!isTransitionAllowed(currentState, targetState, {
-    allowDirectPublication,
-    allowReopenVotesFromPublication
-  })) {
-    const error = new WorkflowTransitionError('Transition workflow invalide.', {
-      currentState,
-      targetState,
-      allowedTransitions: getAllowedTransitions(currentState)
-    })
-    throw error
-  }
-
   const now = new Date()
+  const nextPhases = nextActive
+    ? Array.from(new Set([...currentPhases, normalizedPhase]))
+    : currentPhases.filter((entry) => entry !== normalizedPhase)
 
-  if (targetState === 'voting_open' || (targetState === 'published' && currentState === 'planning')) {
-    const activeSnapshot = await hasActivePlanningSnapshot(year)
-    if (!activeSnapshot) {
-      const error = new WorkflowTransitionError(
-        targetState === 'published'
-          ? 'Impossible de publier sans snapshot gele.'
-          : 'Impossible d\'ouvrir le vote sans snapshot gele.',
-        {
-          currentState,
-          targetState,
-          allowedTransitions: getAllowedTransitions(currentState),
-          reason: 'missing_planning_snapshot'
-        }
-      )
-      throw error
-    }
+  workflow.activePhases = nextPhases
+  workflow.state = getLegacyStateFromPhases(nextPhases)
+  workflow.lastPhaseChangeAt = now
+
+  if (normalizedPhase === 'planning' && nextActive && !workflow.planningAt) {
+    workflow.planningAt = now
   }
 
-  workflow.state = targetState
-  workflow.lastTransitionAt = now
-
-  if (targetState === 'voting_open' && !workflow.votingOpenedAt) {
+  if (normalizedPhase === 'votes' && nextActive && !workflow.votingOpenedAt) {
     workflow.votingOpenedAt = now
   }
 
-  if (targetState === 'voting_open' && currentState === 'published' && allowReopenVotesFromPublication) {
-    workflow.publishedAt = null
+  if (normalizedPhase === 'arbitrage' && nextActive && !workflow.arbitrageOpenedAt) {
+    workflow.arbitrageOpenedAt = now
   }
 
-  if (targetState === 'published' && !workflow.publishedAt) {
+  if (normalizedPhase === 'defenses' && nextActive && !workflow.publishedAt) {
     workflow.publishedAt = now
   }
 
-  workflow.transitions.push({
-    from: currentState,
-    to: targetState,
+  if (!Array.isArray(workflow.phaseEvents)) {
+    workflow.phaseEvents = []
+  }
+
+  workflow.phaseEvents.push({
+    phase: normalizedPhase,
+    active: nextActive,
+    previousActive: currentlyActive,
     actorId: user?.id ? String(user.id) : null,
     actorEmail: typeof user?.email === 'string' ? user.email : null,
+    reason: String(reason || '').trim(),
     at: now
   })
 
@@ -208,37 +283,24 @@ async function transitionWorkflowYear({
 
   await writeAuditEvent({
     year,
-    action: 'workflow.transition',
+    action: 'workflow.phase.toggle',
     user,
     payload: {
-      from: currentState,
-      to: targetState
+      phase: normalizedPhase,
+      active: nextActive,
+      previousActive: currentlyActive,
+      activePhases: nextPhases,
+      reason: String(reason || '').trim()
     },
     success: true
   })
 
   return {
     changed: true,
+    phase: normalizedPhase,
+    active: nextActive,
     workflow: toPublicWorkflow(workflow)
   }
-}
-
-async function safeAuditTransitionFailure({ year, user, targetState, error }) {
-  const currentState =
-    error?.details?.currentState ||
-    null
-
-  await writeAuditEvent({
-    year,
-    action: 'workflow.transition',
-    user,
-    payload: {
-      from: currentState,
-      to: targetState
-    },
-    success: false,
-    error: error?.message || 'Transition invalide'
-  })
 }
 
 async function listWorkflowAuditEvents(year, limit = 100) {
@@ -313,6 +375,7 @@ async function resetWorkflowYear({ year, user }) {
   const snapshotsResult = await PlanningSnapshot.deleteMany({ year })
   const publicationVersionsResult = await PublicationVersion.deleteMany({ year })
   const magicLinksResult = await MagicLink.deleteMany({ year })
+  const accessLinkLogsResult = await AccessLinkLog.deleteMany({ year })
   const workflowYearsResult = await WorkflowYear.deleteMany({ year })
   const legacyCollections = await Promise.all([
     clearCollectionIfExists(`tpiRooms_${year}`),
@@ -326,6 +389,7 @@ async function resetWorkflowYear({ year, user }) {
     planningSnapshots: snapshotsResult.deletedCount || 0,
     publicationVersions: publicationVersionsResult.deletedCount || 0,
     magicLinks: magicLinksResult.deletedCount || 0,
+    accessLinkLogs: accessLinkLogsResult.deletedCount || 0,
     workflowYears: workflowYearsResult.deletedCount || 0,
     legacyCollections
   }
@@ -345,15 +409,12 @@ async function resetWorkflowYear({ year, user }) {
 }
 
 module.exports = {
-  WORKFLOW_STATES,
-  WORKFLOW_TRANSITIONS,
-  WorkflowTransitionError,
-  getAllowedTransitions,
-  isTransitionAllowed,
-  isWorkflowState,
+  WORKFLOW_PHASES,
+  isWorkflowPhase,
+  isWorkflowPhaseActive,
   getWorkflowYearState,
-  transitionWorkflowYear,
-  safeAuditTransitionFailure,
+  normalizeWorkflowPhase,
+  setWorkflowPhaseActive,
   listWorkflowAuditEvents,
   resetWorkflowYear,
   logWorkflowAuditEvent: writeAuditEvent,

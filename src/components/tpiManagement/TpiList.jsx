@@ -13,14 +13,14 @@ import {
   SaveIcon
 } from '../shared/InlineIcons.jsx'
 import { getPlanningClassDisplayInfo } from '../tpiPlanning/planningClassUtils.js'
-import { getPlanningPerimeterState } from '../../utils/planningScopeUtils.js'
+import { getPlanningPerimeterState } from '../../utils/coordinationScopeUtils.js'
 import {
   buildTpiTagProfile,
   formatDisplayDate,
   getCategoryChipClass,
   getCategoryLabelFromKey,
-  getMissingStakeholders,
   getStakeholderIssues,
+  getTpiLifecycleSummary,
   getTpiLocationLabel,
   getTpiTimelineLabel,
   matchesSearch,
@@ -29,12 +29,17 @@ import {
   splitTags
 } from './tpiManagementUtils.js'
 import { ROUTES } from '../../config/appConfig'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules.js'
+
+const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
+const EXPERTS_ROLE_LABEL = `${getTpiRelationRoleLabel('expert1')} / ${getTpiRelationRoleLabel('expert2')}`
+const PROJECT_LEAD_ROLE_LABEL = getTpiRelationRoleLabel('chef_projet')
 
 const DISPLAY_FIELDS = [
   { key: 'showTagsPreview', label: 'Tags' },
   { key: 'showLocation', label: 'Lieu' },
   { key: 'showDates', label: 'Dates' },
-  { key: 'showExperts', label: 'Experts' },
+  { key: 'showExperts', label: EXPERTS_ROLE_LABEL },
   { key: 'showEvaluation', label: 'Note' }
 ]
 
@@ -54,7 +59,7 @@ const getExpertsLabel = (tpi) => {
   const expert1 = tpi?.experts?.['1']
   const expert2 = tpi?.experts?.['2']
 
-  return [expert1, expert2].filter(Boolean).join(' / ') || 'Experts non assignés'
+  return [expert1, expert2].filter(Boolean).join(' / ') || `${EXPERTS_ROLE_LABEL} non assignés`
 }
 
 const getEvaluationLabel = (tpi) => {
@@ -216,14 +221,14 @@ const TpiList = ({
   planningCatalogSites = [],
   planningClassTypes = [],
   planningSoutenanceDates = [],
-  planningSiteConfigs = []
+  planningSiteConfigs = [],
+  planningScopeFilter = 'all',
+  onPlanningScopeFilterChange = () => {},
+  stakeholderFilter = 'all',
+  onStakeholderFilterChange = () => {}
 }) => {
   const [editingTpiId, setEditingTpiId] = useState(null)
   const [categoryFilter, setCategoryFilter] = useState('all')
-  const [planningScopeFilter, setPlanningScopeFilter] = useState('all')
-  const [stakeholderFilter, setStakeholderFilter] = useState(() =>
-    tpiList.some((tpi) => getMissingStakeholders(tpi).length > 0) ? 'missing' : 'all'
-  )
   const [displayMode, setDisplayMode] = useState('cards')
   const [cardColumns, setCardColumns] = useState(4)
   const [cardGridWidth, setCardGridWidth] = useState(0)
@@ -261,6 +266,7 @@ const TpiList = ({
 
           return {
             ...entry,
+            lifecycleSummary: getTpiLifecycleSummary(entry.tpi),
             stakeholderIssues,
             missingStakeholders: stakeholderIssues.missingStakeholders
           }
@@ -321,30 +327,6 @@ const TpiList = ({
     [categoryFilter, planningScopeFilter, profiles, searchTerm, stakeholderFilter]
   )
 
-  const missingStakeholderCount = useMemo(
-    () => profiles.filter(({ planningPerimeter, missingStakeholders }) => planningPerimeter.isPlanifiable && missingStakeholders.length > 0).length,
-    [profiles]
-  )
-  const stakeholderIssueCount = useMemo(
-    () => profiles.filter(({ planningPerimeter, stakeholderIssues }) => planningPerimeter.isPlanifiable && stakeholderIssues.hasIssues).length,
-    [profiles]
-  )
-  const planifiableCount = useMemo(
-    () => profiles.filter(({ planningPerimeter }) => planningPerimeter.isPlanifiable).length,
-    [profiles]
-  )
-  const outOfScopeCount = useMemo(
-    () => profiles.filter(({ planningPerimeter }) => !planningPerimeter.isPlanifiable).length,
-    [profiles]
-  )
-  const hasMissingStakeholderFilter = missingStakeholderCount > 0
-  const hasStakeholderIssueFilter = stakeholderIssueCount > 0
-  const hasPlanningScopeFilter = outOfScopeCount > 0
-  const hasActiveFilters =
-    categoryFilter !== 'all' ||
-    planningScopeFilter !== 'all' ||
-    stakeholderFilter !== 'all' ||
-    Boolean(searchTerm)
   const selectedRefSet = useMemo(() => new Set(selectedRefs), [selectedRefs])
   const selectedProfiles = useMemo(
     () =>
@@ -357,6 +339,9 @@ const TpiList = ({
       filteredProfiles.filter(({ tpi }) => selectedRefSet.has(normalizeManagedRef(tpi?.refTpi))).length,
     [filteredProfiles, selectedRefSet]
   )
+  const tpiCountLabel = filteredProfiles.length === profiles.length
+    ? `${profiles.length} TPI`
+    : `${filteredProfiles.length}/${profiles.length} TPI`
   const allFilteredSelected = filteredProfiles.length > 0 &&
     filteredProfiles.every(({ tpi }) => selectedRefSet.has(normalizeManagedRef(tpi?.refTpi)))
   const enabledBulkFieldCount = useMemo(
@@ -409,10 +394,6 @@ const TpiList = ({
     expert2: { name: ['experts', '2'], idName: 'expert2PersonId', role: 'expert' },
     boss: { name: 'boss', idName: 'bossPersonId', role: 'chef_projet' }
   }
-
-  useEffect(() => {
-    setStakeholderFilter(hasMissingStakeholderFilter ? 'missing' : 'all')
-  }, [hasMissingStakeholderFilter, year])
 
   useEffect(() => {
     setSelectedRefs([])
@@ -501,8 +482,8 @@ const TpiList = ({
 
   const clearFilters = () => {
     setCategoryFilter('all')
-    setPlanningScopeFilter('all')
-    setStakeholderFilter('all')
+    onPlanningScopeFilterChange('all')
+    onStakeholderFilterChange('all')
     onSearchTermChange('')
   }
 
@@ -755,23 +736,29 @@ const TpiList = ({
               <h3>Affichage</h3>
             </div>
 
-            <div className='tpi-display-toggle' role='group' aria-label='Mode affichage'>
-              <button
-                type='button'
-                className={displayMode === 'cards' ? 'active' : ''}
-                onClick={() => setDisplayMode('cards')}
-                aria-pressed={displayMode === 'cards'}
-              >
-                Cartes
-              </button>
-              <button
-                type='button'
-                className={displayMode === 'table' ? 'active' : ''}
-                onClick={() => setDisplayMode('table')}
-                aria-pressed={displayMode === 'table'}
-              >
-                Tableau
-              </button>
+            <div className='tpi-view-head-actions'>
+              <span className='tpi-view-count' aria-label='Nombre de TPI affichés'>
+                {tpiCountLabel}
+              </span>
+
+              <div className='tpi-display-toggle' role='group' aria-label='Mode affichage'>
+                <button
+                  type='button'
+                  className={displayMode === 'cards' ? 'active' : ''}
+                  onClick={() => setDisplayMode('cards')}
+                  aria-pressed={displayMode === 'cards'}
+                >
+                  Cartes
+                </button>
+                <button
+                  type='button'
+                  className={displayMode === 'table' ? 'active' : ''}
+                  onClick={() => setDisplayMode('table')}
+                  aria-pressed={displayMode === 'table'}
+                >
+                  Tableau
+                </button>
+              </div>
             </div>
           </div>
 
@@ -830,93 +817,6 @@ const TpiList = ({
           </div>
         </section>
 
-        <section className='tpi-control-panel tpi-control-panel-quality' aria-label='Qualité'>
-          <div className='tpi-control-panel-head'>
-            <div>
-              <span>Contrôles</span>
-              <h3>Qualité</h3>
-            </div>
-
-            {hasActiveFilters && (
-              <button type='button' className='tpi-clear-filters-button' onClick={clearFilters}>
-                Effacer
-              </button>
-            )}
-          </div>
-
-          {hasStakeholderIssueFilter ? (
-            <div
-              className='tpi-display-controls-stakeholder'
-              aria-label='Filtre parties prenantes'
-            >
-              <span>Parties prenantes</span>
-              {hasMissingStakeholderFilter && (
-                <button
-                  type='button'
-                  className={stakeholderFilter === 'missing' ? 'active' : ''}
-                  onClick={() => setStakeholderFilter('missing')}
-                >
-                  Manquantes
-                  <strong>{missingStakeholderCount}</strong>
-                </button>
-              )}
-              <button
-                type='button'
-                className={stakeholderFilter === 'issues' ? 'active' : ''}
-                onClick={() => setStakeholderFilter('issues')}
-              >
-                Incorrectes
-                <strong>{stakeholderIssueCount}</strong>
-              </button>
-              <button
-                type='button'
-                className={stakeholderFilter === 'all' ? 'active' : ''}
-                onClick={() => setStakeholderFilter('all')}
-              >
-                Toutes
-                <strong>{profiles.length}</strong>
-              </button>
-            </div>
-          ) : (
-            <span className='tpi-control-empty'>Parties prenantes complètes</span>
-          )}
-
-          {hasPlanningScopeFilter ? (
-            <div
-              className='tpi-display-controls-planning'
-              aria-label='Filtre périmètre planning'
-            >
-              <span>Planification</span>
-              <button
-                type='button'
-                className={planningScopeFilter === 'planifiable' ? 'active' : ''}
-                onClick={() => setPlanningScopeFilter('planifiable')}
-              >
-                Planif.
-                <strong>{planifiableCount}</strong>
-              </button>
-              <button
-                type='button'
-                className={planningScopeFilter === 'out-of-scope' ? 'active' : ''}
-                onClick={() => setPlanningScopeFilter('out-of-scope')}
-              >
-                Hors pér.
-                <strong>{outOfScopeCount}</strong>
-              </button>
-              <button
-                type='button'
-                className={planningScopeFilter === 'all' ? 'active' : ''}
-                onClick={() => setPlanningScopeFilter('all')}
-              >
-                Tout
-                <strong>{profiles.length}</strong>
-              </button>
-            </div>
-          ) : (
-            <span className='tpi-control-empty'>Périmètre planning complet</span>
-          )}
-        </section>
-
         <section className='tpi-control-panel tpi-control-panel-axes' aria-label='Axes'>
           <div className='tpi-control-panel-head'>
             <div>
@@ -946,6 +846,9 @@ const TpiList = ({
           {activeFilterLabels.map((label) => (
             <span key={label}>{label}</span>
           ))}
+          <button type='button' className='tpi-clear-filters-button' onClick={clearFilters}>
+            Effacer
+          </button>
         </div>
       ) : null}
 
@@ -1094,7 +997,7 @@ const TpiList = ({
           className='tpi-card-grid'
           style={{ gridTemplateColumns: `repeat(${effectiveCardColumns}, minmax(0, 1fr))` }}
         >
-          {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution, planningPerimeter }) => {
+          {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution, planningPerimeter, lifecycleSummary }) => {
             const classChipLabel = String(
               classResolution?.classLabel || classResolution?.displayClassLabel || ''
             ).trim()
@@ -1121,7 +1024,7 @@ const TpiList = ({
               ? planningPerimeter.reason || 'Hors planification'
               : stakeholderIssues.hasIssues
                 ? stakeholderIssues.summary
-                : 'Prête pour le planning'
+                : 'Prête pour la coordination'
 
             return (
               <article
@@ -1193,16 +1096,26 @@ const TpiList = ({
                 </div>
 
                 <div className='tpi-card-main-copy'>
-                  <span>Candidat</span>
+                  <span>{CANDIDATE_ROLE_LABEL}</span>
                   <h3 className='tpi-card-candidate'>
                     <StakeholderLink tpi={tpi} field={stakeholderFields.candidat} year={year}>
-                      {tpi.candidat || 'Candidat non renseigné'}
+                      {tpi.candidat || `${CANDIDATE_ROLE_LABEL} non renseigné`}
                     </StakeholderLink>
                   </h3>
                   <p className='tpi-card-title'>{tpi.sujet || 'Sujet non renseigné'}</p>
                 </div>
 
                 <div className='tpi-card-summary'>
+                  <span className={`tpi-tag tpi-lifecycle-tag is-${lifecycleSummary.tone}`}>
+                    {lifecycleSummary.label}
+                  </span>
+                  <span className='tpi-tag muted'>
+                    Journal: {lifecycleSummary.journalLabel}
+                  </span>
+                  <span className='tpi-tag muted'>
+                    Rapport: {lifecycleSummary.rapportLabel}
+                  </span>
+
                   {displayOptions.showTagsPreview && profile.previewTags.length > 0 ? (
                     profile.previewTags.map((tag) => (
                       <span key={`${tpi.refTpi}-${tag}`} className='tpi-tag'>
@@ -1256,7 +1169,7 @@ const TpiList = ({
 
                 <dl className='tpi-card-meta'>
                   <div>
-                    <dt>Encadrant</dt>
+                    <dt>{PROJECT_LEAD_ROLE_LABEL}</dt>
                     <dd>
                       <StakeholderLink tpi={tpi} field={stakeholderFields.boss} year={year}>
                         {tpi.boss || 'Non renseigné'}
@@ -1280,7 +1193,7 @@ const TpiList = ({
 
                   {displayOptions.showExperts && (
                     <div>
-                      <dt>Experts</dt>
+                      <dt>{EXPERTS_ROLE_LABEL}</dt>
                       <dd>{getExpertsLabel(tpi)}</dd>
                     </div>
                   )}
@@ -1291,6 +1204,11 @@ const TpiList = ({
                       <dd>{getEvaluationLabel(tpi)}</dd>
                     </div>
                   )}
+
+                  <div>
+                    <dt>Suivi</dt>
+                    <dd>{lifecycleSummary.label}</dd>
+                  </div>
                 </dl>
 
                 <div className='tpi-card-footer'>
@@ -1311,9 +1229,10 @@ const TpiList = ({
               <tr>
                 {isBulkMode ? <th className='tpi-table-selection-col'>Lot</th> : null}
                 <th>Ref</th>
-                <th>Candidat</th>
+                <th>{CANDIDATE_ROLE_LABEL}</th>
                 <th>Classe</th>
                 <th>Axe</th>
+                <th>Statut</th>
                 <th>Sujet</th>
                 <th>Tags</th>
                 <th>Lieu</th>
@@ -1322,7 +1241,7 @@ const TpiList = ({
               </tr>
             </thead>
             <tbody>
-              {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution, planningPerimeter }) => {
+              {filteredProfiles.map(({ tpi, profile, stakeholderIssues, classResolution, planningPerimeter, lifecycleSummary }) => {
                 const classDisplay = classResolution?.displayLabel || String(tpi.classe || '').trim() || 'Non renseignée'
                 const missingStakeholders = stakeholderIssues.missingStakeholders
                 const missingStakeholderLinks = stakeholderIssues.missingLinks
@@ -1350,11 +1269,12 @@ const TpiList = ({
                     <td>{tpi.refTpi}</td>
                     <td>
                       <StakeholderLink tpi={tpi} field={stakeholderFields.candidat} year={year}>
-                        {tpi.candidat || 'Candidat non renseigné'}
+                        {tpi.candidat || `${CANDIDATE_ROLE_LABEL} non renseigné`}
                       </StakeholderLink>
                     </td>
                     <td>{classDisplay}</td>
                     <td>{profile.primaryCategory}</td>
+                    <td>{lifecycleSummary.label}</td>
                     <td>{tpi.sujet || 'Non renseigné'}</td>
                     <td>{profile.previewTags.join(', ') || 'Aucun'}</td>
                     <td>{getTpiLocationLabel(tpi)}</td>

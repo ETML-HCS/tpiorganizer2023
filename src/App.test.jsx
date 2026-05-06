@@ -26,7 +26,7 @@ jest.mock('./components/tpiSchedule/TpiSchedule', () => function MockTpiSchedule
 })
 
 jest.mock('./components/tpiPlanning/PlanningDashboard', () => function MockPlanningDashboard({ isAdmin }) {
-  return <div data-testid='planning-dashboard'>planning {isAdmin ? 'admin' : 'magic'}</div>
+  return <div data-testid='planning-dashboard'>coordination {isAdmin ? 'admin' : 'magic'}</div>
 })
 
 jest.mock('./components/tpiSoutenance/TpiSoutenance', () => function MockTpiSoutenance() {
@@ -43,8 +43,8 @@ jest.mock('./services/apiService', () => ({
   }
 }))
 
-jest.mock('./services/planningService', () => ({
-  authPlanningService: {
+jest.mock('./services/coordinationService', () => ({
+  authCoordinationService: {
     getCurrentUser: jest.fn(() => null),
     clearSession: jest.fn()
   }
@@ -93,11 +93,11 @@ describe('App routing access', () => {
   })
 
   test('keeps vote and défense magic-link pages accessible without an admin session', async () => {
-    window.history.pushState({}, '', '/planning/2026?ml=test-token')
+    window.history.pushState({}, '', '/coordination/2026?ml=test-token')
 
     const { unmount } = render(<App />)
 
-    expect(await screen.findByTestId('planning-dashboard')).toHaveTextContent('planning magic')
+    expect(await screen.findByTestId('planning-dashboard')).toHaveTextContent('coordination magic')
     unmount()
 
     window.history.pushState({}, '', '/defenses/2026?ml=test-token')

@@ -1,19 +1,53 @@
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
+const Person = require('../models/personModel')
 const emailService = require('./emailService')
-const magicLinkV2Service = require('./magicLinkV2Service')
-const { getSharedEmailSettingsIfAvailable } = require('./planningCatalogService')
-const { getActivePublicationVersion } = require('./publishedSoutenanceService')
+const accessLinkTokenService = require('../modules/accessLinks/tokenService')
+const { getSharedEmailSettingsIfAvailable } = require('./coordinationCatalogService')
+const {
+  getActivePublicationVersion,
+  getPublicationVersion
+} = require('./publishedSoutenanceService')
 const {
   getPlanningConfigIfAvailable,
   normalizeWorkflowSettings
-} = require('./planningConfigService')
+} = require('./coordinationConfigService')
 const schedulingService = require('./schedulingService')
 const staticVotePublicationService = require('./staticVotePublicationService')
-const { filterPlanifiableTpis } = require('./tpiPlanningVisibility')
+const { filterPlanifiableTpis } = require('./coordinationTpiVisibility')
+const { buildDefensePublicPath } = require('../utils/publicRoutes')
+const {
+  normalizeVoteLinkTarget,
+  normalizeSoutenanceLinkTarget,
+  getVoteGeneratedAccessLinkSources,
+  getSoutenanceAccessLinkSource,
+  getSoutenanceGeneratedAccessLinkSources
+} = require('../modules/accessLinks/constants')
+const {
+  COORDINATION_PROPOSAL_READY_STATUSES,
+  COORDINATION_VOTE_STATUSES
+} = require('../modules/coordination/status')
+const {
+  VOTING_STAKEHOLDER_ROLES,
+  formatTpiStakeholderRoleLabel
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const HOUR_IN_MS = 60 * 60 * 1000
+const AUTOMATIC_EMAIL_SENDS_ENABLED = false
+const AUTOMATIC_EMAIL_SENDS_DISABLED_REASON = 'automatic_email_sends_disabled'
+
+function shouldSkipAutomaticEmailSends(options = {}) {
+  return options?.skipEmails === true || AUTOMATIC_EMAIL_SENDS_ENABLED !== true
+}
+
+function getAutomaticEmailSkipReason(options = {}) {
+  if (AUTOMATIC_EMAIL_SENDS_ENABLED !== true) {
+    return AUTOMATIC_EMAIL_SENDS_DISABLED_REASON
+  }
+
+  return options?.skipEmails === true ? 'requested' : null
+}
 
 function getDisplayName(person) {
   if (!person) {
@@ -25,14 +59,6 @@ function getDisplayName(person) {
   }
 
   return [person.firstName, person.lastName].filter(Boolean).join(' ').trim()
-}
-
-function toRoleLabel(role) {
-  if (role === 'expert1' || role === 'expert2') {
-    return 'Expert'
-  }
-
-  return 'Chef de projet'
 }
 
 function canReceiveAutomaticEmail(person) {
@@ -178,7 +204,7 @@ function addTpiToVoteEmailTarget(targetsByPersonId, {
   }
 
   if (role) {
-    entry.roleLabels.add(toRoleLabel(role))
+    entry.roleLabels.add(formatTpiStakeholderRoleLabel(role))
     target.roles.add(role)
   }
 }
@@ -243,7 +269,7 @@ async function loadVotingTpisForYear(year) {
     getPlanningConfigIfAvailable(year),
     TpiPlanning.find({
       year,
-      status: { $in: ['voting', 'pending_slots'] },
+      status: { $in: COORDINATION_PROPOSAL_READY_STATUSES },
       proposedSlots: { $exists: true, $ne: [] }
     })
       .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
@@ -269,9 +295,33 @@ function compactText(value) {
   return String(value).trim()
 }
 
-function normalizeVoteLinkTarget(value) {
-  const normalized = compactText(value).toLowerCase()
-  return normalized === 'static' || normalized === 'publication' ? 'static' : 'app'
+function buildPublicUrlLinkTarget(rawPublicUrl, fallbackBaseUrl, fallbackRedirectPath) {
+  const publicUrl = compactText(rawPublicUrl)
+
+  if (!publicUrl) {
+    return null
+  }
+
+  if (publicUrl.startsWith('/')) {
+    return {
+      baseUrl: fallbackBaseUrl,
+      redirectPath: publicUrl
+    }
+  }
+
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(publicUrl)
+    ? publicUrl
+    : `https://${publicUrl}`
+
+  try {
+    const url = new URL(withProtocol)
+    return {
+      baseUrl: `${url.protocol}//${url.host}`,
+      redirectPath: `${url.pathname || fallbackRedirectPath}${url.search || ''}` || fallbackRedirectPath
+    }
+  } catch (error) {
+    return null
+  }
 }
 
 async function resolveVoteMagicLinkTarget(year, baseUrl, options = {}) {
@@ -285,7 +335,7 @@ async function resolveVoteMagicLinkTarget(year, baseUrl, options = {}) {
   if (configuredTarget !== 'static') {
     return {
       baseUrl,
-      redirectPath: `/planning/${year}`,
+      redirectPath: `/coordination/${year}`,
       linkTarget: 'app'
     }
   }
@@ -300,6 +350,129 @@ async function resolveVoteMagicLinkTarget(year, baseUrl, options = {}) {
   return {
     ...target,
     linkTarget: 'static'
+  }
+}
+
+async function resolveSoutenanceMagicLinkTarget(year, baseUrl, options = {}) {
+  const configuredTarget = normalizeSoutenanceLinkTarget(
+    options.soutenanceLinkTarget ||
+    options.accessLinkSettings?.defaultSoutenanceLinkTarget
+  )
+  const fallbackRedirectPath = buildDefensePublicPath(year)
+
+  if (configuredTarget !== 'publication') {
+    return {
+      baseUrl,
+      redirectPath: fallbackRedirectPath,
+      linkTarget: 'app'
+    }
+  }
+
+  const publicationTarget = buildPublicUrlLinkTarget(
+    options.soutenancePublicUrl ||
+    options.publicationPublicUrl ||
+    options.staticSoutenancePublicUrl ||
+    options.staticDefensePublicUrl ||
+    process.env.STATIC_DEFENSE_PUBLIC_URL ||
+    process.env.STATIC_DEFENSE_PUBLICATION_PUBLIC_URL ||
+    process.env.STATIC_SOUTENANCE_PUBLIC_URL ||
+    process.env.STATIC_SOUTENANCE_PUBLICATION_PUBLIC_URL ||
+    process.env.STATIC_PUBLICATION_PUBLIC_URL,
+    baseUrl,
+    fallbackRedirectPath
+  )
+
+  return {
+    ...(publicationTarget || {
+      baseUrl,
+      redirectPath: fallbackRedirectPath
+    }),
+    linkTarget: 'publication'
+  }
+}
+
+async function findGeneratedVoteAccessLink({
+  year,
+  person,
+  baseUrl,
+  target
+}) {
+  if (typeof accessLinkTokenService.findReusableMagicLink !== 'function') {
+    return null
+  }
+
+  const link = await accessLinkTokenService.findReusableMagicLink({
+    year,
+    type: 'vote',
+    person,
+    scope: {
+      year,
+      kind: 'stakeholder_votes',
+      tpiId: null,
+      voterRole: null
+    },
+    sources: getVoteGeneratedAccessLinkSources(target),
+    baseUrl
+  })
+
+  return link?.url ? link : null
+}
+
+async function findGeneratedSoutenanceAccessLink({
+  year,
+  person,
+  publicationVersion,
+  baseUrl,
+  target
+}) {
+  if (typeof accessLinkTokenService.findReusableMagicLink !== 'function') {
+    return null
+  }
+
+  const link = await accessLinkTokenService.findReusableMagicLink({
+    year,
+    type: 'soutenance',
+    person,
+    scope: {
+      publicationVersion: publicationVersion || null
+    },
+    sources: getSoutenanceGeneratedAccessLinkSources(target),
+    baseUrl
+  })
+
+  return link?.url ? link : null
+}
+
+async function createGeneratedSoutenanceAccessLink({
+  year,
+  person,
+  publicationVersion,
+  baseUrl,
+  redirectPath,
+  target
+}) {
+  return await accessLinkTokenService.createSoutenanceMagicLink({
+    year,
+    person,
+    scope: {
+      kind: 'published_soutenances',
+      publicationVersion: publicationVersion || null,
+      source: getSoutenanceAccessLinkSource(target)
+    },
+    baseUrl,
+    redirectPath,
+    persistToken: true
+  })
+}
+
+function buildMissingAccessLinkTarget(target) {
+  return {
+    personId: target?.personId || normalizeTargetPersonId(target?.person),
+    email: target?.email || target?.person?.email || '',
+    personName: target?.personName || getDisplayName(target?.person),
+    tpiIds: target?.tpisById instanceof Map
+      ? Array.from(target.tpisById.keys())
+      : []
   }
 }
 
@@ -398,8 +571,28 @@ async function ensureVotesForTpi(tpi) {
   return votes
 }
 
+async function ensureVoteRecordsForTpis(tpis = []) {
+  let voteCount = 0
+  let tpiCount = 0
+
+  for (const tpi of Array.isArray(tpis) ? tpis : []) {
+    if (!tpi?._id) {
+      continue
+    }
+
+    const votes = await ensureVotesForTpi(tpi)
+    voteCount += Array.isArray(votes) ? votes.length : 0
+    tpiCount += 1
+  }
+
+  return {
+    tpiCount,
+    voteCount
+  }
+}
+
 async function startVotesCampaign(year, baseUrl, options = {}) {
-  const skipEmails = options?.skipEmails === true
+  const skipEmails = shouldSkipAutomaticEmailSends(options)
   const fromArbitrage = options?.fromArbitrage === true
   const { planningConfig, tpis } = await loadVotingTpisForYear(year)
   const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
@@ -412,6 +605,8 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
   let totalEmails = 0
   let successfulEmails = 0
+  let missingAccessLinkCount = 0
+  const missingAccessLinks = []
   const details = []
 
   for (const tpi of tpis) {
@@ -498,18 +693,17 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
       })
 
     for (const target of sortedTargets) {
-      const link = await magicLinkV2Service.createVoteMagicLink({
+      const link = await findGeneratedVoteAccessLink({
         year,
         person: target.person,
-        role: null,
-        scope: {
-          year,
-          kind: 'stakeholder_votes'
-        },
-        accessLinkSettings: planningConfig?.accessLinkSettings,
         baseUrl: voteLinkTarget.baseUrl,
-        redirectPath: voteLinkTarget.redirectPath
+        target: voteLinkTarget.linkTarget
       })
+
+      if (!link) {
+        missingAccessLinks.push(buildMissingAccessLinkTarget(target))
+        continue
+      }
 
       digestTargets.push({
         ...finalizeVoteEmailTarget(target, link),
@@ -519,13 +713,16 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
     const mailResults = await emailService.sendVoteDigestRequests(digestTargets, emailOptions)
     const resultByEmail = new Map(mailResults.map((result) => [result.email, result]))
-    totalEmails = mailResults.length
+    totalEmails = sortedTargets.length
     successfulEmails = mailResults.filter(result => result.success).length
+    missingAccessLinkCount = missingAccessLinks.length
 
     for (const detail of details) {
       const detailTargets = digestTargets.filter((target) => target.tpiIds.includes(detail.tpiId))
+      const detailMissingTargets = missingAccessLinks.filter((target) => target.tpiIds.includes(detail.tpiId))
       detail.emailsSent = detailTargets.length
       detail.emailsSucceeded = detailTargets.filter((target) => resultByEmail.get(target.email)?.success).length
+      detail.missingAccessLinks = detailMissingTargets.length
     }
   }
 
@@ -535,6 +732,9 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
     successfulEmails,
     failedEmails: Math.max(totalEmails - successfulEmails, 0),
     emailsSkipped: skipEmails,
+    emailSkipReason: skipEmails ? getAutomaticEmailSkipReason(options) : null,
+    missingAccessLinkCount,
+    missingAccessLinks,
     details
   }
 }
@@ -544,6 +744,20 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
   const planningConfig = await getPlanningConfigIfAvailable(year)
   const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
   const now = resolveDate(options?.now) || new Date()
+
+  if (automatic && AUTOMATIC_EMAIL_SENDS_ENABLED !== true) {
+    return {
+      tpiCount: 0,
+      eligibleTpiCount: 0,
+      reminderTargets: 0,
+      emailsSent: 0,
+      emailsSucceeded: 0,
+      emailsFailed: 0,
+      automatic: true,
+      skipped: true,
+      reason: AUTOMATIC_EMAIL_SENDS_DISABLED_REASON
+    }
+  }
 
   if (automatic && workflowSettings.automaticVoteRemindersEnabled !== true) {
     return {
@@ -620,24 +834,23 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
   }
 
   const digestTargets = []
+  const missingAccessLinks = []
   const voteLinkTarget = await resolveVoteMagicLinkTarget(year, baseUrl, {
     ...options,
     accessLinkSettings: planningConfig?.accessLinkSettings
   })
   for (const target of targetsByPersonId.values()) {
-    const link = await magicLinkV2Service.createVoteMagicLink({
+    const link = await findGeneratedVoteAccessLink({
       year,
       person: target.person,
-      role: null,
-      scope: {
-        year,
-        kind: 'stakeholder_votes',
-        source: 'vote_reminder'
-      },
-      accessLinkSettings: planningConfig?.accessLinkSettings,
       baseUrl: voteLinkTarget.baseUrl,
-      redirectPath: voteLinkTarget.redirectPath
+      target: voteLinkTarget.linkTarget
     })
+
+    if (!link) {
+      missingAccessLinks.push(buildMissingAccessLinkTarget(target))
+      continue
+    }
 
     digestTargets.push({
       ...finalizeVoteEmailTarget(target, link),
@@ -670,10 +883,12 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
   return {
     tpiCount: tpis.length,
     eligibleTpiCount: reminderTpis.length,
-    reminderTargets: digestTargets.length,
+    reminderTargets: targetsByPersonId.size,
     emailsSent,
     emailsSucceeded,
-    emailsFailed: Math.max(emailsSent - emailsSucceeded, 0),
+    emailsFailed: Math.max(targetsByPersonId.size - emailsSucceeded, 0),
+    missingAccessLinkCount: missingAccessLinks.length,
+    missingAccessLinks,
     automatic,
     skipped: false,
     reason: null
@@ -687,11 +902,7 @@ function hasAllVotes(votes) {
       .map(vote => vote.voterRole)
   )
 
-  return (
-    votedRoles.has('expert1') &&
-    votedRoles.has('expert2') &&
-    votedRoles.has('chef_projet')
-  )
+  return VOTING_STAKEHOLDER_ROLES.every((role) => votedRoles.has(role))
 }
 
 async function closeVotesCampaign(year) {
@@ -699,7 +910,7 @@ async function closeVotesCampaign(year) {
     getPlanningConfigIfAvailable(year),
     TpiPlanning.find({
       year,
-      status: { $in: ['voting', 'pending_validation'] }
+      status: { $in: COORDINATION_VOTE_STATUSES }
     })
   ])
   const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
@@ -765,64 +976,236 @@ function listSoutenanceRecipientsFromTpi(tpi) {
   ].filter((entry) => Boolean(entry.person))
 }
 
-async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = null) {
-  const [planningConfig, rawConfirmedTpis] = await Promise.all([
-    getPlanningConfigIfAvailable(year),
-    TpiPlanning.find({
-      year,
-      status: 'confirmed',
-      confirmedSlot: { $ne: null }
+function addSoutenanceRecipient(recipientsByPersonId, person, role) {
+  if (!person?._id || !canReceiveAutomaticEmail(person)) {
+    return
+  }
+
+  const key = String(person._id)
+  if (!recipientsByPersonId.has(key)) {
+    recipientsByPersonId.set(key, {
+      person,
+      roles: new Set()
     })
-    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
-    .select('reference candidat expert1 expert2 chefProjet site')
-  ])
+  }
+
+  const entry = recipientsByPersonId.get(key)
+  entry.roles.add(role)
+
+  if (Array.isArray(person.roles) && person.roles.includes('admin')) {
+    entry.roles.add('admin')
+  }
+}
+
+async function addAdminSoutenanceRecipients(recipientsByPersonId) {
+  const admins = await Person.find({
+    roles: 'admin',
+    isActive: true
+  })
+    .select('firstName lastName email roles sendEmails')
+    .lean()
+  let addedCount = 0
+
+  for (const admin of Array.isArray(admins) ? admins : []) {
+    const beforeCount = recipientsByPersonId.size
+    addSoutenanceRecipient(recipientsByPersonId, admin, 'admin')
+    if (recipientsByPersonId.size > beforeCount) {
+      addedCount += 1
+    }
+  }
+
+  return addedCount
+}
+
+function collectPublishedRoomRecipientRefs(rooms = []) {
+  const recipientRefsByKey = new Map()
+
+  for (const room of Array.isArray(rooms) ? rooms : []) {
+    for (const tpiData of Array.isArray(room?.tpiDatas) ? room.tpiDatas : []) {
+      const refs = [
+        { personId: tpiData?.candidatPersonId, role: 'candidat' },
+        { personId: tpiData?.expert1?.personId, role: 'expert1' },
+        { personId: tpiData?.expert2?.personId, role: 'expert2' },
+        { personId: tpiData?.boss?.personId, role: 'chef_projet' }
+      ]
+
+      for (const ref of refs) {
+        const personId = ref.personId ? String(ref.personId).trim() : ''
+        if (!personId) {
+          continue
+        }
+
+        const key = `${personId}|${ref.role}`
+        if (!recipientRefsByKey.has(key)) {
+          recipientRefsByKey.set(key, {
+            personId,
+            role: ref.role
+          })
+        }
+      }
+    }
+  }
+
+  return Array.from(recipientRefsByKey.values())
+}
+
+async function addPublishedRoomRecipients(recipientsByPersonRoleKey, rooms = []) {
+  const recipientRefs = collectPublishedRoomRecipientRefs(rooms)
+  if (recipientRefs.length === 0) {
+    return 0
+  }
+
+  const personIds = Array.from(new Set(recipientRefs.map(ref => ref.personId)))
+  const people = await Person.find({
+    _id: { $in: personIds },
+    isActive: true
+  })
+    .select('firstName lastName email roles sendEmails')
+    .lean()
+  const peopleById = new Map(
+    (Array.isArray(people) ? people : [])
+      .filter(person => person?._id)
+      .map(person => [String(person._id), person])
+  )
+  let addedCount = 0
+
+  for (const ref of recipientRefs) {
+    const person = peopleById.get(ref.personId)
+    const beforeCount = recipientsByPersonRoleKey.size
+    addSoutenanceRecipient(recipientsByPersonRoleKey, person, ref.role)
+    if (recipientsByPersonRoleKey.size > beforeCount) {
+      addedCount += 1
+    }
+  }
+
+  return addedCount
+}
+
+async function addConfirmedPlanningRecipients(recipientsByPersonRoleKey, year, planningConfig) {
+  const rawConfirmedTpis = await TpiPlanning.find({
+    year,
+    status: 'confirmed',
+    confirmedSlot: { $ne: null }
+  })
+  .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email roles sendEmails')
+  .select('reference candidat expert1 expert2 chefProjet site')
   const confirmedTpis = filterPlanifiableTpis(rawConfirmedTpis, planningConfig)
 
-  const recipientsByPersonRoleKey = new Map()
+  let addedCount = 0
 
   for (const tpi of confirmedTpis) {
     const participants = listSoutenanceRecipientsFromTpi(tpi)
 
     for (const participant of participants) {
-      const person = participant.person
-      const role = participant.role
-      if (!person?._id || !canReceiveAutomaticEmail(person)) {
-        continue
-      }
-
-      const key = `${String(person._id)}|${role}`
-      if (!recipientsByPersonRoleKey.has(key)) {
-        recipientsByPersonRoleKey.set(key, {
-          person,
-          role
-        })
+      const beforeCount = recipientsByPersonRoleKey.size
+      addSoutenanceRecipient(recipientsByPersonRoleKey, participant.person, participant.role)
+      if (recipientsByPersonRoleKey.size > beforeCount) {
+        addedCount += 1
       }
     }
   }
 
+  return addedCount
+}
+
+async function loadPublicationRooms(year, publicationVersion = null) {
+  const activePublication = publicationVersion
+    ? await getPublicationVersion(year, publicationVersion)
+    : await getActivePublicationVersion(year)
+
+  return {
+    publicationVersion: activePublication?.version || publicationVersion || null,
+    rooms: Array.isArray(activePublication?.rooms) ? activePublication.rooms : []
+  }
+}
+
+async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = null, options = {}) {
+  const planningConfig = await getPlanningConfigIfAvailable(year)
+  const recipientsByPersonId = new Map()
+  const optionPublicationRooms = Array.isArray(options?.publicationRooms)
+    ? options.publicationRooms
+    : []
+  let scopedPublicationVersion = publicationVersion || null
+
+  if (optionPublicationRooms.length > 0) {
+    await addPublishedRoomRecipients(recipientsByPersonId, optionPublicationRooms)
+  }
+
+  if (recipientsByPersonId.size === 0) {
+    await addConfirmedPlanningRecipients(recipientsByPersonId, year, planningConfig)
+  }
+
+  if (recipientsByPersonId.size === 0 || !scopedPublicationVersion) {
+    const publication = await loadPublicationRooms(year, publicationVersion)
+    scopedPublicationVersion = publication.publicationVersion
+    if (recipientsByPersonId.size === 0) {
+      await addPublishedRoomRecipients(recipientsByPersonId, publication.rooms)
+    }
+  }
+
+  await addAdminSoutenanceRecipients(recipientsByPersonId)
+
   let emailsSent = 0
   let emailsSucceeded = 0
-  const activePublication = publicationVersion
-    ? { version: publicationVersion }
-    : await getActivePublicationVersion(year)
-  const scopedPublicationVersion = activePublication?.version || null
-  const emailSettings = await getSharedEmailSettingsIfAvailable()
+  let generatedAccessLinkCount = 0
+  const missingAccessLinks = []
+  const skipEmails = options?.skipEmails === true
 
-  for (const { person, role } of recipientsByPersonRoleKey.values()) {
-    const link = await magicLinkV2Service.createSoutenanceMagicLink({
+  if (skipEmails) {
+    return {
+      recipientsCount: recipientsByPersonId.size,
+      publicationVersion: scopedPublicationVersion,
+      emailsSent: 0,
+      emailsSucceeded: 0,
+      emailsFailed: 0,
+      emailsSkipped: true,
+      emailSkipReason: AUTOMATIC_EMAIL_SENDS_DISABLED_REASON,
+      generatedAccessLinkCount,
+      missingAccessLinkCount: 0,
+      missingAccessLinks
+    }
+  }
+
+  const emailSettings = await getSharedEmailSettingsIfAvailable()
+  const soutenanceLinkTarget = await resolveSoutenanceMagicLinkTarget(year, baseUrl, {
+    ...options,
+    accessLinkSettings: planningConfig?.accessLinkSettings
+  })
+
+  for (const { person, roles } of recipientsByPersonId.values()) {
+    let link = await findGeneratedSoutenanceAccessLink({
       year,
       person,
-      scope: {
-        kind: 'published_soutenances',
-        publicationVersion: scopedPublicationVersion,
-        viewerRole: role
-      },
-      accessLinkSettings: planningConfig?.accessLinkSettings,
-      baseUrl
+      publicationVersion: scopedPublicationVersion,
+      baseUrl: soutenanceLinkTarget.baseUrl,
+      target: soutenanceLinkTarget.linkTarget
     })
+
+    if (!link && options.generateMissingAccessLinks === true) {
+      link = await createGeneratedSoutenanceAccessLink({
+        year,
+        person,
+        publicationVersion: scopedPublicationVersion,
+        baseUrl: soutenanceLinkTarget.baseUrl,
+        redirectPath: soutenanceLinkTarget.redirectPath,
+        target: soutenanceLinkTarget.linkTarget
+      })
+      generatedAccessLinkCount += 1
+    }
+
+    if (!link) {
+      missingAccessLinks.push({
+        personId: normalizeTargetPersonId(person),
+        email: person.email || '',
+        personName: getDisplayName(person),
+        roles: Array.from(roles || []).filter(Boolean)
+      })
+      continue
+    }
 
     const result = await emailService.sendEmail(person.email, 'soutenanceAccess', {
       recipientName: getDisplayName(person),
+      recipientRoles: Array.from(roles || []).filter(Boolean),
       year,
       magicLinkUrl: link.url,
       deadline: link.expiresAt.toLocaleDateString('fr-CH')
@@ -835,11 +1218,14 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
   }
 
   return {
-    recipientsCount: recipientsByPersonRoleKey.size,
+    recipientsCount: recipientsByPersonId.size,
     publicationVersion: scopedPublicationVersion,
     emailsSent,
     emailsSucceeded,
-    emailsFailed: Math.max(emailsSent - emailsSucceeded, 0)
+    emailsFailed: Math.max(recipientsByPersonId.size - emailsSucceeded, 0),
+    generatedAccessLinkCount,
+    missingAccessLinkCount: missingAccessLinks.length,
+    missingAccessLinks
   }
 }
 
@@ -848,5 +1234,6 @@ module.exports = {
   remindPendingVotes,
   isTpiEligibleForAutomaticReminder,
   closeVotesCampaign,
-  sendSoutenanceLinksForYear
+  sendSoutenanceLinksForYear,
+  ensureVoteRecordsForTpis
 }

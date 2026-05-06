@@ -89,9 +89,11 @@ export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
   PLANIFICATION: '/planification',
-  PLANNING: '/planning',
-  PLANIFICATION_VOTES: '/planning/:year/votes',
-  PLANNING_VOTES_LEGACY: '/planification-votes/:year',
+  COORDINATION: '/coordination',
+  COORDINATION_VOTES: '/coordination/:year/votes',
+  COORDINATION_LEGACY: '/planning',
+  COORDINATION_VOTES_LEGACY: '/planning/:year/votes',
+  PLANIFICATION_VOTES_LEGACY: '/planification-votes/:year',
   GESTION_TPI: '/gestion-tpi',
   GESTION_TPI_LEGACY: '/gestionTPI',
   PARTIES_PRENANTES: '/parties-prenantes',
@@ -114,6 +116,7 @@ export const ROUTES = {
 export const TIMEOUTS = {
   NOTIFICATION: 3000,
   API_REQUEST: 10000,
+  EMAIL_SEND: 60000,
   DEBOUNCE: 300
 }
 
@@ -121,16 +124,18 @@ export const TIMEOUTS = {
 export const STORAGE_KEYS = {
   IS_AUTHENTICATED: 'isAuthenticated',
   APP_SESSION_TOKEN: 'appSessionToken',
-  PLANNING_SESSION_TOKEN: 'planningSessionToken',
-  PLANNING_SELECTED_YEAR: 'planningSelectedYear',
-  PLANNING_SOUTENANCE_DATES: 'planningSoutenanceDates',
-  PLANNING_ROOM_NAMES: 'planningRoomNames',
+  COORDINATION_SESSION_TOKEN: 'planningSessionToken',
+  COORDINATION_SELECTED_YEAR: 'planningSelectedYear',
+  COORDINATION_SOUTENANCE_DATES: 'planningSoutenanceDates',
+  COORDINATION_ROOM_NAMES: 'planningRoomNames',
+  COORDINATION_USER: 'planningUser',
   TPI_CARD_DETAIL_LEVEL: 'tpiCardDetailLevel',
   ORGANIZER_DATA: 'organizerData',
   EVALUATION_DATA: 'evaluationData',
   TPI_LIST: 'tpiList',
   PENDING_STAKEHOLDER_IMPORT: 'pendingStakeholderImport',
-  PLANNING_USER: 'planningUser',
+  ACCESS_LINK_SHOW_CANDIDATES: 'accessLinkShowCandidates',
+  ACCESS_LINK_EMAIL_DELIVERIES: 'accessLinkEmailDeliveries',
   USER_PREFERENCES: 'userPreferences'
 }
 

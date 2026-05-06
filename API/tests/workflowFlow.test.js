@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const mongoose = require('mongoose')
 
 const schedulingService = require('../services/schedulingService')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const Person = require('../models/personModel')
 const Vote = require('../models/voteModel')

@@ -88,12 +88,14 @@ const clearExpiredSessionState = (endpoint, scope) => {
     return
   }
 
-  if (source === 'planning') {
-    removeStorageValue(STORAGE_KEYS.PLANNING_SESSION_TOKEN)
-    removeStorageValue(STORAGE_KEYS.PLANNING_USER)
+  const isCoordinationSource = source === 'coordination' || source === 'planning'
+
+  if (isCoordinationSource) {
+    removeStorageValue(STORAGE_KEYS.COORDINATION_SESSION_TOKEN)
+    removeStorageValue(STORAGE_KEYS.COORDINATION_USER)
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(
-        new CustomEvent('tpi:planning-auth-expired', {
+        new CustomEvent('tpi:coordination-auth-expired', {
           detail: {
             endpoint,
             source
@@ -132,13 +134,13 @@ const handleResponse = async (response, endpoint) => {
       : response.status === 401
         ? scope === 'app'
           ? 'Session invalide ou expirée. Veuillez vous reconnecter.'
-          : source === 'planning'
-            ? 'Session de planification invalide ou expirée. Veuillez rouvrir le lien.'
+          : source === 'coordination' || source === 'planning'
+            ? 'Session de coordination invalide ou expirée. Veuillez rouvrir le lien.'
             : source === 'app' || source === 'legacy'
             ? 'Session invalide ou expirée. Veuillez vous reconnecter.'
             : scope === 'public'
               ? data?.message || data?.error || 'Lien invalide ou expiré.'
-              : 'Accès de planification requis.'
+              : 'Accès de coordination requis.'
         : data?.message || data?.error || ERROR_MESSAGES.NETWORK_ERROR
 
     if (response.status === 401) {
@@ -248,6 +250,8 @@ export const soutenancesService = {
     if (options.ml) params.append('ml', options.ml)
     if (options.token) params.append('token', options.token)
     if (options.code) params.append('code', options.code)
+    if (options.view) params.append('view', options.view)
+    if (options.adminView) params.append('adminView', options.adminView)
 
     const query = params.toString()
     return apiService.get(`/api/defenses/${year}${query ? `?${query}` : ''}`)
@@ -259,8 +263,11 @@ export const soutenancesService = {
   publishRoom: (year, roomData) =>
     apiService.post(`/api/defenses/${year}/publish-room`, roomData),
 
+  publishFromPlanification: (year) =>
+    apiService.post(`/api/defenses/${year}/publish-from-planification`, {}),
+
   publishFromPlanning: (year) =>
-    apiService.post(`/api/defenses/${year}/publish-from-planning`, {}),
+    soutenancesService.publishFromPlanification(year),
 
   updateOffers: (
     year,

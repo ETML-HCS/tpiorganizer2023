@@ -26,9 +26,86 @@ export const RoomIcon = (props) => (
 
 export const RoomAddIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
-    <rect x='4' y='5' width='10' height='14' rx='2' />
-    <path d='M9 12h.01' />
-    <path d='M18 9v6M15 12h6' />
+    <path d='M5 20h10.5' />
+    <path d='M6.2 20V5.8c0-.9.7-1.6 1.6-1.6h6.1c.9 0 1.6.7 1.6 1.6V20' />
+    <path d='M10.4 12h.01' />
+    <circle cx='17.5' cy='8' r='4' fill='var(--icon-badge-bg, #ffffff)' />
+    <path d='M17.5 5.8v4.4M15.3 8h4.4' />
+  </svg>
+)
+
+export const RoomBatchAddIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M4.2 18.8V7.2c0-.8.6-1.4 1.4-1.4h5.6' opacity='0.55' />
+    <path d='M7.2 20V5.8c0-.9.7-1.6 1.6-1.6h6.1c.9 0 1.6.7 1.6 1.6V20' />
+    <path d='M11.4 12h.01' />
+    <circle cx='17.2' cy='16.4' r='4' fill='var(--icon-badge-bg, #ffffff)' />
+    <path d='M17.2 14.2v4.4M15 16.4h4.4' />
+  </svg>
+)
+
+export const GearIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M10.4 3.3h3.2l.4 2.1c.6.2 1.2.5 1.7 1l2-.7 1.6 2.8-1.6 1.4c.1.3.1.7.1 1.1s0 .8-.1 1.1l1.6 1.4-1.6 2.8-2-.7c-.5.4-1.1.7-1.7 1l-.4 2.1h-3.2l-.4-2.1c-.6-.2-1.2-.5-1.7-1l-2 .7-1.6-2.8 1.6-1.4c-.1-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.7 8.5l1.6-2.8 2 .7c.5-.4 1.1-.7 1.7-1l.4-2.1Z' />
+    <circle cx='12' cy='12' r='3' />
+  </svg>
+)
+
+export const DataEditIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='4' y='5' width='10' height='13.5' rx='2' />
+    <path d='M7 8.5h4M7 12h3' />
+    <path d='M13.2 18.5 19.6 12a1.8 1.8 0 0 0-2.6-2.6l-6.4 6.5-.6 3.2 3.2-.6Z' />
+    <path d='m15.8 10.7 2.6 2.6' />
+  </svg>
+)
+
+export const JsonImportIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M7 3.8h7l4 4v12.4H7z' />
+    <path d='M14 3.8V8h4' />
+    <path d='M10.5 12h7' />
+    <path d='m14.8 9.8 2.7 2.2-2.7 2.2' />
+    <path d='M5.2 12h5.3' />
+  </svg>
+)
+
+export const JsonExportIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M6 3.8h7l4 4v12.4H6z' />
+    <path d='M13 3.8V8h4' />
+    <path d='M6.5 12h7' />
+    <path d='m9.2 9.8-2.7 2.2 2.7 2.2' />
+    <path d='M13.5 12h5.3' />
+  </svg>
+)
+
+export const LocalSaveIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M5 4.5h12.2L20 7.3v11.2A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5V5.5a1 1 0 0 1 1-1Z' />
+    <path d='M8 4.5V9h7V5.2' />
+    <rect x='7.5' y='13.2' width='9' height='4.3' rx='1.2' />
+    <path d='M10 15.4h4' />
+  </svg>
+)
+
+export const DatabaseLoadIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <ellipse cx='12' cy='5.8' rx='6.5' ry='2.8' />
+    <path d='M5.5 5.8v7c0 1.5 2.9 2.8 6.5 2.8s6.5-1.3 6.5-2.8v-7' />
+    <path d='M5.5 9.3c0 1.5 2.9 2.8 6.5 2.8s6.5-1.3 6.5-2.8' />
+    <path d='M12 20v-5.8' />
+    <path d='m9.6 17.7 2.4 2.4 2.4-2.4' />
+  </svg>
+)
+
+export const DatabaseSendIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <path d='M12 3.8v5.8' />
+    <path d='m9.6 6.2 2.4-2.4 2.4 2.4' />
+    <ellipse cx='12' cy='11.2' rx='6.5' ry='2.8' />
+    <path d='M5.5 11.2v7c0 1.5 2.9 2.8 6.5 2.8s6.5-1.3 6.5-2.8v-7' />
+    <path d='M5.5 14.7c0 1.5 2.9 2.8 6.5 2.8s6.5-1.3 6.5-2.8' />
   </svg>
 )
 

@@ -142,19 +142,8 @@ async function backfillMissingPersonShortIds() {
   return missingPeople.length
 }
 
-async function resetPersonShortIdSequence() {
-  fallbackSequence = 0
-
-  if (!hasDatabaseConnection()) {
-    return
-  }
-
-  await AppCounter.deleteOne({ _id: PERSON_SHORT_ID_COUNTER_KEY })
-}
-
 module.exports = {
   MAX_PERSON_SHORT_ID,
   backfillMissingPersonShortIds,
-  ensurePersonShortId,
-  resetPersonShortIdSequence
+  ensurePersonShortId
 }

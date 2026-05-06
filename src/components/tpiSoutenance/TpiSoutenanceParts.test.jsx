@@ -28,6 +28,7 @@ describe('MobileRoomFilter', () => {
   test('normalise les badges de salle pour le filtre type de classe', () => {
     expect(getRoomClassFilterValue({ roomClassMode: 'matu' })).toBe('matu')
     expect(getRoomClassFilterValue({ roomClassMode: 'special' })).toBe('special')
+    expect(getRoomClassFilterValue({ roomClassMode: 'other' })).toBe('noBadge')
     expect(getRoomClassFilterValue({ roomClassMode: null })).toBe('noBadge')
     expect(getRoomClassFilterValue({ roomClassMode: 'nonM' })).toBe('noBadge')
   })
@@ -362,5 +363,21 @@ describe('SoutenanceDesktopHeader', () => {
     fireEvent.change(select, { target: { value: 'special' } })
 
     expect(updateFilter).toHaveBeenCalledWith('classType', 'special')
+  })
+
+  test('en vue admin, seuls les filtres date et type restent visibles', () => {
+    renderHeader({
+      adminGeneralView: true,
+      canUseAdminGeneralView: true,
+      expertOrBoss: { name: 'Ada Admin', role: 'viewer' }
+    })
+
+    expect(screen.getByLabelText(/filtrer par date/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/filtrer par type de classe/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/filtrer par site/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/filtrer par salle/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/filtrer par expert/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/filtrer par chef de projet/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/filtrer par candidat/i)).not.toBeInTheDocument()
   })
 })

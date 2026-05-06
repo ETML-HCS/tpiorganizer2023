@@ -126,6 +126,112 @@ describe('TpiCard editing overlay', () => {
     expect(screen.getByRole('article', { name: /TPI/i })).toHaveClass('has-validation-error')
   })
 
+  it('affiche une alerte quand le TPI est placé avec une contrainte ignorée', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={{
+          ...baseTpi,
+          isConstraintOverride: true,
+          constraintWarnings: [
+            {
+              type: 'availability_override',
+              message: 'Disponibilité ignorée: Boss indisponible le 2026-06-10 au créneau 5.'
+            }
+          ]
+        }}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /contrainte non respectée/i })).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: /TPI/i })).toHaveClass('has-constraint-warning')
+  })
+
+  it('affiche une pastille rouge quand le chef de projet est indisponible sur le créneau planifié', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={baseTpi}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        roomPeriod={1}
+        peopleRegistry={[
+          {
+            _id: 'boss-availability',
+            firstName: 'Boss',
+            lastName: '',
+            roles: ['chef_projet'],
+            isActive: true,
+            defaultAvailability: [
+              { dayOfWeek: 3, periods: [2] }
+            ]
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /chef de projet indisponible/i })).toBeInTheDocument()
+  })
+
+  it('affiche aussi la pastille rouge pour une date exceptionnelle indisponible du chef de projet', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={baseTpi}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        roomPeriod={1}
+        peopleRegistry={[
+          {
+            _id: 'boss-availability',
+            firstName: 'Boss',
+            lastName: '',
+            roles: ['chef_projet'],
+            isActive: true,
+            defaultAvailability: [],
+            unavailableDates: [
+              {
+                date: '2026-06-10T00:00:00.000Z',
+                allDay: true
+              }
+            ]
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('img', { name: /chef de projet indisponible/i })).toBeInTheDocument()
+  })
+
+  it('ne signale pas le chef de projet quand l indisponibilité concerne une autre demi-journée', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={baseTpi}
+        onUpdateTpi={jest.fn()}
+        {...roomProps}
+        isEditingTpiCard={false}
+        roomPeriod={6}
+        peopleRegistry={[
+          {
+            _id: 'boss-availability',
+            firstName: 'Boss',
+            lastName: '',
+            roles: ['chef_projet'],
+            isActive: true,
+            defaultAvailability: [
+              { dayOfWeek: 3, periods: [2] }
+            ]
+          }
+        ]}
+      />
+    )
+
+    expect(await screen.findByText(/Candidat courant/i)).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /chef de projet indisponible/i })).not.toBeInTheDocument()
+  })
+
   it('affiche les identifiants des parties prenantes dans la vue 0', async () => {
     renderWithRouter(
       <TpiCard

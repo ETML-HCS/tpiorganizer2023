@@ -10,11 +10,11 @@ const {
   startServer
 } = require('./helpers/httpTest')
 const Person = require('../models/personModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const { MagicLink } = require('../models/magicLinkModel')
 
-test('POST /api/planning/persons/import rejects empty content', async () => {
+test('POST /api/coordination/persons/import rejects empty content', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const { app, restoreEnv } = loadTestApp({
@@ -25,7 +25,7 @@ test('POST /api/planning/persons/import rejects empty content', async () => {
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/persons/import`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons/import`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -43,36 +43,7 @@ test('POST /api/planning/persons/import rejects empty content', async () => {
   }
 })
 
-test('POST /api/planning/persons/purge requires confirmation', async () => {
-  const jwtSecret = 'test-jwt-secret'
-  const token = buildSessionToken(jwtSecret)
-  const { app, restoreEnv } = loadTestApp({
-    NODE_ENV: 'development',
-    JWT_SECRET: jwtSecret
-  })
-
-  const { server, baseUrl } = await startServer(app)
-
-  try {
-    const response = await fetch(`${baseUrl}/api/planning/persons/purge`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    })
-
-    assert.equal(response.status, 400)
-    const error = await response.json()
-    assert.equal(error.error, 'Confirmation requise')
-  } finally {
-    await closeServer(server)
-    restoreEnv()
-  }
-})
-
-test('POST /api/planning/persons merges roles when the email already exists', async () => {
+test('POST /api/coordination/persons merges roles when the email already exists', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFindOne = Person.findOne
@@ -119,7 +90,7 @@ test('POST /api/planning/persons merges roles when the email already exists', as
       return this
     }
 
-    const response = await fetch(`${baseUrl}/api/planning/persons`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -148,7 +119,121 @@ test('POST /api/planning/persons merges roles when the email already exists', as
   }
 })
 
-test('POST /api/planning/persons updates a synthetic organizer email when the name matches', async () => {
+test('POST /api/coordination/persons normalizes legacy role aliases', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const originalFindOne = Person.findOne
+  const originalFind = Person.find
+  const originalSave = Person.prototype.save
+  const savedDocs = []
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    Person.findOne = async () => null
+    Person.find = () => ({
+      select() {
+        return []
+      }
+    })
+    Person.prototype.save = async function save() {
+      savedDocs.push({
+        email: this.email,
+        roles: this.roles
+      })
+      return this
+    }
+
+    const response = await fetch(`${baseUrl}/api/coordination/persons`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        firstName: 'Rita',
+        lastName: 'Responsable',
+        email: 'rita.responsable@example.com',
+        roles: ['expert1', 'responsable', 'formateur']
+      })
+    })
+
+    assert.equal(response.status, 201)
+    const body = await response.json()
+    assert.equal(body.created, true)
+    assert.deepEqual(body.person.roles, ['expert', 'chef_projet'])
+    assert.deepEqual(savedDocs[0].roles, ['expert', 'chef_projet'])
+  } finally {
+    Person.findOne = originalFindOne
+    Person.find = originalFind
+    Person.prototype.save = originalSave
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/coordination/persons accepts admin as an additional application role', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const originalFindOne = Person.findOne
+  const originalFind = Person.find
+  const originalSave = Person.prototype.save
+  const savedDocs = []
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    Person.findOne = async () => null
+    Person.find = () => ({
+      select() {
+        return []
+      }
+    })
+    Person.prototype.save = async function save() {
+      savedDocs.push({
+        email: this.email,
+        roles: this.roles
+      })
+      return this
+    }
+
+    const response = await fetch(`${baseUrl}/api/coordination/persons`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        firstName: 'Ada',
+        lastName: 'Admin',
+        email: 'ada.admin@example.com',
+        roles: ['admin', 'expert']
+      })
+    })
+
+    assert.equal(response.status, 201)
+    const body = await response.json()
+    assert.equal(body.created, true)
+    assert.deepEqual(body.person.roles, ['admin', 'expert'])
+    assert.deepEqual(savedDocs[0].roles, ['admin', 'expert'])
+  } finally {
+    Person.findOne = originalFindOne
+    Person.find = originalFind
+    Person.prototype.save = originalSave
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/coordination/persons updates a synthetic organizer email when the name matches', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFindOne = Person.findOne
@@ -199,7 +284,7 @@ test('POST /api/planning/persons updates a synthetic organizer email when the na
       return this
     }
 
-    const response = await fetch(`${baseUrl}/api/planning/persons`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -229,7 +314,7 @@ test('POST /api/planning/persons updates a synthetic organizer email when the na
   }
 })
 
-test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferredSoutenanceDates and preferredSoutenanceChoices', async () => {
+test('PUT /api/coordination/persons/:id persists sendEmails, candidateYears, preferredSoutenanceDates and preferredSoutenanceChoices', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFindByIdAndUpdate = Person.findByIdAndUpdate
@@ -249,7 +334,7 @@ test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferr
       options
     })
 
-    const response = await fetch(`${baseUrl}/api/planning/persons/${DEFAULT_USER_ID}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons/${DEFAULT_USER_ID}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -291,7 +376,7 @@ test('PUT /api/planning/persons/:id persists sendEmails, candidateYears, preferr
   }
 })
 
-test('GET /api/planning/persons accepts prefixed short id search', async () => {
+test('GET /api/coordination/persons accepts prefixed short id search', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFind = Person.find
@@ -328,7 +413,7 @@ test('GET /api/planning/persons accepts prefixed short id search', async () => {
       }
     }
 
-    const response = await fetch(`${baseUrl}/api/planning/persons?search=E-001`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons?search=E-001`, {
       headers: {
         Authorization: `Bearer ${token}`
       }
@@ -347,7 +432,7 @@ test('GET /api/planning/persons accepts prefixed short id search', async () => {
   }
 })
 
-test('POST /api/planning/persons/merge merges duplicate people and rewires references', async () => {
+test('POST /api/coordination/persons/merge merges duplicate people and rewires references', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFindById = Person.findById
@@ -459,7 +544,7 @@ test('POST /api/planning/persons/merge merges duplicate people and rewires refer
       })
     }
 
-    const response = await fetch(`${baseUrl}/api/planning/persons/merge`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons/merge`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -516,7 +601,7 @@ test('POST /api/planning/persons/merge merges duplicate people and rewires refer
   }
 })
 
-test('POST /api/planning/persons/merge allows manual merge when identities differ explicitly', async () => {
+test('POST /api/coordination/persons/merge allows manual merge when identities differ explicitly', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret)
   const originalFindById = Person.findById
@@ -592,7 +677,7 @@ test('POST /api/planning/persons/merge allows manual merge when identities diffe
       })
     }
 
-    const response = await fetch(`${baseUrl}/api/planning/persons/merge`, {
+    const response = await fetch(`${baseUrl}/api/coordination/persons/merge`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

@@ -1,26 +1,36 @@
 .token-generator-page.page-with-toolbar {
+  --token-access-button-bg: #0f766e;
+  --token-access-button-bg-hover: #0d5f59;
+  --token-access-button-muted-bg: #f0fdfa;
+  --token-access-button-muted-bg-hover: #ccfbf1;
+  --token-access-button-muted-border: #99f6e4;
+  --token-access-button-muted-color: #0f766e;
+  --token-access-button-height: 30px;
+  --token-access-button-radius: 8px;
   width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
   margin: 0 auto;
-  padding: calc(var(--room-padding-top, 72px) + var(--page-toolbar-gap, 18px)) 0 96px;
-  position: relative;
-  isolation: isolate;
+  padding: calc(var(--room-padding-top, 72px) + var(--page-toolbar-gap, 18px)) 0 92px;
+  color: #0f172a;
 }
 
 #tools.token-generator-tools {
-  padding: 8px 12px;
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, rgba(255, 249, 229, 0.94) 0%, rgba(236, 245, 255, 0.94) 100%);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+  width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+  border: 1px solid var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-panel, 10px);
+  background: #ffffff;
+  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+  padding: 10px 12px;
+  text-align: left;
 }
 
 #tools.token-generator-tools .page-tools-shell {
-  gap: 6px;
+  gap: 10px;
 }
 
 #tools.token-generator-tools .page-tools-header {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.85fr) auto;
-  gap: 4px 8px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.95fr) auto auto;
+  gap: 6px 12px;
+  align-items: center;
 }
 
 #tools.token-generator-tools .page-tools-title,
@@ -29,76 +39,229 @@
 }
 
 #tools.token-generator-tools .page-tools-title {
-  font-size: 1rem;
+  font-size: 1.02rem;
+  line-height: 1.15;
 }
 
 #tools.token-generator-tools .page-tools-description {
-  max-width: 58ch;
+  max-width: 54ch;
 }
 
-.token-generator-page::before,
-.token-generator-page::after {
-  display: none;
-}
-
-.token-generator-page .token-generator-results {
-  width: var(--app-content-width);
-  margin: 18px auto 0;
-  padding: 0 var(--app-page-gutter);
-}
-
-.token-generator-page .token-generator-results-shell {
-  border-radius: 28px;
-  border: 1px solid rgba(203, 213, 225, 0.9);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 252, 0.98) 100%);
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
-  padding: 24px;
-}
-
-.token-access-toolbar-grid {
-  align-items: end;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-
-.token-access-toolbar-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.token-access-toolbar-note {
-  margin-top: 6px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(14, 116, 144, 0.18);
-  background: rgba(236, 253, 255, 0.88);
-  color: #0f4c5c;
-  font-size: 0.78rem;
-  line-height: 1.42;
-}
-
-.token-access-active-filters {
+.token-access-toolbar-actions,
+.token-access-badges,
+.token-access-person-meta,
+.token-access-link-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: #334155;
-  font-size: 0.84rem;
 }
 
-.token-access-filter-chip {
+.token-access-toolbar-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.token-access-toolbar-actions .page-tools-action-btn {
+  min-width: max-content;
+}
+
+.token-access-toolbar-actions .ui-button-icon,
+.token-access-btn .ui-button-icon,
+.token-access-icon-btn .ui-button-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.token-access-toolbar-body {
+  display: grid;
+  gap: 10px;
+}
+
+.token-access-command-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.6fr) minmax(250px, 1fr) minmax(250px, 1fr);
+  gap: 10px;
+}
+
+.token-access-command-section {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: #f8fafc;
+}
+
+.token-access-command-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.token-access-command-section-head > span,
+.token-access-panel-head > span,
+.token-generator-notice-icon,
+.token-access-summary-icon,
+.token-access-phase-icon {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.token-access-command-section-head > span,
+.token-access-panel-head > span {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.token-access-command-section-head svg,
+.token-access-panel-head svg,
+.token-generator-notice-icon svg,
+.token-access-summary-icon svg,
+.token-access-phase-icon svg,
+.token-access-section-head svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.token-access-command-section-head strong,
+.token-access-command-section-head small,
+.token-access-panel-head h2,
+.token-access-panel-head p {
+  min-width: 0;
+}
+
+.token-access-command-section-head strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.token-access-command-section-head small {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.token-access-control-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.35fr) minmax(130px, 0.8fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.token-access-publication-field {
+  grid-column: 1 / -1;
+}
+
+.token-access-search-field {
+  min-width: 0;
+}
+
+.token-access-switch-list,
+.token-access-delivery-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.token-access-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.token-access-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.token-access-switch-control {
+  width: 38px;
+  height: 22px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-weight: 700;
+  border: 1px solid #94a3b8;
+  background: #e2e8f0;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.token-access-switch-control::after {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.24);
+  transition: transform 160ms ease;
+}
+
+.token-access-switch.is-active {
+  border-color: #38bdf8;
+  background: #f0f9ff;
+}
+
+.token-access-switch.is-active .token-access-switch-control {
+  border-color: #0284c7;
+  background: #0284c7;
+}
+
+.token-access-switch.is-active .token-access-switch-control::after {
+  transform: translateX(16px);
+}
+
+.token-access-switch.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.token-access-switch:focus-within {
+  outline: 2px solid rgba(37, 99, 235, 0.34);
+  outline-offset: 2px;
+}
+
+.token-access-switch-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-switch-copy strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
+.token-access-switch-copy small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .token-access-filter-reset {
@@ -106,101 +269,183 @@
   border-radius: 999px;
   min-height: 28px;
   padding: 0 12px;
-  font-size: 0.84rem;
-  font-weight: 700;
   color: #1e293b;
   background: #e2e8f0;
-}
-
-.token-access-checkbox-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  color: #334155;
+  font-size: 0.84rem;
   font-weight: 700;
 }
 
-.token-access-checkbox-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: #1756d6;
+.token-generator-results {
+  width: var(--app-content-width);
+  margin: 18px auto 0;
 }
 
-.token-generator-page .token-generator-alert,
-.token-generator-page .token-generator-success {
-  margin-bottom: 16px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  font-weight: 600;
+.token-generator-results-shell {
+  display: grid;
+  gap: 12px;
 }
 
-.token-generator-page .token-generator-alert {
-  border: 1px solid rgba(220, 38, 38, 0.2);
-  background: rgba(254, 242, 242, 0.96);
+.token-generator-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.token-generator-notice.has-action {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.token-generator-notice-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.token-generator-notice-copy {
+  min-width: 0;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.token-generator-notice-action {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.token-generator-notice.is-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.token-generator-notice.is-success .token-generator-notice-icon {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.token-generator-notice.is-warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.token-generator-notice.is-warning .token-generator-notice-icon {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.token-generator-notice.is-danger {
+  border-color: #fecaca;
+  background: #fef2f2;
   color: #991b1b;
 }
 
-.token-generator-page .token-generator-alert-action {
+.token-generator-notice.is-danger .token-generator-notice-icon {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.token-access-results-layout,
+.token-access-results-layout.is-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.token-access-status-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+  gap: 12px;
+}
+
+.token-access-status-panel:first-child {
+  grid-column: 1 / -1;
+}
+
+.token-access-status-panel,
+.token-access-draft-panel,
+.token-generator-empty-state,
+.token-access-person-card {
+  border: 1px solid var(--app-border, #d8e0ea);
+  border-radius: var(--app-radius-card, 8px);
+  background: #ffffff;
+  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+}
+
+.token-access-status-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.token-access-panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-color: rgba(217, 119, 6, 0.28);
-  background: rgba(255, 251, 235, 0.98);
-  color: #92400e;
+  gap: 10px;
 }
 
-.token-generator-page .token-generator-alert-action span {
-  min-width: 0;
-}
-
-.token-generator-page .token-generator-success {
-  border: 1px solid rgba(5, 150, 105, 0.2);
-  background: rgba(236, 253, 245, 0.96);
-  color: #065f46;
-}
-
-.token-access-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.token-access-summary-card {
-  display: grid;
-  gap: 6px;
-  min-height: 108px;
-  padding: 18px;
-  border-radius: 20px;
-  border: 1px solid rgba(191, 219, 254, 0.8);
-  background:
-    linear-gradient(145deg, rgba(239, 246, 255, 0.92) 0%, rgba(255, 255, 255, 0.98) 100%);
-}
-
-.token-access-summary-card span {
-  color: #475569;
-  font-size: 0.86rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.token-access-summary-card strong {
+.token-access-panel-head h2 {
+  margin: 0;
   color: #0f172a;
-  font-size: 1.5rem;
-  line-height: 1.1;
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.token-access-panel-head p {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.token-access-status-placeholder {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 160px;
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+}
+
+.token-access-status-placeholder svg {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.token-access-main-panel,
+.token-access-person-list,
+.token-access-draft-list,
+.token-access-draft-copy,
+.token-access-link-copy,
+.token-access-link-list,
+.token-access-link-group {
+  min-width: 0;
+  display: grid;
+}
+
+.token-access-main-panel,
+.token-access-person-list {
+  gap: 14px;
 }
 
 .token-access-draft-panel {
   display: grid;
   gap: 12px;
-  margin-bottom: 20px;
-  padding: 16px;
-  border: 1px solid rgba(37, 99, 235, 0.16);
-  border-radius: 16px;
-  background: #f8fbff;
+  padding: 14px;
 }
 
 .token-access-draft-head {
@@ -218,7 +463,7 @@
 
 .token-access-draft-head p {
   margin: 0;
-  color: #475569;
+  color: #64748b;
 }
 
 .token-access-draft-head > span {
@@ -235,7 +480,6 @@
 }
 
 .token-access-draft-list {
-  display: grid;
   gap: 8px;
 }
 
@@ -243,17 +487,15 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: center;
+  align-items: start;
   padding: 12px;
-  border: 1px solid rgba(203, 213, 225, 0.82);
-  border-radius: 12px;
-  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .token-access-draft-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
+  gap: 8px;
 }
 
 .token-access-draft-copy strong,
@@ -270,76 +512,204 @@
 
 .token-access-draft-copy span,
 .token-access-draft-copy small {
-  color: #475569;
+  color: #64748b;
 }
 
-.token-access-person-list {
+.token-access-draft-field {
   display: grid;
-  gap: 16px;
+  gap: 6px;
+}
+
+.token-access-draft-field span {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.token-access-draft-field input,
+.token-access-draft-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #0f172a;
+  font: inherit;
+  line-height: 1.45;
+  background: #ffffff;
+}
+
+.token-access-draft-field textarea {
+  resize: vertical;
+  white-space: pre-wrap;
 }
 
 .token-access-person-card {
   display: grid;
-  gap: 18px;
-  padding: 22px;
-  border-radius: 22px;
-  border: 1px solid rgba(203, 213, 225, 0.9);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  gap: 14px;
+  padding: 16px;
+  border-left: 4px solid #2563eb;
+}
+
+.token-access-person-card.is-email-sent {
+  border-color: #bbf7d0;
+  border-left-color: #16a34a;
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.1);
+}
+
+.token-access-person-card.is-email-prepared {
+  border-color: #bae6fd;
+  border-left-color: #0284c7;
+  box-shadow: 0 10px 24px rgba(2, 132, 199, 0.1);
+}
+
+.token-access-person-card.is-email-partial {
+  border-color: #fde68a;
+  border-left-color: #d97706;
+}
+
+.token-access-person-card.is-email-pending,
+.token-access-person-card.is-email-failed {
+  border-left-color: #f97316;
+}
+
+.token-access-person-card.is-email-blocked {
+  border-left-color: #dc2626;
+}
+
+.token-access-person-card.is-collapsed {
+  gap: 0;
+  padding-block: 12px;
 }
 
 .token-access-person-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.token-access-person-head.is-expanded {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.token-access-person-body {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.token-access-person-main {
+  min-width: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
+  align-items: center;
+  gap: 12px;
+}
+
+.token-access-person-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 800;
 }
 
 .token-access-person-identity {
+  min-width: 0;
   display: grid;
   gap: 4px;
 }
 
 .token-access-person-identity strong {
-  font-size: 1.15rem;
+  min-width: 0;
+  overflow: hidden;
   color: #0f172a;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .token-access-person-identity span {
-  color: #475569;
+  color: #64748b;
   word-break: break-word;
 }
 
-.token-access-person-meta {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.token-access-count-chip,
-.token-access-badge {
+.token-access-email-state-badge,
+.token-access-email-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
+  width: fit-content;
+  min-height: 23px;
+  padding: 0 8px;
   border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
   text-transform: uppercase;
 }
 
-.token-access-count-chip {
-  background: #e2e8f0;
-  color: #334155;
+.token-access-email-state-badge.is-sent,
+.token-access-email-chip.is-sent {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.token-access-email-state-badge.is-prepared,
+.token-access-email-chip.is-prepared {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.token-access-email-state-badge.is-partial {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.token-access-person-meta {
+  justify-self: end;
+  justify-content: flex-end;
+  gap: 8px;
+  color: #475569;
+  font-size: 0.84rem;
+  font-weight: 750;
+  line-height: 1.3;
+  text-align: right;
+}
+
+.token-access-person-collapse-btn {
+  justify-self: end;
+}
+
+.token-access-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .token-access-badges {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.token-access-person-context {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .token-access-badge {
@@ -383,69 +753,101 @@
 }
 
 .token-access-link-group {
-  display: grid;
-  gap: 12px;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .token-access-section-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   align-items: center;
 }
 
 .token-access-section-head h3 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 1rem;
-}
-
-.token-access-section-head span {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #334155;
-  font-weight: 800;
+  gap: 8px;
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.token-access-section-head h3 svg {
+  color: #2563eb;
 }
 
 .token-access-link-list {
-  display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .token-access-link-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  padding: 18px;
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 0.94) 100%);
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.token-access-link-row.is-available {
+  border-left-color: #16a34a;
+}
+
+.token-access-link-row.is-expired,
+.token-access-link-row.is-exhausted,
+.token-access-link-row.is-unavailable {
+  border-left-color: #f97316;
+}
+
+.token-access-link-row.is-revoked,
+.token-access-link-row.is-missing {
+  border-left-color: #94a3b8;
+}
+
+.token-access-link-row.is-unrecoverable {
+  border-left-color: #dc2626;
+}
+
+.token-access-link-row.has-email-sent {
+  border-color: #bbf7d0;
+  background: #f7fdf9;
+}
+
+.token-access-link-row.has-email-prepared {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.token-access-link-row.has-email-pending.is-available {
+  border-color: #fed7aa;
+  background: #fffaf5;
+}
+
+.token-access-link-row.has-email-failed,
+.token-access-link-row.has-email-blocked {
+  border-color: #fecaca;
 }
 
 .token-access-link-copy {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
+  gap: 9px;
 }
 
 .token-access-link-head {
   display: grid;
-  gap: 4px;
+  gap: 5px;
 }
 
 .token-access-link-head strong {
   color: #0f172a;
+  line-height: 1.25;
 }
 
 .token-access-link-head span {
-  color: #475569;
+  color: #64748b;
 }
 
 .token-access-link-meta {
@@ -457,35 +859,40 @@
 
 .token-access-link-details {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 6px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(203, 213, 225, 0.72);
-  background: rgba(248, 250, 252, 0.92);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .token-access-link-detail {
   display: grid;
   gap: 2px;
   color: #334155;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   line-height: 1.35;
 }
 
 .token-access-link-detail strong {
   color: #0f172a;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
 }
 
 .token-access-link-detail span {
-  color: #475569;
+  color: #64748b;
 }
 
 .token-access-link-url {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   color: #0f62fe;
   text-decoration: none;
-  word-break: break-all;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 750;
 }
 
 .token-access-link-url:hover {
@@ -503,110 +910,206 @@
 
 .token-access-link-expiry {
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
+}
+
+.token-access-link-email-state {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.token-access-link-email-state.is-sent {
+  color: #166534;
+}
+
+.token-access-link-email-state.is-prepared {
+  color: #0369a1;
+}
+
+.token-access-link-email-state.is-failed,
+.token-access-link-email-state.is-blocked {
+  color: #b91c1c;
 }
 
 .token-access-link-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.token-access-btn {
+.token-access-btn,
+.token-access-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 700;
-  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+  font-weight: 750;
+  transition: transform 140ms ease, background-color 140ms ease, opacity 140ms ease;
 }
 
-.token-access-btn:hover {
+.token-access-btn {
+  min-height: var(--token-access-button-height);
+  padding: 0 14px;
+  gap: 7px;
+}
+
+.token-access-icon-btn {
+  width: var(--token-access-button-height);
+  height: var(--token-access-button-height);
+  padding: 0;
+}
+
+.token-access-btn:hover:not(:disabled),
+.token-access-icon-btn:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-.token-access-btn:disabled {
+.token-access-btn:disabled,
+.token-access-icon-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.52;
+  opacity: 0.5;
   transform: none;
 }
 
-.token-access-btn.primary {
-  background: linear-gradient(135deg, #0f62fe 0%, #2563eb 100%);
+.token-access-btn.primary,
+.token-access-icon-btn.primary {
+  background: #1756d6;
   color: #ffffff;
-  box-shadow: 0 12px 20px rgba(37, 99, 235, 0.22);
 }
 
-.token-access-btn.secondary {
+.token-access-btn.secondary,
+.token-access-icon-btn.secondary {
   background: #e2e8f0;
   color: #1e293b;
 }
 
-.token-access-btn.is-success {
+.token-access-icon-btn.email {
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.token-access-icon-btn.email.is-sent {
   background: #16a34a;
   color: #ffffff;
 }
 
-.token-generator-page .token-generator-empty-state {
+.token-access-icon-btn.email.is-prepared {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.token-access-icon-btn.email.is-pending,
+.token-access-icon-btn.email.is-partial {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.token-access-icon-btn.email.is-failed,
+.token-access-icon-btn.email.is-blocked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.token-access-btn.is-success,
+.token-access-icon-btn.is-success {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.token-generator-empty-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 300px;
   padding: 38px 24px;
-  border-radius: 20px;
-  border: 1px dashed rgba(148, 163, 184, 0.5);
-  background: rgba(255, 255, 255, 0.72);
+  border-style: dashed;
+  background: #ffffff;
   text-align: center;
 }
 
-.token-generator-page .token-generator-empty-state .token-access-filter-reset {
-  margin-top: 12px;
+.token-generator-empty-state .token-access-filter-reset {
+  margin-top: 8px;
 }
 
-.token-generator-page .token-generator-empty-state h3 {
-  margin: 0 0 8px;
+.token-generator-empty-state h3 {
+  margin: 0;
   color: #0f172a;
 }
 
-.token-generator-page .token-generator-empty-state p,
+.token-generator-empty-state p,
 .token-access-empty-inline {
   margin: 0;
-  color: #475569;
+  color: #64748b;
 }
 
 .token-access-empty-inline {
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.92);
-  border: 1px dashed rgba(148, 163, 184, 0.44);
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
 }
 
-@media (max-width: 1024px) {
-  .token-access-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 1180px) {
+  #tools.token-generator-tools .page-tools-header {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
+
+  #tools.token-generator-tools .page-tools-meta,
+  #tools.token-generator-tools .page-tools-actions {
+    grid-column: 1 / -1;
+  }
+
+  .token-access-toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .token-access-command-grid,
+  .token-access-results-layout,
+  .token-access-results-layout.is-empty,
+  .token-access-status-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
 }
 
 @media (max-width: 767px) {
-  .token-generator-page .token-generator-results {
-    padding: 0 14px;
+  .token-generator-page.page-with-toolbar {
+    width: calc(100% - 28px);
+    padding-bottom: 72px;
   }
 
-  .token-generator-page .token-generator-results-shell {
-    padding: 18px;
-    border-radius: 22px;
+  .token-generator-results {
+    width: 100%;
   }
 
-  .token-access-summary-grid {
+  .token-access-command-grid,
+  .token-access-control-grid,
+  .token-access-draft-row,
+  .token-access-link-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .token-access-person-head,
-  .token-access-link-row,
-  .token-access-draft-row {
-    grid-template-columns: minmax(0, 1fr);
-    display: grid;
+  .token-access-toolbar-actions,
+  .token-access-draft-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .token-access-person-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .token-access-person-meta {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    justify-content: flex-end;
+  }
+
+  .token-access-toolbar-actions .page-tools-action-btn {
+    width: 100%;
   }
 
   .token-access-person-meta,
@@ -615,91 +1118,1850 @@
   }
 
   .token-access-link-actions {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, var(--token-access-button-height));
   }
 
-  .token-generator-page .token-generator-alert-action {
-    align-items: stretch;
-    flex-direction: column;
+  .token-generator-notice,
+  .token-generator-notice.has-action {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .token-access-active-filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .token-access-filter-reset {
-    align-self: flex-start;
+  .token-generator-notice-action {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 }
 
-/* Final module harmonization */
+.token-generator-page.page-with-toolbar {
+  color: #111827;
+}
+
 #tools.token-generator-tools {
-  border: 1px solid var(--app-border, #d8e0ea);
-  border-radius: var(--app-radius-panel, 10px);
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  box-shadow: var(--app-shadow-panel, 0 10px 26px rgba(15, 23, 42, 0.06));
+  border-color: #d6dee8;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96)),
+    #ffffff;
+  box-shadow: 0 18px 40px rgba(17, 24, 39, 0.08);
 }
 
-.token-generator-page .token-generator-results {
-  width: var(--app-content-width);
-  padding: 0;
+#tools.token-generator-tools .page-tools-header {
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 0.9fr) auto auto;
+  gap: 10px 16px;
 }
 
-.token-generator-page .token-generator-results-shell,
-.token-access-summary-card,
-.token-access-person-card,
-.token-access-link-row,
-.token-access-link-details,
-.token-access-draft-panel,
-.token-access-draft-row,
-.token-generator-page .token-generator-empty-state,
-.token-access-empty-inline,
-.token-generator-page .token-generator-alert,
-.token-generator-page .token-generator-success {
-  border-color: var(--app-border, #d8e0ea);
-  border-radius: var(--app-radius-card, 8px);
-  background: var(--app-surface, #ffffff);
-  box-shadow: var(--app-shadow-card, 0 6px 18px rgba(15, 23, 42, 0.045));
+#tools.token-generator-tools .page-tools-title {
+  font-size: 1.18rem;
 }
 
-.token-generator-page .token-generator-alert-action {
-  border-color: rgba(217, 119, 6, 0.28);
-  background: rgba(255, 251, 235, 0.98);
-  color: #92400e;
+#tools.token-generator-tools .page-tools-description {
+  color: #526071;
 }
 
-.token-generator-page .token-generator-results-shell {
-  padding: 18px;
-}
-
-.token-access-summary-grid,
-.token-access-person-list,
-.token-access-link-list {
+.token-access-overview-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.token-access-summary-card {
-  min-height: 92px;
+.token-access-overview-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 10px;
+  align-items: center;
+  min-height: 78px;
+  padding: 13px 14px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.token-access-overview-icon {
+  grid-row: span 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #334155;
+}
+
+.token-access-overview-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.token-access-overview-card > span:not(.token-access-overview-icon),
+.token-access-overview-card small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-overview-card > span:not(.token-access-overview-icon) {
+  color: #64748b;
+  font-size: 0.69rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.token-access-overview-card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 1.04rem;
+  line-height: 1.16;
+}
+
+.token-access-overview-card small {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.token-access-overview-card.is-ok .token-access-overview-icon {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.token-access-overview-card.is-warning .token-access-overview-icon {
+  background: #ffedd5;
+  color: #b45309;
+}
+
+.token-access-overview-card.is-pending .token-access-overview-icon {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.token-access-overview-card.is-soutenance .token-access-overview-icon {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.token-access-command-grid {
+  grid-template-columns: minmax(360px, 1.45fr) minmax(260px, 0.85fr) minmax(260px, 0.85fr);
+}
+
+.token-access-command-section {
+  border-color: #dbe2ea;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.token-access-command-section-head > span,
+.token-access-panel-head > span {
+  background: #ecfeff;
+  color: #0f766e;
+}
+
+.token-access-control-grid {
+  grid-template-columns: minmax(220px, 1.5fr) minmax(150px, 0.75fr);
+}
+
+.token-access-switch {
+  border-color: #d6dee8;
+  background: #fbfcfe;
+}
+
+.token-access-switch.is-active {
+  border-color: #14b8a6;
+  background: #f0fdfa;
+}
+
+.token-access-switch.is-active .token-access-switch-control {
+  border-color: #0f766e;
+  background: #0f766e;
+}
+
+.token-generator-results {
+  width: min(var(--app-page-width), calc(100% - 2 * var(--app-page-gutter)));
+  margin-top: 16px;
+}
+
+.token-access-results-layout {
+  position: relative;
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+  gap: 14px;
+  transition: grid-template-columns 180ms ease;
+}
+
+.token-access-results-layout.has-collapsed-summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.token-access-results-layout.is-empty {
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+}
+
+.token-access-results-layout.is-empty.has-collapsed-summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.token-access-status-rail {
+  position: sticky;
+  top: calc(var(--room-padding-top, 72px) + 16px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  transform-origin: top left;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.token-access-status-rail.is-hidden {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: min(300px, 100%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-18px, -10px) scale(0.96);
+}
+
+.token-access-status-panel:first-child {
+  grid-column: auto;
+}
+
+.token-access-status-panel,
+.token-access-draft-panel,
+.token-generator-empty-state,
+.token-access-person-card {
+  border-color: #dbe2ea;
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.06);
+}
+
+.token-access-status-overview {
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  animation: token-access-summary-panel-in 180ms ease-out both;
+}
+
+.token-access-panel-title {
+  min-width: 0;
+}
+
+.token-access-summary-toggle {
+  margin-left: auto;
+}
+
+.token-access-panel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #0f766e;
+}
+
+.token-access-panel-icon svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.token-access-summary-floating {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--token-access-button-height);
+  max-width: min(260px, 100%);
+  padding: 0 10px;
+  border: 1px solid var(--token-access-button-muted-border);
+  border-radius: var(--token-access-button-radius);
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  color: #0f766e;
+  cursor: pointer;
+  font: inherit;
+  animation: token-access-summary-float-in 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.token-access-summary-floating-row {
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-self: start;
+}
+
+.token-access-summary-floating--toolbar {
+  position: static;
+  justify-self: start;
+  margin: -2px 0 0;
+  animation-name: token-access-summary-toolbar-in;
+  animation-duration: 680ms;
+}
+
+.token-access-summary-reset {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+  animation-delay: 90ms;
+}
+
+.token-access-email-menu {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+  animation-delay: 60ms;
+}
+
+.token-access-summary-floating:hover {
+  background: #f0fdfa;
+}
+
+.token-access-summary-reset:hover {
+  background: #ffedd5;
+}
+
+.token-access-email-menu:hover {
+  background: #dcfce7;
+}
+
+.token-access-summary-floating:focus-visible {
+  outline: 2px solid rgba(20, 184, 166, 0.34);
+  outline-offset: 2px;
+}
+
+.token-access-summary-floating svg {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+}
+
+.token-access-summary-floating span {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-summary-floating strong {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.token-access-results-layout.has-collapsed-summary .token-access-main-panel {
+  padding-top: 0;
+}
+
+@keyframes token-access-summary-float-in {
+  from {
+    opacity: 0;
+    transform: translate(-18px, 18px) scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes token-access-summary-toolbar-in {
+  from {
+    opacity: 0;
+    transform: translate(-24px, -14px) scale(0.96);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translate(2px, 0) scale(1);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes token-access-summary-panel-in {
+  from {
+    opacity: 0.72;
+    transform: translate(-12px, -8px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.token-access-summary-list,
+.token-access-phase-list,
+.token-access-status-section {
+  display: grid;
+  gap: 6px;
+}
+
+.token-access-status-section {
+  padding-top: 4px;
+}
+
+.token-access-status-section h3 {
+  margin: 0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.token-access-email-console {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dbe2ea;
+  border-left: 3px solid #f97316;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.token-access-email-console.is-sent {
+  border-left-color: #16a34a;
+  background: #f7fdf9;
+}
+
+.token-access-email-console.is-prepared {
+  border-left-color: #0284c7;
+  background: #f0f9ff;
+}
+
+.token-access-email-console.is-partial {
+  border-left-color: #d97706;
+}
+
+.token-access-email-console.is-failed,
+.token-access-email-console.is-blocked {
+  border-left-color: #dc2626;
+}
+
+.token-access-email-console.is-none {
+  border-left-color: #94a3b8;
+}
+
+.token-access-email-console-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-access-email-console-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.token-access-email-console.is-sent .token-access-email-console-icon {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.token-access-email-console.is-prepared .token-access-email-console-icon {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.token-access-email-console.is-failed .token-access-email-console-icon,
+.token-access-email-console.is-blocked .token-access-email-console-icon {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.token-access-email-console-icon svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.token-access-email-console-head div {
+  min-width: 0;
+}
+
+.token-access-email-console-head h3,
+.token-access-email-console-head p,
+.token-access-email-console small {
+  margin: 0;
+}
+
+.token-access-email-console-head p,
+.token-access-email-console small {
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.token-access-email-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.token-access-email-progress span {
+  display: block;
+  width: var(--token-access-email-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: #16a34a;
+  transition: width 180ms ease;
+}
+
+.token-access-email-console.is-prepared .token-access-email-progress span {
+  background: #0284c7;
+}
+
+.token-access-email-console.is-partial .token-access-email-progress span {
+  background: #d97706;
+}
+
+.token-access-email-console-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.token-access-email-console-metrics span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 760;
+  line-height: 1.15;
+}
+
+.token-access-email-console-metrics strong {
+  color: #0f172a;
+  font-size: 0.94rem;
+  line-height: 1;
+}
+
+.token-access-email-automation {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
   padding: 14px;
+  border: 1px solid #d8e2ee;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.token-access-email-automation,
+.token-access-email-automation *,
+.token-access-email-automation *::before,
+.token-access-email-automation *::after {
+  box-sizing: border-box;
+}
+
+.token-access-email-automation-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-access-email-automation-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.token-access-email-automation-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.token-access-email-automation-head div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-email-automation-head h2,
+.token-access-email-automation-head p {
+  margin: 0;
+}
+
+.token-access-email-automation-head h2 {
+  color: #0f172a;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.token-access-email-automation-head p {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.token-access-email-automation-close {
+  justify-self: end;
+}
+
+.token-access-email-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.token-access-email-control-group {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #dbe8e5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.token-access-email-control-title {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.token-access-email-control-title > svg {
+  width: 1rem;
+  height: 1rem;
+  color: #0f766e;
+}
+
+.token-access-email-control-title span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-email-control-title strong,
+.token-access-email-control-title small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-email-control-title strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  line-height: 1.15;
+}
+
+.token-access-email-control-title small {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 760;
+  line-height: 1.15;
+}
+
+.token-access-email-control-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 7px;
+  align-items: end;
+}
+
+.token-access-email-control-row.is-preparation-row,
+.token-access-email-control-row.is-two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.token-access-email-pill-button {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.12;
+  white-space: normal;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.token-access-email-pill-button:hover:not(:disabled) {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  color: #0f766e;
+  transform: translateY(-1px);
+}
+
+.token-access-email-pill-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
+.token-access-email-pill-button svg {
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.token-access-email-pill-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.token-access-email-pill-button strong {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.token-access-email-pill-button.is-primary {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.token-access-email-pill-button.is-primary:hover:not(:disabled) {
+  border-color: #0d5f59;
+  background: #0d5f59;
+  color: #ffffff;
+}
+
+.token-access-email-pill-button.is-muted {
+  background: #f8fafc;
+}
+
+.token-access-email-test-control {
+  grid-column: 1 / -1;
+  min-width: 0;
+  max-width: 100%;
+  display: grid;
+  gap: 4px;
+}
+
+.token-access-email-test-control span {
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.token-access-email-test-control input {
+  min-width: 0;
+  width: 100%;
+  height: var(--token-access-button-height);
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+}
+
+.token-access-email-book-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.token-access-email-book-tools button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.token-access-email-book-tools button:not(:disabled) {
+  cursor: pointer;
+}
+
+.token-access-email-automation-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.token-access-email-book {
+  min-height: 260px;
+  max-height: 430px;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.token-access-email-book-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  padding: 7px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.token-access-email-book-row.is-selected {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.token-access-email-book-row input {
+  width: 16px;
+  height: 16px;
+}
+
+.token-access-email-book-person {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-email-book-person strong,
+.token-access-email-book-person small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-email-book-person strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.token-access-email-book-person small {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.token-access-email-book-audience,
+.token-access-email-book-state {
+  min-width: max-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.token-access-email-book-audience {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.token-access-email-book-audience.is-cdp {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.token-access-email-book-audience.is-expert {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.token-access-email-book-state {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.token-access-email-book-state.is-sent {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.token-access-email-book-state.is-prepared {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.token-access-email-book-state.is-failed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.token-access-email-book-empty {
+  margin: 0;
+  padding: 14px;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.token-access-email-preview {
+  min-width: 0;
+  min-height: 340px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.token-access-email-preview-head {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.token-access-email-preview-head strong,
+.token-access-email-preview-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-email-preview-head strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.token-access-email-preview-head span {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.token-access-email-preview iframe {
+  width: 100%;
+  min-height: 420px;
+  border: 0;
+  background: #ffffff;
+}
+
+.token-access-email-preview-empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 260px;
+  padding: 20px;
+  color: #64748b;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.token-access-email-preview-empty svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.token-access-summary-row,
+.token-access-phase-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+  min-height: 42px;
+  padding: 7px 8px 7px 9px;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.token-access-summary-row-label,
+.token-access-phase-row-copy span {
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 820;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-summary-row strong,
+.token-access-phase-row strong {
+  justify-self: end;
+  color: #0f172a;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.token-access-summary-row small,
+.token-access-phase-row-copy small {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-summary-row small {
+  grid-column: 1 / -1;
+}
+
+.token-access-phase-row-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-summary-row.is-vote,
+.token-access-phase-row.is-vote {
+  border-left-color: #2563eb;
+}
+
+.token-access-summary-row.is-soutenance,
+.token-access-phase-row.is-soutenance {
+  border-left-color: #d97706;
+}
+
+.token-access-summary-row.is-arbitrage,
+.token-access-phase-row.is-arbitrage {
+  border-left-color: #7c3aed;
+}
+
+.token-access-summary-row.is-ok,
+.token-access-phase-row.is-ok {
+  border-left-color: #16a34a;
+}
+
+.token-access-summary-row.is-warning,
+.token-access-phase-row.is-warning {
+  border-left-color: #f59e0b;
+}
+
+.token-access-summary-row.is-danger,
+.token-access-phase-row.is-danger {
+  border-left-color: #dc2626;
+}
+
+.token-access-main-panel {
+  align-content: start;
 }
 
 .token-access-person-card {
-  gap: 14px;
   padding: 18px;
+  border-left: 0;
+}
+
+.token-access-person-card.is-email-sent {
+  border-color: #bbf7d0;
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.12);
+}
+
+.token-access-person-card.is-email-prepared {
+  border-color: #bae6fd;
+  box-shadow: 0 10px 24px rgba(2, 132, 199, 0.12);
+}
+
+.token-access-person-card.is-email-partial {
+  border-color: #fde68a;
+}
+
+.token-access-person-card.is-email-pending {
+  border-color: #fed7aa;
+}
+
+.token-access-person-card.is-email-failed,
+.token-access-person-card.is-email-blocked {
+  border-color: #fecaca;
+}
+
+.token-access-person-card.is-collapsed {
+  padding: 12px 14px;
+}
+
+.token-access-person-card.is-expanded .token-access-person-head {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5eaf0;
+}
+
+.token-access-person-avatar {
+  border-radius: 8px;
+  background: #111827;
+}
+
+.token-access-badge {
+  border-radius: 8px;
+}
+
+.token-access-link-group {
+  padding-top: 2px;
+  border-top: 0;
 }
 
 .token-access-link-row {
-  gap: 12px;
-  padding: 14px;
+  border-color: #e2e8f0;
+  background: #fbfcfe;
 }
 
-.token-access-btn {
-  min-height: 38px;
-  border-radius: var(--app-radius-card, 8px);
+.token-access-link-details {
+  background: #ffffff;
+}
+
+.token-access-btn.primary,
+.token-access-icon-btn.primary {
+  background: #0f766e;
+}
+
+.token-access-btn.primary:hover:not(:disabled),
+.token-access-icon-btn.primary:hover:not(:disabled) {
+  background: #0d5f59;
+}
+
+@media (max-width: 1180px) {
+  #tools.token-generator-tools .page-tools-header,
+  .token-access-overview-strip,
+  .token-access-command-grid,
+  .token-access-results-layout,
+  .token-access-results-layout.has-collapsed-summary,
+  .token-access-results-layout.is-empty {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-results-layout.is-empty.has-collapsed-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-status-rail {
+    position: static;
+  }
+
+  .token-access-summary-floating {
+    max-width: 100%;
+  }
+
+  .token-access-summary-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .token-access-phase-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  #tools.token-generator-tools .page-tools-header,
+  .token-access-control-grid,
+  .token-access-summary-list,
+  .token-access-phase-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-overview-card {
+    min-height: 70px;
+  }
+
+  .token-access-person-head {
+    align-items: stretch;
+  }
+}
+
+/* Access links tools menu redesign */
+#tools.token-generator-tools {
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+#tools.token-generator-tools .page-tools-shell {
+  gap: 9px;
+}
+
+#tools.token-generator-tools .page-tools-header {
+  grid-template-columns: max-content minmax(0, 1fr) auto auto;
+  gap: 8px 12px;
+}
+
+.token-access-toolbar-body {
+  gap: 8px;
+}
+
+.token-access-tools-menu {
+  display: grid;
+  gap: 8px;
+}
+
+.token-access-stats-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.token-access-stats-panel-head {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-stats-panel-head strong {
+  color: #0f172a;
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.token-access-stats-panel-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-tools-menu .token-access-overview-strip {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.token-access-tools-menu .token-access-overview-card {
+  min-height: 30px;
+  gap: 0 6px;
+  padding: 4px 7px;
+  border-color: #e5eaf0;
+  background: #f8fafc;
   box-shadow: none;
 }
 
-.token-access-btn.primary {
-  background: #1756d6;
+.token-access-tools-menu .token-access-overview-icon {
+  grid-row: span 2;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.token-access-tools-menu .token-access-overview-icon svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.token-access-tools-menu .token-access-overview-card > span:not(.token-access-overview-icon) {
+  font-size: 0.56rem;
+}
+
+.token-access-tools-menu .token-access-overview-card strong {
+  overflow: hidden;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-tools-menu .token-access-overview-card small {
+  display: none;
+}
+
+.token-access-tools-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.token-access-tools-primary .token-access-search-control {
+  flex: 1 1 260px;
+}
+
+.token-access-tools-primary .token-access-phase-control {
+  flex: 0 1 235px;
+}
+
+.token-access-tools-primary .token-access-checkbox-control {
+  flex: 0 0 auto;
+}
+
+.token-access-search-control,
+.token-access-phase-control,
+.token-access-publication-control {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+
+.token-access-tools-primary .page-tools-field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.token-access-checkbox-control {
+  min-width: 0;
+}
+
+.token-access-search-input-shell {
+  position: relative;
+  min-width: 0;
+  display: block;
+}
+
+.token-access-search-input-shell svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  color: #64748b;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.token-access-search-input-shell .page-tools-field-control {
+  width: 100%;
+  height: var(--token-access-button-height);
+  min-height: var(--token-access-button-height);
+  border-color: #d6dee8;
+  border-radius: var(--token-access-button-radius);
+  background: #ffffff;
+  padding-left: 38px;
+  font-size: 0.82rem;
+}
+
+.token-access-phase-segment {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  min-height: var(--token-access-button-height);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.token-access-publication-segment {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 3px;
+  min-height: 40px;
+  overflow-x: auto;
+  padding: 3px;
+  border: 1px solid #d6dee8;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.token-access-phase-option,
+.token-access-publication-option {
+  min-width: 0;
+  height: var(--token-access-button-height);
+  min-height: var(--token-access-button-height);
+  border: 1px solid var(--token-access-button-muted-border);
+  border-radius: var(--token-access-button-radius);
+  padding: 0 11px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.token-access-phase-option:hover,
+.token-access-publication-option:hover {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.token-access-phase-option:focus-visible,
+.token-access-publication-option:focus-visible {
+  outline: 2px solid rgba(20, 184, 166, 0.36);
+  outline-offset: 2px;
+}
+
+.token-access-phase-option.is-active,
+.token-access-publication-option.is-active {
+  background: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(15, 118, 110, 0.2);
+}
+
+.token-access-phase-option:disabled,
+.token-access-publication-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.token-access-checkbox-control {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-self: start;
+  width: max-content;
+  min-width: 118px;
+  height: var(--token-access-button-height);
+  min-height: var(--token-access-button-height);
+  padding: 0 8px 0 10px;
+  gap: 8px;
+  border: 1px solid var(--token-access-button-muted-border);
+  border-radius: var(--token-access-button-radius);
+  background: var(--token-access-button-muted-bg);
+  color: var(--token-access-button-muted-color);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.token-access-checkbox-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.token-access-checkbox-mark {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: currentColor;
+}
+
+.token-access-checkbox-mark::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  transition: transform 140ms ease;
+}
+
+.token-access-checkbox-control.is-active {
+  border-color: var(--token-access-button-bg);
+  background: var(--token-access-button-bg);
+  color: #ffffff;
+}
+
+.token-access-checkbox-control.is-active .token-access-checkbox-mark {
+  border-color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.token-access-checkbox-control.is-active .token-access-checkbox-mark::after {
+  transform: translateX(14px);
+}
+
+.token-access-checkbox-control:hover {
+  border-color: var(--token-access-button-bg);
+  background: var(--token-access-button-muted-bg-hover);
+}
+
+.token-access-checkbox-control.is-active:hover {
+  border-color: var(--token-access-button-bg-hover);
+  background: var(--token-access-button-bg-hover);
+}
+
+.token-access-checkbox-control:focus-within {
+  outline: 2px solid rgba(20, 184, 166, 0.32);
+  outline-offset: 2px;
+}
+
+.token-access-checkbox-copy {
+  min-width: 0;
+}
+
+.token-access-checkbox-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: currentColor;
+  font-size: 0.8rem;
+  line-height: 1.15;
+}
+
+.token-access-tools-secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.82fr);
+  gap: 10px;
+  align-items: stretch;
+  padding-top: 10px;
+  border-top: 1px solid #e5eaf0;
+}
+
+.token-access-tool-group {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.token-access-tool-group--delivery {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.token-access-tool-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: max-content;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.token-access-tool-group-label svg {
+  width: 1rem;
+  height: 1rem;
+  color: #0f766e;
+}
+
+.token-access-tool-group-label small {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.token-access-toggle-row,
+.token-access-delivery-row {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.token-access-toggle-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.token-access-delivery-row {
+  grid-template-columns: minmax(200px, 1fr) auto;
+}
+
+.token-access-tool-toggle {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid #d6dee8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.token-access-tool-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.token-access-tool-toggle-indicator {
+  width: 34px;
+  height: 20px;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  background: #e2e8f0;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.token-access-tool-toggle-indicator::after {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.22);
+  transition: transform 160ms ease;
+}
+
+.token-access-tool-toggle-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.token-access-tool-toggle-copy strong,
+.token-access-tool-toggle-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-access-tool-toggle-copy strong {
+  color: #0f172a;
+  font-size: 0.8rem;
+  line-height: 1.15;
+}
+
+.token-access-tool-toggle-copy small {
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.token-access-tool-toggle.is-active {
+  border-color: #14b8a6;
+  background: #f0fdfa;
+}
+
+.token-access-tool-toggle.is-active .token-access-tool-toggle-indicator {
+  border-color: #0f766e;
+  background: #0f766e;
+}
+
+.token-access-tool-toggle.is-active .token-access-tool-toggle-indicator::after {
+  transform: translateX(14px);
+}
+
+.token-access-tool-toggle.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.token-access-tool-toggle:focus-within {
+  outline: 2px solid rgba(20, 184, 166, 0.32);
+  outline-offset: 2px;
+}
+
+#tools.token-generator-tools .page-tools-action-btn,
+.token-generator-page .token-access-btn,
+.token-generator-page .token-access-icon-btn,
+.token-generator-page .token-access-phase-option,
+.token-generator-page .token-access-filter-reset {
+  height: var(--token-access-button-height);
+  min-height: var(--token-access-button-height);
+  border: 1px solid var(--token-access-button-bg);
+  border-radius: var(--token-access-button-radius);
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+#tools.token-generator-tools .page-tools-action-btn,
+.token-generator-page .token-access-btn,
+.token-generator-page .token-access-icon-btn,
+.token-generator-page .token-access-filter-reset {
+  background: var(--token-access-button-bg);
+  color: #ffffff;
+}
+
+#tools.token-generator-tools .page-tools-action-btn:hover:not(:disabled),
+.token-generator-page .token-access-btn:hover:not(:disabled),
+.token-generator-page .token-access-icon-btn:hover:not(:disabled),
+.token-generator-page .token-access-filter-reset:hover:not(:disabled) {
+  border-color: var(--token-access-button-bg-hover);
+  background: var(--token-access-button-bg-hover);
+  color: #ffffff;
+}
+
+.token-generator-page .token-access-icon-btn {
+  width: var(--token-access-button-height);
+  height: var(--token-access-button-height);
+  padding: 0;
+}
+
+#tools.token-generator-tools .page-tools-action-btn,
+.token-generator-page .token-access-btn,
+.token-generator-page .token-access-filter-reset {
+  padding: 0 14px;
+}
+
+.token-generator-page .token-access-phase-option {
+  background: var(--token-access-button-muted-bg);
+  color: var(--token-access-button-muted-color);
+  border-color: var(--token-access-button-muted-border);
+}
+
+.token-generator-page .token-access-phase-option:hover {
+  background: var(--token-access-button-muted-bg-hover);
+  color: var(--token-access-button-muted-color);
+}
+
+.token-generator-page .token-access-phase-option.is-active {
+  border-color: var(--token-access-button-bg);
+  background: var(--token-access-button-bg);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+#tools.token-generator-tools .collapse-toggle-mini {
+  width: var(--token-access-button-height);
+  height: var(--token-access-button-height);
+  min-height: var(--token-access-button-height);
+  border-radius: var(--token-access-button-radius);
+}
+
+@media (max-width: 1280px) {
+  .token-access-tools-secondary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-email-control-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-tool-group,
+  .token-access-tool-group--delivery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-tool-group-label {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .token-access-tools-primary,
+  .token-access-toggle-row,
+  .token-access-delivery-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-tools-primary {
+    align-items: stretch;
+  }
+
+  .token-access-tools-primary .token-access-search-control,
+  .token-access-tools-primary .token-access-phase-control,
+  .token-access-tools-primary .token-access-checkbox-control {
+    flex-basis: 100%;
+    max-width: none;
+    width: 100%;
+  }
+
+  .token-access-checkbox-control {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .token-access-email-automation-grid,
+  .token-access-email-book-row,
+  .token-access-email-control-grid,
+  .token-access-email-control-row,
+  .token-access-email-control-row.is-preparation-row,
+  .token-access-email-control-row.is-two-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-email-test-control,
+  .token-access-email-pill-button {
+    width: 100%;
+  }
+
+  .token-access-phase-segment {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .token-access-stats-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-stats-panel-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .token-access-stats-panel-head span {
+    text-align: right;
+  }
+
+  .token-access-tools-menu .token-access-overview-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .token-access-stats-panel-head,
+  .token-access-tools-menu .token-access-overview-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-access-stats-panel-head span {
+    text-align: left;
+  }
 }

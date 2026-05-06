@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
+const accessLinkPolicy = require('../../shared/accessLinkPolicy.json')
 
 async function startServer(app) {
   return await new Promise(resolve => {
@@ -16,12 +17,12 @@ async function startServer(app) {
 }
 
 test('soutenance magic links are valid for 4 days by default', () => {
-  const { DEFAULT_EXPIRY_HOURS } = require('../services/magicLinkV2Service')
+  const { DEFAULT_EXPIRY_HOURS } = require('../modules/accessLinks/tokenService')
 
-  assert.equal(DEFAULT_EXPIRY_HOURS.soutenance, 24 * 4)
+  assert.equal(DEFAULT_EXPIRY_HOURS.soutenance, accessLinkPolicy.defaultSettings.soutenanceLinkValidityHours)
 })
 
-test('legacy planning magic links accept a custom expiration duration', async () => {
+test('legacy coordination magic links accept a custom expiration duration', async () => {
   const Person = require('../models/personModel')
   const magicLinkService = require('../services/magicLinkService')
   const originalFindOne = Person.findOne
@@ -62,7 +63,7 @@ test('legacy planning magic links accept a custom expiration duration', async ()
 
 test('revokeActiveMagicLinks filters by source and keeps the new link active', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
-  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
   const originalUpdateMany = MagicLink.updateMany
   const calls = []
 
@@ -72,7 +73,7 @@ test('revokeActiveMagicLinks filters by source and keeps the new link active', a
   }
 
   try {
-    const result = await magicLinkV2Service.revokeActiveMagicLinks({
+    const result = await accessLinkTokenService.revokeActiveMagicLinks({
       year: '2026',
       type: 'vote',
       person: {
@@ -87,7 +88,8 @@ test('revokeActiveMagicLinks filters by source and keeps the new link active', a
     assert.equal(calls.length, 1)
     assert.equal(calls[0].query.year, 2026)
     assert.equal(calls[0].query.type, 'vote')
-    assert.equal(calls[0].query.personId, 'person-1')
+    assert.equal(calls[0].query.personId, undefined)
+    assert.equal(calls[0].query.recipientEmail, 'alice@example.com')
     assert.equal(calls[0].query.revokedAt, null)
     assert.ok(calls[0].query.expiresAt.$gt instanceof Date)
     assert.deepEqual(
@@ -104,7 +106,7 @@ test('revokeActiveMagicLinks filters by source and keeps the new link active', a
 
 test('revokeActiveMagicLinks can scope revocation by publication version', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
-  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
   const originalUpdateMany = MagicLink.updateMany
   const calls = []
 
@@ -114,7 +116,7 @@ test('revokeActiveMagicLinks can scope revocation by publication version', async
   }
 
   try {
-    await magicLinkV2Service.revokeActiveMagicLinks({
+    await accessLinkTokenService.revokeActiveMagicLinks({
       year: 2026,
       type: 'soutenance',
       person: {
@@ -137,17 +139,17 @@ test('revokeActiveMagicLinks can scope revocation by publication version', async
 
 test('create magic links applique les paramètres annuels de validité et d usages', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
-  const planningConfigService = require('../services/planningConfigService')
-  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const coordinationConfigService = require('../services/coordinationConfigService')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
   const originalCreate = MagicLink.create
-  const originalGetPlanningConfigIfAvailable = planningConfigService.getPlanningConfigIfAvailable
+  const originalGetPlanningConfigIfAvailable = coordinationConfigService.getPlanningConfigIfAvailable
   const calls = []
 
   MagicLink.create = async (payload) => {
     calls.push(payload)
     return { _id: `link-${calls.length}` }
   }
-  planningConfigService.getPlanningConfigIfAvailable = async () => ({
+  coordinationConfigService.getPlanningConfigIfAvailable = async () => ({
     accessLinkSettings: {
       voteLinkValidityHours: 48,
       voteLinkMaxUses: 9,
@@ -159,7 +161,7 @@ test('create magic links applique les paramètres annuels de validité et d usag
   const before = Date.now()
 
   try {
-    await magicLinkV2Service.createVoteMagicLink({
+    await accessLinkTokenService.createVoteMagicLink({
       year: 2026,
       person: {
         _id: 'person-1',
@@ -170,7 +172,7 @@ test('create magic links applique les paramètres annuels de validité et d usag
       baseUrl: 'http://localhost:3000'
     })
 
-    await magicLinkV2Service.createSoutenanceMagicLink({
+    await accessLinkTokenService.createSoutenanceMagicLink({
       year: 2026,
       person: {
         _id: 'person-2',
@@ -191,13 +193,13 @@ test('create magic links applique les paramètres annuels de validité et d usag
     assert.ok(calls[1].expiresAt.getTime() <= after + 120 * 60 * 60 * 1000)
   } finally {
     MagicLink.create = originalCreate
-    planningConfigService.getPlanningConfigIfAvailable = originalGetPlanningConfigIfAvailable
+    coordinationConfigService.getPlanningConfigIfAvailable = originalGetPlanningConfigIfAvailable
   }
 })
 
 test('createVoteMagicLink persiste le token brut uniquement sur demande', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
-  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
   const originalCreate = MagicLink.create
   const calls = []
 
@@ -207,7 +209,7 @@ test('createVoteMagicLink persiste le token brut uniquement sur demande', async 
   }
 
   try {
-    await magicLinkV2Service.createVoteMagicLink({
+    await accessLinkTokenService.createVoteMagicLink({
       year: 2026,
       person: {
         _id: 'person-1',
@@ -219,7 +221,7 @@ test('createVoteMagicLink persiste le token brut uniquement sur demande', async 
       persistToken: true
     })
 
-    await magicLinkV2Service.createVoteMagicLink({
+    await accessLinkTokenService.createVoteMagicLink({
       year: 2026,
       person: {
         _id: 'person-2',
@@ -241,7 +243,7 @@ test('createVoteMagicLink persiste le token brut uniquement sur demande', async 
 
 test('findReusableMagicLink reconstruit une URL depuis un token persiste', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
-  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
   const originalFind = MagicLink.find
   const calls = []
 
@@ -283,7 +285,7 @@ test('findReusableMagicLink reconstruit une URL depuis un token persiste', async
   }
 
   try {
-    const link = await magicLinkV2Service.findReusableMagicLink({
+    const link = await accessLinkTokenService.findReusableMagicLink({
       year: '2026',
       type: 'soutenance',
       person: {
@@ -300,7 +302,8 @@ test('findReusableMagicLink reconstruit une URL depuis un token persiste', async
     assert.equal(calls.length, 1)
     assert.equal(calls[0].query.year, 2026)
     assert.equal(calls[0].query.type, 'soutenance')
-    assert.equal(calls[0].query.personId, 'person-1')
+    assert.equal(calls[0].query.personId, undefined)
+    assert.equal(calls[0].query.recipientEmail, 'alice@example.com')
     assert.equal(calls[0].query['scope.publicationVersion'], 3)
     assert.deepEqual(calls[0].query['scope.source'].$in, ['admin_access_generated'])
     assert.match(calls[0].selection, /\+rawToken/)
@@ -316,7 +319,7 @@ test('findReusableMagicLink reconstruit une URL depuis un token persiste', async
 
 test('findLatestMagicLinkStatus expose un lien expiré sans reconstruire son URL', async () => {
   const { MagicLink } = require('../models/magicLinkModel')
-  const magicLinkV2Service = require('../services/magicLinkV2Service')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
   const originalFindOne = MagicLink.findOne
   const calls = []
 
@@ -348,7 +351,7 @@ test('findLatestMagicLinkStatus expose un lien expiré sans reconstruire son URL
   }
 
   try {
-    const link = await magicLinkV2Service.findLatestMagicLinkStatus({
+    const link = await accessLinkTokenService.findLatestMagicLinkStatus({
       year: '2026',
       type: 'soutenance',
       person: {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { resolutionProposalService } from '../../services/planningService'
+import { resolutionProposalService } from '../../services/coordinationService'
 import {
   AlertIcon,
   CalendarIcon,
@@ -12,7 +12,10 @@ import {
   SendIcon,
   UserIcon
 } from '../shared/InlineIcons'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules'
 import './ResolutionProposalPage.css'
+
+const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -166,7 +169,7 @@ const ResolutionProposalPage = ({ year: routeYear }) => {
 
     return {
       tone: 'success',
-      message: 'Réponse enregistrée. Le planning peut maintenant traiter ce retour.'
+      message: 'Réponse enregistrée. La coordination peut maintenant traiter ce retour.'
     }
   })()
 
@@ -210,7 +213,7 @@ const ResolutionProposalPage = ({ year: routeYear }) => {
             </span>
             <div>
               <h1>{proposal?.tpiReference || 'TPI'}</h1>
-              <p>{proposal?.candidateName || 'Candidat non renseigné'}</p>
+              <p>{proposal?.candidateName || `${CANDIDATE_ROLE_LABEL} non renseigné`}</p>
             </div>
           </div>
           {proposal ? (
@@ -293,7 +296,7 @@ const ResolutionProposalPage = ({ year: routeYear }) => {
 
               <div className="resolution-proposal-response-note">
                 <MailIcon className="inline-icon" />
-                <p>La réponse sera transmise à l'administration du planning.</p>
+                <p>La réponse sera transmise à l'administration de la coordination.</p>
               </div>
 
               <div className="resolution-proposal-choice" role="radiogroup" aria-label="Réponse à la proposition">

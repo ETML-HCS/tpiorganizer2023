@@ -6,8 +6,7 @@ const Person = require('../models/personModel')
 const {
   importPeopleFromContent,
   mergePersonRecord,
-  parsePeopleContent,
-  purgeAllPeople
+  parsePeopleContent
 } = require('../services/personImportService')
 
 test('parsePeopleContent maps the expert import columns and ignores extras', () => {
@@ -21,6 +20,18 @@ test('parsePeopleContent maps the expert import columns and ignores extras', () 
   assert.equal(parsed.rows[0].name, 'Alain Pittet')
   assert.equal(parsed.rows[0].email, 'alain.pittet@info-domo.ch')
   assert.equal(parsed.rows[0].phone, '+41 79 000 00 00')
+})
+
+test('parsePeopleContent uses the shared stakeholder import aliases', () => {
+  const parsed = parsePeopleContent([
+    'Candidat;Email;Site',
+    'Alice Martin;alice@example.com;Vennes'
+  ].join('\n'))
+
+  assert.equal(parsed.rows.length, 1)
+  assert.equal(parsed.rows[0].name, 'Alice Martin')
+  assert.equal(parsed.rows[0].email, 'alice@example.com')
+  assert.equal(parsed.rows[0].site, 'Vennes')
 })
 
 test('importPeopleFromContent creates new experts and skips duplicate emails', async () => {
@@ -290,18 +301,5 @@ test('importPeopleFromContent keeps both expert and chef roles when requested', 
     Person.findOne = originalFindOne
     Person.find = originalFind
     Person.prototype.save = originalSave
-  }
-})
-
-test('purgeAllPeople removes the whole referential', async () => {
-  const originalDeleteMany = Person.deleteMany
-
-  try {
-    Person.deleteMany = async () => ({ deletedCount: 31 })
-
-    const result = await purgeAllPeople()
-    assert.equal(result.deletedCount, 31)
-  } finally {
-    Person.deleteMany = originalDeleteMany
   }
 })

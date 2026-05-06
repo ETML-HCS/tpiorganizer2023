@@ -1,5 +1,5 @@
 const mongoose = require('mongoose')
-const PlanningConfig = require('../models/planningConfigModel')
+const PlanningConfig = require('../models/coordinationConfigModel')
 const PublicationVersion = require('../models/publicationVersionModel')
 
 const defaultPlanningConfigFindOne = PlanningConfig.findOne

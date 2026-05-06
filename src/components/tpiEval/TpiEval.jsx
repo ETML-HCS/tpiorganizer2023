@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
+import { useLocation } from "react-router-dom"
 import { toast } from "react-toastify"
 
 import NewEvaluationForm from "./NewEvaluationForm"
@@ -16,6 +17,11 @@ import {
   readJSONListValue,
   upsertJSONListValue,
 } from "../../utils/storage"
+import {
+  getCoordinationYearFromSearch,
+  getPreferredCoordinationYear,
+  persistCoordinationYear
+} from "../../utils/coordinationYear"
 
 import "../../css/tpiEval/tpiEval.css"
 
@@ -40,7 +46,7 @@ async function getTpiByCandidate(year, candidateName) {
 
     // Effectuer une requête GET à l'API pour récupérer le TPI par nom de candidat
     const response = await fetch(
-      `${apiUrl}/api/tpi/${year}/byCandidate/${encodeURIComponent(String(candidateName || ''))}`,
+      `${apiUrl}/api/gestion-tpi/${year}/by-candidate/${encodeURIComponent(String(candidateName || ''))}`,
       requestOptions
     )
 
@@ -161,10 +167,16 @@ function EvaluationList({ evaluations, setLoadTpiEval }) {
 
 // Composant principal
 function TpiEvalModule({ toggleArrow, isArrowUp }) {
+  const location = useLocation()
+  const requestedYear = useMemo(
+    () => getCoordinationYearFromSearch(location.search),
+    [location.search]
+  )
   // État pour stocker les informations 'évaluation
   const [evaluations, setEvaluations] = useState([])
   const [isNewEval, setIsNewEval] = useState(false)
   const [loadTpiEval, setLoadTpiEval] = useState(null)
+  const [activeYear, setActiveYear] = useState(() => getPreferredCoordinationYear(location.search))
   const fileInputRef = useRef(null)
   const hasOpenEvaluation = isNewEval || loadTpiEval !== null
   const navigationLinks = MAIN_NAVIGATION_LINKS.filter(
@@ -181,6 +193,18 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
       return []
     }
   }
+
+  useEffect(() => {
+    if (!requestedYear || requestedYear === activeYear) {
+      return
+    }
+
+    setActiveYear(requestedYear)
+  }, [activeYear, requestedYear])
+
+  useEffect(() => {
+    persistCoordinationYear(activeYear)
+  }, [activeYear])
 
   useEffect(() => {
     // Déclaration d'une fonction pour charger les données d'évaluation localement
@@ -304,6 +328,9 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
         meta={
           <div className='tpi-eval-toolbar-meta'>
             <span className='page-tools-chip'>
+              Année {activeYear}
+            </span>
+            <span className='page-tools-chip'>
               {evaluationCount} enreg.
             </span>
           </div>
@@ -368,6 +395,7 @@ function TpiEvalModule({ toggleArrow, isArrowUp }) {
               searchCandidat={getTpiByCandidate}
               loadTpiEval={loadTpiEval}
               setLoadTpiEval={setLoadTpiEval}
+              initialYear={activeYear}
               onEvaluationSaved={(savedEvaluation) => {
                 setEvaluations((prevEvaluations) => {
                   const currentEvaluations = Array.isArray(prevEvaluations) ? prevEvaluations : []

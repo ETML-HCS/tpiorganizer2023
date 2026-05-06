@@ -3,7 +3,19 @@ import { ROUTES } from "../../config/appConfig"
 export const MAIN_NAVIGATION_LINKS = [
   { label: "Accueil", to: "/", title: "Accueil", match: ["/"] },
   { label: "Planification", to: ROUTES.PLANIFICATION, title: "Planification", match: [ROUTES.PLANIFICATION] },
-  { label: "Planning", to: ROUTES.PLANNING, title: "Workflow de planning et votes", match: [ROUTES.PLANNING, `${ROUTES.PLANNING}/`, ROUTES.PLANIFICATION_VOTES_LEGACY] },
+  {
+    label: "Coordination",
+    to: ROUTES.COORDINATION,
+    title: "Coordination, votes et publication",
+    match: [
+      ROUTES.COORDINATION,
+      `${ROUTES.COORDINATION}/`,
+      ROUTES.COORDINATION_LEGACY,
+      `${ROUTES.COORDINATION_LEGACY}/`,
+      ROUTES.COORDINATION_VOTES_LEGACY,
+      ROUTES.PLANIFICATION_VOTES_LEGACY
+    ]
+  },
   { label: "Configuration", to: "/configuration", title: "Configuration générale", match: ["/configuration"] },
   { label: "Gestion TPI", to: ROUTES.GESTION_TPI, title: "Gestion des dossiers TPI", match: [ROUTES.GESTION_TPI, ROUTES.GESTION_TPI_LEGACY, "/tpi/"] },
   { label: "Parties prenantes", to: ROUTES.PARTIES_PRENANTES, title: "Gestion des parties prenantes", match: [ROUTES.PARTIES_PRENANTES, ROUTES.PARTIES_PRENANTES_LEGACY] },

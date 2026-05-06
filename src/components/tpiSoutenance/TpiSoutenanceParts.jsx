@@ -1,14 +1,21 @@
 import React, { Fragment, useEffect, useState } from "react"
 import { buildSoutenanceRoomAppearance } from "../../config/soutenanceAppearance"
 
-function TruncatedText({ text = "", maxLength }) {
-  const isTruncated = text.length > maxLength
+const TPI_DISPLAY_NAME_MAX_LENGTH = 24
+
+function TruncatedText({ text = "", maxLength = TPI_DISPLAY_NAME_MAX_LENGTH }) {
+  const safeText = String(text || "")
+  const safeMaxLength = Number.isInteger(maxLength) && maxLength > 3
+    ? maxLength
+    : TPI_DISPLAY_NAME_MAX_LENGTH
+  const isTruncated = safeText.length > safeMaxLength
+
   return (
     <div
-      title={isTruncated ? text : ""}
+      title={isTruncated ? safeText : ""}
       className={isTruncated ? "truncated-text" : "nameTpi"}
     >
-      {isTruncated ? `${text.substring(0, maxLength - 3)}...` : text}
+      {isTruncated ? `${safeText.substring(0, safeMaxLength - 3)}...` : safeText}
     </div>
   )
 }
@@ -275,17 +282,23 @@ const MobileMesTpiFilter = ({ mesTpi, hasToken, year, focusReference }) => {
                     >
                       <div className='tpi-container'>
                         <div className='tpi-entry'>
-                          <div className='tpi-candidat'>{candidat}</div>
+                          <div className='tpi-candidat'>
+                            <TruncatedText text={candidat} />
+                          </div>
                         </div>
                         <div className='tpi-entry'>
-                          <div className='tpi-expert1'>{expert1.name}</div>
+                          <div className='tpi-expert1'>
+                            <TruncatedText text={expert1?.name} />
+                          </div>
                         </div>
                         <div className='tpi-entry'>
-                          <div className='tpi-expert2'>{expert2.name}</div>
+                          <div className='tpi-expert2'>
+                            <TruncatedText text={expert2?.name} />
+                          </div>
                         </div>
 
                         <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-                          <div>{boss?.name}</div>
+                          <TruncatedText text={boss?.name} />
                         </div>
                       </div>
                     </div>
@@ -477,16 +490,16 @@ const MobileRoomFilter = ({
                   {hasPublishedTpi ? (
                     <>
                       <div className='tpi-entry tpi-candidat'>
-                        <TruncatedText text={candidat} maxLength={20} />
+                        <TruncatedText text={candidat} />
                       </div>
                       <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-                        <TruncatedText text={expert1?.name} maxLength={20} />
+                        <TruncatedText text={expert1?.name} />
                       </div>
                       <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-                        <TruncatedText text={expert2?.name} maxLength={20} />
+                        <TruncatedText text={expert2?.name} />
                       </div>
                       <div className='tpi-entry' style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-                        <TruncatedText text={boss?.name} maxLength={20} />
+                        <TruncatedText text={boss?.name} />
                       </div>
                       {ficheUrl ? (
                         <a className='tpi-room-fiche-link' href={ficheUrl}>
@@ -597,11 +610,15 @@ const SoutenanceDesktopHeader = ({
   uniqueDates,
   uniqueSites,
   uniqueSalles,
-  onShowPersonalView
+  onShowPersonalView,
+  canUseAdminGeneralView = false,
+  adminGeneralView = false,
+  onToggleAdminGeneralView
 }) => {
   const userGreeting = hasToken
     ? `Bonjour ${expertOrBoss?.name || "Collaborateur"}`
     : ""
+  const showGeneralFilters = !adminGeneralView
   const [isFullscreen, setIsFullscreen] = useState(Boolean(getFullscreenElement()))
 
   useEffect(() => {
@@ -701,7 +718,7 @@ const SoutenanceDesktopHeader = ({
             >
               <option value='general'>Vue générale</option>
               <option value='rooms'>Par salle</option>
-              <option value='roomGrid'>Planning salles</option>
+              <option value='roomGrid'>Planification salles</option>
               <option value='people'>Par expert/CDP</option>
             </select>
           </label>
@@ -726,6 +743,21 @@ const SoutenanceDesktopHeader = ({
               onShowPersonalView={onShowPersonalView}
             />
           )}
+          {canUseAdminGeneralView ? (
+            <button
+              type='button'
+              className={`btnFilters ${adminGeneralView ? "active" : "inactive"}`}
+              onClick={onToggleAdminGeneralView}
+              title={
+                adminGeneralView
+                  ? "Revenir à votre vue personnelle"
+                  : "Afficher toutes les défenses; seuls date et type de classe restent appliqués"
+              }
+              aria-pressed={adminGeneralView}
+            >
+              {adminGeneralView ? "Vue personnelle" : "Vue admin"}
+            </button>
+          ) : null}
         </div>
 
         <label className='soutenance-filter-block'>
@@ -743,35 +775,39 @@ const SoutenanceDesktopHeader = ({
           </select>
         </label>
 
-        <label className='soutenance-filter-block'>
-          <select
-            aria-label='Filtrer par site'
-            value={filters.site}
-            onChange={(e) => updateFilter("site", e.target.value)}
-          >
-            <option value=''>Site</option>
-            {uniqueSites.map((site) => (
-              <option key={site} value={site}>
-                {site}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showGeneralFilters ? (
+          <label className='soutenance-filter-block'>
+            <select
+              aria-label='Filtrer par site'
+              value={filters.site}
+              onChange={(e) => updateFilter("site", e.target.value)}
+            >
+              <option value=''>Site</option>
+              {uniqueSites.map((site) => (
+                <option key={site} value={site}>
+                  {site}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
-        <label className='soutenance-filter-block'>
-          <select
-            aria-label='Filtrer par salle'
-            value={filters.nameRoom}
-            onChange={(e) => updateFilter("nameRoom", e.target.value)}
-          >
-            <option value=''>Salle</option>
-            {uniqueSalles.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showGeneralFilters ? (
+          <label className='soutenance-filter-block'>
+            <select
+              aria-label='Filtrer par salle'
+              value={filters.nameRoom}
+              onChange={(e) => updateFilter("nameRoom", e.target.value)}
+            >
+              <option value=''>Salle</option>
+              {uniqueSalles.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <label className='soutenance-filter-block'>
           <select
@@ -788,7 +824,7 @@ const SoutenanceDesktopHeader = ({
           </select>
         </label>
 
-        {!expertOrBoss && (
+        {!expertOrBoss && showGeneralFilters && (
           <label className='soutenance-filter-block'>
             <select
               aria-label='Filtrer par expert'
@@ -805,7 +841,7 @@ const SoutenanceDesktopHeader = ({
           </label>
         )}
 
-        {!expertOrBoss && (
+        {!expertOrBoss && showGeneralFilters && (
           <label className='soutenance-filter-block'>
             <select
               aria-label='Filtrer par chef de projet'
@@ -822,7 +858,7 @@ const SoutenanceDesktopHeader = ({
           </label>
         )}
 
-        {!expertOrBoss && (
+        {!expertOrBoss && showGeneralFilters && (
           <label className='soutenance-filter-block'>
             <select
               aria-label='Filtrer par candidat'
@@ -853,6 +889,7 @@ export {
   MobileMesTpiFilter,
   MobileRoomFilter,
   SoutenanceDesktopHeader,
+  TPI_DISPLAY_NAME_MAX_LENGTH,
   TruncatedText,
   formatDate,
   formatTimeRange,

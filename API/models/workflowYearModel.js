@@ -1,18 +1,22 @@
 const mongoose = require('mongoose')
 
-const WORKFLOW_STATES = ['planning', 'voting_open', 'published']
+const LEGACY_WORKFLOW_STATES = ['planning', 'voting_open', 'published']
+const WORKFLOW_PHASES = ['planning', 'votes', 'arbitrage', 'defenses']
 
-const transitionEntrySchema = new mongoose.Schema(
+const phaseEventSchema = new mongoose.Schema(
   {
-    from: {
+    phase: {
       type: String,
-      enum: [...WORKFLOW_STATES, null],
-      default: null
-    },
-    to: {
-      type: String,
-      enum: WORKFLOW_STATES,
+      enum: WORKFLOW_PHASES,
       required: true
+    },
+    active: {
+      type: Boolean,
+      required: true
+    },
+    previousActive: {
+      type: Boolean,
+      default: false
     },
     actorId: {
       type: String,
@@ -21,6 +25,10 @@ const transitionEntrySchema = new mongoose.Schema(
     actorEmail: {
       type: String,
       default: null
+    },
+    reason: {
+      type: String,
+      default: ''
     },
     at: {
       type: Date,
@@ -39,8 +47,16 @@ const workflowYearSchema = new mongoose.Schema({
   },
   state: {
     type: String,
-    enum: WORKFLOW_STATES,
+    enum: LEGACY_WORKFLOW_STATES,
     default: 'planning',
+    index: true
+  },
+  activePhases: {
+    type: [{
+      type: String,
+      enum: WORKFLOW_PHASES
+    }],
+    default: () => ['planning'],
     index: true
   },
   planningAt: {
@@ -51,15 +67,19 @@ const workflowYearSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  arbitrageOpenedAt: {
+    type: Date,
+    default: null
+  },
   publishedAt: {
     type: Date,
     default: null
   },
-  lastTransitionAt: {
+  lastPhaseChangeAt: {
     type: Date,
     default: Date.now
   },
-  transitions: [transitionEntrySchema],
+  phaseEvents: [phaseEventSchema],
   createdAt: {
     type: Date,
     default: Date.now
@@ -82,5 +102,5 @@ const WorkflowYear = mongoose.models.WorkflowYear || mongoose.model(
 
 module.exports = {
   WorkflowYear,
-  WORKFLOW_STATES
+  WORKFLOW_PHASES
 }

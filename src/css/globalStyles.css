@@ -219,6 +219,11 @@ body.planning-focus-mode .app-header-tools-toggle-label {
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
+#header:has(.app-header-planification-filter-menu[open]) {
+  z-index: 12000;
+  overflow: visible;
+}
+
 #title {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -349,6 +354,12 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   min-width: 0;
 }
 
+.app-header-planification-slot:has(.app-header-planification-filter-menu[open]) {
+  overflow: visible;
+  position: relative;
+  z-index: 12010;
+}
+
 .app-header-planification-snapshot {
   display: inline-flex;
   align-items: center;
@@ -388,6 +399,10 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
   box-shadow: 0 3px 8px rgba(15, 23, 42, 0.04);
 }
 
@@ -404,6 +419,147 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   outline: none;
   appearance: none;
   cursor: pointer;
+}
+
+.app-header-planification-filter-menu {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 12020;
+}
+
+.app-header-planification-filter-menu summary {
+  width: 24px;
+  min-width: 0;
+  min-height: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #334155;
+  box-shadow: none;
+  cursor: pointer;
+  list-style: none;
+}
+
+.app-header-planification-filter-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-header-planification-filter-menu summary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.app-header-planification-filter-menu.is-active summary {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+
+.app-header-planification-filter-icon {
+  width: 0.82rem;
+  height: 0.82rem;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
+}
+
+.app-header-planification-filter-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border: 1px solid #ffffff;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.54rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.app-header-planification-filter-panel {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 12030;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, 1fr)) 28px auto;
+  align-items: center;
+  gap: 6px;
+  width: min(430px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+}
+
+.app-header-planification-filter-panel::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 9px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid rgba(203, 213, 225, 0.96);
+  border-top: 1px solid rgba(203, 213, 225, 0.96);
+  background: rgba(255, 255, 255, 0.98);
+  transform: rotate(45deg);
+}
+
+.app-header-planification-filter-control {
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.app-header-planification-filter-reset {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.app-header-planification-filter-reset:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.app-header-planification-filter-reset svg {
+  width: 0.78rem;
+  height: 0.78rem;
+  display: block;
+  stroke-width: var(--app-button-icon-stroke-width);
+}
+
+.app-header-planification-filter-status {
+  color: #475569;
+  font-size: 0.68rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .app-header-planification-slot .app-header-planification-wrap-toggle,
@@ -813,9 +969,51 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 #tools.planning-tools .planning-room-form-head-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms {
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms .planning-tools-panel-head {
+  align-items: center;
+  gap: 6px;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms .planning-tools-panel-copy {
+  flex: 1 1 160px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms .planning-tools-panel-copy p {
+  min-width: 0;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms .planning-room-form-head-actions .page-tools-action-btn {
+  min-height: 30px;
+  height: 30px;
+  font-size: 0.72rem;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms .planning-room-form-head-actions .page-tools-action-btn:not(.icon-button) {
+  padding: 0 9px;
+}
+
+#tools.planning-tools .planning-tools-panel-rooms .planning-room-form-head-actions .page-tools-action-btn.icon-button {
+  width: 30px;
+  min-width: 30px;
+  padding-inline: 0;
 }
 
 #tools.planning-tools .planning-room-date-icon {
@@ -880,19 +1078,19 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 #tools.planning-tools .planning-room-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
   align-items: start;
-  width: min(97%, 100%);
+  width: 100%;
   margin-inline: auto;
 }
 
 #tools.planning-tools .planning-room-overview-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 7px 9px;
+  gap: 4px;
+  padding: 6px 8px;
   border: 1px solid #dce5ee;
-  border-radius: 12px;
+  border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   min-width: 0;
 }
@@ -907,20 +1105,20 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 
 #tools.planning-tools .planning-room-overview-head h5 {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: 800;
   color: #334155;
 }
 
 #tools.planning-tools .planning-room-site-list {
   display: grid;
-  gap: 5px;
+  gap: 3px;
 }
 
 #tools.planning-tools .planning-room-site-overview {
   display: grid;
-  gap: 4px;
-  padding: 5px 0 0;
+  gap: 3px;
+  padding: 4px 0 0;
   border-top: 1px solid #e2e8f0;
 }
 
@@ -939,7 +1137,7 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 #tools.planning-tools .planning-room-site-overview-head strong {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 800;
   color: #0f172a;
   min-width: 0;
@@ -1086,7 +1284,7 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 #tools.planning-tools .planning-room-dates-list--compact {
-  gap: 3px;
+  gap: 2px;
 }
 
 #tools.planning-tools .planning-room-date-chip {
@@ -1105,15 +1303,16 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 #tools.planning-tools .planning-room-date-chip--compact {
-  min-height: 24px;
-  padding: 0 8px;
-  font-size: 0.7rem;
+  min-height: 20px;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: 0.66rem;
 }
 
 #tools.planning-tools .planning-room-date-chip--compact .planning-room-date-chip-badge {
-  min-height: 16px;
-  padding: 0 5px;
-  font-size: 0.58rem;
+  min-height: 14px;
+  padding: 0 4px;
+  font-size: 0.54rem;
 }
 
 #tools.planning-tools .planning-room-date-chip-badge {
@@ -1236,10 +1435,29 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   min-width: 0;
 }
 
+#tools.planning-tools .planning-workflow-btn.phase-toggle {
+  width: auto;
+  min-height: 34px;
+  background: #ffffff;
+}
+
+#tools.planning-tools .planning-workflow-btn.phase-toggle.active {
+  background: #ecfdf5;
+  color: #166534;
+  border-color: #86efac;
+  box-shadow: inset 0 0 0 1px rgba(22, 101, 52, 0.08);
+}
+
 #tools.planning-tools .planning-workflow-stage-static {
   align-items: stretch;
   justify-content: stretch;
   flex: 1 1 780px;
+}
+
+#tools.planning-tools .planning-workflow-stage-phases {
+  align-items: stretch;
+  justify-content: stretch;
+  flex: 1 1 520px;
 }
 
 #tools.planning-tools .planning-workflow-section {
@@ -1251,6 +1469,17 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+#tools.planning-tools .planning-workflow-section-phases {
+  width: 100%;
+}
+
+#tools.planning-tools .planning-workflow-phase-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  width: 100%;
 }
 
 #tools.planning-tools .planning-workflow-section-static {
@@ -1510,10 +1739,6 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   display: none;
 }
 
-#tools.planning-tools .planning-year-select-compact .page-tools-field-label {
-  display: none;
-}
-
 #tools.planning-tools .page-tools-action-btn.active-edit {
   background: #fef2f2;
   color: #991b1b;
@@ -1538,6 +1763,11 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   height: 32px;
   padding: 0 10px;
   font-size: 0.76rem;
+}
+
+#tools.planning-tools .planning-tools-panel-data .planning-button-icon {
+  width: 1.08rem;
+  height: 1.08rem;
 }
 
 #tools.planning-tools .planning-tools-section {
@@ -1757,36 +1987,32 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   box-shadow: 0 3px 10px rgba(37, 99, 235, 0.08);
 }
 
-#tools.planning-tools .planning-room-filters {
-  display: flex;
-  align-items: end;
-  gap: 6px;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-wrap: wrap;
-  overflow: visible;
-  scrollbar-width: thin;
+#tools.planning-tools .planning-room-density--header {
+  min-height: 30px;
+  padding: 2px;
+  gap: 0;
+  border: 1px solid #dbe4ec;
+  border-radius: 999px;
+  background: #f8fafc;
 }
 
-#tools.planning-tools .planning-room-filter {
-  min-width: 124px;
-  flex: 1 1 124px;
+#tools.planning-tools .planning-room-density--header .planning-room-density-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
 }
 
-#tools.planning-tools .planning-room-filter-reset {
-  min-width: 92px;
-  height: 32px;
-  align-self: end;
-  flex: 0 0 auto;
+#tools.planning-tools .planning-room-density--header .planning-room-density-options {
+  gap: 2px;
+  padding: 2px;
+  border: 0;
+  background: #eaf1f8;
 }
 
-#tools.planning-tools .planning-room-actions-row {
-  display: flex;
-  align-items: end;
-  gap: 10px;
-  flex-wrap: wrap;
-  width: 100%;
-  min-width: 0;
+#tools.planning-tools .planning-room-density--header .planning-room-density-option {
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 0.68rem;
 }
 
 /* ─── Workflow buttons ─── */
@@ -1866,6 +2092,11 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 #tools.planning-tools .planning-validation-report.has-issues {
   border-color: #f59e0b;
   background: linear-gradient(180deg, #fff7ed 0%, #fffbeb 100%);
+}
+
+#tools.planning-tools .planning-validation-report.has-warnings {
+  border-color: #fbbf24;
+  background: linear-gradient(180deg, #fffbeb 0%, #fefce8 100%);
 }
 
 #tools.planning-tools .planning-validation-report.is-valid {
@@ -2781,6 +3012,26 @@ label.icon-button:not(.icon-button--with-badge) {
     overflow-x: auto;
   }
 
+  .app-header-planification-slot:has(.app-header-planification-filter-menu[open]) {
+    overflow: visible;
+  }
+
+  .app-header-planification-filter-panel {
+    right: auto;
+    left: 0;
+    grid-template-columns: 1fr;
+    width: min(240px, calc(100vw - 18px));
+  }
+
+  .app-header-planification-filter-panel::before {
+    right: auto;
+    left: 9px;
+  }
+
+  .app-header-planification-filter-status {
+    justify-self: start;
+  }
+
   .app-header-meta-session {
     grid-area: meta;
     flex-wrap: nowrap;
@@ -2869,12 +3120,32 @@ label.icon-button:not(.icon-button--with-badge) {
     width: 100%;
   }
 
-  #tools.planning-tools .planning-room-dates-head,
-  #tools.planning-tools .planning-room-form-head-actions {
+  #tools.planning-tools .planning-room-dates-head {
     align-items: stretch;
   }
 
-  #tools.planning-tools .planning-room-form-head-actions .page-tools-action-btn,
+  #tools.planning-tools .planning-tools-panel-rooms .planning-tools-panel-head {
+    align-items: flex-start;
+  }
+
+  #tools.planning-tools .planning-room-form-head-actions {
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  #tools.planning-tools .planning-room-form-head-actions .page-tools-action-btn {
+    width: auto;
+  }
+
+  #tools.planning-tools .planning-room-form-head-actions .page-tools-action-btn:not(.icon-button) {
+    flex: 1 1 132px;
+  }
+
+  #tools.planning-tools .planning-room-density--header {
+    flex: 1 1 158px;
+    justify-content: space-between;
+  }
+
   #tools.planning-tools .planning-room-dates-head .page-tools-action-btn {
     width: 100%;
   }
@@ -2892,6 +3163,14 @@ label.icon-button:not(.icon-button--with-badge) {
 
   #tools.planning-tools .planning-workflow-stage-static {
     flex-basis: auto;
+  }
+
+  #tools.planning-tools .planning-workflow-stage-phases {
+    flex-basis: auto;
+  }
+
+  #tools.planning-tools .planning-workflow-phase-actions {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 
   #tools.planning-tools .planning-workflow-section-static {

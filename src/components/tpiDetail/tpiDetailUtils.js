@@ -1,4 +1,10 @@
 import { ROUTES } from "../../config/appConfig"
+import {
+  COORDINATION_STATUS,
+  getCoordinationStatusLabel,
+  normalizeCoordinationStatus
+} from '../../constants/coordinationStatus'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules'
 
 export function compactText(value) {
   if (value === null || value === undefined) {
@@ -53,19 +59,7 @@ export function formatDateTime(value) {
 }
 
 export function formatVoteRole(role) {
-  if (role === 'expert1') {
-    return 'Expert 1'
-  }
-
-  if (role === 'expert2') {
-    return 'Expert 2'
-  }
-
-  if (role === 'chef_projet') {
-    return 'Chef de projet'
-  }
-
-  return compactText(role) || 'Rôle'
+  return getTpiRelationRoleLabel(role, 'Rôle')
 }
 
 export function formatVoteDecision(decision) {
@@ -159,7 +153,7 @@ export function buildPlanningTabLink(year, tab = 'list', options = {}) {
   const params = new URLSearchParams()
 
   if (!Number.isInteger(normalizedYear)) {
-    return `/planning/${year}`
+    return `${ROUTES.COORDINATION}/${year}`
   }
 
   if (compactText(tab)) {
@@ -172,8 +166,8 @@ export function buildPlanningTabLink(year, tab = 'list', options = {}) {
 
   const queryString = params.toString()
   return queryString
-    ? `/planning/${normalizedYear}?${queryString}`
-    : `/planning/${normalizedYear}`
+    ? `${ROUTES.COORDINATION}/${normalizedYear}?${queryString}`
+    : `${ROUTES.COORDINATION}/${normalizedYear}`
 }
 
 export function buildPlanningFocusLink(year, ref, options = {}) {
@@ -192,27 +186,46 @@ export function buildSoutenanceFocusLink(year, ref) {
 }
 
 export function getPlanningStatusMeta(status) {
-  const normalizedStatus = compactText(status).toLowerCase()
+  const rawStatus = compactText(status)
+  const normalizedStatus = normalizeCoordinationStatus(rawStatus)
 
-  switch (normalizedStatus) {
-    case 'draft':
-      return { label: 'Brouillon', tone: 'muted' }
-    case 'planning':
-      return { label: 'Planification', tone: 'muted' }
-    case 'voting':
-    case 'voting_open':
-      return { label: 'Votes ouverts', tone: 'warning' }
-    case 'confirmed':
-      return { label: 'Confirmé', tone: 'ready' }
-    case 'manual_required':
-      return { label: 'Intervention requise', tone: 'warning' }
-    case 'published':
-      return { label: 'Publié', tone: 'ready' }
-    default:
-      return {
-        label: compactText(status) || 'Hors planning',
-        tone: compactText(status) ? 'muted' : 'muted'
-      }
+  if (normalizedStatus && COORDINATION_STATUS[normalizedStatus.toUpperCase()]) {
+    const readyStatuses = new Set([
+      COORDINATION_STATUS.CONFIRMED,
+      COORDINATION_STATUS.COMPLETED
+    ])
+    const warningStatuses = new Set([
+      COORDINATION_STATUS.PENDING_SLOTS,
+      COORDINATION_STATUS.VOTING,
+      COORDINATION_STATUS.PENDING_VALIDATION,
+      COORDINATION_STATUS.MANUAL_REQUIRED
+    ])
+
+    return {
+      label: getCoordinationStatusLabel(normalizedStatus),
+      tone: readyStatuses.has(normalizedStatus)
+        ? 'ready'
+        : warningStatuses.has(normalizedStatus)
+          ? 'warning'
+          : 'muted'
+    }
+  }
+
+  if (normalizedStatus === 'planning') {
+    return { label: 'Planification', tone: 'muted' }
+  }
+
+  if (normalizedStatus === 'voting_open') {
+    return { label: 'Votes ouverts', tone: 'warning' }
+  }
+
+  if (normalizedStatus === 'published') {
+    return { label: 'Publié', tone: 'ready' }
+  }
+
+  return {
+    label: rawStatus || 'Hors coordination',
+    tone: 'muted'
   }
 }
 

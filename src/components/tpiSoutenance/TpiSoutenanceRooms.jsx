@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import CreneauPropositionPopup from "./CreneauPropositionPopup"
 import TpiSoutenanceActionButtons from "./TpiSoutenanceActionButtons"
 import {
+  TPI_DISPLAY_NAME_MAX_LENGTH,
   TruncatedText,
   formatDate,
   formatTimeRange,
@@ -24,7 +25,6 @@ import { showNotification } from "../Tools"
 
 const ICS_SUMMARY_PREFIX = "Défense TPI"
 const MAX_CHAR_CLASS = /[^\w.-]+/g
-const TPI_SLOT_NAME_MAX_LENGTH = 28
 
 const escapeIcsText = (value) =>
   String(value || "")
@@ -258,6 +258,7 @@ const RenderRooms = ({
   aggregatedICalPersonLabel,
   showEmptySlots = true,
   personIcalFilter = null,
+  voteAccessUrl = "",
   onClearPersonFilters,
   loadData,
   token,
@@ -266,6 +267,8 @@ const RenderRooms = ({
 }) => {
   const hideLegacyActions = true
   const isPersonIcalMode = Boolean(personIcalFilter)
+  const normalizedVoteAccessUrl = String(voteAccessUrl || "").trim()
+  const hasVoteAccessUrl = Boolean(normalizedVoteAccessUrl)
   const personFilterRoleLabel =
     personIcalFilter?.role === "projectManager" ? "chef de projet" : "expert"
   const clearPersonFilterLabel = personIcalFilter?.name
@@ -651,7 +654,7 @@ const RenderRooms = ({
                             label='Candidat'
                           />
                           <span className='slot-value'>
-                            <TruncatedText text={tpiData?.candidat} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
+                            <TruncatedText text={tpiData?.candidat} maxLength={TPI_DISPLAY_NAME_MAX_LENGTH} />
                           </span>
                           <span className='stakeholder-icon-spacer' aria-hidden='true' />
                         </div>
@@ -666,7 +669,7 @@ const RenderRooms = ({
                             label='Expert 1'
                           />
                           <span className='slot-value'>
-                            <TruncatedText text={tpiData?.expert1?.name} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
+                            <TruncatedText text={tpiData?.expert1?.name} maxLength={TPI_DISPLAY_NAME_MAX_LENGTH} />
                           </span>
                           {!hideLegacyActions ? (
                             <TpiSoutenanceActionButtons
@@ -693,7 +696,7 @@ const RenderRooms = ({
                             label='Expert 2'
                           />
                           <span className='slot-value'>
-                            <TruncatedText text={tpiData?.expert2?.name} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
+                            <TruncatedText text={tpiData?.expert2?.name} maxLength={TPI_DISPLAY_NAME_MAX_LENGTH} />
                           </span>
                           {!hideLegacyActions ? (
                             <TpiSoutenanceActionButtons
@@ -720,7 +723,7 @@ const RenderRooms = ({
                             label='Chef de projet'
                           />
                           <span className='slot-value'>
-                            <TruncatedText text={tpiData?.boss?.name} maxLength={TPI_SLOT_NAME_MAX_LENGTH} />
+                            <TruncatedText text={tpiData?.boss?.name} maxLength={TPI_DISPLAY_NAME_MAX_LENGTH} />
                           </span>
                           {!hideLegacyActions ? (
                             <TpiSoutenanceActionButtons
@@ -744,21 +747,36 @@ const RenderRooms = ({
         )})}
       </div>
 
-      {isPersonIcalMode && filteredIcalEvents.length > 0 ? (
+      {isPersonIcalMode && (filteredIcalEvents.length > 0 || hasVoteAccessUrl) ? (
         <section className='soutenance-person-ical'>
           <p>
-            Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.
+            {hasVoteAccessUrl
+              ? "Télécharger votre iCal ou demander une modification de créneau."
+              : "Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook."}
           </p>
           <div className='soutenance-person-ical-actions'>
-            <button
-              type='button'
-              className='soutenance-person-ical-button'
-              onClick={downloadFilteredICal}
-              aria-label={`Télécharger votre iCal Outlook pour ${personIcalFilter.name}`}
-            >
-              <IcalDownloadIcon />
-              <span>Télécharger votre iCal</span>
-            </button>
+            {filteredIcalEvents.length > 0 ? (
+              <button
+                type='button'
+                className='soutenance-person-ical-button'
+                onClick={downloadFilteredICal}
+                aria-label={`Télécharger votre iCal Outlook pour ${personIcalFilter.name}`}
+              >
+                <IcalDownloadIcon />
+                <span>Télécharger votre iCal</span>
+              </button>
+            ) : null}
+            {hasVoteAccessUrl ? (
+              <a
+                className='soutenance-person-vote-button'
+                href={normalizedVoteAccessUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+                aria-label={`Demander une modification de créneau pour ${personIcalFilter.name}`}
+              >
+                Demander une modification
+              </a>
+            ) : null}
             {typeof onClearPersonFilters === "function" ? (
               <button
                 type='button'

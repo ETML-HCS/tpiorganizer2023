@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react'
 
-import { personService } from '../../services/planningService'
+import { personService } from '../../services/coordinationService'
 import {
   getTpiPlanningSelectOptions,
   normalizeTpiForForm,
   normalizeTpiForSave
 } from './tpiManagementUtils.js'
+import {
+  JOURNAL_STATUS_LABELS,
+  REPORT_STATUS_LABELS,
+  TPI_STATUS_LABELS
+} from '../../constants/tpiLifecycle.js'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules.js'
 
 const emptyFormState = normalizeTpiForForm(null)
 
@@ -13,28 +19,28 @@ const PERSON_FIELD_CONFIG = [
   {
     name: 'candidat',
     idName: 'candidatPersonId',
-    label: 'Candidat',
+    label: getTpiRelationRoleLabel('candidat'),
     role: 'candidat',
     required: true
   },
   {
     name: 'expert1',
     idName: 'expert1PersonId',
-    label: 'Expert 1',
+    label: getTpiRelationRoleLabel('expert1'),
     role: 'expert',
     required: true
   },
   {
     name: 'expert2',
     idName: 'expert2PersonId',
-    label: 'Expert 2',
+    label: getTpiRelationRoleLabel('expert2'),
     role: 'expert',
     required: true
   },
   {
     name: 'boss',
     idName: 'bossPersonId',
-    label: 'Encadrant',
+    label: getTpiRelationRoleLabel('chef_projet'),
     role: 'chef_projet',
     required: true
   }
@@ -347,7 +353,7 @@ const TpiForm = ({
 
           <p>
             {isPrefilledCreate
-              ? 'Prérempli depuis la fiche Planning. Vérifie puis complète les champs manquants avant enregistrement.'
+              ? 'Prérempli depuis la fiche Coordination. Vérifie puis complète les champs manquants avant enregistrement.'
               : 'Structure normalisee pour les experts, lieux, dates et evaluation.'}
           </p>
         </div>
@@ -666,6 +672,111 @@ const TpiForm = ({
                 value={formData.lienEvaluation}
                 onChange={handleInputChange}
               />
+            </div>
+          </section>
+
+          <section className='tpi-form-section tpi-form-section-wide'>
+            <h4>Suivi TPI</h4>
+
+            <div className='tpi-form-status-grid'>
+              <div className='form-row stacked'>
+                <label htmlFor='status'>Statut dossier</label>
+                <select
+                  id='status'
+                  name='status'
+                  value={formData.status}
+                  onChange={handleInputChange}
+                >
+                  {Object.entries(TPI_STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className='form-row stacked'>
+                <label htmlFor='journalStatus'>Journal</label>
+                <select
+                  id='journalStatus'
+                  name='journalStatus'
+                  value={formData.journalStatus}
+                  onChange={handleInputChange}
+                >
+                  {Object.entries(JOURNAL_STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className='form-row stacked'>
+                <label htmlFor='journalLastEntryAt'>Derniere entree</label>
+                <input
+                  id='journalLastEntryAt'
+                  type='date'
+                  name='journalLastEntryAt'
+                  value={formData.journalLastEntryAt}
+                  onChange={handleInputChange}
+                />
+              </div>
+
+              <div className='form-row stacked'>
+                <label htmlFor='rapportStatus'>Rapport</label>
+                <select
+                  id='rapportStatus'
+                  name='rapportStatus'
+                  value={formData.rapportStatus}
+                  onChange={handleInputChange}
+                >
+                  {Object.entries(REPORT_STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className='form-row stacked'>
+                <label htmlFor='rapportSubmittedAt'>Depot rapport</label>
+                <input
+                  id='rapportSubmittedAt'
+                  type='date'
+                  name='rapportSubmittedAt'
+                  value={formData.rapportSubmittedAt}
+                  onChange={handleInputChange}
+                />
+              </div>
+
+              <div className='form-row stacked'>
+                <label htmlFor='rapportDueAt'>Delai rapport</label>
+                <input
+                  id='rapportDueAt'
+                  type='date'
+                  name='rapportDueAt'
+                  value={formData.rapportDueAt}
+                  onChange={handleInputChange}
+                />
+              </div>
+            </div>
+
+            <div className='tpi-form-status-links'>
+              <div className='form-row'>
+                <label htmlFor='journalUrl'>Lien journal</label>
+                <input
+                  id='journalUrl'
+                  type='text'
+                  name='journalUrl'
+                  value={formData.journalUrl}
+                  onChange={handleInputChange}
+                />
+              </div>
+
+              <div className='form-row'>
+                <label htmlFor='rapportUrl'>Lien rapport</label>
+                <input
+                  id='rapportUrl'
+                  type='text'
+                  name='rapportUrl'
+                  value={formData.rapportUrl}
+                  onChange={handleInputChange}
+                />
+              </div>
             </div>
           </section>
         </div>

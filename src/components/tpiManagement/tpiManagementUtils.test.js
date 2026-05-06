@@ -3,6 +3,7 @@ import {
   getMissingStakeholders,
   getStakeholderIssues,
   hasStakeholderIssues,
+  getTpiLifecycleSummary,
   normalizeTpiForForm,
   normalizeTpiForSave
 } from './tpiManagementUtils.js'
@@ -173,5 +174,89 @@ describe('tpiManagementUtils', () => {
     expect(savedTpi.candidatPersonId).toBeNull()
     expect(savedTpi.experts[2]).toBe('')
     expect(savedTpi.tags).toEqual(['React', 'API'])
+  })
+
+  it('round-trips lifecycle, journal and report follow-up fields', () => {
+    const formData = normalizeTpiForForm({
+      refTpi: '2164',
+      status: 'defense_scheduled',
+      journal: {
+        status: 'in_progress',
+        lastEntryAt: '2026-04-12T00:00:00.000Z',
+        url: 'https://example.test/journal'
+      },
+      rapport: {
+        status: 'submitted',
+        submittedAt: '2026-06-04T00:00:00.000Z',
+        dueAt: '2026-06-05T00:00:00.000Z',
+        url: 'https://example.test/rapport.pdf'
+      }
+    })
+
+    expect(formData.status).toBe('defense_scheduled')
+    expect(formData.journalStatus).toBe('in_progress')
+    expect(formData.journalLastEntryAt).toBe('2026-04-12')
+    expect(formData.rapportStatus).toBe('submitted')
+    expect(formData.rapportSubmittedAt).toBe('2026-06-04')
+
+    const savedTpi = normalizeTpiForSave(formData)
+
+    expect(savedTpi.status).toBe('defense_scheduled')
+    expect(savedTpi.journal).toEqual({
+      status: 'in_progress',
+      lastEntryAt: '2026-04-12',
+      url: 'https://example.test/journal',
+      notes: ''
+    })
+    expect(savedTpi.rapport).toEqual({
+      status: 'submitted',
+      submittedAt: '2026-06-04',
+      dueAt: '2026-06-05',
+      url: 'https://example.test/rapport.pdf',
+      feedback: ''
+    })
+  })
+
+  it('builds a lifecycle summary from API validation metadata', () => {
+    expect(getTpiLifecycleSummary({
+      lifecycle: {
+        status: 'report_review',
+        blockingIssueCount: 0,
+        warningCount: 1
+      },
+      journal: { status: 'validated' },
+      rapport: { status: 'submitted' }
+    })).toEqual({
+      status: 'report_review',
+      label: 'Rapport a suivre',
+      journalStatus: 'validated',
+      journalLabel: 'Valide',
+      rapportStatus: 'submitted',
+      rapportLabel: 'Depose',
+      issueCount: 0,
+      warningCount: 1,
+      tone: 'warning'
+    })
+  })
+
+  it('keeps explicit lifecycle counters even when stale validation issues remain', () => {
+    expect(getTpiLifecycleSummary({
+      lifecycle: {
+        status: 'ready_for_planning',
+        blockingIssueCount: 0,
+        warningCount: 0
+      },
+      validation: {
+        issues: [
+          { severity: 'error', type: 'stale' },
+          { severity: 'warning', type: 'stale_warning' }
+        ]
+      }
+    })).toMatchObject({
+      status: 'ready_for_planning',
+      issueCount: 0,
+      warningCount: 0,
+      tone: 'neutral'
+    })
   })
 })

@@ -5,7 +5,7 @@ import {
 } from './planningScopeUtils'
 
 describe('planningScopeUtils', () => {
-  it('keeps only active site codes as planning perimeter keys', () => {
+  it('keeps only active site codes as coordination perimeter keys', () => {
     const siteKeys = buildConfiguredPlanningSiteKeys([
       { siteCode: 'Vennes', label: 'ETML / CFPV', active: true },
       { siteCode: 'CFPV', active: false },

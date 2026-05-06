@@ -1,9 +1,10 @@
 const TpiModelsYear = require('../models/tpiModels')
+const { normalizeYear } = require('../modules/gestionTpi/normalization')
 
 async function deleteTpiCatalogByYear(year, modelFactory = TpiModelsYear) {
-  const normalizedYear = Number.parseInt(year, 10)
+  const normalizedYear = normalizeYear(year)
 
-  if (!Number.isInteger(normalizedYear)) {
+  if (!normalizedYear) {
     throw new Error('Année invalide.')
   }
 

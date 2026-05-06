@@ -13,10 +13,14 @@ import {
   VoteIcon,
   WrenchIcon
 } from '../shared/InlineIcons'
-import { normalizePlanningStatus, PLANNING_STATUS } from '../../constants/planningStatus'
+import { normalizeCoordinationStatus, COORDINATION_STATUS } from '../../constants/coordinationStatus'
+import {
+  VOTING_STAKEHOLDER_ROLES,
+  getTpiRelationRoleLabel
+} from '../../utils/stakeholderRules'
 import './VoteCommandCenter.css'
 
-const VOTE_ROLE_ORDER = ['expert1', 'expert2', 'chef_projet']
+const VOTE_ROLE_ORDER = VOTING_STAKEHOLDER_ROLES
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -38,19 +42,7 @@ function isOnlyAvailabilityVoteComment(value) {
 }
 
 function getVoterRoleLabel(role) {
-  if (role === 'expert1') {
-    return 'Expert 1'
-  }
-
-  if (role === 'expert2') {
-    return 'Expert 2'
-  }
-
-  if (role === 'chef_projet') {
-    return 'Chef de projet'
-  }
-
-  return compactText(role) || 'Role'
+  return getTpiRelationRoleLabel(role, 'Role')
 }
 
 function hasVoteRoleResponded(roleStatus) {
@@ -381,7 +373,7 @@ function getCaseDescriptor(row, checkedConstraint = null) {
     return {
       tone: 'confirmed',
       label: 'Confirme',
-      detail: row.fixedSlotLabel || 'Defense confirmee'
+      detail: row.fixedSlotLabel || 'Défense confirmée'
     }
   }
 
@@ -521,8 +513,6 @@ function getRecommendationTitle(row, descriptor) {
 
 function getPrimaryAction({
   workflowState,
-  isPlanningState,
-  isVotingState,
   isPublishedState,
   hasActiveSnapshot,
   canStartVotes,
@@ -539,7 +529,7 @@ function getPrimaryAction({
   onPublishDefinitive,
   onOpenPublishedView
 }) {
-  if (isPlanningState && !hasActiveSnapshot) {
+  if (!hasActiveSnapshot) {
     return {
       key: 'freeze',
       label: 'Geler snapshot',
@@ -551,7 +541,7 @@ function getPrimaryAction({
     }
   }
 
-  if (isPlanningState) {
+  if (Number(stats.totalTpis || 0) > 0 && Number(stats.responseTpis || 0) === 0) {
     return {
       key: 'startVotes',
       label: 'Ouvrir campagne',
@@ -563,7 +553,7 @@ function getPrimaryAction({
     }
   }
 
-  if (isVotingState && staticVotePublicationInfo?.available && staticVotePublicationInfo?.syncSecretConfigured) {
+  if (staticVotePublicationInfo?.available && staticVotePublicationInfo?.syncSecretConfigured) {
     return {
       key: 'staticVoteSync',
       label: 'Importer réponses web',
@@ -576,7 +566,7 @@ function getPrimaryAction({
     }
   }
 
-  if (isVotingState && Number(stats.missingVotes || 0) > 0) {
+  if (Number(stats.missingVotes || 0) > 0) {
     return {
       key: 'remindVotes',
       label: 'Relancer',
@@ -589,7 +579,7 @@ function getPrimaryAction({
     }
   }
 
-  if (isVotingState) {
+  if (Number(stats.totalTpis || 0) > 0) {
     return {
       key: 'closeVotes',
       label: 'Clore campagne',
@@ -605,8 +595,8 @@ function getPrimaryAction({
     return {
       key: 'published',
       label: 'Agenda publie',
-      detail: `${stats.confirmedTpis} TPI confirmes`,
-      buttonLabel: 'Ouvrir defenses',
+      detail: `${stats.confirmedTpis} TPI confirmés`,
+      buttonLabel: 'Ouvrir défenses',
       icon: <CheckIcon className="button-icon" />,
       onClick: onOpenPublishedView,
       disabled: workflowActionLoading
@@ -662,13 +652,10 @@ const WorkflowActionButton = ({
 const VoteCommandCenter = ({
   year,
   workflowState,
-  isPlanningState,
-  isVotingState,
   isPublishedState,
   hasActiveSnapshot,
   canStartVotes,
   canPublish,
-  canPublishDirect,
   hasLegacyImportGap,
   hasBlockedValidation,
   workflowActionLoading,
@@ -854,7 +841,7 @@ const VoteCommandCenter = ({
     : null
   const canOpenResolutionProposal = Boolean(
     selectedRow &&
-    normalizePlanningStatus(selectedRow.tpi?.status) !== PLANNING_STATUS.CONFIRMED &&
+    normalizeCoordinationStatus(selectedRow.tpi?.status) !== COORDINATION_STATUS.CONFIRMED &&
     (selectedRow.hasHardConstraint || selectedConstraint?.hasHardConstraint || selectedRow.bucket === 'manual')
   )
   const selectedResolutionCandidateSlot = selectedResolutionSlot || selectedBestSlot
@@ -865,7 +852,7 @@ const VoteCommandCenter = ({
   const canConfirmResolutionProposal = Boolean(
     selectedResolutionProposal?.status === 'accepted' &&
     compactText(selectedResolutionSlot?.slotId) &&
-    normalizePlanningStatus(selectedRow?.tpi?.status) !== PLANNING_STATUS.CONFIRMED
+    normalizeCoordinationStatus(selectedRow?.tpi?.status) !== COORDINATION_STATUS.CONFIRMED
   )
   const inboxTitle = selectedRow ? getQueueTitle(selectedRow) : 'Réponses reçues'
   const [selectedRoleByCaseId, setSelectedRoleByCaseId] = useState({})
@@ -962,8 +949,6 @@ const VoteCommandCenter = ({
 
   const primaryAction = getPrimaryAction({
     workflowState,
-    isPlanningState,
-    isVotingState,
     isPublishedState,
     hasActiveSnapshot,
     canStartVotes,
@@ -1044,8 +1029,7 @@ const VoteCommandCenter = ({
       </div>
 
       <div className="vote-command-actions" aria-label="Actions disponibles">
-        {isPlanningState ? (
-          <div className="vote-command-action-group">
+        <div className="vote-command-action-group">
             <span className="vote-command-action-group-title">Planification</span>
             <WorkflowActionButton
               actionKey="autoPlan"
@@ -1071,7 +1055,7 @@ const VoteCommandCenter = ({
               runningLabel="Verification..."
               title="Verifier les conflits avant ouverture."
             >
-              Vérifier planning
+              Vérifier coordination
             </WorkflowActionButton>
             <WorkflowActionButton
               actionKey="freeze"
@@ -1096,12 +1080,12 @@ const VoteCommandCenter = ({
               icon={<ArrowRightIcon className="button-icon" />}
               runningLabel="Ouverture..."
               title={hasLegacyImportGap
-                ? 'Des TPI de GestionTPI ne sont pas encore presents dans Planning.'
+                ? 'Des TPI de GestionTPI ne sont pas encore presents dans Coordination.'
                 : hasBlockedValidation
-                  ? 'La verification a detecte des anomalies.'
+                  ? 'La verification a detecte des anomalies; l action reste possible côté admin.'
                   : !hasActiveSnapshot
-                    ? 'Geler un snapshot d abord.'
-                    : 'Ouvrir la campagne et envoyer les liens de vote.'}
+                    ? 'Aucun snapshot actif.'
+                    : 'Ouvrir la campagne sans envoyer d emails.'}
             >
               Ouvrir votes
             </WorkflowActionButton>
@@ -1121,11 +1105,9 @@ const VoteCommandCenter = ({
                 Ouvrir sans emails
               </WorkflowActionButton>
             ) : null}
-          </div>
-        ) : null}
+        </div>
 
-        {isVotingState ? (
-          <div className="vote-command-action-group">
+        <div className="vote-command-action-group">
             <span className="vote-command-action-group-title">Campagne</span>
             <WorkflowActionButton
               actionKey="remindVotes"
@@ -1149,16 +1131,14 @@ const VoteCommandCenter = ({
               disabled={workflowActionLoading || Number(stats.totalTpis || 0) === 0}
               isActionRunning={isActionRunning}
               icon={<ArrowRightIcon className="button-icon" />}
-              runningLabel="Cloture..."
+              runningLabel="Clôture..."
               title="Clore la campagne et classer chaque TPI."
             >
               Clore campagne
             </WorkflowActionButton>
-          </div>
-        ) : null}
+        </div>
 
-        {isVotingState ? (
-          <div className="vote-command-action-group">
+        <div className="vote-command-action-group">
             <span className="vote-command-action-group-title">Vote web</span>
             {IS_DEBUG ? (
               <WorkflowActionButton
@@ -1221,8 +1201,7 @@ const VoteCommandCenter = ({
             >
               Importer
             </WorkflowActionButton>
-          </div>
-        ) : null}
+        </div>
 
         {Number(stats.responseTpis || 0) > 0 || Number(stats.manualTpis || 0) > 0 ? (
           <div className="vote-command-action-group">
@@ -1263,62 +1242,51 @@ const VoteCommandCenter = ({
           </div>
         ) : null}
 
-        {isPlanningState || isVotingState || isPublishedState ? (
-          <div className="vote-command-action-group">
+        <div className="vote-command-action-group">
             <span className="vote-command-action-group-title">Publication</span>
-            {isPlanningState || isVotingState ? (
-              <WorkflowActionButton
-                actionKey="publish"
-                primaryActionKey={primaryAction.key}
-                className="success"
-                onClick={onPublishDefinitive}
-                disabled={workflowActionLoading || (isPlanningState ? !canPublishDirect : !canPublish)}
-                isActionRunning={isActionRunning}
-                icon={<CheckIcon className="button-icon" />}
-                runningLabel="Publication..."
-                title={isPlanningState
-                  ? 'Publier directement depuis le snapshot confirme.'
-                  : 'Publier les defenses confirmees.'}
-                ariaLabel={isPlanningState ? 'Publier sans votes' : 'Publier défenses'}
-              >
-                Publier
-              </WorkflowActionButton>
-            ) : null}
-
-            {isPublishedState ? (
-              <>
-                <WorkflowActionButton
-                  actionKey="sendLinks"
-                  primaryActionKey={primaryAction.key}
-                  className="secondary"
-                  onClick={onSendPublicationLinks}
-                  disabled={workflowActionLoading || !onSendPublicationLinks}
-                  isActionRunning={isActionRunning}
-                  icon={<MailIcon className="button-icon" />}
-                  runningLabel="Envoi..."
-                  title="Envoyer les liens personnels de consultation des défenses."
-                  ariaLabel="Envoyer liens défense."
-                >
-                  Envoyer liens
-                </WorkflowActionButton>
-                <WorkflowActionButton
-                  actionKey="published"
-                  primaryActionKey={primaryAction.key}
-                  className="success"
-                  onClick={onOpenPublishedView}
-                  disabled={workflowActionLoading}
-                  isActionRunning={isActionRunning}
-                  icon={<CheckIcon className="button-icon" />}
-                  runningLabel="Ouverture..."
-                  title="Afficher les defenses publiees."
-                  ariaLabel="Ouvrir defenses."
-                >
-                  Ouvrir defenses
-                </WorkflowActionButton>
-              </>
-            ) : null}
-          </div>
-        ) : null}
+            <WorkflowActionButton
+              actionKey="publish"
+              primaryActionKey={primaryAction.key}
+              className="success"
+              onClick={onPublishDefinitive}
+              disabled={workflowActionLoading || !canPublish}
+              isActionRunning={isActionRunning}
+              icon={<CheckIcon className="button-icon" />}
+              runningLabel="Publication..."
+              title="Publier les défenses selon les données disponibles."
+              ariaLabel="Publier défenses"
+            >
+              Publier
+            </WorkflowActionButton>
+            <WorkflowActionButton
+              actionKey="sendLinks"
+              primaryActionKey={primaryAction.key}
+              className="secondary"
+              onClick={onSendPublicationLinks}
+              disabled={workflowActionLoading || !onSendPublicationLinks}
+              isActionRunning={isActionRunning}
+              icon={<MailIcon className="button-icon" />}
+              runningLabel="Envoi..."
+              title="Envoyer les liens personnels de consultation des défenses."
+              ariaLabel="Envoyer liens défense."
+            >
+              Envoyer liens
+            </WorkflowActionButton>
+            <WorkflowActionButton
+              actionKey="published"
+              primaryActionKey={primaryAction.key}
+              className="success"
+              onClick={onOpenPublishedView}
+              disabled={workflowActionLoading}
+              isActionRunning={isActionRunning}
+              icon={<CheckIcon className="button-icon" />}
+              runningLabel="Ouverture..."
+              title="Afficher les défenses publiées."
+              ariaLabel="Ouvrir défenses."
+            >
+              Ouvrir défenses
+            </WorkflowActionButton>
+        </div>
       </div>
 
       {constraintCheckResult ? (
@@ -1476,7 +1444,7 @@ const VoteCommandCenter = ({
                         {resolutionProposalSubmitting ? '...' : 'Informer'}
                       </button>
                     ) : null}
-                    {selectedBestSlot && !selectedRow.hasHardConstraint && normalizePlanningStatus(selectedRow.tpi?.status) !== PLANNING_STATUS.CONFIRMED ? (
+                    {selectedBestSlot && !selectedRow.hasHardConstraint && normalizeCoordinationStatus(selectedRow.tpi?.status) !== COORDINATION_STATUS.CONFIRMED ? (
                       <button
                         type="button"
                         className="vote-command-link-button is-primary"
@@ -1653,7 +1621,7 @@ const VoteCommandCenter = ({
                               <span>{slot.positiveCount}/3 accord</span>
                               <span>{slot.rejectedCount} refus</span>
                             </div>
-                            {normalizePlanningStatus(selectedRow.tpi?.status) !== PLANNING_STATUS.CONFIRMED ? (
+                            {normalizeCoordinationStatus(selectedRow.tpi?.status) !== COORDINATION_STATUS.CONFIRMED ? (
                               <div className="vote-command-role-slot-actions">
                                 <button
                                   type="button"

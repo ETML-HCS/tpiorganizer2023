@@ -7,7 +7,7 @@ const {
   isConfiguredPlanningSite,
   isExternalPlanningSite,
   normalizeSiteValue
-} = require('../services/tpiPlanningVisibility')
+} = require('../services/coordinationTpiVisibility')
 
 test('normalizeSiteValue removes punctuation and accents', async () => {
   assert.equal(normalizeSiteValue('Hors-ÉTML '), 'horsetml')
@@ -19,7 +19,7 @@ test('isExternalPlanningSite detects hors-etml variants', async () => {
   assert.equal(isExternalPlanningSite('ETML'), false)
 })
 
-test('filterPlanifiableTpis removes external planning entries', async () => {
+test('filterPlanifiableTpis removes external coordination entries', async () => {
   const result = filterPlanifiableTpis([
     { reference: 'TPI-1', site: 'ETML' },
     { reference: 'TPI-2', site: 'hors-etml' },
@@ -43,7 +43,7 @@ test('buildConfiguredPlanningSiteKeys keeps only active configured site codes', 
   assert.equal(siteKeys.has('cfpv'), false)
 })
 
-test('isConfiguredPlanningSite uses siteCode as the planning perimeter', async () => {
+test('isConfiguredPlanningSite uses siteCode as the coordination perimeter', async () => {
   const planningConfig = {
     siteConfigs: [
       { siteCode: 'ETML', label: 'Lausanne', active: true }
@@ -69,7 +69,7 @@ test('filterPlanifiableTpis keeps only configured sites when a site configuratio
   assert.deepEqual(result.map((tpi) => tpi.reference), ['TPI-1'])
 })
 
-test('filterPlanifiableTpis returns no TPI when no planning site is configured for the year', async () => {
+test('filterPlanifiableTpis returns no TPI when no coordination site is configured for the year', async () => {
   const result = filterPlanifiableTpis([
     { reference: 'TPI-1', site: 'ETML' },
     { reference: 'TPI-2', site: 'CFPV' }

@@ -22,7 +22,7 @@ const {
   normalizeVotePublicPath,
   normalizeVoteRemoteDir
 } = require('../services/staticVotePublicationService')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 const { MagicLink } = require('../models/magicLinkModel')
 const { ResolutionProposal } = require('../models/resolutionProposalModel')
@@ -96,21 +96,21 @@ test('normalizeVotePublicPath and normalizeVoteRemoteDir keep votes isolated fro
     const status = await getStaticVotePublicationStatus(2026)
     assert.equal(status.publicUrl, 'https://tpi26.ch/votes-2026/')
     assert.equal(status.remoteDir, '/home/account/domains/tpi26.ch/public_html/votes-2026')
-    assert.equal(normalizeVotePublicPath(2026, { votePublicPath: '/planning-vote-{year}' }), '/planning-vote-2026')
-    assert.equal(normalizeVotePublicPath(2026, { votePublicationPublicPath: '/planning-vote-{year}' }), '/planning-vote-2026')
+    assert.equal(normalizeVotePublicPath(2026, { votePublicPath: '/coordination-vote-{year}' }), '/coordination-vote-2026')
+    assert.equal(normalizeVotePublicPath(2026, { votePublicationPublicPath: '/coordination-vote-{year}' }), '/coordination-vote-2026')
     assert.equal(
       normalizeVoteRemoteDir(2026, {
         remoteDir: '/home/account/domains/tpi26.ch/public_html',
-        voteRemoteDir: 'planning-vote-{year}'
+        voteRemoteDir: 'coordination-vote-{year}'
       }),
-      '/home/account/domains/tpi26.ch/public_html/planning-vote-2026'
+      '/home/account/domains/tpi26.ch/public_html/coordination-vote-2026'
     )
     assert.equal(
       normalizeVoteRemoteDir(2026, {
         remoteDir: '/home/account/domains/tpi26.ch/public_html',
-        votePublicationRemoteDir: 'planning-vote-{year}'
+        votePublicationRemoteDir: 'coordination-vote-{year}'
       }),
-      '/home/account/domains/tpi26.ch/public_html/planning-vote-2026'
+      '/home/account/domains/tpi26.ch/public_html/coordination-vote-2026'
     )
   })
 })
@@ -136,12 +136,12 @@ test('getStaticVoteLinkTarget appends the vote path when only a site domain is p
 test('getStaticVoteLinkTarget uses the deployment domain when no explicit vote URL is provided', async () => {
   const target = await getStaticVoteLinkTarget(2026, '', {
     publicBaseUrl: 'publication.example.ch/',
-    votePublicPath: '/planning-vote-{year}'
+    votePublicPath: '/coordination-vote-{year}'
   })
 
   assert.deepEqual(target, {
     baseUrl: 'https://publication.example.ch',
-    redirectPath: '/planning-vote-2026/'
+    redirectPath: '/coordination-vote-2026/'
   })
 })
 
@@ -234,7 +234,7 @@ test('buildStaticVoteCampaignPayload groups pending votes by voter and TPI', asy
     {
       _id: tpiId,
       reference: 'TPI-2026-001',
-      sujet: 'Sujet planning',
+      sujet: 'Sujet coordination',
       status: 'voting',
       candidat: { firstName: 'Cara', lastName: 'Candidate' },
       proposedSlots: [
@@ -297,6 +297,61 @@ test('buildStaticVoteCampaignPayload groups pending votes by voter and TPI', asy
   }
 })
 
+test('buildStaticVoteCampaignPayload conserve tous les TPI pour un lien vote groupe', async () => {
+  const personId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const tpiIds = [
+    new mongoose.Types.ObjectId(),
+    new mongoose.Types.ObjectId(),
+    new mongoose.Types.ObjectId()
+  ]
+  const tpis = tpiIds.map((tpiId, index) => ({
+    _id: tpiId,
+    reference: `TPI-2026-${index + 39}`,
+    sujet: `Sujet ${index + 1}`,
+    status: 'voting',
+    candidat: { firstName: `Candidat${index + 1}`, lastName: 'Test' },
+    proposedSlots: [{ slot: { _id: fixedSlotId } }]
+  }))
+  const votes = tpiIds.map((tpiId, index) => ({
+    _id: new mongoose.Types.ObjectId(),
+    tpiPlanning: tpiId,
+    voter: { _id: personId, firstName: 'Alain', lastName: 'Garraux', email: 'alain@example.test' },
+    voterRole: 'chef_projet',
+    slot: {
+      _id: fixedSlotId,
+      date: new Date(`2026-06-${10 + index}T00:00:00.000Z`),
+      period: 1,
+      startTime: '08:00',
+      endTime: '09:00',
+      room: { name: `A10${index + 1}`, site: 'ETML' }
+    }
+  }))
+
+  const restore = [
+    replaceProperty(TpiPlanning, 'find', () => makeQueryResult(tpis)),
+    replaceProperty(Vote, 'find', () => makeQueryResult(votes))
+  ]
+
+  try {
+    const payload = await buildStaticVoteCampaignPayload(2026, '2026-05-01T10:00:00.000Z')
+
+    assert.equal(payload.groups.length, 3)
+    assert.deepEqual(
+      payload.groups.map((group) => group.personId),
+      [String(personId), String(personId), String(personId)]
+    )
+    assert.deepEqual(
+      payload.groups.map((group) => group.tpi.reference),
+      ['TPI-2026-39', 'TPI-2026-40', 'TPI-2026-41']
+    )
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
 test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   const html = buildStaticVoteHtml({
     year: 2026,
@@ -309,7 +364,7 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
         tpi: {
           id: 'tpi-1',
           reference: 'TPI-2026-001',
-          subject: 'Sujet planning',
+          subject: 'Sujet coordination',
           candidateName: 'Cara Candidate'
         },
         fixedVoteId: 'vote-fixed',
@@ -338,10 +393,15 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   })
 
   assert.match(html, /class="vote-summary"/)
+  assert.match(html, /vote-date-group/)
+  assert.match(html, /buildVoteDateGroups/)
+  assert.match(html, /vote-period-group/)
+  assert.match(html, /buildVotePeriodGroups/)
+  assert.match(html, /vote-card-main-grid/)
   assert.match(html, /dataset\.proposalArea/)
   assert.match(html, /updateSummary/)
-  assert.match(html, /Envoyer/)
-  assert.match(html, /Options/)
+  assert.match(html, /Transmettre/)
+  assert.match(html, /Autres demi-journées/)
   assert.match(html, /Remarque/)
   assert.match(html, /Hors liste/)
   assert.match(html, /vote-sent/)
@@ -370,7 +430,7 @@ test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote
     {
       _id: tpiId,
       reference: 'TPI-2026-001',
-      sujet: 'Sujet planning',
+      sujet: 'Sujet coordination',
       status: 'voting',
       candidat: { firstName: 'Cara', lastName: 'Candidate' },
       proposedSlots: [{ slot: { _id: fixedSlotId } }]
@@ -1023,6 +1083,111 @@ test('importStaticVoteArbitrageRecord applique une réponse d arbitrage statique
     assert.equal(proposal.recipients[0].responseReason, 'Indisponible')
     assert.equal(proposal.recipients[0].alternativeProposal, 'Matin suivant')
     assert.equal(proposal.status, 'rejected')
+    assert.equal(proposal.saved, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteArbitrageRecord ignore une réponse statique après expiration', async () => {
+  const year = 2026
+  const tokenHash = 'e'.repeat(64)
+  const proposalId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const personId = new mongoose.Types.ObjectId()
+  const proposal = {
+    _id: proposalId,
+    year,
+    tpiPlanning: tpiId,
+    status: 'sent',
+    recipients: [{
+      role: 'expert1',
+      person: personId,
+      tokenHash,
+      responseStatus: 'pending'
+    }],
+    expiresAt: new Date('2020-01-01T10:00:00.000Z'),
+    saved: false,
+    async save() {
+      this.saved = true
+      return this
+    }
+  }
+  const restore = [
+    replaceProperty(ResolutionProposal, 'findOne', () => makeQueryResult(proposal))
+  ]
+
+  try {
+    const result = await importStaticVoteArbitrageRecord({
+      id: 'arbitrage-expired',
+      year,
+      tokenHash,
+      tpiId: String(tpiId),
+      personId: String(personId),
+      role: 'expert1',
+      decision: 'accepted',
+      submittedAt: '2026-05-10T08:00:00.000Z'
+    }, year)
+
+    assert.equal(result.imported, false)
+    assert.equal(result.skipped, true)
+    assert.equal(result.reason, 'proposal_expired')
+    assert.equal(result.status, 'expired')
+    assert.equal(proposal.status, 'expired')
+    assert.equal(proposal.recipients[0].responseStatus, 'pending')
+    assert.equal(proposal.saved, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteArbitrageRecord accepte une réponse avant expiration synchronisée plus tard', async () => {
+  const year = 2026
+  const tokenHash = 'f'.repeat(64)
+  const proposalId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const personId = new mongoose.Types.ObjectId()
+  const proposal = {
+    _id: proposalId,
+    year,
+    tpiPlanning: tpiId,
+    status: 'sent',
+    recipients: [{
+      role: 'expert1',
+      person: personId,
+      tokenHash,
+      responseStatus: 'pending'
+    }],
+    expiresAt: new Date('2020-01-02T10:00:00.000Z'),
+    saved: false,
+    async save() {
+      this.saved = true
+      return this
+    }
+  }
+  const restore = [
+    replaceProperty(ResolutionProposal, 'findOne', () => makeQueryResult(proposal))
+  ]
+
+  try {
+    const result = await importStaticVoteArbitrageRecord({
+      id: 'arbitrage-delayed-sync',
+      year,
+      tokenHash,
+      tpiId: String(tpiId),
+      personId: String(personId),
+      role: 'expert1',
+      decision: 'accepted',
+      submittedAt: '2020-01-01T08:00:00.000Z'
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.equal(proposal.recipients[0].responseStatus, 'accepted')
+    assert.equal(proposal.status, 'accepted')
     assert.equal(proposal.saved, true)
   } finally {
     while (restore.length > 0) {

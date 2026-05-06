@@ -1,5 +1,8 @@
 import { normalizeSoutenanceDateValue } from "./soutenanceDateUtils"
-import { buildLocalValidationIssues } from "./tpiScheduleValidationUtils"
+import {
+  buildLocalValidationIssues,
+  isValidationWarningIssue
+} from "./tpiScheduleValidationUtils"
 
 const compactText = (value) => {
   if (value === null || value === undefined) {
@@ -101,13 +104,19 @@ const addMarker = (markers, slotKey, issue) => {
 
   if (!markers.has(slotKey)) {
     markers.set(slotKey, {
-      hasError: true,
+      hasError: false,
+      hasWarning: false,
       issueTypes: [],
       messages: []
     })
   }
 
   const current = markers.get(slotKey)
+  if (isValidationWarningIssue(issue)) {
+    current.hasWarning = true
+  } else {
+    current.hasError = true
+  }
   const type = compactText(issue?.type)
   const message = compactText(issue?.message)
 

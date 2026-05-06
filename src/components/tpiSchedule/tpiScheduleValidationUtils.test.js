@@ -86,4 +86,42 @@ describe("tpiScheduleValidationUtils", () => {
       "room_class_mismatch"
     ])
   })
+
+  it("dedoublonne un avertissement backend d override avec l analyse locale", () => {
+    const localAnalysis = {
+      sequenceViolations: [
+        {
+          personName: "Grace Hopper",
+          consecutiveCount: 5,
+          slotKeys: ["2026-06-11|1", "2026-06-11|2", "2026-06-11|3", "2026-06-11|4", "2026-06-11|5"]
+        }
+      ]
+    }
+
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 0,
+        hardConflictCount: 0,
+        warningCount: 1
+      },
+      issues: [
+        {
+          type: "consecutive_limit",
+          severity: "warning",
+          isConstraintOverride: true,
+          personName: "Grace Hopper",
+          consecutiveCount: 5,
+          slotKeys: ["2026-06-11|1", "2026-06-11|2", "2026-06-11|3", "2026-06-11|4", "2026-06-11|5"],
+          message: "Grace Hopper a 5 TPI consécutifs."
+        }
+      ]
+    }, localAnalysis)
+
+    expect(result.summary.issueCount).toBe(0)
+    expect(result.summary.warningCount).toBe(1)
+    expect(result.summary.isValid).toBe(true)
+    expect(result.issues).toHaveLength(1)
+    expect(result.issues[0].severity).toBe("warning")
+  })
 })

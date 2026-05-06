@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema
+const { VOTING_STAKEHOLDER_ROLES } = require('../modules/stakeholders/stakeholderDefinitions')
 
 /**
  * Schéma Vote - Enregistre les votes des experts et chefs de projet sur les créneaux proposés
@@ -32,7 +33,7 @@ const voteSchema = new Schema({
   // Rôle de la personne pour ce TPI
   voterRole: {
     type: String,
-    enum: ['expert1', 'expert2', 'chef_projet'],
+    enum: VOTING_STAKEHOLDER_ROLES,
     required: true
   },
   
@@ -93,13 +94,8 @@ voteSchema.statics.areAllVotesCollected = async function(tpiPlanningId, slotId) 
     decision: { $ne: 'pending' }
   })
   
-  // On attend 3 votes: expert1, expert2, chef_projet
   const votedRoles = votes.map(v => v.voterRole)
-  return (
-    votedRoles.includes('expert1') &&
-    votedRoles.includes('expert2') &&
-    votedRoles.includes('chef_projet')
-  )
+  return VOTING_STAKEHOLDER_ROLES.every((role) => votedRoles.includes(role))
 }
 
 // Méthode statique pour trouver un créneau unanimement accepté

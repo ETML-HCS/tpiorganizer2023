@@ -1,31 +1,43 @@
 const express = require('express')
 
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 const { requireNonEmptyBody, requireYearParam } = require('../middleware/requestValidation')
 const { authMiddleware, requireRole } = require('../services/magicLinkService')
-const magicLinkV2Service = require('../services/magicLinkV2Service')
+const accessLinkTokenService = require('../modules/accessLinks/tokenService')
 const emailService = require('../services/emailService')
 const publishedSoutenanceService = require('../services/publishedSoutenanceService')
-const planningAutomationService = require('../services/planningAutomationService')
-const planningValidationService = require('../services/planningValidationService')
+const coordinationAutomationService = require('../services/coordinationAutomationService')
+const coordinationValidationService = require('../services/coordinationValidationService')
 const schedulingService = require('../services/schedulingService')
 const staticDefensePublicationService = require('../services/staticDefensePublicationService')
 const staticVotePublicationService = require('../services/staticVotePublicationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const workflowService = require('../services/workflowService')
-const { getSharedEmailSettingsIfAvailable } = require('../services/planningCatalogService')
-const planningConfigService = require('../services/planningConfigService')
+const { getSharedEmailSettingsIfAvailable } = require('../services/coordinationCatalogService')
+const coordinationConfigService = require('../services/coordinationConfigService')
 const publicationDeploymentConfigService = require('../services/publicationDeploymentConfigService')
-const { buildAccessLinkPreview } = require('../services/accessLinkPreviewService')
+const accessLinkPreviewModule = require('../modules/accessLinks/previewService')
 const { buildDefensePublicPath } = require('../utils/publicRoutes')
+const {
+  normalizeVoteLinkTarget,
+  normalizeSoutenanceLinkTarget
+} = require('../modules/accessLinks/constants')
 const {
   syncLegacyCatalogToPlanning,
   rebuildWorkflowFromLegacyPlanning
 } = require('../services/legacyPlanningBridgeService')
+const {
+  COORDINATION_PROPOSAL_READY_STATUSES
+} = require('../modules/coordination/status')
+const {
+  VOTING_STAKEHOLDER_ROLES,
+  formatTpiStakeholderRoleLabel
+} = require('../modules/stakeholders/stakeholderDefinitions')
 
 const router = express.Router()
 const IS_DEBUG = process.env.NODE_ENV !== 'production' && process.env.REACT_APP_DEBUG === 'true'
+const AUTOMATIC_EMAIL_SENDS_DISABLED_REASON = 'automatic_email_sends_disabled'
 
 function parsePositiveInteger(rawValue, fallbackValue) {
   if (rawValue === undefined) {
@@ -67,6 +79,24 @@ function parseBoolean(rawValue, fallbackValue = false) {
   return fallbackValue
 }
 
+function parseOptionalBoolean(rawValue) {
+  if (typeof rawValue === 'boolean') {
+    return rawValue
+  }
+
+  if (typeof rawValue === 'string') {
+    const normalized = rawValue.trim().toLowerCase()
+    if (normalized === 'true') {
+      return true
+    }
+    if (normalized === 'false') {
+      return false
+    }
+  }
+
+  return null
+}
+
 function normalizeBaseUrl(rawValue, fallbackValue) {
   if (typeof rawValue === 'string' && rawValue.trim().length > 0) {
     return rawValue.trim().replace(/\/+$/, '')
@@ -82,17 +112,9 @@ function getFrontendBaseUrl(req) {
   )
 }
 
-function normalizeSoutenanceLinkTarget(rawValue) {
-  return rawValue === 'publication' ? 'publication' : 'app'
-}
-
-function normalizeVoteLinkTarget(rawValue) {
-  return rawValue === 'static' || rawValue === 'publication' ? 'static' : 'app'
-}
-
 async function getAccessLinkSettingsForYear(year) {
-  const config = await planningConfigService.getPlanningConfigIfAvailable(year)
-  return planningConfigService.normalizeAccessLinkSettings(config?.accessLinkSettings)
+  const config = await coordinationConfigService.getPlanningConfigIfAvailable(year)
+  return coordinationConfigService.normalizeAccessLinkSettings(config?.accessLinkSettings)
 }
 
 async function resolveAccessLinkTargets(year, body = {}) {
@@ -144,6 +166,51 @@ function compactText(value) {
   return String(value).trim()
 }
 
+async function getConfiguredSoutenancePublicUrl(year) {
+  try {
+    const status = await staticDefensePublicationService.getStaticPublicationStatus(year)
+    return compactText(status?.publicUrl)
+  } catch (error) {
+    console.warn(`URL publique défense ${year} indisponible:`, error?.message || error)
+    return ''
+  }
+}
+
+async function resolveSoutenancePublicationLinkTarget(year, rawPublicUrl) {
+  const explicitTarget = buildSoutenancePublicationLinkTarget(rawPublicUrl)
+
+  if (explicitTarget) {
+    return explicitTarget
+  }
+
+  const configuredPublicUrl = await getConfiguredSoutenancePublicUrl(year)
+  return buildSoutenancePublicationLinkTarget(configuredPublicUrl)
+}
+
+async function applySoutenanceSendLinkOptions(year, body = {}, sendLinkOptions = {}) {
+  const settings = await getAccessLinkSettingsForYear(year)
+  const requestedSoutenanceLinkTarget = compactText(body?.soutenanceLinkTarget)
+  const soutenanceLinkTarget = normalizeSoutenanceLinkTarget(
+    requestedSoutenanceLinkTarget || settings.defaultSoutenanceLinkTarget
+  )
+  const requestedSoutenancePublicUrl = compactText(body?.soutenancePublicUrl || body?.publicationPublicUrl)
+
+  if (requestedSoutenanceLinkTarget || soutenanceLinkTarget === 'publication') {
+    sendLinkOptions.soutenanceLinkTarget = soutenanceLinkTarget
+  }
+
+  if (requestedSoutenancePublicUrl) {
+    sendLinkOptions.soutenancePublicUrl = requestedSoutenancePublicUrl
+  } else if (soutenanceLinkTarget === 'publication') {
+    const configuredPublicUrl = await getConfiguredSoutenancePublicUrl(year)
+    if (configuredPublicUrl) {
+      sendLinkOptions.soutenancePublicUrl = configuredPublicUrl
+    }
+  }
+
+  return sendLinkOptions
+}
+
 function normalizeReference(value) {
   return compactText(value)
     .toLowerCase()
@@ -164,26 +231,6 @@ function matchesReference(candidateReference, requestedReference) {
 
 function formatPersonName(person) {
   return [person?.firstName, person?.lastName].filter(Boolean).join(' ').trim()
-}
-
-function formatRoleLabel(role) {
-  if (role === 'expert1') {
-    return 'Expert 1'
-  }
-
-  if (role === 'expert2') {
-    return 'Expert 2'
-  }
-
-  if (role === 'chef_projet') {
-    return 'Chef de projet'
-  }
-
-  if (role === 'candidat') {
-    return 'Candidat'
-  }
-
-  return compactText(role)
 }
 
 function buildRedirectPath(pathname, query = {}) {
@@ -267,16 +314,16 @@ function extractDirectPublicationTargets(snapshot) {
 }
 
 async function getValidatedSnapshotForDirectPublication(year) {
-  const snapshot = await planningValidationService.getActiveSnapshot(year)
+  const snapshot = await coordinationValidationService.getActiveSnapshot(year)
 
   if (!snapshot) {
     throw createDirectPublicationError(
-      'Un snapshot actif est requis avant la publication directe. Geler d abord la planification.',
+      'Un snapshot actif est requis avant la publication directe. Geler d\'abord la planification.',
       { year, hasSnapshot: false }
     )
   }
 
-  const validation = await planningValidationService.validatePlanningForYear(year)
+  const validation = await coordinationValidationService.validatePlanningForYear(year)
 
   if (!validation.summary?.isValid) {
     throw createDirectPublicationError(
@@ -290,7 +337,7 @@ async function getValidatedSnapshotForDirectPublication(year) {
     )
   }
 
-  if (!planningValidationService.isValidationAlignedWithSnapshot(snapshot, validation)) {
+  if (!coordinationValidationService.isValidationAlignedWithSnapshot(snapshot, validation)) {
     throw createDirectPublicationError(
       'La planification a été modifiée depuis le dernier snapshot. Geler une nouvelle version avant publication directe.',
       {
@@ -373,7 +420,7 @@ async function confirmSnapshotForDirectPublication({ year, snapshot }) {
 
   if (failures.length > 0) {
     throw createDirectPublicationError(
-      'Publication directe bloquee: certains créneaux n ont pas pu être confirmés.',
+      'Publication directe bloquée: certains créneaux n\'ont pas pu être confirmés.',
       {
         year,
         snapshotVersion: snapshot?.version || null,
@@ -397,7 +444,7 @@ async function confirmSnapshotForDirectPublication({ year, snapshot }) {
 async function findDevVoteLinkTarget(year, requestedReference = '') {
   const tpis = await TpiPlanning.find({
     year,
-    status: { $in: ['voting', 'pending_slots'] }
+    status: { $in: COORDINATION_PROPOSAL_READY_STATUSES }
   })
     .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email')
     .sort({ reference: 1 })
@@ -428,7 +475,7 @@ async function findDevVoteLinkTarget(year, requestedReference = '') {
       byRole.set(vote.voterRole, vote)
     }
 
-    const requiredRoles = ['expert1', 'expert2', 'chef_projet']
+    const requiredRoles = VOTING_STAKEHOLDER_ROLES
     const votes = requiredRoles
       .map(role => byRole.get(role))
       .filter(Boolean)
@@ -444,6 +491,18 @@ async function findDevVoteLinkTarget(year, requestedReference = '') {
   }
 
   return null
+}
+
+async function ensureWorkflowFreeVoteRecordsForYear(year) {
+  const tpis = await TpiPlanning.find({
+    year,
+    status: { $in: COORDINATION_PROPOSAL_READY_STATUSES },
+    proposedSlots: { $exists: true, $ne: [] }
+  })
+    .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
+    .populate('proposedSlots.slot')
+
+  return await votingCampaignService.ensureVoteRecordsForTpis(tpis)
 }
 
 async function findDevSoutenanceLinkTarget(year, requestedReference = '') {
@@ -490,7 +549,7 @@ async function findDevSoutenanceLinkTarget(year, requestedReference = '') {
         seenPersonIds.add(personId)
         participants.push({
           ...participant,
-          roleLabel: formatRoleLabel(participant.role)
+          roleLabel: formatTpiStakeholderRoleLabel(participant.role)
         })
       }
 
@@ -524,7 +583,7 @@ router.get(
       const year = req.validatedParams.year
       const includeEntries = parseBoolean(req.query.includeEntries, false)
 
-      const validation = await planningValidationService.validatePlanningForYear(year)
+      const validation = await coordinationValidationService.validatePlanningForYear(year)
 
       const response = {
         year: validation.year,
@@ -556,25 +615,14 @@ router.post(
     const year = req.validatedParams.year
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-
-      if (workflow.state !== 'planning') {
-        return res.status(409).json({
-          error: 'Planification automatique impossible hors etat planning.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'planning'
-          }
-        })
-      }
+      await workflowService.getWorkflowYearState(year)
 
       const syncSummary = await syncLegacyCatalogToPlanning({
         year,
         createdBy: req.user
       })
-      const result = await planningAutomationService.autoPlanYear(year)
-      const validation = await planningValidationService.validatePlanningForYear(year)
+      const result = await coordinationAutomationService.autoPlanYear(year)
+      const validation = await coordinationValidationService.validatePlanningForYear(year)
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -584,6 +632,7 @@ router.post(
           syncCreatedCount: syncSummary.createdCount,
           plannedCount: result.plannedCount,
           manualRequiredCount: result.manualRequiredCount,
+          constraintOverrideCount: result.constraintOverrideCount,
           slotCount: result.slotCount,
           roomCount: result.roomCount
         },
@@ -635,18 +684,6 @@ router.post(
       let migrationSummary = null
 
       if (legacyRooms) {
-        const workflow = await workflowService.getWorkflowYearState(year)
-        if (workflow.state !== 'planning') {
-          return res.status(409).json({
-            error: 'Validation de la planification impossible hors etat planning.',
-            details: {
-              year,
-              state: workflow.state,
-              requiredState: 'planning'
-            }
-          })
-        }
-
         migrationSummary = await rebuildWorkflowFromLegacyPlanning({
           year,
           legacyRooms,
@@ -654,7 +691,7 @@ router.post(
         })
       }
 
-      const validation = await planningValidationService.validatePlanningForYear(year)
+      const validation = await coordinationValidationService.validatePlanningForYear(year)
 
       const response = {
         year: validation.year,
@@ -690,7 +727,7 @@ router.get(
     try {
       const year = req.validatedParams.year
       const includeEntries = parseBoolean(req.query.includeEntries, false)
-      const snapshot = await planningValidationService.getActiveSnapshot(year)
+      const snapshot = await coordinationValidationService.getActiveSnapshot(year)
 
       if (!snapshot) {
         return res.status(404).json({ error: 'Aucun snapshot actif pour cette annee.' })
@@ -734,18 +771,7 @@ router.post(
     let migrationSummary = null
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-
-      if (workflow.state !== 'planning') {
-        return res.status(409).json({
-          error: 'Freeze impossible hors etat planning.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'planning'
-          }
-        })
-      }
+      await workflowService.getWorkflowYearState(year)
 
       if (legacyRooms) {
         migrationSummary = await rebuildWorkflowFromLegacyPlanning({
@@ -763,7 +789,7 @@ router.post(
         })
       }
 
-      const result = await planningValidationService.freezePlanningSnapshot({
+      const result = await coordinationValidationService.freezePlanningSnapshot({
         year,
         user: req.user,
         allowHardConflicts
@@ -795,7 +821,7 @@ router.post(
         hardConflicts: result.snapshot.hardConflicts
       })
     } catch (error) {
-      if (error instanceof planningValidationService.PlanningFreezeError) {
+      if (error instanceof coordinationValidationService.PlanningFreezeError) {
         await workflowService.logWorkflowAuditEvent({
           year,
           action: 'workflow.planification.freeze',
@@ -829,50 +855,22 @@ router.post(
     const legacyRooms = Array.isArray(req.body?.legacyRooms) && req.body.legacyRooms.length > 0
       ? req.body.legacyRooms
       : null
-    const skipEmails = parseBoolean(req.body?.skipEmails, false)
+    const skipEmails = true
     let migrationSummary = null
+    const workflowWarnings = []
 
     try {
-      if (skipEmails && !IS_DEBUG) {
-        return res.status(403).json({
-          error: 'L ouverture des votes sans emails est indisponible hors mode debug.'
-        })
-      }
-
       const workflow = await workflowService.getWorkflowYearState(year)
+      let nextWorkflow = workflow
 
-      if (workflow.state === 'published') {
-        return res.status(409).json({
-          error: 'Campagne de votes impossible en etat published.',
-          details: {
-            year,
-            state: workflow.state
-          }
-        })
-      }
-
-      if (legacyRooms && workflow.state !== 'planning') {
-        return res.status(409).json({
-          error: 'La synchronisation legacy est autorisée uniquement avant l ouverture des votes.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'planning'
-          }
-        })
-      }
-
-      const snapshot = await planningValidationService.getActiveSnapshot(year)
-      if (workflow.state === 'planning' && !snapshot) {
-        return res.status(409).json({
-          error: 'Un snapshot actif est requis avant l ouverture des votes. Geler d abord la planification.',
-          details: { year, hasSnapshot: false }
-        })
+      const snapshot = await coordinationValidationService.getActiveSnapshot(year)
+      if (!snapshot) {
+        workflowWarnings.push('Aucun snapshot actif: normalement la planification est gelée avant les votes.')
       }
 
       const votingTpiCount = await TpiPlanning.countDocuments({
         year,
-        status: { $in: ['voting', 'pending_slots'] }
+        status: { $in: COORDINATION_PROPOSAL_READY_STATUSES }
       })
 
       if (legacyRooms || votingTpiCount === 0) {
@@ -883,58 +881,6 @@ router.post(
             legacyRooms,
             createdBy: req.user
           })
-        }
-      }
-
-      if (workflow.state === 'planning') {
-        const validation = await planningValidationService.validatePlanningForYear(year)
-
-        if (!validation.summary?.isValid) {
-          return res.status(409).json({
-            error: 'La planification courante contient encore des erreurs bloquantes. Corrigez-les puis regeler la planification.',
-            details: {
-              year,
-              snapshotVersion: snapshot?.version || null,
-              summary: validation.summary,
-              issues: validation.issues
-            }
-          })
-        }
-
-        if (!planningValidationService.isValidationAlignedWithSnapshot(snapshot, validation)) {
-          return res.status(409).json({
-            error: 'La planification a été modifiée depuis le dernier snapshot. Geler une nouvelle version avant d ouvrir les votes.',
-            details: {
-              year,
-              snapshotVersion: snapshot?.version || null,
-              summary: validation.summary,
-              issues: validation.issues
-            }
-          })
-        }
-
-        try {
-          await workflowService.transitionWorkflowYear({
-            year,
-            targetState: 'voting_open',
-            user: req.user
-          })
-        } catch (error) {
-          if (error instanceof workflowService.WorkflowTransitionError) {
-            await workflowService.safeAuditTransitionFailure({
-              year,
-              user: req.user,
-              targetState: 'voting_open',
-              error
-            })
-
-            return res.status(error.statusCode || 409).json({
-              error: error.message,
-              details: error.details
-            })
-          }
-
-          throw error
         }
       }
 
@@ -966,7 +912,9 @@ router.post(
           tpiCount: result.tpiCount,
           totalEmails: result.totalEmails,
           successfulEmails: result.successfulEmails,
-          emailsSkipped: result.emailsSkipped === true
+          emailsSkipped: result.emailsSkipped === true,
+          emailSkipReason: result.emailSkipReason || AUTOMATIC_EMAIL_SENDS_DISABLED_REASON,
+          warnings: workflowWarnings
         },
         success: true
       })
@@ -974,7 +922,10 @@ router.post(
       return res.status(200).json({
         success: true,
         year,
-        workflowState: 'voting_open',
+        workflowState: nextWorkflow?.state || 'planning',
+        workflow: nextWorkflow,
+        activePhases: nextWorkflow?.activePhases || [],
+        warnings: workflowWarnings,
         summary: migrationSummary,
         ...result
       })
@@ -995,16 +946,22 @@ async function handleDevVoteLinks(req, res) {
 
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
+    const accessLinkSettings = await getAccessLinkSettingsForYear(year)
+    const workflowFreeModeEnabled = accessLinkSettings.workflowFreeModeEnabled === true
 
-    if (workflow.state !== 'voting_open') {
+    if (!workflow?.phases?.votes?.active && !workflowFreeModeEnabled) {
       return res.status(409).json({
-        error: 'Le mode test de vote est disponible uniquement quand les votes sont ouverts.',
+        error: 'Le mode test de vote est disponible uniquement quand la phase Votes est active.',
         details: {
           year,
-          state: workflow.state,
-          requiredState: 'voting_open'
+          activePhases: workflow?.activePhases || [],
+          requiredPhase: 'votes'
         }
       })
+    }
+
+    if (workflowFreeModeEnabled) {
+      await ensureWorkflowFreeVoteRecordsForYear(year)
     }
 
     const target = await findDevVoteLinkTarget(year, requestedReference)
@@ -1018,14 +975,14 @@ async function handleDevVoteLinks(req, res) {
     }
 
     const baseUrl = getFrontendBaseUrl(req)
-    const redirectPath = buildRedirectPath(`/planning/${year}`, {
+    const redirectPath = buildRedirectPath(`/coordination/${year}`, {
       previewVote: '1',
       focus: target.tpi.reference || ''
     })
     const links = []
 
     for (const vote of target.votes) {
-      const link = await magicLinkV2Service.createVoteMagicLink({
+      const link = await accessLinkTokenService.createVoteMagicLink({
         year,
         person: vote.voter,
         role: vote.voterRole,
@@ -1041,7 +998,7 @@ async function handleDevVoteLinks(req, res) {
       links.push({
         type: 'vote',
         role: vote.voterRole,
-        roleLabel: formatRoleLabel(vote.voterRole),
+        roleLabel: formatTpiStakeholderRoleLabel(vote.voterRole),
         voter: {
           id: String(vote.voter._id),
           name: formatPersonName(vote.voter),
@@ -1083,16 +1040,22 @@ async function handleDevVoteEmails(req, res) {
 
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
+    const accessLinkSettings = await getAccessLinkSettingsForYear(year)
+    const workflowFreeModeEnabled = accessLinkSettings.workflowFreeModeEnabled === true
 
-    if (workflow.state !== 'voting_open') {
+    if (!workflow?.phases?.votes?.active && !workflowFreeModeEnabled) {
       return res.status(409).json({
-        error: 'Le mode test de vote est disponible uniquement quand les votes sont ouverts.',
+        error: 'Le mode test de vote est disponible uniquement quand la phase Votes est active.',
         details: {
           year,
-          state: workflow.state,
-          requiredState: 'voting_open'
+          activePhases: workflow?.activePhases || [],
+          requiredPhase: 'votes'
         }
       })
+    }
+
+    if (workflowFreeModeEnabled) {
+      await ensureWorkflowFreeVoteRecordsForYear(year)
     }
 
     const target = await findDevVoteLinkTarget(year, requestedReference)
@@ -1106,7 +1069,7 @@ async function handleDevVoteEmails(req, res) {
     }
 
     const baseUrl = getFrontendBaseUrl(req)
-    const redirectPath = buildRedirectPath(`/planning/${year}`, {
+    const redirectPath = buildRedirectPath(`/coordination/${year}`, {
       previewVote: '1',
       focus: target.tpi.reference || ''
     })
@@ -1120,7 +1083,7 @@ async function handleDevVoteEmails(req, res) {
     const emailSettings = await getSharedEmailSettingsIfAvailable()
 
     for (const vote of target.votes) {
-      const link = await magicLinkV2Service.createVoteMagicLink({
+      const link = await accessLinkTokenService.createVoteMagicLink({
         year,
         person: vote.voter,
         recipientEmail,
@@ -1136,11 +1099,11 @@ async function handleDevVoteEmails(req, res) {
       })
 
       const emailDelivery = await emailService.sendEmail(recipientEmail, 'voteRequest', {
-        recipientName: formatPersonName(vote.voter) || formatRoleLabel(vote.voterRole),
+        recipientName: formatPersonName(vote.voter) || formatTpiStakeholderRoleLabel(vote.voterRole),
         candidateName,
         tpiReference: target.tpi.reference,
         tpiSubject: target.tpi.sujet || '',
-        role: formatRoleLabel(vote.voterRole),
+        role: formatTpiStakeholderRoleLabel(vote.voterRole),
         slots,
         deadline: fallbackDeadline || link.expiresAt.toLocaleDateString('fr-CH'),
         magicLinkUrl: link.url
@@ -1153,7 +1116,7 @@ async function handleDevVoteEmails(req, res) {
       links.push({
         type: 'vote',
         role: vote.voterRole,
-        roleLabel: formatRoleLabel(vote.voterRole),
+        roleLabel: formatTpiStakeholderRoleLabel(vote.voterRole),
         viewer: {
           id: String(vote.voter._id),
           name: formatPersonName(vote.voter),
@@ -1205,14 +1168,16 @@ async function handleDevSoutenanceEmails(req, res) {
 
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
+    const accessLinkSettings = await getAccessLinkSettingsForYear(year)
+    const workflowFreeModeEnabled = accessLinkSettings.workflowFreeModeEnabled === true
 
-    if (workflow.state !== 'published') {
+    if (!workflow?.phases?.defenses?.active && !workflowFreeModeEnabled) {
       return res.status(409).json({
-        error: 'Le mode test défense est disponible uniquement apres publication.',
+        error: 'Le mode test défense est disponible uniquement quand la phase Défenses est active.',
         details: {
           year,
-          state: workflow.state,
-          requiredState: 'published'
+          activePhases: workflow?.activePhases || [],
+          requiredPhase: 'defenses'
         }
       })
     }
@@ -1236,7 +1201,7 @@ async function handleDevSoutenanceEmails(req, res) {
     const emailSettings = await getSharedEmailSettingsIfAvailable()
 
     for (const participant of target.participants) {
-      const link = await magicLinkV2Service.createSoutenanceMagicLink({
+      const link = await accessLinkTokenService.createSoutenanceMagicLink({
         year,
         person: {
           _id: participant.personId,
@@ -1257,6 +1222,7 @@ async function handleDevSoutenanceEmails(req, res) {
 
       const emailDelivery = await emailService.sendEmail(recipientEmail, 'soutenanceAccess', {
         recipientName: participant.name || participant.roleLabel,
+        recipientRoles: [participant.role],
         year,
         magicLinkUrl: link.url,
         deadline: link.expiresAt.toLocaleDateString('fr-CH')
@@ -1385,6 +1351,58 @@ async function safeLogAccessLinksAudit(event) {
   }
 }
 
+async function refreshGeneratedAccessPublications({
+  year,
+  voteLinkTarget,
+  soutenanceLinkTarget
+}) {
+  const result = {
+    votePublication: null,
+    soutenancePublication: null,
+    warnings: []
+  }
+
+  if (voteLinkTarget === 'static') {
+    try {
+      const generated = await staticVotePublicationService.generateStaticVotesSite(year)
+      let published = null
+
+      try {
+        published = await staticVotePublicationService.publishStaticVotesSite(year)
+      } catch (error) {
+        result.warnings.push(
+          `Mini-site vote généré localement, mais publication FTP échouée: ${error.message}`
+        )
+      }
+
+      result.votePublication = published || generated
+    } catch (error) {
+      result.warnings.push(`Mini-site vote non rafraîchi: ${error.message}`)
+    }
+  }
+
+  if (soutenanceLinkTarget === 'publication') {
+    try {
+      const generated = await staticDefensePublicationService.generateStaticDefensesSite(year)
+      let published = null
+
+      try {
+        published = await staticDefensePublicationService.publishStaticDefensesSite(year)
+      } catch (error) {
+        result.warnings.push(
+          `Mini-site défense généré localement, mais publication FTP échouée: ${error.message}`
+        )
+      }
+
+      result.soutenancePublication = published || generated
+    } catch (error) {
+      result.warnings.push(`Mini-site défense non rafraîchi: ${error.message}`)
+    }
+  }
+
+  return result
+}
+
 async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
   const year = req.validatedParams.year
   const actionLabel = generateLinks ? 'generation' : 'preparation'
@@ -1393,6 +1411,7 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
     const workflow = await workflowService.getWorkflowYearState(year)
     const baseUrl = getFrontendBaseUrl(req)
     const {
+      settings,
       voteLinkTarget,
       soutenanceLinkTarget
     } = await resolveAccessLinkTargets(year, req.body)
@@ -1403,7 +1422,10 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
       )
       : null
     const publicationTarget = soutenanceLinkTarget === 'publication'
-      ? buildSoutenancePublicationLinkTarget(req.body?.soutenancePublicUrl || req.body?.publicationPublicUrl)
+      ? await resolveSoutenancePublicationLinkTarget(
+        year,
+        req.body?.soutenancePublicUrl || req.body?.publicationPublicUrl
+      )
       : null
 
     if (soutenanceLinkTarget === 'publication' && !publicationTarget) {
@@ -1413,18 +1435,28 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
     }
 
     const publicationVersion = parseOptionalPositiveInteger(req.body?.publicationVersion)
-    const preview = await buildAccessLinkPreview({
+    const preview = await accessLinkPreviewModule.buildAccessLinkPreview({
       year,
       baseUrl,
       voteBaseUrl: votePublicationTarget?.baseUrl || baseUrl,
-      voteRedirectPath: votePublicationTarget?.redirectPath || `/planning/${year}`,
+      voteRedirectPath: votePublicationTarget?.redirectPath || `/coordination/${year}`,
       voteLinkTarget,
       soutenanceBaseUrl: publicationTarget?.baseUrl || baseUrl,
       soutenanceRedirectPath: publicationTarget?.redirectPath || buildDefensePublicPath(year),
       soutenanceLinkTarget: publicationTarget ? 'publication' : 'app',
       publicationVersion,
+      autoPublishSoutenance: generateLinks === true,
+      publicationUser: req.user,
+      workflowFreeModeEnabled: true,
       generateLinks
     })
+    const publicationRefresh = generateLinks
+      ? await refreshGeneratedAccessPublications({
+        year,
+        voteLinkTarget,
+        soutenanceLinkTarget: publicationTarget ? 'publication' : 'app'
+      })
+      : null
 
     if (generateLinks) {
       await safeLogAccessLinksAudit({
@@ -1433,15 +1465,21 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
         user: req.user,
         payload: {
           summary: preview.summary,
-          contexts: preview.contexts
+          contexts: preview.contexts,
+          publicationRefresh
         },
-        success: true
+        success: !publicationRefresh?.warnings?.length,
+        error: publicationRefresh?.warnings?.join(' | ') || undefined
       })
     }
 
     return res.status(200).json({
       success: true,
       workflowState: workflow?.state || 'planning',
+      workflowPhases: workflow?.phases || {},
+      activePhases: workflow?.activePhases || [],
+      publicationRefresh,
+      warnings: publicationRefresh?.warnings || [],
       ...preview
     })
   } catch (error) {
@@ -1468,6 +1506,233 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
   }
 }
 
+function normalizeEmailPreviewTarget(rawTarget = {}) {
+  const target = rawTarget && typeof rawTarget === 'object' ? rawTarget : {}
+
+  return {
+    clientKey: compactText(target.clientKey || target.deliveryKey),
+    linkId: compactText(target.linkId || target.id),
+    personId: compactText(target.personId),
+    recipientName: compactText(target.recipientName || target.personName || target.name),
+    recipientEmail: getRecipientEmail(target.recipientEmail || target.email),
+    recipientAudience: compactText(target.recipientAudience || target.audience),
+    recipientRoles: Array.isArray(target.recipientRoles)
+      ? target.recipientRoles.map(compactText).filter(Boolean)
+      : [],
+    magicLinkUrl: compactText(target.magicLinkUrl || target.url),
+    expiresAt: target.expiresAt || null
+  }
+}
+
+function formatEmailDeadline(value) {
+  const date = value ? new Date(value) : null
+  if (date && !Number.isNaN(date.getTime())) {
+    return date.toLocaleDateString('fr-CH')
+  }
+
+  return 'selon la configuration active'
+}
+
+function buildSoutenanceEmailTemplateData(year, target = {}) {
+  const normalizedTarget = normalizeEmailPreviewTarget(target)
+
+  return {
+    recipientName: normalizedTarget.recipientName || 'Jean Expert',
+    recipientAudience: normalizedTarget.recipientAudience || 'expert',
+    recipientRoles: normalizedTarget.recipientRoles.length > 0 ? normalizedTarget.recipientRoles : ['expert'],
+    year,
+    magicLinkUrl: normalizedTarget.magicLinkUrl || `https://tpi${String(year).slice(-2)}.ch/?ml=preview`,
+    deadline: formatEmailDeadline(normalizedTarget.expiresAt)
+  }
+}
+
+async function handleAccessEmailPreview(req, res) {
+  const year = req.validatedParams.year
+  const template = compactText(req.body?.template || 'soutenanceAccess')
+
+  if (template !== 'soutenanceAccess') {
+    return res.status(400).json({ error: 'Template email non supporté.' })
+  }
+
+  try {
+    const emailSettings = await getSharedEmailSettingsIfAvailable()
+    const email = emailService.emailTemplates.soutenanceAccess(
+      emailService.buildTemplateData(
+        buildSoutenanceEmailTemplateData(year, req.body?.target),
+        { emailSettings }
+      )
+    )
+
+    return res.status(200).json({
+      success: true,
+      year,
+      template,
+      subject: email.subject,
+      html: email.html,
+      text: email.text
+    })
+  } catch (error) {
+    console.error('Erreur prévisualisation email accès:', error)
+    return res.status(500).json({
+      error: 'Erreur lors de la prévisualisation du template email.'
+    })
+  }
+}
+
+function normalizeEmailBatchTargets(rawTargets) {
+  return (Array.isArray(rawTargets) ? rawTargets : [])
+    .slice(0, 250)
+    .map(normalizeEmailPreviewTarget)
+    .filter((target) => target.linkId)
+}
+
+async function handleSendSoutenanceAccessEmails(req, res) {
+  const year = req.validatedParams.year
+  const targets = normalizeEmailBatchTargets(req.body?.targets)
+  const testEmail = getRecipientEmail(req.body?.testEmail)
+  const forceResend = parseBoolean(req.body?.forceResend, false)
+
+  if (targets.length === 0) {
+    return res.status(400).json({ error: 'Aucun destinataire sélectionné.' })
+  }
+
+  if (testEmail && !isValidEmailAddress(testEmail)) {
+    return res.status(400).json({ error: 'Adresse email de test invalide.' })
+  }
+
+  const baseUrl = getFrontendBaseUrl(req)
+  const emailSettings = await getSharedEmailSettingsIfAvailable()
+  const results = []
+
+  for (const target of targets) {
+    try {
+      const resolvedLink = await accessLinkTokenService.findMagicLinkForEmailDelivery({
+        id: target.linkId,
+        year,
+        type: 'soutenance',
+        baseUrl
+      })
+
+      if (!resolvedLink?.raw || !resolvedLink?.public) {
+        results.push({
+          ...target,
+          deliveryStatus: 'failed',
+          error: 'Lien introuvable.'
+        })
+        continue
+      }
+
+      const rawLink = resolvedLink.raw
+      const publicLink = resolvedLink.public
+      const recipientEmail = testEmail || getRecipientEmail(rawLink.recipientEmail)
+      const magicLinkUrl = target.magicLinkUrl || publicLink.url
+
+      if (!recipientEmail || !isValidEmailAddress(recipientEmail)) {
+        results.push({
+          ...target,
+          recipientEmail,
+          deliveryStatus: 'failed',
+          error: 'Adresse email invalide.'
+        })
+        continue
+      }
+
+      if (!magicLinkUrl || publicLink.availabilityStatus !== 'available') {
+        results.push({
+          ...target,
+          recipientEmail,
+          deliveryStatus: 'failed',
+          error: 'Lien personnel indisponible ou expiré.'
+        })
+        continue
+      }
+
+      if (!testEmail && rawLink.emailDeliveryStatus === 'sent' && !forceResend) {
+        results.push({
+          ...target,
+          recipientEmail,
+          deliveryStatus: 'skipped',
+          sentAt: rawLink.emailSentAt || null,
+          messageId: rawLink.emailMessageId || '',
+          error: 'Déjà envoyé.'
+        })
+        continue
+      }
+
+      const sentAt = new Date()
+      const delivery = await emailService.sendEmail(recipientEmail, 'soutenanceAccess', {
+        recipientName: target.recipientName || rawLink.personName || recipientEmail,
+        recipientAudience: target.recipientAudience,
+        recipientRoles: target.recipientRoles,
+        year,
+        magicLinkUrl,
+        deadline: formatEmailDeadline(rawLink.expiresAt)
+      }, { emailSettings })
+
+      if (!testEmail) {
+        await accessLinkTokenService.markMagicLinkEmailDelivery({
+          id: rawLink._id,
+          status: delivery.success ? 'sent' : 'failed',
+          messageId: delivery.messageId || '',
+          error: delivery.error || '',
+          sentAt
+        })
+      }
+
+      results.push({
+        ...target,
+        recipientEmail,
+        recipientName: target.recipientName || rawLink.personName || '',
+        deliveryStatus: delivery.success ? 'sent' : 'failed',
+        sentAt: delivery.success ? sentAt.toISOString() : null,
+        messageId: delivery.messageId || '',
+        error: delivery.error || '',
+        testMode: Boolean(testEmail)
+      })
+    } catch (error) {
+      results.push({
+        ...target,
+        deliveryStatus: 'failed',
+        error: error?.message || 'Erreur lors de l’envoi.'
+      })
+    }
+  }
+
+  const sentCount = results.filter((entry) => entry.deliveryStatus === 'sent').length
+  const skippedCount = results.filter((entry) => entry.deliveryStatus === 'skipped').length
+  const failedCount = results.filter((entry) => entry.deliveryStatus === 'failed').length
+
+  await safeLogAccessLinksAudit({
+    year,
+    action: testEmail
+      ? 'workflow.access-links.email-test'
+      : 'workflow.access-links.email-send',
+    user: req.user,
+    payload: {
+      requestedCount: targets.length,
+      sentCount,
+      skippedCount,
+      failedCount,
+      testMode: Boolean(testEmail)
+    },
+    success: failedCount === 0,
+    error: failedCount > 0 ? `${failedCount} échec(s) email.` : undefined
+  })
+
+  return res.status(200).json({
+    success: failedCount === 0,
+    year,
+    testMode: Boolean(testEmail),
+    summary: {
+      requestedCount: targets.length,
+      sentCount,
+      skippedCount,
+      failedCount
+    },
+    results
+  })
+}
+
 router.post(
   '/:year/access-links/preview',
   requireYearParam('year'),
@@ -1484,6 +1749,37 @@ router.post(
   async (req, res) => handleAccessLinks(req, res, { generateLinks: true })
 )
 
+router.get(
+  '/:year/access-links/logs',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const logs = await accessLinkTokenService.listAccessLogs({
+        year,
+        type: compactText(req.query?.type),
+        status: compactText(req.query?.status),
+        personId: compactText(req.query?.personId),
+        limit: parsePositiveInteger(req.query?.limit, 100)
+      })
+
+      return res.status(200).json({
+        success: true,
+        year,
+        logs
+      })
+    } catch (error) {
+      console.error('Erreur lecture logs liens acces:', error)
+      return res.status(500).json({
+        error: 'Erreur lors de la lecture des logs de liens d acces.'
+      })
+    }
+  }
+)
+
 router.post(
   '/:year/votes/remind',
   requireYearParam('year'),
@@ -1493,19 +1789,6 @@ router.post(
     const year = req.validatedParams.year
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-
-      if (workflow.state !== 'voting_open') {
-        return res.status(409).json({
-          error: 'Relance impossible hors etat voting_open.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'voting_open'
-          }
-        })
-      }
-
       const baseUrl = `${req.protocol}://${req.get('host')}`
       const reminderOptions = { automatic: req.body?.automatic === true }
       const requestedVoteLinkTarget = compactText(req.body?.voteLinkTarget)
@@ -1556,19 +1839,6 @@ router.post(
     const year = req.validatedParams.year
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-
-      if (workflow.state !== 'voting_open') {
-        return res.status(409).json({
-          error: 'Cloture impossible hors etat voting_open.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'voting_open'
-          }
-        })
-      }
-
       const result = await votingCampaignService.closeVotesCampaign(year)
 
       await workflowService.logWorkflowAuditEvent({
@@ -1602,27 +1872,31 @@ router.post(
   requireRole('admin'),
   async (req, res) => {
     const year = req.validatedParams.year
+    const legacyRooms = Array.isArray(req.body?.legacyRooms) && req.body.legacyRooms.length > 0
+      ? req.body.legacyRooms
+      : null
     let directPublication = null
+    const workflowWarnings = []
 
     try {
       const workflow = await workflowService.getWorkflowYearState(year)
-      if (!['planning', 'voting_open', 'published'].includes(workflow.state)) {
-        return res.status(409).json({
-          error: 'Publication impossible dans l\'etat courant.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredStates: ['planning', 'voting_open', 'published']
-          }
-        })
+
+      if (legacyRooms) {
+        workflowWarnings.push('Publication générée depuis la planification courante fournie par l\'admin.')
       }
 
-      if (workflow.state === 'planning') {
-        const { snapshot } = await getValidatedSnapshotForDirectPublication(year)
-        directPublication = await confirmSnapshotForDirectPublication({
-          year,
-          snapshot
-        })
+      if (!legacyRooms && !workflow?.phases?.votes?.active) {
+        try {
+          const { snapshot } = await getValidatedSnapshotForDirectPublication(year)
+          directPublication = await confirmSnapshotForDirectPublication({
+            year,
+            snapshot
+          })
+        } catch (error) {
+          workflowWarnings.push(
+            error?.message || 'Publication directe lancée sans snapshot validé.'
+          )
+        }
       }
 
       const blockingStatuses = ['voting', 'pending_validation', 'manual_required']
@@ -1632,37 +1906,34 @@ router.post(
       })
 
       if (blockingCount > 0) {
-        return res.status(409).json({
-          error: 'Publication bloquee tant que des TPI restent en vote ou en intervention manuelle.',
-          details: {
-            year,
-            blockingStatuses,
-            blockingCount
-          }
-        })
+        workflowWarnings.push(
+          `${blockingCount} TPI restent en vote ou en intervention manuelle: publication forcée par l'admin.`
+        )
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`
       const defenseTargetUrl = buildDefensePublicPath(year)
-      const publishedResult = await publishedSoutenanceService.publishConfirmedPlanningSoutenances(year, req.user)
+      const publishedResult = legacyRooms
+        ? await publishedSoutenanceService.publishRoomsAsSoutenances(year, legacyRooms, req.user, {
+          origin: 'admin_current_planning'
+        })
+        : await publishedSoutenanceService.publishConfirmedPlanningSoutenances(year, req.user)
       const roomCount = Array.isArray(publishedResult?.rooms)
         ? publishedResult.rooms.length
         : 0
       const publicationVersion = publishedResult?.publicationVersion || null
-
-      if (workflow.state !== 'published') {
-        await workflowService.transitionWorkflowYear({
-          year,
-          targetState: 'published',
-          user: req.user,
-          allowDirectPublication: workflow.state === 'planning'
-        })
+      const sendLinkOptions = {
+        publicationRooms: Array.isArray(publishedResult?.rooms) ? publishedResult.rooms : [],
+        generateMissingAccessLinks: true,
+        skipEmails: true
       }
+      await applySoutenanceSendLinkOptions(year, req.body, sendLinkOptions)
 
       const sentLinks = await votingCampaignService.sendSoutenanceLinksForYear(
         year,
         baseUrl,
-        publicationVersion?.version || null
+        publicationVersion?.version || null,
+        sendLinkOptions
       )
 
       await workflowService.logWorkflowAuditEvent({
@@ -1674,7 +1945,8 @@ router.post(
           roomsCount: roomCount,
           sentLinks,
           directPublication,
-          targetUrl: defenseTargetUrl
+          targetUrl: defenseTargetUrl,
+          warnings: workflowWarnings
         },
         success: true
       })
@@ -1687,9 +1959,13 @@ router.post(
         sentLinks,
         directPublication,
         targetUrl: defenseTargetUrl,
+        workflow,
+        workflowState: workflow?.state || 'planning',
+        activePhases: workflow?.activePhases || [],
+        warnings: workflowWarnings,
         message: roomCount > 0
-          ? `${roomCount} salles publiees depuis le planning confirme${directPublication ? ' sans campagne de votes' : ''}`
-          : 'Aucune défense confirmee a publier'
+          ? `${roomCount} salles publiées depuis ${legacyRooms ? 'la planification courante' : 'la planification confirmée'}${directPublication ? ' sans campagne de votes' : ''}`
+          : 'Aucune défense confirmée à publier'
       })
     } catch (error) {
       if (error?.statusCode) {
@@ -1730,18 +2006,6 @@ router.post(
     }
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-      if (workflow.state !== 'published') {
-        return res.status(409).json({
-          error: 'Rollback possible uniquement en etat published.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'published'
-          }
-        })
-      }
-
       const rollbackResult = await publishedSoutenanceService.rollbackPublicationVersion(year, version)
       const defenseTargetUrl = buildDefensePublicPath(year)
 
@@ -1784,43 +2048,14 @@ router.post(
     const year = req.validatedParams.year
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-      if (workflow.state !== 'published') {
-        return res.status(409).json({
-          error: 'Desactivation possible uniquement en etat published.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'published'
-          }
-        })
-      }
-
+      const workflowWarnings = []
       const snapshot = await workflowService.hasActivePlanningSnapshot(year)
       if (!snapshot) {
-        return res.status(409).json({
-          error: 'Impossible de revenir aux votes sans snapshot de planification actif.',
-          details: {
-            year,
-            reason: 'missing_planning_snapshot'
-          }
-        })
+        workflowWarnings.push('Aucun snapshot actif: désactivation lancée par l\'admin.')
       }
 
       const deactivationResult = await publishedSoutenanceService.deactivatePublication(year)
-      const voteCampaignResult = deactivationResult.reopenedDirectPublicationCount > 0
-        ? await votingCampaignService.startVotesCampaign(
-          year,
-          `${req.protocol}://${req.get('host')}`,
-          { skipEmails: true }
-        )
-        : null
-      const transitionResult = await workflowService.transitionWorkflowYear({
-        year,
-        targetState: 'voting_open',
-        user: req.user,
-        allowReopenVotesFromPublication: true
-      })
+      const nextWorkflow = await workflowService.getWorkflowYearState(year)
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -1828,8 +2063,9 @@ router.post(
         user: req.user,
         payload: {
           ...deactivationResult,
-          voteCampaign: voteCampaignResult,
-          targetState: transitionResult?.workflow?.state || 'voting_open'
+          voteCampaign: null,
+          activePhases: nextWorkflow?.activePhases || [],
+          warnings: workflowWarnings
         },
         success: true
       })
@@ -1837,27 +2073,15 @@ router.post(
       return res.status(200).json({
         success: true,
         year,
-        workflowState: transitionResult?.workflow?.state || 'voting_open',
-        workflow: transitionResult?.workflow || null,
-        voteCampaign: voteCampaignResult,
+        workflowState: nextWorkflow?.state || 'planning',
+        workflow: nextWorkflow,
+        activePhases: nextWorkflow?.activePhases || [],
+        voteCampaign: null,
+        warnings: workflowWarnings,
         ...deactivationResult,
-        message: 'Publication des defenses desactivee. La campagne est revenue aux votes.'
+        message: 'Publication des défenses désactivée.'
       })
     } catch (error) {
-      if (error instanceof workflowService.WorkflowTransitionError) {
-        await workflowService.safeAuditTransitionFailure({
-          year,
-          user: req.user,
-          targetState: 'voting_open',
-          error
-        })
-
-        return res.status(error.statusCode || 409).json({
-          error: error.message,
-          details: error.details
-        })
-      }
-
       await workflowService.logWorkflowAuditEvent({
         year,
         action: 'workflow.publication.deactivate',
@@ -1882,20 +2106,16 @@ router.post(
     const year = req.validatedParams.year
 
     try {
-      const workflow = await workflowService.getWorkflowYearState(year)
-      if (workflow.state !== 'published') {
-        return res.status(409).json({
-          error: 'Envoi des liens possible uniquement en etat published.',
-          details: {
-            year,
-            state: workflow.state,
-            requiredState: 'published'
-          }
-        })
-      }
-
       const baseUrl = `${req.protocol}://${req.get('host')}`
-      const sentLinks = await votingCampaignService.sendSoutenanceLinksForYear(year, baseUrl)
+      const sendLinkOptions = {}
+      await applySoutenanceSendLinkOptions(year, req.body, sendLinkOptions)
+
+      const sentLinks = await votingCampaignService.sendSoutenanceLinksForYear(
+        year,
+        baseUrl,
+        null,
+        sendLinkOptions
+      )
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -1915,6 +2135,22 @@ router.post(
       return res.status(500).json({ error: 'Erreur lors de l\'envoi des liens défenses.' })
     }
   }
+)
+
+router.post(
+  '/:year/access-links/email-preview',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => handleAccessEmailPreview(req, res)
+)
+
+router.post(
+  '/:year/access-links/send-soutenance-emails',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => handleSendSoutenanceAccessEmails(req, res)
 )
 
 router.post(
@@ -2284,56 +2520,46 @@ router.get('/:year', requireYearParam('year'), authMiddleware, async (req, res) 
 })
 
 router.post(
-  '/:year/transition',
+  '/:year/phases/:phase',
   requireYearParam('year'),
   authMiddleware,
   requireRole('admin'),
-  requireNonEmptyBody('Donnees de transition requises.'),
+  requireNonEmptyBody('Donnees de phase requises.'),
   async (req, res) => {
     const year = req.validatedParams.year
-    const targetState = typeof req.body?.targetState === 'string'
-      ? req.body.targetState.trim()
-      : typeof req.body?.state === 'string'
-        ? req.body.state.trim()
-        : ''
+    const phase = workflowService.normalizeWorkflowPhase(req.params.phase)
+    const active = parseOptionalBoolean(req.body?.active)
+    const reason = compactText(req.body?.reason)
 
-    if (targetState.length === 0) {
-      return res.status(400).json({ error: 'targetState requis.' })
+    if (!phase) {
+      return res.status(400).json({ error: 'Phase workflow invalide.' })
     }
 
-    if (!workflowService.isWorkflowState(targetState)) {
-      return res.status(400).json({ error: 'Etat workflow invalide.' })
+    if (active === null) {
+      return res.status(400).json({ error: 'Valeur active requise.' })
     }
 
     try {
-      const result = await workflowService.transitionWorkflowYear({
+      const result = await workflowService.setWorkflowPhaseActive({
         year,
-        targetState,
-        user: req.user
+        phase,
+        active,
+        user: req.user,
+        reason
       })
 
       return res.status(200).json({
         success: true,
         changed: result.changed,
-        workflow: result.workflow
+        phase: result.phase,
+        active: result.active,
+        workflow: result.workflow,
+        workflowState: result.workflow?.state || 'planning',
+        activePhases: result.workflow?.activePhases || []
       })
     } catch (error) {
-      if (error instanceof workflowService.WorkflowTransitionError) {
-        await workflowService.safeAuditTransitionFailure({
-          year,
-          user: req.user,
-          targetState,
-          error
-        })
-
-        return res.status(error.statusCode || 409).json({
-          error: error.message,
-          details: error.details
-        })
-      }
-
-      console.error('Erreur transition workflow:', error)
-      return res.status(500).json({ error: 'Erreur lors de la transition workflow.' })
+      console.error('Erreur activation phase workflow:', error)
+      return res.status(500).json({ error: 'Erreur lors de la mise a jour de la phase workflow.' })
     }
   }
 )

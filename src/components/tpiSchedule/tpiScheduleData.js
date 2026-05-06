@@ -395,7 +395,10 @@ export const createEmptyTpi = () => ({
   candidatPersonId: "",
   expert1: { name: "", personId: "", offres: createEmptyOffer() },
   expert2: { name: "", personId: "", offres: createEmptyOffer() },
-  boss: { name: "", personId: "", offres: createEmptyOffer() }
+  boss: { name: "", personId: "", offres: createEmptyOffer() },
+  isConstraintOverride: false,
+  planningOverrideReason: "",
+  constraintWarnings: []
 })
 
 const normalizeOffer = (offer) => ({
@@ -425,6 +428,15 @@ const normalizeStakeholder = (entry, fallbackName = "", fallbackPersonId = "") =
 }
 
 export const normalizeTpi = (tpi = {}) => {
+  const constraintWarnings = Array.isArray(tpi.constraintWarnings)
+    ? tpi.constraintWarnings
+        .map((warning) => ({
+          type: compactText(warning?.type),
+          message: compactText(warning?.message || warning?.description)
+        }))
+        .filter((warning) => warning.message)
+    : []
+
   return {
     ...createEmptyTpi(),
     refTpi: tpi.refTpi ?? null,
@@ -445,7 +457,10 @@ export const normalizeTpi = (tpi = {}) => {
       tpi.boss,
       typeof tpi.boss === "string" ? tpi.boss : "",
       tpi.bossPersonId
-    )
+    ),
+    isConstraintOverride: Boolean(tpi.isConstraintOverride || constraintWarnings.length > 0),
+    planningOverrideReason: compactText(tpi.planningOverrideReason),
+    constraintWarnings
   }
 }
 

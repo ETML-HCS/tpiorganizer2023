@@ -58,16 +58,17 @@ jest.mock('../tpiControllers/TpiController', () => ({
 
 jest.mock('../tpiControllers/TpiRoomsController', () => ({
   createTpiCollectionForYear: jest.fn(),
+  publishSoutenancesFromPlanification: jest.fn(),
   publishSoutenancesFromPlanning: jest.fn(),
   transmitToDatabase: jest.fn(() => Promise.resolve(true))
 }))
 
-jest.mock('../../services/planningService', () => ({
-  workflowPlanningService: {},
-  planningCatalogService: {
+jest.mock('../../services/coordinationService', () => ({
+  workflowCoordinationService: {},
+  coordinationCatalogService: {
     getGlobal: jest.fn(() => Promise.resolve(null))
   },
-  planningConfigService: {
+  coordinationConfigService: {
     getByYear: jest.fn(() => Promise.resolve(null))
   },
   personService: {

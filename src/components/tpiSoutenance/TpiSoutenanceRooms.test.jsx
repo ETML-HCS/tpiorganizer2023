@@ -225,7 +225,7 @@ describe('TpiSoutenanceRooms', () => {
     expect(screen.getAllByText('10:00').length).toBeGreaterThan(0)
   })
 
-  test('tronque les noms des slots TPI à 28 caractères avec le nom complet en hover', () => {
+  test('tronque les noms des slots TPI à 24 caractères avec le nom complet en hover', () => {
     const longCandidateName = 'Alice Martin Dupont Très Long'
     const longExpertName = 'Expert Principal Avec Nom Très Long'
 
@@ -263,12 +263,12 @@ describe('TpiSoutenanceRooms', () => {
       </MemoryRouter>
     )
 
-    const truncatedCandidate = screen.getByText('Alice Martin Dupont Très ...')
-    const truncatedExpert = screen.getByText('Expert Principal Avec Nom...')
+    const truncatedCandidate = screen.getByText('Alice Martin Dupont T...')
+    const truncatedExpert = screen.getByText('Expert Principal Avec...')
 
-    expect(truncatedCandidate.textContent).toHaveLength(28)
+    expect(truncatedCandidate.textContent).toHaveLength(24)
     expect(truncatedCandidate).toHaveAttribute('title', longCandidateName)
-    expect(truncatedExpert.textContent).toHaveLength(28)
+    expect(truncatedExpert.textContent).toHaveLength(24)
     expect(truncatedExpert).toHaveAttribute('title', longExpertName)
   })
 
@@ -429,5 +429,54 @@ describe('TpiSoutenanceRooms', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1)
     expect(clickSpy).toHaveBeenCalledTimes(1)
     expect(clearPersonFilters).toHaveBeenCalledTimes(1)
+  })
+
+  test('affiche le lien de vote associe a la vue personnelle', () => {
+    render(
+      <MemoryRouter>
+        <RenderRooms
+          year={2026}
+          tpiDatas={[
+            {
+              site: 'ETML',
+              date: '2026-06-10',
+              name: 'A101',
+              tpiDatas: [
+                {
+                  id: 'room-a_0',
+                  refTpi: '2163',
+                  candidat: 'Alice Martin',
+                  expert1: { name: 'Expert 1' },
+                  expert2: { name: 'Expert 2' },
+                  boss: { name: 'Chef de projet' }
+                }
+              ]
+            }
+          ]}
+          schedule={[
+            { startTime: '08:00', endTime: '09:00' }
+          ]}
+          listOfPerson={[]}
+          isAnyFilterApplied={true}
+          personIcalFilter={{ name: 'Expert 1', role: 'expert' }}
+          voteAccessUrl='https://tpi26.ch/votes-2026/?ml=vote-token'
+          aggregatedICalPersonLabel='Expert 1'
+          loadData={jest.fn()}
+          token=''
+          isOn={false}
+          updateSoutenanceData={jest.fn()}
+        />
+      </MemoryRouter>
+    )
+
+    expect(
+      screen.getByText(/Télécharger votre iCal ou demander une modification de créneau/i)
+    ).toBeInTheDocument()
+
+    const voteLink = screen.getByRole('link', {
+      name: /demander une modification de créneau pour expert 1/i
+    })
+    expect(voteLink).toHaveAttribute('href', 'https://tpi26.ch/votes-2026/?ml=vote-token')
+    expect(voteLink).toHaveAttribute('rel', 'noopener noreferrer')
   })
 })

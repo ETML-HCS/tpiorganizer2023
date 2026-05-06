@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState, useRef } from "react"
+import React, { useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { Link, useLocation } from "react-router-dom"
-import { IS_DEBUG } from "../../config/appConfig"
 import PageToolbar from "../shared/PageToolbar"
 import { MAIN_NAVIGATION_LINKS } from "../shared/mainNavigation"
 import IconButtonContent from "../shared/IconButtonContent"
@@ -11,20 +10,25 @@ import {
   BanIcon,
   ChartIcon,
   CheckIcon,
-  ConfigurationIcon,
   CollapseIcon,
+  DataEditIcon,
+  DatabaseLoadIcon,
+  DatabaseSendIcon,
   DownloadIcon,
   ExpandIcon,
+  GearIcon,
+  JsonExportIcon,
+  JsonImportIcon,
+  LocalSaveIcon,
   MailIcon,
   PencilIcon,
   RefreshIcon,
+  RoomBatchAddIcon,
   RoomAddIcon,
-  SaveIcon,
   SearchIcon,
   SendIcon,
   SnowflakeIcon,
   TrashIcon,
-  UploadIcon,
   VoteIcon,
   WrapIcon,
   WrenchIcon
@@ -34,6 +38,7 @@ import {
   getSoutenanceDateBadgeTone,
   normalizeSoutenanceDateEntries
 } from "./soutenanceDateUtils"
+import { isValidationWarningIssue } from "./tpiScheduleValidationUtils"
 
 const formatPublicationTargetLabel = (url) => {
   const rawUrl = typeof url === "string" ? url.trim() : ""
@@ -57,7 +62,6 @@ const TpiScheduleButtons = ({
   onLoadConfig,
   onFetchConfig,
   selectedYear,
-  onYearChange,
   availableYears = [],
   workflowState = "planning",
   activeSnapshotVersion = null,
@@ -74,6 +78,8 @@ const TpiScheduleButtons = ({
   onCloseVotes,
   onPublishDefinitive,
   onDeactivatePublication = null,
+  workflowPhases = null,
+  onWorkflowPhaseToggle = null,
   onSendSoutenanceLinks,
   onGenerateStaticPublication = null,
   onPreviewStaticPublication = null,
@@ -145,10 +151,32 @@ const TpiScheduleButtons = ({
     : years[years.length - 1]
 
   const hasSnapshot = Boolean(activeSnapshotVersion)
-  const isPlanningState = workflowState === "planning"
-  const isVotingState = workflowState === "voting_open"
-  const isPublishedState = workflowState === "published"
-  const canOpenVoteTracking = isVotingState || isPublishedState
+  const isPhaseActive = (phase) => {
+    if (workflowPhases?.[phase] && typeof workflowPhases[phase].active === "boolean") {
+      return workflowPhases[phase].active
+    }
+
+    if (phase === "planning") {
+      return workflowState === "planning"
+    }
+
+    if (phase === "votes") {
+      return workflowState === "voting_open"
+    }
+
+    if (phase === "defenses") {
+      return workflowState === "published"
+    }
+
+    return false
+  }
+  const isPublishedState = isPhaseActive("defenses")
+  const workflowPhaseControls = [
+    { id: "planning", label: "Planification", icon: WrenchIcon },
+    { id: "votes", label: "Votes", icon: VoteIcon },
+    { id: "arbitrage", label: "Arbitrage", icon: PencilIcon },
+    { id: "defenses", label: "Défenses", icon: CheckIcon }
+  ]
   const isActionRunning = (actionKey) =>
     workflowActionLoading && pendingWorkflowAction === actionKey
   const planningHeaderSlot =
@@ -168,18 +196,23 @@ const TpiScheduleButtons = ({
     Boolean(validationResult) &&
     Number(validationResult?.year) === Number(effectiveYear) &&
     validationResult?.summary?.isValid === false
-  const canStartVotes = isPlanningState && hasSnapshot && !hasStaleSnapshot && hasSuccessfulValidation
-  const canPublishDirect = isPlanningState && canStartVotes
-  const canPublishDefinitive = canPublishDirect || isVotingState || isPublishedState
-
   const validationYear = Number.parseInt(validationResult?.year, 10)
   const validationSummary = validationResult?.summary || {}
+  const validationIssues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
   const validationIssueCount = Number(validationSummary.issueCount || validationSummary.hardConflictCount || 0)
+  const validationWarningCount = Number(
+    validationSummary.warningCount ??
+      validationIssues.filter(isValidationWarningIssue).length
+  )
+  const validationDisplayedIssues = validationIssues.filter((issue) =>
+    validationIssueCount > 0
+      ? !isValidationWarningIssue(issue)
+      : isValidationWarningIssue(issue)
+  )
   const validationClassMismatchCount = Number(validationSummary.classMismatchCount || 0)
   const validationSequenceViolationCount = Number(validationSummary.sequenceViolationCount || 0)
   const validationImportIssueCount = Number(validationSummary.importIssueCount || 0)
   const validationUnplannedTpiCount = Number(validationSummary.unplannedTpiCount || 0)
-  const validationIssues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
   const validationCheckedAt = validationResult?.checkedAt
     ? new Date(validationResult.checkedAt)
     : null
@@ -221,12 +254,10 @@ const TpiScheduleButtons = ({
   const closeVotesLabel = isActionRunning("closeVotes") ? "Clôture..." : "Clore votes"
   const publishDefinitiveLabel = isActionRunning("publish")
     ? "Publication..."
-    : isPlanningState
-      ? "Publier sans votes"
-      : "Publier définitif"
+    : "Publier défenses"
   const deactivatePublicationLabel = isActionRunning("deactivatePublication")
-    ? "Retour votes..."
-    : "Revenir aux votes"
+    ? "Désactivation..."
+    : "Désactiver défenses"
   const sendLinksLabel = isActionRunning("sendLinks") ? "Envoi..." : "Envoyer liens"
   const openSoutenancesLabel = "Ouvrir Défenses"
   const generateStaticPublicationLabel = isActionRunning("staticGenerate")
@@ -262,7 +293,8 @@ const TpiScheduleButtons = ({
     remindVotes: "Relance des votes",
     closeVotes: "Clôture des votes",
     publish: "Publication",
-    deactivatePublication: "Desactivation publication",
+    deactivatePublication: "Désactivation publication",
+    phaseToggle: "Activation de phase",
     sendLinks: "Envoi des liens",
     staticGenerate: "Génération page statique",
     staticPublish: "Publication FTP",
@@ -298,11 +330,15 @@ const TpiScheduleButtons = ({
     ? `Vérification ${effectiveYear} déjà effectuée${validationCheckedAtLabel ? ` le ${validationCheckedAtLabel}` : ""}.`
     : hasValidationForCurrentYear && validationIssueCount > 0
       ? `Vérification ${effectiveYear} terminée: ${validationIssueCount} erreur(s) détectée(s)${validationIssueDetailText}.`
+      : hasValidationForCurrentYear && validationWarningCount > 0
+        ? `Vérification ${effectiveYear} terminée: ${validationWarningCount} avertissement(s) de contrainte indiqué(s) sur les cartes.`
       : hasLocalConflictCount
-        ? `${localConflictCount} conflit(s) détecté(s) dans le planning local. Lance la vérification pour tenter une optimisation automatique et obtenir le détail.`
+        ? `${localConflictCount} conflit(s) détecté(s) dans la planification locale. Lance la vérification pour tenter une optimisation automatique et obtenir le détail.`
         : "Optimiser puis vérifier l'unicité par créneau, la séquence des TPI et les déplacements avant le snapshot."
   const workflowBadge = validationIssueCount > 0
     ? String(validationIssueCount)
+    : validationWarningCount > 0
+      ? String(validationWarningCount)
     : hasLocalConflictCount
       ? String(localConflictCount)
       : ""
@@ -328,6 +364,11 @@ const TpiScheduleButtons = ({
       label: "Finalisation",
       state: "published",
       icon: CheckIcon
+    },
+    {
+      id: "phases",
+      label: "Phases",
+      icon: PencilIcon
     },
     {
       id: "static-publication",
@@ -562,12 +603,6 @@ const TpiScheduleButtons = ({
                   ? "Prêt FTP"
                   : "À générer"
 
-  useEffect(() => {
-    const nextActiveWorkflowTab =
-      workflowTabs.find((tab) => tab.state === workflowState)?.id || "preparation"
-    setActiveWorkflowTab(nextActiveWorkflowTab)
-  }, [workflowState, workflowTabs])
-
   const toolbarTabs = useMemo(() => [
     {
       id: "data",
@@ -698,6 +733,12 @@ const TpiScheduleButtons = ({
   const normalizedSoutenanceDates = useMemo(() => {
     return normalizeSoutenanceDateEntries(soutenanceDates)
   }, [soutenanceDates])
+  const hasActiveRoomFilters = Boolean(roomFilters?.site || roomFilters?.date || roomFilters?.room)
+  const activeRoomFilterCount = [
+    roomFilters?.site,
+    roomFilters?.date,
+    roomFilters?.room
+  ].filter(Boolean).length
 
   const handleToggleRoomsFocusMode = () => {
     if (!isRoomsFocusMode) {
@@ -715,16 +756,82 @@ const TpiScheduleButtons = ({
     }
   }
 
-  const handleYearChange = (event) => {
-    const parsedYear = Number.parseInt(event.target.value, 10)
-    if (Number.isInteger(parsedYear) && onYearChange) {
-      onYearChange(parsedYear)
-    }
-  }
-
   const planningHeaderPortal = !isRoomsFocusMode && planningHeaderSlot
     ? createPortal(
         <div className="app-header-planification-slot">
+          {typeof onRoomFiltersChange === "function" ? (
+            <details className={`app-header-planification-filter-menu ${hasActiveRoomFilters ? "is-active" : ""}`.trim()}>
+              <summary
+                aria-label={
+                  hasActiveRoomFilters
+                    ? `${activeRoomFilterCount} filtre${activeRoomFilterCount > 1 ? "s" : ""} actif${activeRoomFilterCount > 1 ? "s" : ""}`
+                    : "Filtres de planification"
+                }
+                title="Filtrer site, date ou salle"
+              >
+                <SearchIcon className="app-header-planification-filter-icon" />
+                {activeRoomFilterCount > 0 ? (
+                  <span className="app-header-planification-filter-count">
+                    {activeRoomFilterCount}
+                  </span>
+                ) : null}
+              </summary>
+              <div className="app-header-planification-filter-panel">
+                <select
+                  className="app-header-planification-filter-control"
+                  value={roomFilters?.site || ""}
+                  onChange={(event) => onRoomFiltersChange({ site: event.target.value })}
+                  aria-label="Filtrer par site"
+                >
+                  <option value="">Sites</option>
+                  {normalizedRoomSiteOptions.map((site) => (
+                    <option key={site} value={site}>
+                      {site}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="app-header-planification-filter-control"
+                  value={roomFilters?.date || ""}
+                  onChange={(event) => onRoomFiltersChange({ date: event.target.value })}
+                  aria-label="Filtrer par date"
+                >
+                  <option value="">Dates</option>
+                  {normalizedRoomDateOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="app-header-planification-filter-control"
+                  value={roomFilters?.room || ""}
+                  onChange={(event) => onRoomFiltersChange({ room: event.target.value })}
+                  aria-label="Filtrer par salle"
+                >
+                  <option value="">Salles</option>
+                  {normalizedRoomNameOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="app-header-planification-filter-reset"
+                  onClick={() => onClearRoomFilters?.()}
+                  disabled={!hasActiveRoomFilters}
+                  aria-label="Réinitialiser les filtres"
+                  title="Réinitialiser les filtres"
+                >
+                  <RefreshIcon />
+                </button>
+                <span className="app-header-planification-filter-status" role="status">
+                  {roomsCount}/{totalRoomsCount}
+                </span>
+              </div>
+            </details>
+          ) : null}
           {typeof onToggleRoomsWrapMode === "function" ? (
             <button
               type="button"
@@ -758,20 +865,9 @@ const TpiScheduleButtons = ({
           <span className="app-header-planification-snapshot">
             Snapshot : {hasSnapshot ? `v${activeSnapshotVersion}` : "—"}
           </span>
-          <label className="app-header-planification-year" htmlFor="planning-year-select">
-            <select
-              id="planning-year-select"
-              onChange={handleYearChange}
-              value={effectiveYear}
-              aria-label="Année"
-            >
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </label>
+          <span className="app-header-planification-year">
+            Année {effectiveYear}
+          </span>
         </div>,
         planningHeaderSlot
       )
@@ -854,7 +950,7 @@ const TpiScheduleButtons = ({
             >
               <IconButtonContent
                 label={editButtonLabel}
-                icon={PencilIcon}
+                icon={DataEditIcon}
                 iconClassName="planning-button-icon"
                 badge={isEditing && hasTpiUsageCount ? `${usedTpiCount}/${totalTpiCount}` : null}
                 badgeClassName="ui-button-badge planning-edit-toggle-count"
@@ -869,7 +965,7 @@ const TpiScheduleButtons = ({
                 aria-label="Supprimer tout"
                 title={
                   deleteAllRoomsCount > 0
-                    ? `Supprimer toutes les salles du planning (${deleteAllRoomsCount}).`
+                    ? `Supprimer toutes les salles de la planification (${deleteAllRoomsCount}).`
                     : "Aucune salle à supprimer."
                 }
                 disabled={!onDeleteAllRooms || deleteAllRoomsCount <= 0}
@@ -898,7 +994,7 @@ const TpiScheduleButtons = ({
             >
               <IconButtonContent
                 label="Importer JSON"
-                icon={UploadIcon}
+                icon={JsonImportIcon}
                 iconClassName="planning-button-icon"
               />
             </label>
@@ -912,7 +1008,7 @@ const TpiScheduleButtons = ({
             >
               <IconButtonContent
                 label="Sauvegarder localement"
-                icon={SaveIcon}
+                icon={LocalSaveIcon}
                 iconClassName="planning-button-icon"
               />
             </button>
@@ -926,7 +1022,7 @@ const TpiScheduleButtons = ({
             >
               <IconButtonContent
                 label="Exporter JSON"
-                icon={DownloadIcon}
+                icon={JsonExportIcon}
                 iconClassName="planning-button-icon"
               />
             </button>
@@ -940,7 +1036,7 @@ const TpiScheduleButtons = ({
             >
               <IconButtonContent
                 label="Charger BDD"
-                icon={RefreshIcon}
+                icon={DatabaseLoadIcon}
                 iconClassName="planning-button-icon"
               />
             </button>
@@ -954,7 +1050,7 @@ const TpiScheduleButtons = ({
             >
               <IconButtonContent
                 label="Envoyer BDD"
-                icon={SendIcon}
+                icon={DatabaseSendIcon}
                 iconClassName="planning-button-icon"
               />
             </button>
@@ -967,13 +1063,44 @@ const TpiScheduleButtons = ({
           <div className="planning-tools-panel-head">
             <div className="planning-tools-panel-copy">
               <h4>Configuration</h4>
-              <p>Crée les salles du planning depuis Configuration.</p>
+              <p>Dates, sites et salles.</p>
             </div>
             <div className="planning-room-form-head-actions">
+              {typeof onTpiCardDetailLevelChange === "function" ? (
+                <div
+                  className="planning-room-density planning-room-density--header"
+                  role="radiogroup"
+                  aria-label="Niveau de détail des cartes TPI"
+                >
+                  <div className="planning-room-density-options">
+                    {cardDetailOptions.map((option) => {
+                      const isSelected = Number(tpiCardDetailLevel) === option.level
+
+                      return (
+                        <label
+                          key={option.level}
+                          className={`planning-room-density-option ${isSelected ? "active" : ""}`}
+                          title={option.title}
+                        >
+                          <input
+                            type="radio"
+                            name="planning-tpi-card-detail-level"
+                            value={option.level}
+                            checked={isSelected}
+                            onChange={() => onTpiCardDetailLevelChange(option.level)}
+                            aria-label={option.title}
+                          />
+                          <span className="planning-room-density-value">{option.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
               {typeof onShowNewRoomForm === "function" ? (
                 <button
                   type="button"
-                  className="page-tools-action-btn primary"
+                  className="page-tools-action-btn primary icon-button"
                   onClick={onShowNewRoomForm}
                   aria-label="Créer une room"
                   title="Créer une room manuellement"
@@ -982,7 +1109,6 @@ const TpiScheduleButtons = ({
                     label="Créer une room"
                     icon={RoomAddIcon}
                     iconClassName="planning-button-icon"
-                    showLabel={true}
                   />
                 </button>
               ) : null}
@@ -991,12 +1117,12 @@ const TpiScheduleButtons = ({
                   type="button"
                   className="page-tools-action-btn secondary icon-button"
                   onClick={onGenerateRoomsFromCatalog}
-                  aria-label="Créer les rooms du planning"
-                  title="Créer les rooms du planning"
+                  aria-label="Créer les rooms de la planification"
+                  title="Créer les rooms de la planification"
                 >
                   <IconButtonContent
-                    label="Créer les rooms du planning"
-                    icon={RoomAddIcon}
+                    label="Créer les rooms de la planification"
+                    icon={RoomBatchAddIcon}
                     iconClassName="planning-button-icon"
                   />
                 </button>
@@ -1009,7 +1135,7 @@ const TpiScheduleButtons = ({
               >
                 <IconButtonContent
                   label="Ouvrir Configuration"
-                  icon={ConfigurationIcon}
+                  icon={GearIcon}
                   iconClassName="planning-button-icon"
                 />
               </Link>
@@ -1084,10 +1210,10 @@ const TpiScheduleButtons = ({
                     const siteLabel = String(site || "").trim().toUpperCase()
 
                     return (
-                        <div key={site} className="planning-room-site-overview">
-                          <div className="planning-room-site-overview-head">
-                            <strong>{siteLabel}</strong>
-                          </div>
+                      <div key={site} className="planning-room-site-overview">
+                        <div className="planning-room-site-overview-head">
+                          <strong>{siteLabel}</strong>
+                        </div>
 
                         {roomNames.length > 0 ? (
                           <div className="planning-room-dates-list planning-room-dates-list--compact">
@@ -1117,108 +1243,6 @@ const TpiScheduleButtons = ({
               )}
             </article>
           </div>
-
-          {typeof onRoomFiltersChange === "function" ? (
-            <div className="planning-room-actions-row">
-              {typeof onTpiCardDetailLevelChange === "function" ? (
-                <div
-                  className="planning-room-density"
-                  role="radiogroup"
-                  aria-label="Niveau de détail des cartes TPI"
-                >
-                  <span className="planning-room-density-label">Cartes</span>
-                  <div className="planning-room-density-options">
-                    {cardDetailOptions.map((option) => {
-                      const isSelected = Number(tpiCardDetailLevel) === option.level
-
-                      return (
-                        <label
-                          key={option.level}
-                          className={`planning-room-density-option ${isSelected ? "active" : ""}`}
-                          title={option.title}
-                        >
-                          <input
-                            type="radio"
-                            name="planning-tpi-card-detail-level"
-                            value={option.level}
-                            checked={isSelected}
-                            onChange={() => onTpiCardDetailLevelChange(option.level)}
-                            aria-label={option.title}
-                          />
-                          <span className="planning-room-density-value">{option.label}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="planning-room-filters">
-                <div className="page-tools-field planning-room-filter">
-                  <select
-                    className="page-tools-field-control"
-                    value={roomFilters?.site || ""}
-                    onChange={(event) => onRoomFiltersChange({ site: event.target.value })}
-                    aria-label="Filtrer par site"
-                  >
-                    <option value="">Tous</option>
-                    {normalizedRoomSiteOptions.map((site) => (
-                      <option key={site} value={site}>
-                        {site}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="page-tools-field planning-room-filter">
-                  <select
-                    className="page-tools-field-control"
-                    value={roomFilters?.date || ""}
-                    onChange={(event) => onRoomFiltersChange({ date: event.target.value })}
-                    aria-label="Filtrer par date"
-                  >
-                    <option value="">Toutes</option>
-                    {normalizedRoomDateOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="page-tools-field planning-room-filter">
-                  <select
-                    className="page-tools-field-control"
-                    value={roomFilters?.room || ""}
-                    onChange={(event) => onRoomFiltersChange({ room: event.target.value })}
-                    aria-label="Filtrer par salle"
-                  >
-                    <option value="">Toutes</option>
-                    {normalizedRoomNameOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  type="button"
-                  className="page-tools-action-btn secondary planning-room-filter-reset icon-button"
-                  onClick={onClearRoomFilters}
-                  aria-label="Réinitialiser les filtres"
-                  title="Réinitialiser les filtres"
-                  disabled={!(roomFilters?.site || roomFilters?.date || roomFilters?.room)}
-                >
-                  <IconButtonContent
-                    label="Réinitialiser les filtres"
-                    icon={RefreshIcon}
-                    iconClassName="planning-button-icon"
-                  />
-                </button>
-              </div>
-            </div>
-          ) : null}
         </section>
       ) : null}
       {activeToolTab === "workflow" ? (
@@ -1233,7 +1257,7 @@ const TpiScheduleButtons = ({
             <div
               className="planning-workflow-tabs page-tools-tabs"
               role="tablist"
-              aria-label="Étapes du workflow"
+              aria-label="Menus du pilotage"
             >
               {workflowTabs.map((tab) => {
                 const isActive = activeWorkflowTab === tab.id
@@ -1263,7 +1287,11 @@ const TpiScheduleButtons = ({
 
             <div
               className={`planning-workflow-stage ${
-                activeWorkflowTab === "static-publication" ? "planning-workflow-stage-static" : ""
+                activeWorkflowTab === "static-publication"
+                  ? "planning-workflow-stage-static"
+                  : activeWorkflowTab === "phases"
+                    ? "planning-workflow-stage-phases"
+                    : ""
               }`.trim()}
             >
               {activeWorkflowTab === "preparation" ? (
@@ -1277,7 +1305,7 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn primary"
                       onClick={onAutomatePlanification}
-                      disabled={workflowActionLoading || !isPlanningState || !onAutomatePlanification}
+                      disabled={workflowActionLoading || !onAutomatePlanification}
                       title="Créer automatiquement les salles nécessaires et placer les TPI selon la configuration annuelle."
                       aria-label={automatePlanificationLabel}
                     >
@@ -1295,7 +1323,7 @@ const TpiScheduleButtons = ({
                         isValidationSuccessful ? "validated" : ""
                       }`.trim()}
                       onClick={onValidatePlanification}
-                      disabled={workflowActionLoading || !isPlanningState || isValidationSuccessful}
+                      disabled={workflowActionLoading || isValidationSuccessful}
                       title={validationTooltip}
                       aria-label={validationLabel}
                     >
@@ -1311,7 +1339,7 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn primary"
                       onClick={onFreezeSnapshot}
-                      disabled={workflowActionLoading || !isPlanningState || isAlreadyFrozen || nonImportableTpiCount > 0}
+                      disabled={workflowActionLoading || isAlreadyFrozen || nonImportableTpiCount > 0}
                       aria-label={freezeSnapshotLabel}
                       title={
                         nonImportableTpiCount > 0
@@ -1343,16 +1371,14 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn primary"
                       onClick={onOpenVotes}
-                      disabled={workflowActionLoading || !canStartVotes}
+                      disabled={workflowActionLoading || !onOpenVotes}
                       aria-label={openVotesLabel}
                       title={
                         hasStaleSnapshot
-                          ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
+                          ? "La planification a changé depuis le dernier snapshot. Une confirmation admin sera demandée."
                           : hasBlockedValidation
-                            ? "La vérification a détecté des anomalies. Corrigez-les avant d'ouvrir les votes."
-                          : canStartVotes
-                            ? "Ouvrir la campagne de votes."
-                            : "Snapshot requis avant ouverture des votes."
+                            ? "La vérification a détecté des anomalies. Une confirmation admin sera demandée."
+                            : "Ouvrir la campagne de votes sans envoyer d'emails."
                       }
                     >
                       <IconButtonContent
@@ -1363,55 +1389,43 @@ const TpiScheduleButtons = ({
                       />
                     </button>
 
-                    {IS_DEBUG ? (
-                      <button
-                        type="button"
-                        className="planning-workflow-btn secondary"
-                        onClick={onOpenVotesWithoutEmails}
-                        disabled={workflowActionLoading || !canStartVotes || !onOpenVotesWithoutEmails}
-                        title={
-                          hasStaleSnapshot
-                            ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant d'ouvrir les votes."
-                            : hasBlockedValidation
-                              ? "La vérification a détecté des anomalies. Corrigez-les avant d'ouvrir les votes."
-                              : canStartVotes
-                                ? "Ouvrir la campagne de votes sans envoyer les emails automatiques."
-                                : "Snapshot requis avant ouverture des votes."
-                        }
-                        aria-label={openVotesWithoutEmailsLabel}
-                      >
-                        <IconButtonContent
-                          label={openVotesWithoutEmailsLabel}
-                          icon={VoteIcon}
-                          showLabel
-                          iconClassName="planning-button-icon"
-                        />
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className="planning-workflow-btn secondary"
+                      onClick={onOpenVotesWithoutEmails}
+                      disabled={workflowActionLoading || !onOpenVotesWithoutEmails}
+                      title="Ouvrir la campagne de votes sans envoyer les emails automatiques."
+                      aria-label={openVotesWithoutEmailsLabel}
+                    >
+                      <IconButtonContent
+                        label={openVotesWithoutEmailsLabel}
+                        icon={VoteIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
-                    {IS_DEBUG ? (
-                      <button
-                        type="button"
-                        className="planning-workflow-btn open"
-                        onClick={onOpenVoteAccessPreview}
-                        disabled={workflowActionLoading || !isVotingState || !onOpenVoteAccessPreview}
-                        title="Ouvre l'aperçu des liens de vote préfiltré sur cette année."
-                        aria-label="Aperçu des liens vote"
-                      >
-                        <IconButtonContent
-                          label="Aperçu des liens vote"
-                          icon={SearchIcon}
-                          showLabel
-                          iconClassName="planning-button-icon"
-                        />
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className="planning-workflow-btn open"
+                      onClick={onOpenVoteAccessPreview}
+                      disabled={workflowActionLoading || !onOpenVoteAccessPreview}
+                      title="Ouvre l'aperçu des liens de vote préfiltré sur cette année."
+                      aria-label="Aperçu des liens vote"
+                    >
+                      <IconButtonContent
+                        label="Aperçu des liens vote"
+                        icon={SearchIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
 
                     <button
                       type="button"
                       className="planning-workflow-btn neutral"
                       onClick={onOpenVotesTracking}
-                      disabled={workflowActionLoading || !canOpenVoteTracking || !onOpenVotesTracking}
+                      disabled={workflowActionLoading || !onOpenVotesTracking}
                       title="Ouvrir la page de suivi des votes pour cette année."
                       aria-label={trackVotesLabel}
                     >
@@ -1427,7 +1441,7 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn neutral"
                       onClick={onRemindVotes}
-                      disabled={workflowActionLoading || !isVotingState}
+                      disabled={workflowActionLoading || !onRemindVotes}
                       title="Relancer les non-répondants."
                       aria-label={remindVotesLabel}
                     >
@@ -1443,7 +1457,7 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn neutral"
                       onClick={onCloseVotes}
-                      disabled={workflowActionLoading || !isVotingState}
+                      disabled={workflowActionLoading || !onCloseVotes}
                       title="Clore la campagne de votes."
                       aria-label={closeVotesLabel}
                     >
@@ -1469,17 +1483,13 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn success"
                       onClick={onPublishDefinitive}
-                      disabled={workflowActionLoading || !canPublishDefinitive}
+                      disabled={workflowActionLoading || !onPublishDefinitive}
                       title={
-                        isPlanningState
-                          ? hasStaleSnapshot
-                            ? "La planification a changé depuis le dernier snapshot. Geler une nouvelle version avant de publier."
-                            : hasBlockedValidation
-                              ? "La vérification a détecté des anomalies. Corrigez-les avant de publier."
-                              : canPublishDirect
-                                ? "Confirmer les créneaux du snapshot et publier sans campagne de votes."
-                                : "Snapshot validé requis avant publication directe."
-                          : "Publier la version définitive dans Défenses."
+                        hasStaleSnapshot
+                          ? "La planification a changé depuis le dernier snapshot. Une confirmation admin sera demandée."
+                          : hasBlockedValidation
+                            ? "La vérification a détecté des anomalies. Une confirmation admin sera demandée."
+                            : "Publier les défenses selon les données disponibles."
                       }
                       aria-label={publishDefinitiveLabel}
                     >
@@ -1495,7 +1505,7 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn success"
                       onClick={onSendSoutenanceLinks}
-                      disabled={workflowActionLoading || !isPublishedState}
+                      disabled={workflowActionLoading || !onSendSoutenanceLinks}
                       title="Renvoyer les magic links de défense."
                       aria-label={sendLinksLabel}
                     >
@@ -1511,11 +1521,11 @@ const TpiScheduleButtons = ({
                       type="button"
                       className="planning-workflow-btn neutral"
                       onClick={onDeactivatePublication}
-                      disabled={workflowActionLoading || !isPublishedState || !onDeactivatePublication}
+                      disabled={workflowActionLoading || !onDeactivatePublication}
                       title={
                         isPublishedState
-                          ? "Desactiver la publication des defenses, revoquer les liens de defense et revenir a la campagne de votes."
-                          : "Disponible uniquement apres publication des defenses."
+                          ? "Désactiver la publication des défenses et révoquer les liens de défense."
+                          : "Révoquer les liens de défense existants si une publication active est présente."
                       }
                       aria-label={deactivatePublicationLabel}
                     >
@@ -1542,6 +1552,41 @@ const TpiScheduleButtons = ({
                         iconClassName="planning-button-icon"
                       />
                     </button>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeWorkflowTab === "phases" ? (
+                <section
+                  className="planning-workflow-section planning-workflow-section-phases"
+                  id="planning-workflow-panel-phases"
+                  role="tabpanel"
+                >
+                  <div className="planning-workflow-phase-actions" aria-label="Activation des phases">
+                    {workflowPhaseControls.map((phase) => {
+                      const phaseActive = isPhaseActive(phase.id)
+                      const phaseLabel = `${phaseActive ? "Désactiver" : "Activer"} ${phase.label}`
+
+                      return (
+                        <button
+                          key={phase.id}
+                          type="button"
+                          className={`planning-workflow-btn phase-toggle ${phaseActive ? "active" : ""}`.trim()}
+                          onClick={() => onWorkflowPhaseToggle?.(phase.id, !phaseActive)}
+                          disabled={workflowActionLoading || !onWorkflowPhaseToggle}
+                          title={phaseLabel}
+                          aria-label={phaseLabel}
+                          aria-pressed={phaseActive}
+                        >
+                          <IconButtonContent
+                            label={phase.label}
+                            icon={phase.icon}
+                            showLabel
+                            iconClassName="planning-button-icon"
+                          />
+                        </button>
+                      )
+                    })}
                   </div>
                 </section>
               ) : null}
@@ -1751,14 +1796,20 @@ const TpiScheduleButtons = ({
           {validationResult ? (
             <div
               className={`planning-validation-report ${
-                validationIssueCount > 0 ? "has-issues" : "is-valid"
+                validationIssueCount > 0
+                  ? "has-issues"
+                  : validationWarningCount > 0
+                    ? "has-warnings"
+                    : "is-valid"
               }`}
             >
               <div className="planning-validation-report-head">
                 <strong>
                   {validationIssueCount > 0
                     ? `Erreurs détectées: ${validationIssueCount}`
-                    : "Planning valide"}
+                    : validationWarningCount > 0
+                      ? `Avertissements: ${validationWarningCount}`
+                    : "Planification valide"}
                 </strong>
                 <span>
                   {validationCheckedAtLabel
@@ -1767,16 +1818,16 @@ const TpiScheduleButtons = ({
                 </span>
               </div>
 
-              {validationIssueCount > 0 ? (
+              {validationIssueCount > 0 || validationWarningCount > 0 ? (
                 <ul className="planning-validation-report-list">
-                  {validationIssues.slice(0, 6).map((issue, index) => (
+                  {validationDisplayedIssues.slice(0, 6).map((issue, index) => (
                     <li key={`${issue.type || "issue"}-${index}`}>
                       {issue.message || "Contrainte bloquante détectée."}
                     </li>
                   ))}
-                  {validationIssues.length > 6 ? (
+                  {validationDisplayedIssues.length > 6 ? (
                     <li className="planning-validation-report-more">
-                      + {validationIssues.length - 6} autre(s) erreur(s)
+                      + {validationDisplayedIssues.length - 6} autre(s) élément(s)
                     </li>
                   ) : null}
                 </ul>

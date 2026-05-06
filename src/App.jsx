@@ -16,7 +16,7 @@ import { MAIN_NAVIGATION_LINKS } from "./components/shared/mainNavigation"
 import { toast } from "react-toastify"
 
 import { authService } from "./services/apiService"
-import { authPlanningService } from "./services/planningService"
+import { authCoordinationService } from "./services/coordinationService"
 import {
   STORAGE_KEYS,
   SUCCESS_MESSAGES,
@@ -84,8 +84,6 @@ const STATIC_TOOLBAR_PATHS = [
   '/configuration',
   ROUTES.GEN_TOKENS,
   ROUTES.TPI_EVAL,
-  ROUTES.GESTION_TPI_LEGACY,
-  ROUTES.GEN_TOKENS_LEGACY,
   ROUTES.TPI_EVAL_LEGACY
 ]
 const PAGE_TOOLBAR_SELECTOR = "[data-page-toolbar='true']"
@@ -93,8 +91,10 @@ const PAGE_TOOLBAR_LAYOUT_EVENT = "tpi:page-toolbar-layout"
 
 const isPlanningToolbarPage = (pathname) =>
   pathname === ROUTES.PLANIFICATION ||
-  pathname === ROUTES.PLANNING ||
-  pathname.startsWith(`${ROUTES.PLANNING}/`) ||
+  pathname === ROUTES.COORDINATION ||
+  pathname.startsWith(`${ROUTES.COORDINATION}/`) ||
+  pathname === ROUTES.COORDINATION_LEGACY ||
+  pathname.startsWith(`${ROUTES.COORDINATION_LEGACY}/`) ||
   pathname.startsWith('/planification-votes/')
 
 const isToolbarPage = (pathname) =>
@@ -180,7 +180,7 @@ const getBrowserTitle = (pathname, currentModule) => {
 const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessionToken }) => {
   const appSessionPayload = decodeJwtPayload(appSessionToken)
   const planningSessionPayload = decodeJwtPayload(planningSessionToken)
-  const planningSessionUser = authPlanningService.getCurrentUser()
+  const planningSessionUser = authCoordinationService.getCurrentUser()
 
   if (planningSessionPayload?.authContext?.type === 'vote_magic_link') {
     const userName = compactText(
@@ -211,9 +211,9 @@ const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessio
   return ""
 }
 
-const getPreferredPlanningYear = () => {
+const getPreferredCoordinationYear = () => {
   const storedYear = Number.parseInt(
-    readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ""),
+    readStorageValue(STORAGE_KEYS.COORDINATION_SELECTED_YEAR, ""),
     10
   )
 
@@ -230,11 +230,11 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
   const routeYear = Number.parseInt(year, 10)
   const normalizedYear = YEARS_CONFIG.isSupportedYear(routeYear)
     ? routeYear
-    : getPreferredPlanningYear()
+    : getPreferredCoordinationYear()
   const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const hasMagicLink = queryParams.has('ml')
   const isVotePreview = queryParams.get('previewVote') === '1'
-  const planningSessionToken = getStoredAuthToken('/api/planning')
+  const planningSessionToken = getStoredAuthToken('/api/coordination')
   const planningSessionPayload = useMemo(
     () => decodeJwtPayload(planningSessionToken),
     [planningSessionToken]
@@ -252,7 +252,7 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
 
   useEffect(() => {
     if (shouldResetScopedVoteSession) {
-      authPlanningService.clearSession()
+      authCoordinationService.clearSession()
     }
 
     setIsSessionNormalized(true)
@@ -260,7 +260,7 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
 
   useEffect(() => {
     if (YEARS_CONFIG.isSupportedYear(normalizedYear)) {
-      writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(normalizedYear))
+      writeStorageValue(STORAGE_KEYS.COORDINATION_SELECTED_YEAR, String(normalizedYear))
     }
   }, [normalizedYear])
 
@@ -276,7 +276,7 @@ const PlanningVotesRoute = ({ isAuthenticated, toggleArrow, isArrowUp }) => {
   }
 
   if (!YEARS_CONFIG.isSupportedYear(routeYear)) {
-    return <Navigate to={`/planning/${normalizedYear}`} replace />
+    return <Navigate to={`${ROUTES.COORDINATION}/${normalizedYear}${location.search || ''}`} replace />
   }
 
   const isAdminView = Boolean(
@@ -326,6 +326,35 @@ const SoutenanceRedirect = ({ preferredYear }) => {
   )
 }
 
+const CanonicalRouteRedirect = ({ to }) => {
+  const location = useLocation()
+
+  return <Navigate to={`${to}${location.search || ''}`} replace />
+}
+
+const CoordinationLegacyRedirect = ({ preferredYear, includeVotesTab = false }) => {
+  const { year } = useParams()
+  const location = useLocation()
+  const routeYear = Number.parseInt(year, 10)
+  const targetYear = YEARS_CONFIG.isSupportedYear(routeYear)
+    ? routeYear
+    : preferredYear
+  const searchParams = new URLSearchParams(location.search)
+
+  if (includeVotesTab && !searchParams.has('tab')) {
+    searchParams.set('tab', 'votes')
+  }
+
+  const search = searchParams.toString()
+
+  return (
+    <Navigate
+      to={`${ROUTES.COORDINATION}/${targetYear}${search ? `?${search}` : ''}`}
+      replace
+    />
+  )
+}
+
 const hasSoutenanceAccessParam = (search = "") => {
   const queryParams = new URLSearchParams(search)
 
@@ -354,7 +383,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     shouldOpenToolbarByDefault(location.pathname)
   )
   const appSessionToken = getStoredAuthToken('/api/me')
-  const planningSessionToken = getStoredAuthToken('/api/planning')
+  const planningSessionToken = getStoredAuthToken('/api/coordination')
   const connectedUserName = useMemo(
     () => getConnectedUserName({
       isAuthenticated,
@@ -363,7 +392,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     }),
     [appSessionToken, isAuthenticated, planningSessionToken]
   )
-  const preferredPlanningYear = getPreferredPlanningYear()
+  const preferredPlanningYear = getPreferredCoordinationYear()
   const currentModule = useMemo(
     () => getAppHeaderModule(location.pathname),
     [location.pathname]
@@ -682,12 +711,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path={ROUTES.GESTION_TPI_LEGACY}
-                element={
-                  <TpiManagement
-                    toggleArrow={toggleArrow}
-                    isArrowUp={isArrowUp}
-                  />
-                }
+                element={<CanonicalRouteRedirect to={ROUTES.GESTION_TPI} />}
               />
               <Route
                 path={ROUTES.PARTIES_PRENANTES}
@@ -695,7 +719,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path={ROUTES.PARTIES_PRENANTES_LEGACY}
-                element={<PartiesPrenantes />}
+                element={<CanonicalRouteRedirect to={ROUTES.PARTIES_PRENANTES} />}
               />
               <Route
                 path={ROUTES.SUIVI_ETUDIANTS}
@@ -716,12 +740,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
               />
               <Route
                 path={ROUTES.GEN_TOKENS_LEGACY}
-                element={
-                  <TokenGenerator
-                    toggleArrow={toggleArrow}
-                    isArrowUp={isArrowUp}
-                  />
-                }
+                element={<CanonicalRouteRedirect to={ROUTES.GEN_TOKENS} />}
               />
               <Route
                 path={ROUTES.TPI_EVAL}
@@ -746,11 +765,11 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 
           {/* Routes toujours accessibles, authentifié ou non */}
           <Route
-            path='/planning'
-            element={<Navigate to={`/planning/${preferredPlanningYear}`} replace />}
+            path={ROUTES.COORDINATION}
+            element={<Navigate to={`${ROUTES.COORDINATION}/${preferredPlanningYear}`} replace />}
           />
           <Route
-            path={`${ROUTES.PLANNING}/:year`}
+            path={`${ROUTES.COORDINATION}/:year`}
             element={
               <PlanningVotesRoute
                 isAuthenticated={isAuthenticated}
@@ -760,7 +779,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
             }
           />
           <Route
-            path={ROUTES.PLANIFICATION_VOTES}
+            path={ROUTES.COORDINATION_VOTES}
             element={
               <PlanningVotesRoute
                 isAuthenticated={isAuthenticated}
@@ -768,15 +787,23 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 isArrowUp={isArrowUp}
               />
             }
+          />
+          <Route
+            path={ROUTES.COORDINATION_LEGACY}
+            element={<CoordinationLegacyRedirect preferredYear={preferredPlanningYear} />}
+          />
+          <Route
+            path={`${ROUTES.COORDINATION_LEGACY}/:year`}
+            element={<CoordinationLegacyRedirect preferredYear={preferredPlanningYear} />}
+          />
+          <Route
+            path={ROUTES.COORDINATION_VOTES_LEGACY}
+            element={<CoordinationLegacyRedirect preferredYear={preferredPlanningYear} includeVotesTab />}
           />
           <Route
             path={ROUTES.PLANIFICATION_VOTES_LEGACY}
             element={
-              <PlanningVotesRoute
-                isAuthenticated={isAuthenticated}
-                toggleArrow={toggleArrow}
-                isArrowUp={isArrowUp}
-              />
+              <CoordinationLegacyRedirect preferredYear={preferredPlanningYear} includeVotesTab />
             }
           />
           {YEARS_CONFIG.getAvailableYears().map((proposalYear) => (

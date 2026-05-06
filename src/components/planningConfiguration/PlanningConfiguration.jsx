@@ -1,22 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { UNSAFE_LocationContext as LocationContext } from "react-router-dom"
 import { toast } from "react-toastify"
 
-import { YEARS_CONFIG, STORAGE_KEYS } from "../../config/appConfig"
+import { YEARS_CONFIG } from "../../config/appConfig"
+import accessLinkPolicy from "../../../shared/accessLinkPolicy.json"
 import {
   getStakeholderIconOptionsForRole,
   normalizeOptionalSoutenanceColor,
   normalizeStakeholderIcons,
   resolveSoutenanceColor
 } from "../../config/soutenanceAppearance"
-import { readStorageValue, writeStorageValue } from "../../utils/storage"
+import {
+  getCoordinationYearFromSearch,
+  getPreferredCoordinationYear,
+  persistCoordinationYear
+} from "../../utils/coordinationYear"
 import {
   publicationDeploymentConfigService,
-  planningCatalogService,
-  planningConfigService
-} from "../../services/planningService"
-import { buildPlanningRoomSizingOverview } from "../../utils/planningCapacityUtils"
-import { getPlanningPerimeterState } from "../../utils/planningScopeUtils"
+  coordinationCatalogService,
+  coordinationConfigService
+} from "../../services/coordinationService"
+import { buildPlanningRoomSizingOverview } from "../../utils/coordinationCapacityUtils"
+import { getPlanningPerimeterState } from "../../utils/coordinationScopeUtils"
+import { getTpiRelationRoleLabel } from "../../utils/stakeholderRules"
 import { getTpiModels } from "../tpiControllers/TpiController.jsx"
 import { normalizeSoutenanceDateEntries } from "../tpiSchedule/soutenanceDateUtils"
 import BinaryToggle from "../shared/BinaryToggle"
@@ -61,14 +68,9 @@ const DEFAULT_WORKFLOW_SETTINGS = {
   voteReminderCooldownHours: 24
 }
 
-const DEFAULT_ACCESS_LINK_SETTINGS = {
-  defaultVoteLinkTarget: "app",
-  defaultSoutenanceLinkTarget: "app",
-  voteLinkValidityHours: 24 * 7,
-  voteLinkMaxUses: 20,
-  soutenanceLinkValidityHours: 24 * 4,
-  soutenanceLinkMaxUses: 60
-}
+const DEFAULT_ACCESS_LINK_SETTINGS = Object.freeze({
+  ...accessLinkPolicy.defaultSettings
+})
 
 const DEFAULT_ANNUAL_CLASS_TYPES = [
   { code: "CFC", prefix: "C", label: "CFC", startDate: "", endDate: "" },
@@ -194,11 +196,15 @@ const normalizeBoundedInteger = (value, fallback, min, max) => {
 
 const normalizeVoteLinkTarget = (value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget) => {
   const normalized = compactText(value || fallback).toLowerCase()
-  return normalized === "static" || normalized === "publication" ? "static" : "app"
+  return normalized === accessLinkPolicy.targets.static || normalized === accessLinkPolicy.targets.publication
+    ? accessLinkPolicy.targets.static
+    : accessLinkPolicy.targets.app
 }
 
 const normalizeSoutenanceLinkTarget = (value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget) => {
-  return compactText(value || fallback).toLowerCase() === "publication" ? "publication" : "app"
+  return compactText(value || fallback).toLowerCase() === accessLinkPolicy.targets.publication
+    ? accessLinkPolicy.targets.publication
+    : accessLinkPolicy.targets.app
 }
 
 const normalizeWorkflowSettings = (value = {}, fallback = DEFAULT_WORKFLOW_SETTINGS) => {
@@ -285,7 +291,18 @@ const normalizeAccessLinkSettings = (value = {}, fallback = DEFAULT_ACCESS_LINK_
       fallbackSource.soutenanceLinkMaxUses ?? DEFAULT_ACCESS_LINK_SETTINGS.soutenanceLinkMaxUses,
       1,
       1000
-    )
+    ),
+    workflowFreeModeEnabled: typeof (
+      source.workflowFreeModeEnabled ??
+      source.freeWorkflowModeEnabled ??
+      source.ignoreWorkflowStateForLinks
+    ) === "boolean"
+      ? (
+          source.workflowFreeModeEnabled ??
+          source.freeWorkflowModeEnabled ??
+          source.ignoreWorkflowStateForLinks
+        )
+      : fallbackSource.workflowFreeModeEnabled === true
   }
 }
 
@@ -1530,14 +1547,7 @@ const cloneSiteClassGroupsForSite = (groups, siteCode) => {
   return [...seededDefaults, ...customGroups]
 }
 
-const getInitialSelectedYear = () => {
-  const storedYear = Number.parseInt(readStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, ""), 10)
-  if (Number.isInteger(storedYear)) {
-    return storedYear
-  }
-
-  return YEARS_CONFIG.getCurrentYear()
-}
+const getInitialSelectedYear = (search = "") => getPreferredCoordinationYear(search)
 
 const formatDateRangeLabel = (startDate, endDate) => {
   const start = compactText(startDate)
@@ -2048,7 +2058,8 @@ const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
     `${normalizedSettings.voteLinkMaxUses} accès vote`,
     `Défense ${formatLinkTargetLabel(normalizedSettings.defaultSoutenanceLinkTarget, SOUTENANCE_LINK_TARGET_OPTIONS).toLowerCase()}`,
     `${formatAccessLinkHours(normalizedSettings.soutenanceLinkValidityHours)}`,
-    `${normalizedSettings.soutenanceLinkMaxUses} accès défense`
+    `${normalizedSettings.soutenanceLinkMaxUses} accès défense`,
+    normalizedSettings.workflowFreeModeEnabled ? "Hors phases" : "Phases actives"
   ].join(" · ")
 
   return (
@@ -2089,6 +2100,35 @@ const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
 
       <div id={bodyId} className='configuration-card-body' hidden={!isExpanded}>
         <div className='configuration-access-link-groups'>
+          <div className='configuration-settings-subsection configuration-access-link-group'>
+            <div className='configuration-subsection-head'>
+              <span className='configuration-subsection-title'>Mode</span>
+              <span className='page-tools-chip'>
+                {normalizedSettings.workflowFreeModeEnabled ? "Hors phases" : "Phases"}
+              </span>
+            </div>
+            <div className='configuration-card-grid configuration-card-grid--access-link-group'>
+              <div className='page-tools-field configuration-workflow-toggle-field'>
+                <span
+                  className='page-tools-field-label'
+                  title="Autorise le module Liens d'accès à préparer les liens même si la phase correspondante n'est pas active."
+                >
+                  Liens hors phases
+                </span>
+                <BinaryToggle
+                  value={normalizedSettings.workflowFreeModeEnabled}
+                  onChange={(nextValue) => onChange("workflowFreeModeEnabled", nextValue)}
+                  name='access-link-workflow-free-mode'
+                  trueLabel='Hors phases'
+                  falseLabel='Phases'
+                  ariaLabel="Liens d'accès hors phases actives"
+                  disabled={disabled}
+                  compact
+                />
+              </div>
+            </div>
+          </div>
+
           <div className='configuration-settings-subsection configuration-access-link-group'>
             <div className='configuration-subsection-head'>
               <span className='configuration-subsection-title'>Vote</span>
@@ -2863,10 +2903,10 @@ const SiteClassCatalogCard = ({
 }
 
 const STAKEHOLDER_ICON_FIELDS = [
-  { key: "candidate", label: "Candidat" },
-  { key: "expert1", label: "Expert 1" },
-  { key: "expert2", label: "Expert 2" },
-  { key: "projectManager", label: "Chef de projet" }
+  { key: "candidate", label: getTpiRelationRoleLabel("candidat") },
+  { key: "expert1", label: getTpiRelationRoleLabel("expert1") },
+  { key: "expert2", label: getTpiRelationRoleLabel("expert2") },
+  { key: "projectManager", label: getTpiRelationRoleLabel("chef_projet") }
 ]
 
 const getDefenseRoomColor = (site = {}, room = {}) =>
@@ -3739,7 +3779,7 @@ const CatalogSiteCard = ({
             </label>
 
             <label className='page-tools-field'>
-              <span className='page-tools-field-label'>Couleur planning</span>
+              <span className='page-tools-field-label'>Couleur planification</span>
               <input
                 className='page-tools-field-control configuration-color-input'
                 type='color'
@@ -3747,7 +3787,7 @@ const CatalogSiteCard = ({
                   site?.planningColor || getDefaultPlanningColor(site?.code || site?.label)
                 )}
                 onChange={(event) => onSiteChange("planningColor", event.target.value)}
-                aria-label={`Couleur planning du site ${site?.label || site?.code || "site"}`}
+                aria-label={`Couleur planification du site ${site?.label || site?.code || "site"}`}
                 disabled={disabled}
               />
             </label>
@@ -4182,7 +4222,17 @@ const RoomSizingPanel = ({ overview, isLoading = false, error = "" }) => {
 }
 
 const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
-  const initialYear = useMemo(getInitialSelectedYear, [])
+  const routerLocation = React.useContext(LocationContext)?.location
+  const locationSearch = routerLocation?.search ||
+    (typeof window !== "undefined" ? window.location.search : "")
+  const initialYear = useMemo(
+    () => getInitialSelectedYear(locationSearch),
+    [locationSearch]
+  )
+  const requestedYear = useMemo(
+    () => getCoordinationYearFromSearch(locationSearch),
+    [locationSearch]
+  )
   const [selectedYear, setSelectedYear] = useState(initialYear)
   const [yearDraft, setYearDraft] = useState(() => normalizeYearDraft({}, initialYear, []))
   const [catalogDraft, setCatalogDraft] = useState(() => normalizeCatalogDraft({}))
@@ -4205,11 +4255,6 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   const yearBaselineRef = useRef("")
   const catalogBaselineRef = useRef("")
   const publicationDeploymentBaselineRef = useRef("")
-
-  const yearOptions = useMemo(
-    () => YEARS_CONFIG.getAvailableYears().slice().sort((left, right) => right - left),
-    []
-  )
 
   const currentYearPayload = useMemo(
     () => buildYearPayload(yearDraft, selectedYear, catalogDraft.sites),
@@ -4293,7 +4338,7 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
 
       let loadedCatalog = normalizeCatalogDraft({})
       try {
-        const catalog = await planningCatalogService.getGlobal()
+        const catalog = await coordinationCatalogService.getGlobal()
         loadedCatalog = normalizeCatalogDraft(catalog)
       } catch (error) {
         console.error("Erreur lors du chargement du catalogue partagé :", error)
@@ -4330,7 +4375,7 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
 
       try {
         const [config, tpis] = await Promise.all([
-          planningConfigService.getByYear(selectedYear),
+          coordinationConfigService.getByYear(selectedYear),
           Promise.resolve(getTpiModels(selectedYear)).catch((error) => {
             console.error(`Erreur lors du chargement des TPI GestionTPI ${selectedYear} :`, error)
             return null
@@ -4401,12 +4446,12 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   }, [catalogDraft.sites])
 
   useEffect(() => {
-    writeStorageValue(STORAGE_KEYS.PLANNING_SELECTED_YEAR, String(selectedYear))
+    persistCoordinationYear(selectedYear)
   }, [selectedYear])
 
   const persistCatalogDraft = useCallback(async (draft) => {
     const payload = buildCatalogPayload(draft)
-    const saved = await planningCatalogService.saveGlobal(payload)
+    const saved = await coordinationCatalogService.saveGlobal(payload)
     const normalized = normalizeCatalogDraft(saved || payload)
     setCatalogDraft(normalized)
     catalogBaselineRef.current = JSON.stringify(buildCatalogPayload(normalized))
@@ -4427,7 +4472,7 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
   const persistYearDraft = useCallback(
     async (draft, catalogSites) => {
       const payload = buildYearPayload(draft, selectedYear, catalogSites)
-      const saved = await planningConfigService.saveByYear(selectedYear, payload)
+      const saved = await coordinationConfigService.saveByYear(selectedYear, payload)
       const normalized = normalizeYearDraft(saved || payload, selectedYear, catalogSites)
       setYearDraft(normalized)
       yearBaselineRef.current = JSON.stringify(
@@ -4558,6 +4603,14 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
     },
     [handleSaveAll, isAnyDirty, selectedYear]
   )
+
+  useEffect(() => {
+    if (!requestedYear || requestedYear === selectedYear) {
+      return
+    }
+
+    void handleYearChange({ target: { value: String(requestedYear) } })
+  }, [handleYearChange, requestedYear, selectedYear])
 
   const addClassType = useCallback(() => {
     setIsYearPanelExpanded(true)
@@ -5103,21 +5156,7 @@ const PlanningConfiguration = ({ toggleArrow = null, isArrowUp = true }) => {
 
   const actions = (
     <div className='configuration-page-actions'>
-      <div className='configuration-year-field'>
-        <select
-          className='page-tools-field-control'
-          value={selectedYear}
-          onChange={handleYearChange}
-          disabled={!isYearReady || isAnySaving}
-          aria-label='Année'
-        >
-          {yearOptions.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-      </div>
+      <span className='page-tools-chip'>Année {selectedYear}</span>
 
       <button
         type='button'

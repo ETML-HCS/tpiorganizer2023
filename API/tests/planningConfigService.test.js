@@ -4,7 +4,8 @@ const assert = require('node:assert/strict')
 const {
   buildDefaultPlanningConfig,
   normalizeStoredConfig
-} = require('../services/planningConfigService')
+} = require('../services/coordinationConfigService')
+const accessLinkPolicy = require('../../shared/accessLinkPolicy.json')
 
 test('buildDefaultPlanningConfig expose une structure vide et alimente les sites du catalogue', () => {
   const config = buildDefaultPlanningConfig(2026, [
@@ -34,14 +35,7 @@ test('buildDefaultPlanningConfig expose une structure vide et alimente les sites
     maxVoteReminders: 1,
     voteReminderCooldownHours: 24
   })
-  assert.deepEqual(config.accessLinkSettings, {
-    defaultVoteLinkTarget: 'app',
-    defaultSoutenanceLinkTarget: 'app',
-    voteLinkValidityHours: 168,
-    voteLinkMaxUses: 20,
-    soutenanceLinkValidityHours: 96,
-    soutenanceLinkMaxUses: 60
-  })
+  assert.deepEqual(config.accessLinkSettings, accessLinkPolicy.defaultSettings)
   assert.equal(config.siteConfigs.length, 1)
   assert.equal(config.siteConfigs[0].siteId, 'site-etml')
   assert.equal(config.siteConfigs[0].siteCode, 'ETML')
@@ -78,7 +72,8 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
         voteLinkValidityHours: 72,
         voteLinkMaxUses: 12,
         soutenanceLinkValidityHours: 240,
-        soutenanceLinkMaxUses: 90
+        soutenanceLinkMaxUses: 90,
+        workflowFreeModeEnabled: true
       },
       classTypes: [
         {
@@ -145,7 +140,8 @@ test('normalizeStoredConfig conserve les types de classe dynamiques et les param
     voteLinkValidityHours: 72,
     voteLinkMaxUses: 12,
     soutenanceLinkValidityHours: 240,
-    soutenanceLinkMaxUses: 90
+    soutenanceLinkMaxUses: 90,
+    workflowFreeModeEnabled: true
   })
   assert.deepEqual(
     config.classTypes.map((classType) => classType.code),

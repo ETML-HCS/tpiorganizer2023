@@ -1,22 +1,31 @@
 const crypto = require('crypto')
 const mongoose = require('mongoose')
 
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const Vote = require('../models/voteModel')
 const {
   ResolutionProposal
 } = require('../models/resolutionProposalModel')
 const emailService = require('./emailService')
+const coordinationConfigService = require('./coordinationConfigService')
 const staticVotePublicationService = require('./staticVotePublicationService')
+const {
+  TPI_STAKEHOLDER_RELATIONS,
+  VOTING_STAKEHOLDER_ROLES
+} = require('../modules/stakeholders/stakeholderDefinitions')
+const accessLinkPolicy = require('../../shared/accessLinkPolicy.json')
 
-const DEFAULT_EXPIRY_HOURS = 24 * 7
-const RECIPIENT_ROLES = ['expert1', 'expert2', 'chef_projet']
-const ROLE_LABELS = {
-  expert1: 'Expert 1',
-  expert2: 'Expert 2',
-  chef_projet: 'Chef de projet'
-}
+const DEFAULT_EXPIRY_HOURS = accessLinkPolicy.defaultSettings.voteLinkValidityHours
+const RECIPIENT_ROLES = VOTING_STAKEHOLDER_ROLES
+const ROLE_LABELS = Object.freeze(
+  Object.fromEntries(
+    TPI_STAKEHOLDER_RELATIONS.map((relation) => [
+      relation.key,
+      relation.displayLabel
+    ])
+  )
+)
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -46,6 +55,25 @@ function createHttpError(statusCode, message) {
   const error = new Error(message)
   error.statusCode = statusCode
   return error
+}
+
+async function resolveResolutionProposalExpiryHours(year, expiresInHours = null) {
+  const explicitHours = Number.parseInt(String(expiresInHours || ''), 10)
+  if (Number.isInteger(explicitHours) && explicitHours > 0) {
+    return explicitHours
+  }
+
+  try {
+    const config = await coordinationConfigService.getPlanningConfigIfAvailable(year)
+    const settings = coordinationConfigService.normalizeAccessLinkSettings(config?.accessLinkSettings)
+    return settings.voteLinkValidityHours
+  } catch (error) {
+    console.warn(
+      `Impossible de charger la duree des liens d'arbitrage ${year}:`,
+      error?.message || error
+    )
+    return DEFAULT_EXPIRY_HOURS
+  }
 }
 
 function isDebugModeEnabled() {
@@ -422,7 +450,7 @@ async function createResolutionProposal({
   linkTarget = 'app',
   createdBy = null,
   emailSettings = null,
-  expiresInHours = DEFAULT_EXPIRY_HOURS,
+  expiresInHours = null,
   devMode = false
 }) {
   if (!isValidObjectId(tpiId)) {
@@ -463,8 +491,7 @@ async function createResolutionProposal({
     )
   }
 
-  const hours = Number.parseInt(String(expiresInHours || DEFAULT_EXPIRY_HOURS), 10)
-  const safeHours = Number.isInteger(hours) && hours > 0 ? hours : DEFAULT_EXPIRY_HOURS
+  const safeHours = await resolveResolutionProposalExpiryHours(tpi.year, expiresInHours)
   const now = new Date()
   const expiresAt = new Date(now.getTime() + safeHours * 60 * 60 * 1000)
   const slotSnapshot = buildSlotSnapshot(slot)
@@ -610,6 +637,18 @@ async function findProposalByToken(token) {
 
 async function getPublicResolutionProposal(token) {
   const { proposal, recipient } = await findProposalByToken(token)
+  const status = computeStatus(proposal)
+
+  if (status === 'expired') {
+    proposal.status = 'expired'
+    await proposal.save()
+    throw createHttpError(410, 'Cette proposition est expirée.')
+  }
+
+  if (status === 'cancelled' || status === 'failed') {
+    throw createHttpError(410, 'Cette proposition n’est plus active.')
+  }
+
   const serialized = serializeProposal(proposal)
 
   return {
@@ -682,6 +721,7 @@ module.exports = {
   getPublicResolutionProposal,
   hashToken,
   listResolutionProposalSummariesForTpis,
+  resolveResolutionProposalExpiryHours,
   respondToResolutionProposal,
   serializeProposal
 }

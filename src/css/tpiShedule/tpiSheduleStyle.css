@@ -918,6 +918,20 @@
     0 12px 26px rgba(127, 29, 29, 0.16);
 }
 
+.tpiCard.has-boss-availability-conflict:not(.has-validation-error) {
+  border-color: rgba(220, 38, 38, 0.38);
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 38, 38, 0.16),
+    0 6px 14px rgba(127, 29, 29, 0.08);
+}
+
+.tpiCard.has-constraint-warning:not(.has-validation-error) {
+  border-color: rgba(217, 119, 6, 0.5);
+  box-shadow:
+    inset 0 0 0 1px rgba(217, 119, 6, 0.22),
+    0 6px 14px rgba(146, 64, 14, 0.1);
+}
+
 .tpi-card-head {
   display: flex;
   flex-direction: column;
@@ -980,6 +994,98 @@
 
 .tpi-card-preference-indicator--red {
   color: #dc2626;
+}
+
+.tpi-card-constraint-warning-dot {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-radius: 999px;
+  color: #ffffff;
+  background: #d97706;
+  box-shadow: 0 2px 7px rgba(146, 64, 14, 0.28);
+  cursor: help;
+}
+
+.tpi-card-constraint-warning-dot::after {
+  content: "!";
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.tpi-card-constraint-warning-dot:focus-visible {
+  outline: 2px solid rgba(217, 119, 6, 0.62);
+  outline-offset: 2px;
+}
+
+.tpi-card-boss-unavailability-dot {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-radius: 999px;
+  color: #ffffff;
+  background: #b91c1c;
+  box-shadow: 0 2px 7px rgba(127, 29, 29, 0.3);
+  cursor: help;
+}
+
+.tpi-card-boss-unavailability-dot::after {
+  content: "!";
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.tpi-card-boss-unavailability-dot:focus-visible {
+  outline: 2px solid rgba(220, 38, 38, 0.6);
+  outline-offset: 2px;
+}
+
+.tpiCard.has-constraint-warning .tpi-card-boss-unavailability-dot {
+  top: 26px;
+}
+
+.tpiCard.detail-level-0 .tpi-card-boss-unavailability-dot,
+.tpiCard.detail-level-1 .tpi-card-boss-unavailability-dot {
+  top: 4px;
+  right: 4px;
+  left: auto;
+  width: 12px;
+  height: 12px;
+}
+
+.tpiCard.detail-level-0 .tpi-card-constraint-warning-dot,
+.tpiCard.detail-level-1 .tpi-card-constraint-warning-dot {
+  top: 4px;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+}
+
+.tpiCard.detail-level-0 .tpi-card-boss-unavailability-dot::after,
+.tpiCard.detail-level-1 .tpi-card-boss-unavailability-dot::after,
+.tpiCard.detail-level-0 .tpi-card-constraint-warning-dot::after,
+.tpiCard.detail-level-1 .tpi-card-constraint-warning-dot::after {
+  font-size: 0.48rem;
 }
 
 .tpiCard.detail-level-2 .tpi-card-preference-indicator {
@@ -2025,6 +2131,88 @@
   margin: 12px auto 16px;
 }
 
+.planning-focus-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 clamp(12px, 2vw, 28px);
+  padding: 10px 12px;
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 0 0 12px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.planning-focus-toolbar-copy,
+.planning-focus-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.planning-focus-toolbar-copy > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.planning-focus-toolbar-copy strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-focus-toolbar-copy span {
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.planning-focus-toolbar-icon {
+  width: 18px;
+  height: 18px;
+  color: #2563eb;
+  flex: 0 0 auto;
+}
+
+.planning-focus-date-select {
+  min-height: 34px;
+  width: min(240px, 42vw);
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 750;
+  padding: 0 10px;
+}
+
+.planning-focus-toolbar-btn.icon-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #334155;
+}
+
+.planning-focus-toolbar-btn.primary {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .planning-schedule-page--focus .room {
   padding-top: 16px;
   flex: 0 0 clamp(300px, 21vw, 420px);
@@ -2033,6 +2221,23 @@
 
 .planning-schedule-page--focus .date-room {
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 720px) {
+  .planning-focus-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .planning-focus-toolbar-actions {
+    width: 100%;
+  }
+
+  .planning-focus-date-select {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
 }
 
 

@@ -1,0 +1,65 @@
+{
+  "statuses": {
+    "draft": "Brouillon",
+    "pending_slots": "En attente de creneaux",
+    "voting": "Vote en cours",
+    "pending_validation": "Validation en attente",
+    "confirmed": "Confirme",
+    "manual_required": "Intervention requise",
+    "completed": "Termine",
+    "cancelled": "Annule"
+  },
+  "transitions": {
+    "draft": [
+      "pending_slots",
+      "cancelled"
+    ],
+    "pending_slots": [
+      "voting",
+      "manual_required",
+      "cancelled"
+    ],
+    "voting": [
+      "pending_validation",
+      "manual_required",
+      "confirmed",
+      "cancelled"
+    ],
+    "pending_validation": [
+      "confirmed",
+      "manual_required",
+      "cancelled"
+    ],
+    "confirmed": [
+      "completed",
+      "manual_required",
+      "cancelled"
+    ],
+    "manual_required": [
+      "pending_slots",
+      "voting",
+      "confirmed",
+      "cancelled"
+    ],
+    "completed": [],
+    "cancelled": [
+      "draft"
+    ]
+  },
+  "aliases": {
+    "requires_manual_intervention": "manual_required"
+  },
+  "voteStatuses": [
+    "voting",
+    "pending_validation"
+  ],
+  "workflowFreeVoteStatuses": [
+    "voting",
+    "pending_validation",
+    "pending_slots"
+  ],
+  "proposalReadyStatuses": [
+    "pending_slots",
+    "voting"
+  ]
+}

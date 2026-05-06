@@ -1,13 +1,15 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const emailService = require('../services/emailService')
-const magicLinkV2Service = require('../services/magicLinkV2Service')
+const accessLinkTokenService = require('../modules/accessLinks/tokenService')
 const staticVotePublicationService = require('../services/staticVotePublicationService')
 const votingCampaignService = require('../services/votingCampaignService')
 const Vote = require('../models/voteModel')
 const schedulingService = require('../services/schedulingService')
+const Person = require('../models/personModel')
+const accessLinkPolicy = require('../../shared/accessLinkPolicy.json')
 
 function patchMethod(target, key, implementation) {
   const original = target[key]
@@ -22,11 +24,11 @@ function loadVotingCampaignServiceWithPatches({
   filterPlanifiableTpis = (tpis) => tpis
 } = {}) {
   const servicePath = require.resolve('../services/votingCampaignService')
-  const planningConfigService = require('../services/planningConfigService')
-  const planningVisibilityService = require('../services/tpiPlanningVisibility')
+  const coordinationConfigService = require('../services/coordinationConfigService')
+  const planningVisibilityService = require('../services/coordinationTpiVisibility')
 
-  const restorePlanningConfig = patchMethod(planningConfigService, 'getPlanningConfig', getPlanningConfig)
-  const restorePlanningConfigIfAvailable = patchMethod(planningConfigService, 'getPlanningConfigIfAvailable', getPlanningConfig)
+  const restorePlanningConfig = patchMethod(coordinationConfigService, 'getPlanningConfig', getPlanningConfig)
+  const restorePlanningConfigIfAvailable = patchMethod(coordinationConfigService, 'getPlanningConfigIfAvailable', getPlanningConfig)
   const restoreVisibility = patchMethod(planningVisibilityService, 'filterPlanifiableTpis', filterPlanifiableTpis)
 
   delete require.cache[servicePath]
@@ -84,10 +86,29 @@ test('sendSoutenanceLinksForYear skips recipients with sendEmails disabled', asy
       },
       select: async () => confirmedTpis
     })),
-    patchMethod(magicLinkV2Service, 'createSoutenanceMagicLink', async ({ person }) => ({
-      url: `https://example.test/magic/${person._id}`,
-      expiresAt: new Date('2026-06-01T10:00:00.000Z')
-    })),
+    patchMethod(Person, 'find', (query) => {
+      assert.equal(query.roles, 'admin')
+      return {
+        select() {
+          return this
+        },
+        lean: async () => []
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async ({ person, type, scope, sources, baseUrl }) => {
+      assert.equal(type, 'soutenance')
+      assert.equal(scope.publicationVersion, 4)
+      assert.deepEqual(sources, ['admin_access_generated'])
+      assert.equal(baseUrl, 'https://example.test')
+      return {
+        url: `https://example.test/magic/${person._id}`,
+        expiresAt: new Date('2026-06-01T10:00:00.000Z'),
+        generated: true
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'createSoutenanceMagicLink', async () => {
+      throw new Error('Les liens défense doivent être réutilisés, pas générés pendant l envoi.')
+    }),
     patchMethod(emailService, 'sendEmail', async (email) => {
       sentEmails.push(email)
       return {
@@ -103,7 +124,319 @@ test('sendSoutenanceLinksForYear skips recipients with sendEmails disabled', asy
     assert.equal(result.recipientsCount, 2)
     assert.equal(result.emailsSent, 2)
     assert.equal(result.emailsSucceeded, 2)
+    assert.equal(result.missingAccessLinkCount, 0)
     assert.equal(result.publicationVersion, 4)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('sendSoutenanceLinksForYear can use published rooms as recipient source', async () => {
+  const sentEmails = []
+  const reusableCalls = []
+  const people = [
+    {
+      _id: 'candidate-1',
+      firstName: 'Alice',
+      lastName: 'Candidate',
+      email: 'alice@example.com',
+      sendEmails: true
+    },
+    {
+      _id: 'expert-1',
+      firstName: 'Eva',
+      lastName: 'Expert',
+      email: 'eva@example.com',
+      sendEmails: true
+    },
+    {
+      _id: 'expert-2',
+      firstName: 'No',
+      lastName: 'Mail',
+      email: 'nomail@example.com',
+      sendEmails: false
+    },
+    {
+      _id: 'boss-1',
+      firstName: 'Paul',
+      lastName: 'Chef',
+      email: 'paul@example.com',
+      sendEmails: true
+    }
+  ]
+  const publicationRooms = [
+    {
+      idRoom: 1,
+      tpiDatas: [
+        {
+          candidatPersonId: 'candidate-1',
+          expert1: { personId: 'expert-1' },
+          expert2: { personId: 'expert-2' },
+          boss: { personId: 'boss-1' }
+        },
+        {
+          candidatPersonId: 'candidate-1',
+          expert1: { personId: 'expert-1' },
+          expert2: { personId: '' },
+          boss: { personId: 'boss-1' }
+        }
+      ]
+    }
+  ]
+
+  const restore = [
+    patchMethod(TpiPlanning, 'find', () => {
+      throw new Error('confirmed coordination recipients should not be queried')
+    }),
+    patchMethod(Person, 'find', (query) => {
+      if (query.roles === 'admin') {
+        return {
+          select() {
+            return this
+          },
+          lean: async () => []
+        }
+      }
+
+      assert.deepEqual(
+        [...query._id.$in].sort(),
+        ['boss-1', 'candidate-1', 'expert-1', 'expert-2']
+      )
+
+      return {
+        select() {
+          return this
+        },
+        lean: async () => people
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async ({ person, type, scope, sources, baseUrl }) => {
+      reusableCalls.push({ personId: String(person._id), type, scope, sources, baseUrl })
+      return {
+        url: `https://example.test/magic/${person._id}`,
+        expiresAt: new Date('2026-06-01T10:00:00.000Z'),
+        generated: true
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'createSoutenanceMagicLink', async () => {
+      throw new Error('Les liens défense doivent être réutilisés, pas générés pendant l envoi.')
+    }),
+    patchMethod(emailService, 'sendEmail', async (email) => {
+      sentEmails.push(email)
+      return {
+        success: true
+      }
+    })
+  ]
+
+  try {
+    const result = await votingCampaignService.sendSoutenanceLinksForYear(
+      2026,
+      'https://example.test',
+      9,
+      { publicationRooms }
+    )
+
+    assert.deepEqual(sentEmails.sort(), [
+      'alice@example.com',
+      'eva@example.com',
+      'paul@example.com'
+    ])
+    assert.equal(result.recipientsCount, 3)
+    assert.equal(result.emailsSent, 3)
+    assert.equal(result.emailsSucceeded, 3)
+    assert.equal(result.missingAccessLinkCount, 0)
+    assert.equal(result.publicationVersion, 9)
+    assert.deepEqual(
+      reusableCalls.map(entry => `${entry.personId}:${entry.scope.publicationVersion}`).sort(),
+      ['boss-1:9', 'candidate-1:9', 'expert-1:9']
+    )
+    assert.equal(reusableCalls.every((entry) => entry.type === 'soutenance'), true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('sendSoutenanceLinksForYear envoie aussi les liens defense aux administrateurs actifs', async () => {
+  const sentEmails = []
+  const people = [
+    {
+      _id: 'candidate-1',
+      firstName: 'Alice',
+      lastName: 'Candidate',
+      email: 'alice@example.com',
+      roles: ['candidat'],
+      sendEmails: true
+    }
+  ]
+  const admins = [
+    {
+      _id: 'admin-1',
+      firstName: 'Ada',
+      lastName: 'Admin',
+      email: 'ada.admin@example.com',
+      roles: ['admin'],
+      sendEmails: true
+    }
+  ]
+  const publicationRooms = [
+    {
+      idRoom: 1,
+      tpiDatas: [
+        {
+          candidatPersonId: 'candidate-1'
+        }
+      ]
+    }
+  ]
+
+  const restore = [
+    patchMethod(TpiPlanning, 'find', () => {
+      throw new Error('confirmed coordination recipients should not be queried')
+    }),
+    patchMethod(Person, 'find', (query) => {
+      return {
+        select() {
+          return this
+        },
+        lean: async () => query.roles === 'admin' ? admins : people
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async ({ person }) => ({
+      url: `https://example.test/defenses/2026?ml=${person._id}`,
+      expiresAt: new Date('2026-06-01T10:00:00.000Z'),
+      generated: true
+    })),
+    patchMethod(accessLinkTokenService, 'createSoutenanceMagicLink', async () => {
+      throw new Error('Les liens défense doivent être réutilisés.')
+    }),
+    patchMethod(emailService, 'sendEmail', async (email, template, data) => {
+      sentEmails.push({ email, template, roles: data.recipientRoles })
+      return {
+        success: true
+      }
+    })
+  ]
+
+  try {
+    const result = await votingCampaignService.sendSoutenanceLinksForYear(
+      2026,
+      'https://example.test',
+      9,
+      { publicationRooms }
+    )
+
+    assert.deepEqual(
+      sentEmails.map((entry) => entry.email).sort(),
+      ['ada.admin@example.com', 'alice@example.com']
+    )
+    assert.deepEqual(
+      sentEmails.find((entry) => entry.email === 'ada.admin@example.com').roles,
+      ['admin']
+    )
+    assert.equal(result.recipientsCount, 2)
+    assert.equal(result.emailsSent, 2)
+    assert.equal(result.emailsSucceeded, 2)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('sendSoutenanceLinksForYear genere les liens defense manquants avant envoi quand demande', async () => {
+  const sentEmails = []
+  const createCalls = []
+  const people = [
+    {
+      _id: 'expert-1',
+      firstName: 'Eva',
+      lastName: 'Expert',
+      email: 'eva@example.com',
+      sendEmails: true
+    }
+  ]
+  const publicationRooms = [
+    {
+      idRoom: 1,
+      tpiDatas: [
+        {
+          expert1: { personId: 'expert-1' }
+        }
+      ]
+    }
+  ]
+
+  const restore = [
+    patchMethod(TpiPlanning, 'find', () => {
+      throw new Error('Les destinataires doivent venir des salles publiees.')
+    }),
+    patchMethod(Person, 'find', (query) => {
+      if (query.roles === 'admin') {
+        return {
+          select() {
+            return this
+          },
+          lean: async () => []
+        }
+      }
+
+      assert.deepEqual([...query._id.$in], ['expert-1'])
+      return {
+        select() {
+          return this
+        },
+        lean: async () => people
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async () => null),
+    patchMethod(accessLinkTokenService, 'createSoutenanceMagicLink', async (params) => {
+      createCalls.push(params)
+      return {
+        url: `https://example.test/defenses/2026?ml=created-${createCalls.length}`,
+        expiresAt: new Date('2026-06-01T10:00:00.000Z'),
+        generated: true
+      }
+    }),
+    patchMethod(emailService, 'sendEmail', async (email) => {
+      sentEmails.push(email)
+      return {
+        success: true
+      }
+    })
+  ]
+
+  try {
+    const result = await votingCampaignService.sendSoutenanceLinksForYear(
+      2026,
+      'https://example.test',
+      12,
+      {
+        publicationRooms,
+        generateMissingAccessLinks: true
+      }
+    )
+
+    assert.deepEqual(sentEmails, ['eva@example.com'])
+    assert.equal(createCalls.length, 1)
+    assert.equal(createCalls[0].year, 2026)
+    assert.equal(createCalls[0].baseUrl, 'https://example.test')
+    assert.equal(createCalls[0].redirectPath, '/defenses/2026')
+    assert.equal(createCalls[0].persistToken, true)
+    assert.deepEqual(createCalls[0].scope, {
+      kind: 'published_soutenances',
+      publicationVersion: 12,
+      source: accessLinkPolicy.sources.adminApp
+    })
+    assert.equal(result.recipientsCount, 1)
+    assert.equal(result.emailsSent, 1)
+    assert.equal(result.emailsSucceeded, 1)
+    assert.equal(result.generatedAccessLinkCount, 1)
+    assert.equal(result.missingAccessLinkCount, 0)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -192,7 +525,7 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
       sentVoteRequests.push(args)
       return []
     }),
-    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (...args) => {
+    patchMethod(accessLinkTokenService, 'createVoteMagicLink', async (...args) => {
       createdVoteLinks.push(args)
       return {
         url: 'https://example.test/magic'
@@ -226,8 +559,8 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
   }
 })
 
-test('startVotesCampaign sends one vote link per stakeholder for all their TPI', async () => {
-  const createdVoteLinks = []
+test('startVotesCampaign skips digest emails while automatic sends are disabled', async () => {
+  const reusableVoteLinks = []
   const sentDigestTargets = []
   const sentVoteRequests = []
   const voteUpdates = []
@@ -322,12 +655,16 @@ test('startVotesCampaign sends one vote link per stakeholder for all their TPI',
         _id: `vote-${voteUpdates.length}`
       }
     }),
-    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (params) => {
-      createdVoteLinks.push(params)
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async (params) => {
+      reusableVoteLinks.push(params)
       return {
-        url: `https://example.test/planning/${params.year}?ml=${params.person._id}`,
-        expiresAt: new Date('2026-05-01T12:00:00.000Z')
+        url: `https://example.test/coordination/${params.year}?ml=${params.person._id}`,
+        expiresAt: new Date('2026-05-01T12:00:00.000Z'),
+        generated: true
       }
+    }),
+    patchMethod(accessLinkTokenService, 'createVoteMagicLink', async () => {
+      throw new Error('Les liens de vote doivent être réutilisés, pas générés pendant la phase.')
     }),
     patchMethod(emailService, 'sendVoteDigestRequests', async (targets) => {
       sentDigestTargets.push(...targets)
@@ -346,53 +683,18 @@ test('startVotesCampaign sends one vote link per stakeholder for all their TPI',
     const result = await service.startVotesCampaign(2026, 'https://example.test')
 
     assert.equal(result.tpiCount, 2)
-    assert.equal(result.totalEmails, 4)
-    assert.equal(result.successfulEmails, 4)
-    assert.equal(createdVoteLinks.length, 4)
-    assert.equal(sentDigestTargets.length, 4)
+    assert.equal(result.totalEmails, 0)
+    assert.equal(result.successfulEmails, 0)
+    assert.equal(result.emailsSkipped, true)
+    assert.equal(result.emailSkipReason, 'automatic_email_sends_disabled')
+    assert.equal(result.missingAccessLinkCount, 0)
+    assert.equal(reusableVoteLinks.length, 0)
+    assert.equal(sentDigestTargets.length, 0)
     assert.equal(sentVoteRequests.length, 0)
     assert.equal(voteUpdates.length, 6)
     assert.equal(savedTpis.length, 2)
-
-    assert.equal(
-      createdVoteLinks.every((link) => link.baseUrl === 'https://example.test'),
-      true
-    )
-    assert.equal(
-      createdVoteLinks.every((link) => link.redirectPath === '/planning/2026'),
-      true
-    )
-    assert.equal(createdVoteLinks.every((link) => link.role === null), true)
-    assert.equal(
-      createdVoteLinks.every((link) => link.scope?.kind === 'stakeholder_votes'),
-      true
-    )
-    assert.equal(
-      createdVoteLinks.some((link) => Object.prototype.hasOwnProperty.call(link.scope || {}, 'tpiId')),
-      false
-    )
-
-    const aliceTarget = sentDigestTargets.find((target) => target.email === 'alice@example.com')
-    const carlaTarget = sentDigestTargets.find((target) => target.email === 'carla@example.com')
-    const bobTarget = sentDigestTargets.find((target) => target.email === 'bob@example.com')
-
-    assert.ok(aliceTarget)
-    assert.ok(carlaTarget)
-    assert.ok(bobTarget)
-    assert.deepEqual(
-      aliceTarget.tpis.map((tpi) => tpi.reference),
-      ['TPI-2026-001', 'TPI-2026-002']
-    )
-    assert.deepEqual(
-      carlaTarget.tpis.map((tpi) => tpi.reference),
-      ['TPI-2026-001', 'TPI-2026-002']
-    )
-    assert.deepEqual(
-      bobTarget.tpis.map((tpi) => tpi.reference),
-      ['TPI-2026-001']
-    )
-    assert.equal(result.details[0].emailsSent, 3)
-    assert.equal(result.details[1].emailsSent, 3)
+    assert.equal(result.details[0].emailsSent, 0)
+    assert.equal(result.details[1].emailsSent, 0)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -400,8 +702,8 @@ test('startVotesCampaign sends one vote link per stakeholder for all their TPI',
   }
 })
 
-test('startVotesCampaign uses the configured static vote target by default', async () => {
-  const createdVoteLinks = []
+test('startVotesCampaign does not resolve static vote links while automatic sends are disabled', async () => {
+  const reusableVoteLinks = []
   const tpi = {
     _id: 'planning-1',
     status: 'pending_slots',
@@ -457,8 +759,8 @@ test('startVotesCampaign uses the configured static vote target by default', asy
     getPlanningConfig: async () => ({
       accessLinkSettings: {
         defaultVoteLinkTarget: 'static',
-        voteLinkValidityHours: 168,
-        voteLinkMaxUses: 20
+        voteLinkValidityHours: accessLinkPolicy.defaultSettings.voteLinkValidityHours,
+        voteLinkMaxUses: accessLinkPolicy.defaultSettings.voteLinkMaxUses
       }
     })
   })
@@ -470,12 +772,16 @@ test('startVotesCampaign uses the configured static vote target by default', asy
       baseUrl: 'https://tpi26.ch',
       redirectPath: '/votes-2026/'
     })),
-    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (params) => {
-      createdVoteLinks.push(params)
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async (params) => {
+      reusableVoteLinks.push(params)
       return {
         url: `https://tpi26.ch/votes-2026/?ml=${params.person._id}`,
-        expiresAt: new Date('2026-05-01T12:00:00.000Z')
+        expiresAt: new Date('2026-05-01T12:00:00.000Z'),
+        generated: true
       }
+    }),
+    patchMethod(accessLinkTokenService, 'createVoteMagicLink', async () => {
+      throw new Error('Les liens de vote statiques doivent être réutilisés, pas générés pendant la phase.')
     }),
     patchMethod(emailService, 'sendVoteDigestRequests', async (targets) => {
       return targets.map((target) => ({
@@ -488,10 +794,99 @@ test('startVotesCampaign uses the configured static vote target by default', asy
   try {
     const result = await service.startVotesCampaign(2026, 'https://example.test')
 
-    assert.equal(result.totalEmails, 3)
-    assert.equal(createdVoteLinks.length, 3)
-    assert.equal(createdVoteLinks.every((link) => link.baseUrl === 'https://tpi26.ch'), true)
-    assert.equal(createdVoteLinks.every((link) => link.redirectPath === '/votes-2026/'), true)
+    assert.equal(result.totalEmails, 0)
+    assert.equal(result.successfulEmails, 0)
+    assert.equal(result.emailsSkipped, true)
+    assert.equal(result.emailSkipReason, 'automatic_email_sends_disabled')
+    assert.equal(reusableVoteLinks.length, 0)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('startVotesCampaign does not report missing links while automatic sends are disabled', async () => {
+  const sentDigestTargets = []
+  const tpi = {
+    _id: 'planning-1',
+    status: 'pending_slots',
+    reference: 'TPI-2026-001',
+    sujet: 'Sujet',
+    candidat: { _id: 'candidate-1', firstName: 'Cand', lastName: 'Test' },
+    proposedSlots: [
+      {
+        slot: {
+          _id: 'slot-1',
+          date: new Date('2026-06-10T08:00:00.000Z'),
+          period: 'AM',
+          startTime: '08:00',
+          endTime: '08:45',
+          room: { name: 'A101' }
+        }
+      }
+    ],
+    expert1: {
+      _id: 'person-alice',
+      firstName: 'Alice',
+      lastName: 'Expert',
+      email: 'alice@example.com',
+      sendEmails: true
+    },
+    expert2: {
+      _id: 'person-bob',
+      firstName: 'Bob',
+      lastName: 'Expert',
+      email: 'bob@example.com',
+      sendEmails: true
+    },
+    chefProjet: {
+      _id: 'person-carla',
+      firstName: 'Carla',
+      lastName: 'Boss',
+      email: 'carla@example.com',
+      sendEmails: true
+    },
+    save: async () => {}
+  }
+
+  const query = {
+    populate() {
+      return this
+    },
+    then(resolve, reject) {
+      return Promise.resolve([tpi]).then(resolve, reject)
+    }
+  }
+
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches()
+  const restore = [
+    restoreService,
+    patchMethod(TpiPlanning, 'find', () => query),
+    patchMethod(Vote, 'findOneAndUpdate', async () => ({ _id: 'vote-1' })),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async () => null),
+    patchMethod(accessLinkTokenService, 'createVoteMagicLink', async () => {
+      throw new Error('Aucun lien de secours ne doit être généré.')
+    }),
+    patchMethod(emailService, 'sendVoteDigestRequests', async (targets) => {
+      sentDigestTargets.push(...targets)
+      return []
+    })
+  ]
+
+  try {
+    const result = await service.startVotesCampaign(2026, 'https://example.test')
+
+    assert.equal(result.totalEmails, 0)
+    assert.equal(result.successfulEmails, 0)
+    assert.equal(result.failedEmails, 0)
+    assert.equal(result.emailsSkipped, true)
+    assert.equal(result.emailSkipReason, 'automatic_email_sends_disabled')
+    assert.equal(result.missingAccessLinkCount, 0)
+    assert.equal(result.missingAccessLinks.length, 0)
+    assert.equal(sentDigestTargets.length, 0)
+    assert.equal(result.details[0].emailsSent, 0)
+    assert.equal(result.details[0].missingAccessLinks, undefined)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -529,7 +924,7 @@ test('remindPendingVotes skips automatic reminders when annual setting is disabl
 
     assert.equal(result.automatic, true)
     assert.equal(result.skipped, true)
-    assert.equal(result.reason, 'automatic_reminders_disabled')
+    assert.equal(result.reason, 'automatic_email_sends_disabled')
     assert.equal(result.emailsSent, 0)
     assert.equal(tpiQueryCalled, false)
   } finally {
@@ -539,10 +934,11 @@ test('remindPendingVotes skips automatic reminders when annual setting is disabl
   }
 })
 
-test('remindPendingVotes sends automatic reminders only inside configured window', async () => {
+test('remindPendingVotes skips automatic reminders while automatic sends are disabled', async () => {
   const sentDigestTargets = []
-  const createdVoteLinks = []
+  const reusableVoteLinks = []
   const updates = []
+  let tpiQueryCalled = false
   const now = new Date('2026-04-02T00:00:00.000Z')
   const voter = {
     _id: 'person-alice',
@@ -619,12 +1015,15 @@ test('remindPendingVotes sends automatic reminders only inside configured window
   })
   const restore = [
     restoreService,
-    patchMethod(TpiPlanning, 'find', () => ({
-      populate() {
-        return this
-      },
-      select: async () => tpis
-    })),
+    patchMethod(TpiPlanning, 'find', () => {
+      tpiQueryCalled = true
+      return {
+        populate() {
+          return this
+        },
+        select: async () => tpis
+      }
+    }),
     patchMethod(Vote, 'find', (query) => {
       assert.deepEqual(query.tpiPlanning.$in, [dueTpi._id])
       return {
@@ -634,12 +1033,16 @@ test('remindPendingVotes sends automatic reminders only inside configured window
         select: async () => pendingVotes
       }
     }),
-    patchMethod(magicLinkV2Service, 'createVoteMagicLink', async (params) => {
-      createdVoteLinks.push(params)
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async (params) => {
+      reusableVoteLinks.push(params)
       return {
-        url: `https://example.test/planning/${params.year}?ml=${params.person._id}`,
-        expiresAt: new Date('2026-04-09T00:00:00.000Z')
+        url: `https://example.test/coordination/${params.year}?ml=${params.person._id}`,
+        expiresAt: new Date('2026-04-09T00:00:00.000Z'),
+        generated: true
       }
+    }),
+    patchMethod(accessLinkTokenService, 'createVoteMagicLink', async () => {
+      throw new Error('Les liens de relance doivent être réutilisés, pas régénérés.')
     }),
     patchMethod(emailService, 'sendVoteDigestRequests', async (targets, options = {}) => {
       assert.equal(options.reminder, true)
@@ -662,23 +1065,17 @@ test('remindPendingVotes sends automatic reminders only inside configured window
     })
 
     assert.equal(result.automatic, true)
-    assert.equal(result.skipped, false)
-    assert.equal(result.tpiCount, 4)
-    assert.equal(result.eligibleTpiCount, 1)
-    assert.equal(result.reminderTargets, 1)
-    assert.equal(result.emailsSent, 1)
-    assert.equal(result.emailsSucceeded, 1)
-    assert.equal(createdVoteLinks.length, 1)
-    assert.equal(sentDigestTargets.length, 1)
-    assert.deepEqual(
-      sentDigestTargets[0].tpis.map((tpi) => tpi.reference),
-      ['TPI-2026-001']
-    )
-    assert.equal(updates.length, 1)
-    assert.deepEqual(updates[0].filter._id.$in, [dueTpi._id])
-    assert.deepEqual(updates[0].update.$set, {
-      'votingSession.lastReminderSentAt': now
-    })
+    assert.equal(result.skipped, true)
+    assert.equal(result.reason, 'automatic_email_sends_disabled')
+    assert.equal(result.tpiCount, 0)
+    assert.equal(result.eligibleTpiCount, 0)
+    assert.equal(result.reminderTargets, 0)
+    assert.equal(result.emailsSent, 0)
+    assert.equal(result.emailsSucceeded, 0)
+    assert.equal(tpiQueryCalled, false)
+    assert.equal(reusableVoteLinks.length, 0)
+    assert.equal(sentDigestTargets.length, 0)
+    assert.equal(updates.length, 0)
   } finally {
     while (restore.length > 0) {
       restore.pop()()

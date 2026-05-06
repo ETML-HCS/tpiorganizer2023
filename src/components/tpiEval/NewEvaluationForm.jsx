@@ -10,7 +10,7 @@ import {
   TrashIcon
 } from "../shared/InlineIcons"
 
-import { API_URL, STORAGE_KEYS } from "../../config/appConfig"
+import { API_URL, STORAGE_KEYS, YEARS_CONFIG } from "../../config/appConfig"
 import { loadPdfDocumentConstructor } from "./pdfDocumentLoader"
 import { getEvaluationStorageKey } from "./tpiEvalUtils"
 import {
@@ -29,6 +29,14 @@ import { Section, TablePoints } from "./headerForm/Section"
 import "../../css/tpiEval/newEvaluationForm.css"
 
 const apiUrl = API_URL
+
+const normalizeEvaluationYear = (value) => {
+  const parsedYear = Number.parseInt(String(value ?? ""), 10)
+
+  return YEARS_CONFIG.isSupportedYear(parsedYear)
+    ? parsedYear
+    : YEARS_CONFIG.getCurrentYear()
+}
 
 function getFieldValue(inputName) {
   // Recherche de l'élément de formulaire par id
@@ -323,15 +331,22 @@ function updateElementValue(elementName, dataValue) {
   }
 }
 
-function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEvaluationSaved, onEvaluationDeleted }) {
+function NewEvaluationForm({
+  searchCandidat,
+  loadTpiEval,
+  setLoadTpiEval,
+  initialYear = YEARS_CONFIG.getCurrentYear(),
+  onEvaluationSaved,
+  onEvaluationDeleted
+}) {
   const [data, setData] = useState(null)
   const [isActive, setIsActive] = useState(false)
   const [isFreeze, setIsFreeze] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showDownloadButton, setShowDownloadButton] = useState(false)
 
-  const [yearForThisEval, setYearForThisEval] = useState(
-    new Date().getFullYear()
+  const [yearForThisEval, setYearForThisEval] = useState(() =>
+    normalizeEvaluationYear(initialYear)
   )
   // json =>  partie(string) maxPoints(int): pointsObtenus(int):
   const [resultsOfParts, setResultsOfParts] = useState([
@@ -582,7 +597,7 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
         {
           idCritere: "B6",
           question: "Respect des prescriptions formelles du rapport du TPI",
-          help: "Il s'agit ici d'évaluer le caractère exhaustif de la documentation du point de vue formel, conformément aux prescriptions de l'expert en chef cantonal.  <br> <h3>Niveau de qualité 3 </h3>1. La mise en page et le contenu du PDF et du fichier Word/de la version imprimée sont identiques<br>2. Le rapport est séparé en deux parties distinctes. Le code source est annexé.  <br>3. Le rapport contient : L'organisation du projet, le journal, le planning.  <br>4. Le rapport du TPI contient une table des matières à jour (num. page etc.).<br>5. Le rapport contient une liste des sources et références complète et structurée.  <br>6. Le rapport du TPI contient un entête et un pied de page sur toutes les pages comprenant la date d'impression et le nom du candidat.<br>7. Le rapport du TPI contient un glossaire trié alphabétiquement comprenant les termes spécifiques au TPI.  <br> <h3>Niveau de qualité 2 </h3>Le point 1 et 5 autres points sont entièrement remplis.  <br> <h3>Niveau de qualité 1</h3>Le point 1 et au moins 3 autres sont remplis.  <br> <h3>Niveau de qualité 0</h3>Le niveau de qualité 1 n'est pas atteint ou moins de cinq points sont atteints.",
+          help: "Il s'agit ici d'évaluer le caractère exhaustif de la documentation du point de vue formel, conformément aux prescriptions de l'expert en chef cantonal.  <br> <h3>Niveau de qualité 3 </h3>1. La mise en page et le contenu du PDF et du fichier Word/de la version imprimée sont identiques<br>2. Le rapport est séparé en deux parties distinctes. Le code source est annexé.  <br>3. Le rapport contient : L'organisation du projet, le journal, la planification.  <br>4. Le rapport du TPI contient une table des matières à jour (num. page etc.).<br>5. Le rapport contient une liste des sources et références complète et structurée.  <br>6. Le rapport du TPI contient un entête et un pied de page sur toutes les pages comprenant la date d'impression et le nom du candidat.<br>7. Le rapport du TPI contient un glossaire trié alphabétiquement comprenant les termes spécifiques au TPI.  <br> <h3>Niveau de qualité 2 </h3>Le point 1 et 5 autres points sont entièrement remplis.  <br> <h3>Niveau de qualité 1</h3>Le point 1 et au moins 3 autres sont remplis.  <br> <h3>Niveau de qualité 0</h3>Le niveau de qualité 1 n'est pas atteint ou moins de cinq points sont atteints.",
 
           pt: 0,
           justification: "",
@@ -824,6 +839,14 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
     fetchData()
   }, [loadTpiEval, toggleFreeze])
 
+  useEffect(() => {
+    if (loadTpiEval != null) {
+      return
+    }
+
+    setYearForThisEval(normalizeEvaluationYear(initialYear))
+  }, [initialYear, loadTpiEval])
+
   // Si j'ai data qui n'est plus null alors je dois l'afficher
 
   useEffect(() => {
@@ -970,11 +993,6 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
     setIsActive((prevIsActive) => !prevIsActive)
   }
 
-  const handleYearChange = (event) => {
-    const selectedYearValue = parseInt(event.target.value)
-    setYearForThisEval(selectedYearValue)
-  }
-
   // Afficher un indicateur de chargement si isLoading est true
   if (isLoading) {
     return <div>Loading...</div>
@@ -1061,24 +1079,10 @@ function NewEvaluationForm({ searchCandidat, loadTpiEval, setLoadTpiEval, onEval
           ></button>
         </span>
         <div className='yearSelect'>
-          <div className='select-title'>Année du TPI</div>{" "}
-          <select
-            id='yearTpi'
-            value={yearForThisEval}
-            onChange={handleYearChange}
-          >
-            {Array.from(
-              { length: new Date().getFullYear() - 2021 },
-              (_, index) => {
-                const year = 2022 + index
-                return (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                )
-              }
-            )}
-          </select>
+          <div className='select-title'>Année du TPI</div>
+          <span id='yearTpi' className='yearSelect-value'>
+            {yearForThisEval}
+          </span>
         </div>
       </div>
 

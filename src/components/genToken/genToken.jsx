@@ -1,62 +1,142 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
+import IconButtonContent from '../shared/IconButtonContent'
 import PageToolbar from '../shared/PageToolbar'
-import { YEARS_CONFIG } from '../../config/appConfig'
 import {
-  planningConfigService,
-  planningCatalogService,
-  workflowPlanningService
-} from '../../services/planningService'
+  AlertIcon,
+  ArrowRightIcon,
+  BriefcaseIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CheckIcon,
+  ClipboardIcon,
+  KeyIcon,
+  MailIcon,
+  RefreshIcon,
+  SearchIcon,
+  SendIcon,
+  VoteIcon,
+  WorkflowIcon
+} from '../shared/InlineIcons'
+import { STORAGE_KEYS, YEARS_CONFIG } from '../../config/appConfig'
+import accessLinkPolicy from '../../../shared/accessLinkPolicy.json'
+import {
+  coordinationConfigService,
+  workflowCoordinationService
+} from '../../services/coordinationService'
+import { readStorageValue, writeStorageValue } from '../../utils/storage'
+import { persistCoordinationYear } from '../../utils/coordinationYear'
+import { getTpiRelationRoleLabel, normalizeRoleList } from '../../utils/stakeholderRules'
 
 import '../../css/genToken/genToken.css'
 
-const LINK_TYPE_FILTERS = [
-  { value: 'all', label: 'Tous les liens' },
+const ACCESS_PHASE_FILTERS = [
   { value: 'vote', label: 'Votes' },
   { value: 'soutenance', label: 'Défenses' },
   { value: 'arbitrage', label: 'Arbitrage' }
 ]
 
-const LINK_TYPE_FILTER_VALUES = new Set(LINK_TYPE_FILTERS.map((filter) => filter.value))
-const DEFAULT_EMAIL_SETTINGS = {
-  senderName: 'TPI Organizer',
-  senderEmail: '',
-  senderArbitrageName: '',
-  senderArbitrageEmail: '',
-  replyToEmail: '',
-  defaultDeliveryMode: 'outlook'
-}
-const DEFAULT_PUBLICATION_SETTINGS = {
-  publicBaseUrl: 'https://tpi26.ch'
-}
-const DEFAULT_ACCESS_LINK_SETTINGS = {
-  defaultVoteLinkTarget: 'app',
-  defaultSoutenanceLinkTarget: 'app'
+const ACCESS_PHASE_FILTER_VALUES = new Set(ACCESS_PHASE_FILTERS.map((filter) => filter.value))
+const DEFAULT_ACCESS_PHASE_FILTERS = ACCESS_PHASE_FILTERS.map((filter) => filter.value)
+const DEFAULT_ACCESS_LINK_SETTINGS = Object.freeze({
+  ...accessLinkPolicy.defaultSettings
+})
+const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
+const ACCESS_EMAIL_DELIVERY_STORAGE_KEY = STORAGE_KEYS.ACCESS_LINK_EMAIL_DELIVERIES || 'accessLinkEmailDeliveries'
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function formatRoleLabel(role) {
-  if (role === 'expert1') {
-    return 'Expert 1'
+function compactText(value) {
+  if (value === null || value === undefined) {
+    return ''
   }
 
-  if (role === 'expert2') {
-    return 'Expert 2'
+  return String(value).trim()
+}
+
+function readAccessEmailDeliveryStore() {
+  const rawValue = readStorageValue(ACCESS_EMAIL_DELIVERY_STORAGE_KEY, '{}')
+
+  try {
+    const parsed = JSON.parse(rawValue)
+    return isPlainObject(parsed) ? parsed : {}
+  } catch (error) {
+    return {}
+  }
+}
+
+function readAccessEmailDeliveryLedger(year) {
+  const store = readAccessEmailDeliveryStore()
+  const yearLedger = store[String(year)]
+  return isPlainObject(yearLedger) ? yearLedger : {}
+}
+
+function writeAccessEmailDeliveryLedger(year, ledger) {
+  const store = readAccessEmailDeliveryStore()
+  store[String(year)] = isPlainObject(ledger) ? ledger : {}
+  writeStorageValue(ACCESS_EMAIL_DELIVERY_STORAGE_KEY, JSON.stringify(store))
+}
+
+function hashAccessEmailKey(value) {
+  const text = String(value || '')
+  let hash = 0
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(index)
+    hash |= 0
   }
 
-  if (role === 'chef_projet') {
-    return 'Chef de projet'
+  return Math.abs(hash).toString(36)
+}
+
+function getStoredShowCandidatesPreference() {
+  return readStorageValue(STORAGE_KEYS.ACCESS_LINK_SHOW_CANDIDATES, 'true') !== 'false'
+}
+
+function getStoredAccessYear() {
+  const storedYear = Number.parseInt(readStorageValue(STORAGE_KEYS.COORDINATION_SELECTED_YEAR, ''), 10)
+  return YEARS_CONFIG.isSupportedYear(storedYear) ? storedYear : null
+}
+
+function formatNonZeroCount(value, singularLabel, pluralLabel = `${singularLabel}s`) {
+  const count = Number.parseInt(String(value || 0), 10)
+  if (!Number.isInteger(count) || count <= 0) {
+    return null
   }
 
-  if (role === 'expert') {
-    return 'Expert'
-  }
+  return `${count} ${count > 1 ? pluralLabel : singularLabel}`
+}
 
-  if (role === 'candidat') {
-    return 'Candidat'
-  }
+function isCandidateRole(role) {
+  const normalizedRole = String(role || '').trim().toLowerCase()
+  return normalizedRole === 'candidat' || normalizedRole === 'candidate'
+}
 
-  return String(role || '').trim()
+function isExpertRole(role) {
+  return normalizeRoleList([role]).includes('expert')
+}
+
+function getAccessPersonRoles(person) {
+  return normalizeRoleList(person?.roles)
+}
+
+function isProjectLeadAccessPerson(person) {
+  return getAccessPersonRoles(person).includes('chef_projet')
+}
+
+function isStandaloneExpertAccessPerson(person) {
+  const roles = getAccessPersonRoles(person)
+  return roles.length === 1 && roles.includes('expert')
+}
+
+function isCandidateAccessEntry(entry) {
+  const roles = getAccessPersonRoles(entry?.person)
+  return roles.includes('candidat') || (
+    Array.isArray(entry?.person?.roles) && entry.person.roles.some(isCandidateRole)
+  )
 }
 
 function formatWorkflowLabel(state) {
@@ -73,6 +153,129 @@ function formatWorkflowLabel(state) {
   }
 
   return String(state || 'Inconnu')
+}
+
+function formatWorkflowPhases(phases, fallbackState) {
+  const labels = {
+    planning: 'Planification',
+    votes: 'Votes',
+    arbitrage: 'Arbitrage',
+    defenses: 'Défenses'
+  }
+  const activeLabels = Object.entries(phases || {})
+    .filter(([, value]) => value?.active === true)
+    .map(([phase]) => labels[phase] || phase)
+
+  return activeLabels.length > 0
+    ? activeLabels.join(' + ')
+    : formatWorkflowLabel(fallbackState)
+}
+
+function toSummaryCount(value) {
+  const parsed = Number.parseInt(String(value || 0), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0
+}
+
+function buildPhaseProgress(total, available) {
+  if (total <= 0) {
+    return '0'
+  }
+
+  return `${Math.min(available, total)}/${total}`
+}
+
+function buildGeneratedPhaseState({ total, available, emptyLabel = 'Aucun accès', pendingLabel = 'À générer' }) {
+  if (total <= 0) {
+    return {
+      status: emptyLabel,
+      variant: 'neutral'
+    }
+  }
+
+  if (available >= total) {
+    return {
+      status: 'Prêt',
+      variant: 'ok'
+    }
+  }
+
+  if (available > 0) {
+    return {
+      status: 'Partiel',
+      variant: 'warning'
+    }
+  }
+
+  return {
+    status: pendingLabel,
+    variant: 'warning'
+  }
+}
+
+export function buildAccessPhaseReadiness(summary = {}, contexts = {}) {
+  const voteTotal = toSummaryCount(summary?.voteLinkCount)
+  const voteAvailable = toSummaryCount(summary?.voteGeneratedLinkCount)
+  const defenseTotal = toSummaryCount(summary?.soutenanceLinkCount)
+  const defenseAvailable = toSummaryCount(summary?.soutenanceGeneratedLinkCount)
+  const arbitrageTotal = toSummaryCount(summary?.arbitrageLinkCount)
+  const arbitrageAvailable = toSummaryCount(summary?.arbitrageGeneratedLinkCount)
+  const voteState = buildGeneratedPhaseState({
+    total: voteTotal,
+    available: voteAvailable,
+    emptyLabel: 'Aucun vote',
+    pendingLabel: 'À générer'
+  })
+  const defenseState = buildGeneratedPhaseState({
+    total: defenseTotal,
+    available: defenseAvailable,
+    emptyLabel: 'Aucune publication',
+    pendingLabel: 'À générer'
+  })
+  const arbitrageState = buildGeneratedPhaseState({
+    total: arbitrageTotal,
+    available: arbitrageAvailable,
+    emptyLabel: 'Aucune proposition',
+    pendingLabel: 'À créer'
+  })
+
+  return [
+    {
+      id: 'planning',
+      label: 'Planification',
+      metric: 'Admin',
+      status: 'Aucun token requis',
+      variant: 'neutral',
+      detail: 'Phase pilotée par les actions internes et les droits admin.'
+    },
+    {
+      id: 'vote',
+      label: 'Votes',
+      metric: buildPhaseProgress(voteTotal, voteAvailable),
+      status: voteState.status,
+      variant: voteState.variant,
+      detail: contexts?.vote?.workflowFreeModeEnabled
+        ? 'Chargement autorisé hors phases pour les votes disponibles.'
+        : 'État basé sur les votes en attente.'
+    },
+    {
+      id: 'arbitrage',
+      label: 'Arbitrage',
+      metric: buildPhaseProgress(arbitrageTotal, arbitrageAvailable),
+      status: arbitrageState.status,
+      variant: arbitrageState.variant,
+      detail: 'Les propositions sont créées dans le module vote, puis reprises ici.'
+    },
+    {
+      id: 'soutenance',
+      label: 'Défenses',
+      metric: buildPhaseProgress(defenseTotal, defenseAvailable),
+      status: defenseState.status,
+      variant: defenseState.variant,
+      detail: contexts?.soutenance?.publicationVersion
+        ? `Publication v${contexts.soutenance.publicationVersion}.`
+        : 'Aucune publication défense active détectée.'
+    }
+  ]
 }
 
 function formatDateTime(value) {
@@ -103,60 +306,17 @@ function isPastDate(value) {
   return !Number.isNaN(date.getTime()) && date <= new Date()
 }
 
-function normalizeEmailSettings(value = {}) {
-  const source = value && typeof value === 'object' ? value : {}
-  const defaultDeliveryMode = String(source.defaultDeliveryMode || DEFAULT_EMAIL_SETTINGS.defaultDeliveryMode).trim()
-
-  return {
-    senderName: String(source.senderName || DEFAULT_EMAIL_SETTINGS.senderName).trim() || DEFAULT_EMAIL_SETTINGS.senderName,
-    senderEmail: String(source.senderEmail || '').trim().toLowerCase(),
-    senderArbitrageName: String(source.senderArbitrageName || '').trim(),
-    senderArbitrageEmail: String(source.senderArbitrageEmail || '').trim().toLowerCase(),
-    replyToEmail: String(source.replyToEmail || '').trim().toLowerCase(),
-    defaultDeliveryMode: defaultDeliveryMode === 'automatic' ? 'automatic' : 'outlook'
-  }
-}
-
-function normalizePublicBaseUrl(value, fallback = DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl) {
-  const rawValue = String(value || '').trim()
-  const rawFallback = String(fallback || DEFAULT_PUBLICATION_SETTINGS.publicBaseUrl).trim()
-  const candidate = rawValue || rawFallback
-
-  if (!candidate) {
-    return ''
-  }
-
-  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(candidate)
-    ? candidate
-    : `https://${candidate}`
-
-  try {
-    const url = new URL(withProtocol)
-    url.hash = ''
-    url.search = ''
-    return url.toString().replace(/\/+$/, '')
-  } catch (error) {
-    return rawFallback
-  }
-}
-
-function normalizePublicationSettings(value = {}) {
-  const source = value && typeof value === 'object' ? value : {}
-
-  return {
-    publicBaseUrl: normalizePublicBaseUrl(
-      source.publicBaseUrl || source.staticPublicBaseUrl || source.publicSiteBaseUrl || source.domain
-    )
-  }
-}
-
 function normalizeVoteLinkTarget(value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultVoteLinkTarget) {
   const normalized = String(value || fallback || '').trim().toLowerCase()
-  return normalized === 'static' || normalized === 'publication' ? 'static' : 'app'
+  return normalized === accessLinkPolicy.targets.static || normalized === accessLinkPolicy.targets.publication
+    ? accessLinkPolicy.targets.static
+    : accessLinkPolicy.targets.app
 }
 
 function normalizeSoutenanceLinkTarget(value, fallback = DEFAULT_ACCESS_LINK_SETTINGS.defaultSoutenanceLinkTarget) {
-  return String(value || fallback || '').trim().toLowerCase() === 'publication' ? 'publication' : 'app'
+  return String(value || fallback || '').trim().toLowerCase() === accessLinkPolicy.targets.publication
+    ? accessLinkPolicy.targets.publication
+    : accessLinkPolicy.targets.app
 }
 
 function normalizeAccessLinkSettings(value = {}) {
@@ -168,7 +328,18 @@ function normalizeAccessLinkSettings(value = {}) {
     ),
     defaultSoutenanceLinkTarget: normalizeSoutenanceLinkTarget(
       source.defaultSoutenanceLinkTarget ?? source.soutenanceLinkTarget ?? source.publicationLinkTarget
-    )
+    ),
+    workflowFreeModeEnabled: typeof (
+      source.workflowFreeModeEnabled ??
+      source.freeWorkflowModeEnabled ??
+      source.ignoreWorkflowStateForLinks
+    ) === 'boolean'
+      ? (
+          source.workflowFreeModeEnabled ??
+          source.freeWorkflowModeEnabled ??
+          source.ignoreWorkflowStateForLinks
+        )
+      : DEFAULT_ACCESS_LINK_SETTINGS.workflowFreeModeEnabled
   }
 }
 
@@ -183,385 +354,6 @@ function formatUrlHost(value) {
   } catch (error) {
     return rawValue.replace(/^https?:\/\//i, '').replace(/\/+$/, '')
   }
-}
-
-function getPublicationVersionRequest(value) {
-  const parsed = Number.parseInt(String(value || ''), 10)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-}
-
-function formatPublicationVersionLabel(versionEntry) {
-  if (!versionEntry?.version) {
-    return 'Publication active'
-  }
-
-  const generatedLabel = formatPublicationLinkCountLabel(versionEntry)
-
-  return `Publication v${versionEntry.version}${versionEntry.isActive ? ' · active' : ''}${generatedLabel}`
-}
-
-function getPublicationRecoverableLinkCount(versionEntry) {
-  const recoverableCount = Number.parseInt(String(versionEntry?.recoverableGeneratedLinkCount || ''), 10)
-  return Number.isInteger(recoverableCount) && recoverableCount > 0 ? recoverableCount : 0
-}
-
-function formatPublicationLinkCountLabel(versionEntry) {
-  const recoverableCount = getPublicationRecoverableLinkCount(versionEntry)
-  if (recoverableCount > 0) {
-    return ` · ${recoverableCount} lien${recoverableCount > 1 ? 's' : ''}`
-  }
-
-  return ''
-}
-
-function formatActivePublicationOptionLabel(availableVersions = [], context = {}) {
-  const activeVersion = availableVersions.find((entry) => entry?.isActive)
-  const version = activeVersion?.version || context?.publicationVersion
-
-  if (!version) {
-    return 'Publication active'
-  }
-
-  return `Publication active (v${version})${formatPublicationLinkCountLabel(activeVersion)}`
-}
-
-function buildPublicationVersionOptions(context = {}) {
-  const availableVersions = Array.isArray(context?.availableVersions)
-    ? context.availableVersions
-    : []
-  const options = availableVersions
-    .filter((entry) =>
-      Number.isInteger(Number(entry?.version)) &&
-      Number(entry.version) > 0 &&
-      entry.isActive !== true &&
-      getPublicationRecoverableLinkCount(entry) > 0
-    )
-    .map((entry) => ({
-      value: String(entry.version),
-      label: formatPublicationVersionLabel(entry),
-      isActive: entry.isActive === true
-    }))
-
-  if (options.length > 0) {
-    return [
-      { value: 'active', label: formatActivePublicationOptionLabel(availableVersions, context) },
-      ...options
-    ]
-  }
-
-  if (context?.publicationVersion) {
-    return [
-      { value: 'active', label: 'Publication active' },
-      { value: String(context.publicationVersion), label: `Publication v${context.publicationVersion}` }
-    ]
-  }
-
-  return [{ value: 'active', label: 'Publication active' }]
-}
-
-function getInvitationLinkVersion(link) {
-  const parsed = Number.parseInt(String(link?.publicationVersion || ''), 10)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-}
-
-function compactDraftText(value) {
-  if (value === null || value === undefined) {
-    return ''
-  }
-
-  return String(value).trim()
-}
-
-function getInvitationLinkType(link) {
-  const type = compactDraftText(link?.type).toLowerCase()
-  if (type === 'vote' || type === 'soutenance' || type === 'arbitrage') {
-    return type
-  }
-
-  return getInvitationLinkVersion(link) ? 'soutenance' : 'vote'
-}
-
-function formatDraftTypeLabel(type) {
-  if (type === 'vote') {
-    return 'Vote'
-  }
-
-  if (type === 'arbitrage') {
-    return 'Arbitrage'
-  }
-
-  return 'Défense'
-}
-
-function getDraftSenderName(emailSettings, type = 'soutenance') {
-  if (type === 'arbitrage') {
-    return (
-      emailSettings.senderArbitrageName ||
-      emailSettings.senderName ||
-      DEFAULT_EMAIL_SETTINGS.senderName
-    )
-  }
-
-  return emailSettings.senderName || DEFAULT_EMAIL_SETTINGS.senderName
-}
-
-function getDraftContactEmail(emailSettings, type = 'soutenance') {
-  if (type === 'arbitrage') {
-    return emailSettings.replyToEmail || emailSettings.senderArbitrageEmail || emailSettings.senderEmail
-  }
-
-  return emailSettings.replyToEmail || emailSettings.senderEmail
-}
-
-function getDraftExpiryLine(link, prefix = 'Validité') {
-  return link?.expiresAt ? `${prefix} : ${formatDateTime(link.expiresAt)}` : null
-}
-
-function getLinkEmailAvailabilityStatus(link) {
-  const explicitStatus = compactDraftText(link?.availabilityStatus).toLowerCase()
-  if (explicitStatus) {
-    return explicitStatus
-  }
-
-  if (!link?.url) {
-    return 'missing'
-  }
-
-  if (link?.revokedAt) {
-    return 'revoked'
-  }
-
-  if (isPastDate(link?.expiresAt)) {
-    return 'expired'
-  }
-
-  const maxUses = Number.parseInt(String(link?.maxUses || 0), 10)
-  const usageCount = Number.parseInt(String(link?.usageCount || 0), 10)
-  if (Number.isInteger(maxUses) && maxUses > 0 && Number.isInteger(usageCount) && usageCount >= maxUses) {
-    return 'exhausted'
-  }
-
-  return 'available'
-}
-
-function canPrepareEmailForLink(link) {
-  return Boolean(link?.url) && getLinkEmailAvailabilityStatus(link) === 'available'
-}
-
-function buildVoteInvitationSubject(year, link) {
-  const label = formatVoteLinkLabel(link)
-  return `Votes de défense TPI ${year}${label ? ` - ${label}` : ''}`
-}
-
-function buildVoteInvitationBody({ person, link, year, emailSettings }) {
-  const recipientName = person?.name || ''
-  const tpis = getVoteLinkTpiEntries(link)
-  const tpiLines = tpis.map((tpi) => {
-    const details = [
-      tpi.candidateName,
-      tpi.roleLabel,
-      tpi.subject
-    ].filter(Boolean).join(' · ')
-
-    return `- ${tpi.reference || 'TPI'}${details ? ` : ${details}` : ''}`
-  })
-  const contactEmail = getDraftContactEmail(emailSettings, 'vote')
-  const senderName = getDraftSenderName(emailSettings, 'vote')
-
-  return [
-    `Bonjour${recipientName ? ` ${recipientName}` : ''},`,
-    '',
-    `Votre réponse est attendue pour les votes de défense TPI ${year}.`,
-    tpiLines.length > 0 ? tpiLines.join('\n') : null,
-    '',
-    'Vous pouvez répondre avec votre lien personnel :',
-    link.url,
-    '',
-    'Ce lien est personnel et ne doit pas être transmis.',
-    getDraftExpiryLine(link),
-    contactEmail ? `Pour toute question : ${contactEmail}` : null,
-    '',
-    'Meilleures salutations',
-    senderName
-  ].filter((line) => line !== null).join('\n')
-}
-
-function buildSoutenanceInvitationSubject(year, publicationVersion) {
-  return `Horaire des défenses TPI ${year}${publicationVersion ? ` - v${publicationVersion}` : ''}`
-}
-
-function buildSoutenanceInvitationBody({ person, link, year, emailSettings }) {
-  const recipientName = person?.name || ''
-  const publicationVersion = getInvitationLinkVersion(link)
-  const contactEmail = getDraftContactEmail(emailSettings, 'soutenance')
-  const senderName = getDraftSenderName(emailSettings, 'soutenance')
-
-  return [
-    `Bonjour${recipientName ? ` ${recipientName}` : ''},`,
-    '',
-    `L'horaire des défenses TPI ${year} est disponible.`,
-    '',
-    'Vous pouvez le consulter avec votre lien personnel :',
-    link.url,
-    '',
-    'Ce lien est personnel et ne doit pas être transmis.',
-    publicationVersion ? `Version publiée : v${publicationVersion}` : null,
-    getDraftExpiryLine(link),
-    contactEmail ? `Pour toute question : ${contactEmail}` : null,
-    '',
-    'Meilleures salutations',
-    senderName
-  ].filter((line) => line !== null).join('\n')
-}
-
-function buildArbitrageInvitationSubject(year, link) {
-  return `Proposition d'arbitrage TPI ${year}${link?.reference ? ` - ${link.reference}` : ''}`
-}
-
-function buildArbitrageInvitationBody({ person, link, year, emailSettings }) {
-  const recipientName = person?.name || ''
-  const contactEmail = getDraftContactEmail(emailSettings, 'arbitrage')
-  const senderName = getDraftSenderName(emailSettings, 'arbitrage')
-  const responseStatus = compactDraftText(link?.responseStatus)
-
-  return [
-    `Bonjour${recipientName ? ` ${recipientName}` : ''},`,
-    '',
-    `Une proposition d'arbitrage TPI ${year} est à confirmer.`,
-    link?.reference ? `Référence : ${link.reference}` : null,
-    link?.candidateName ? `Candidat : ${link.candidateName}` : null,
-    link?.subject ? `Sujet : ${link.subject}` : null,
-    link?.proposedSlotLabel ? `Créneau proposé : ${link.proposedSlotLabel}` : null,
-    link?.message ? `Message : ${link.message}` : null,
-    responseStatus && responseStatus !== 'pending'
-      ? `Réponse actuelle : ${formatArbitrageResponseStatus(responseStatus)}`
-      : null,
-    '',
-    'Vous pouvez répondre avec votre lien personnel :',
-    link.url,
-    '',
-    'Ce lien est personnel et ne doit pas être transmis.',
-    getDraftExpiryLine(link, 'Réponse souhaitée avant'),
-    contactEmail ? `Pour toute question : ${contactEmail}` : null,
-    '',
-    'Meilleures salutations',
-    senderName
-  ].filter((line) => line !== null).join('\n')
-}
-
-function buildInvitationSubject({ link, year, type }) {
-  if (type === 'vote') {
-    return buildVoteInvitationSubject(year, link)
-  }
-
-  if (type === 'arbitrage') {
-    return buildArbitrageInvitationSubject(year, link)
-  }
-
-  return buildSoutenanceInvitationSubject(year, getInvitationLinkVersion(link))
-}
-
-function buildInvitationBody({ person, link, year, emailSettings, type }) {
-  if (type === 'vote') {
-    return buildVoteInvitationBody({ person, link, year, emailSettings })
-  }
-
-  if (type === 'arbitrage') {
-    return buildArbitrageInvitationBody({ person, link, year, emailSettings })
-  }
-
-  return buildSoutenanceInvitationBody({ person, link, year, emailSettings })
-}
-
-function buildMailtoUrl({ to, subject, body }) {
-  const params = new URLSearchParams({
-    subject,
-    body
-  })
-
-  return `mailto:${encodeURIComponent(to)}?${params.toString()}`
-}
-
-function buildInvitationDraft({ entry, link, year, emailSettings }) {
-  const person = entry?.person || {}
-  const to = String(person.email || '').trim()
-  const publicationVersion = getInvitationLinkVersion(link)
-  const type = getInvitationLinkType(link)
-  const subject = buildInvitationSubject({ link, year, type })
-  const body = buildInvitationBody({
-    person,
-    link,
-    year,
-    emailSettings,
-    type
-  })
-
-  return {
-    key: `${person.id || to}-${type}-${publicationVersion || link.proposalId || link.reference || 'link'}-${link.url}`,
-    type,
-    to,
-    name: person.name || to,
-    publicationVersion,
-    subject,
-    body,
-    mailto: buildMailtoUrl({ to, subject, body })
-  }
-}
-
-function shouldIncludeInvitationLink(link, options = {}) {
-  if (!canPrepareEmailForLink(link)) {
-    return false
-  }
-
-  const type = getInvitationLinkType(link)
-  if (options.linkTypeFilter && options.linkTypeFilter !== 'all' && type !== options.linkTypeFilter) {
-    return false
-  }
-
-  if (type === 'soutenance' && options.selectedPublicationVersion) {
-    const selectedPublicationVersion = getPublicationVersionRequest(options.selectedPublicationVersion)
-    const linkPublicationVersion = getInvitationLinkVersion(link)
-    if (selectedPublicationVersion && linkPublicationVersion !== selectedPublicationVersion) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function getEntryInvitationLinks(entry) {
-  return [
-    ...(Array.isArray(entry?.voteLinks) ? entry.voteLinks : []),
-    ...(Array.isArray(entry?.soutenanceLinks) ? entry.soutenanceLinks : []),
-    ...(Array.isArray(entry?.arbitrageLinks) ? entry.arbitrageLinks : [])
-  ]
-}
-
-function buildInvitationDrafts(people, options = {}) {
-  const year = options.year
-  const emailSettings = normalizeEmailSettings(options.emailSettings)
-  const drafts = []
-
-  for (const entry of Array.isArray(people) ? people : []) {
-    for (const link of getEntryInvitationLinks(entry)) {
-      if (!shouldIncludeInvitationLink(link, options)) {
-        continue
-      }
-
-      const draft = buildInvitationDraft({
-        entry,
-        link,
-        year,
-        emailSettings
-      })
-
-      if (draft.to) {
-        drafts.push(draft)
-      }
-    }
-  }
-
-  return drafts
 }
 
 async function copyToClipboard(value) {
@@ -594,7 +386,7 @@ function formatVoteLinkLabel(link) {
   const tpis = getVoteLinkTpiEntries(link)
 
   if (tpis.length > 1) {
-    return `${tpis.length} TPI à traiter`
+    return 'Vote groupé'
   }
 
   if (tpis.length === 1) {
@@ -608,15 +400,33 @@ function formatVoteLinkSubtitle(link) {
   const tpis = getVoteLinkTpiEntries(link)
 
   if (tpis.length > 1) {
-    return tpis.map((tpi) => tpi.reference).filter(Boolean).join(', ')
+    return `${tpis.length} TPI à voter`
   }
 
   const candidateName = tpis[0]?.candidateName || link?.candidateName
-  return candidateName ? `Candidat: ${candidateName}` : ''
+  return candidateName ? `${CANDIDATE_ROLE_LABEL}: ${candidateName}` : ''
 }
 
 function buildVoteLinkDetails(link) {
-  return getVoteLinkTpiEntries(link).map((tpi) => ({
+  const tpis = getVoteLinkTpiEntries(link)
+
+  if (tpis.length === 1) {
+    const [tpi] = tpis
+    return [
+      tpi?.roleLabel ? {
+        key: `${tpi.tpiId || tpi.reference}-role`,
+        label: 'Rôle',
+        text: tpi.roleLabel
+      } : null,
+      tpi?.subject ? {
+        key: `${tpi.tpiId || tpi.reference}-subject`,
+        label: 'Sujet',
+        text: tpi.subject
+      } : null
+    ].filter(Boolean)
+  }
+
+  return tpis.map((tpi) => ({
     key: tpi.tpiId || tpi.reference,
     label: tpi.reference || 'TPI',
     text: [
@@ -673,7 +483,7 @@ function formatArbitrageLinkLabel(link) {
 
 function formatArbitrageLinkSubtitle(link) {
   return [
-    link?.candidateName ? `Candidat: ${link.candidateName}` : '',
+    link?.candidateName ? `${CANDIDATE_ROLE_LABEL}: ${link.candidateName}` : '',
     link?.proposedSlotLabel || ''
   ].filter(Boolean).join(' · ')
 }
@@ -736,6 +546,773 @@ function getLinkAvailabilityMeta({
   }
 }
 
+function getPersonInitials(name, email) {
+  const source = String(name || email || '').trim()
+  if (!source) {
+    return '??'
+  }
+
+  const parts = source
+    .replace(/@.*/, '')
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+
+  if (parts.length === 0) {
+    return source.slice(0, 2).toUpperCase()
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join('')
+    .toUpperCase()
+}
+
+function getAccessLinkPhase(link, fallbackPhase = '') {
+  const normalizedType = compactText(link?.type).toLowerCase()
+  if (ACCESS_PHASE_FILTER_VALUES.has(normalizedType)) {
+    return normalizedType
+  }
+
+  return ACCESS_PHASE_FILTER_VALUES.has(fallbackPhase) ? fallbackPhase : 'vote'
+}
+
+function getAccessLinkUrl(link) {
+  return typeof link?.url === 'string' ? link.url.trim() : ''
+}
+
+function canPrepareAccessEmail(person, link) {
+  return Boolean(compactText(person?.email) && getAccessLinkUrl(link))
+}
+
+function buildAccessEmailDeliveryKey({ year, person, link, phase }) {
+  const resolvedPhase = getAccessLinkPhase(link, phase)
+  const identity = [
+    year,
+    person?.id,
+    person?.email,
+    resolvedPhase,
+    link?.url,
+    link?.token,
+    link?.proposalId,
+    link?.publicationVersion,
+    link?.reference,
+    link?.redirectPath
+  ].map(compactText).filter(Boolean).join('|')
+
+  return `${resolvedPhase}-${hashAccessEmailKey(identity)}`
+}
+
+function getBackendEmailDelivery(link) {
+  const deliveryStatus = compactText(link?.deliveryStatus).toLowerCase()
+
+  if (deliveryStatus === 'sent' || link?.sentAt) {
+    return {
+      status: 'sent',
+      source: 'system',
+      sentAt: link?.sentAt || link?.createdAt || null
+    }
+  }
+
+  if (deliveryStatus === 'failed') {
+    return {
+      status: 'failed',
+      source: 'system',
+      sentAt: link?.sentAt || null,
+      error: link?.deliveryError || ''
+    }
+  }
+
+  if (deliveryStatus === 'skipped') {
+    return {
+      status: 'skipped',
+      source: 'system',
+      sentAt: link?.sentAt || null
+    }
+  }
+
+  return null
+}
+
+function getEffectiveEmailDelivery({ year, person, link, phase, ledger }) {
+  const deliveryKey = buildAccessEmailDeliveryKey({ year, person, link, phase })
+  const storedDelivery = isPlainObject(ledger?.[deliveryKey]) ? ledger[deliveryKey] : null
+  const backendDelivery = getBackendEmailDelivery(link)
+
+  return {
+    deliveryKey,
+    delivery: isEmailDeliverySent(backendDelivery) ? backendDelivery : (storedDelivery || backendDelivery)
+  }
+}
+
+function isEmailDeliverySent(delivery) {
+  return compactText(delivery?.status).toLowerCase() === 'sent' &&
+    compactText(delivery?.source).toLowerCase() !== 'outlook'
+}
+
+function isEmailDeliveryPrepared(delivery) {
+  const status = compactText(delivery?.status).toLowerCase()
+  const source = compactText(delivery?.source).toLowerCase()
+  return status === 'prepared' || (status === 'sent' && source === 'outlook')
+}
+
+function isLocalOutlookPreparedDelivery(delivery) {
+  return compactText(delivery?.source).toLowerCase() === 'outlook' &&
+    isEmailDeliveryPrepared(delivery)
+}
+
+function getPublicationVersionSortValue(link) {
+  const version = Number.parseInt(String(link?.publicationVersion || 0), 10)
+  return Number.isInteger(version) ? version : 0
+}
+
+function selectPrimarySoutenanceEmailTarget(targets) {
+  return [...targets]
+    .filter((target) => getAccessLinkUrl(target.link))
+    .sort((left, right) => getPublicationVersionSortValue(right.link) - getPublicationVersionSortValue(left.link))[0] || null
+}
+
+function formatSoutenanceLinkLabel(link) {
+  return `Publication ${link?.publicationVersion || 'active'}`
+}
+
+function formatSoutenanceLinkSubtitle() {
+  return 'Vue filtrée sur les défenses publiées'
+}
+
+function getPrimarySoutenanceLink(entry) {
+  return selectPrimarySoutenanceEmailTarget(
+    (Array.isArray(entry?.soutenanceLinks) ? entry.soutenanceLinks : [])
+      .map((link) => ({ phase: 'soutenance', link }))
+  )?.link || null
+}
+
+function buildSoutenanceEmailTarget({ entry, year, ledger = {} }) {
+  const link = getPrimarySoutenanceLink(entry)
+
+  if (!canPrepareAccessEmail(entry?.person, link)) {
+    return null
+  }
+
+  const { deliveryKey, delivery } = getEffectiveEmailDelivery({
+    year,
+    person: entry?.person,
+    link,
+    phase: 'soutenance',
+    ledger
+  })
+
+  return {
+    deliveryKey,
+    delivery,
+    person: entry?.person,
+    link,
+    phase: 'soutenance',
+    label: formatSoutenanceLinkLabel(link),
+    subtitle: formatSoutenanceLinkSubtitle()
+  }
+}
+
+function isSoutenanceEmailTargetSmtpSendable(target) {
+  return Boolean(
+    target?.deliveryKey &&
+    compactText(target?.link?.id) &&
+    canPrepareAccessEmail(target?.person, target?.link) &&
+    !isEmailDeliverySent(target?.delivery)
+  )
+}
+
+function buildSoutenanceEmailAutomationGroup(targets = []) {
+  const normalizedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
+  const pendingTargets = normalizedTargets.filter(isSoutenanceEmailTargetSmtpSendable)
+  const sentCount = normalizedTargets.filter((target) => isEmailDeliverySent(target.delivery)).length
+
+  return {
+    targets: normalizedTargets,
+    pendingTargets,
+    totalCount: normalizedTargets.length,
+    pendingCount: pendingTargets.length,
+    sentCount
+  }
+}
+
+function getSoutenanceEmailAudience(person) {
+  if (isProjectLeadAccessPerson(person)) {
+    return 'cdp'
+  }
+
+  if (isStandaloneExpertAccessPerson(person)) {
+    return 'expert'
+  }
+
+  return 'autre'
+}
+
+function getSoutenanceEmailAudienceLabel(audience) {
+  if (audience === 'cdp') {
+    return getTpiRelationRoleLabel('chef_projet')
+  }
+
+  if (audience === 'expert') {
+    return getTpiRelationRoleLabel('expert')
+  }
+
+  return 'Autre'
+}
+
+function buildSoutenanceEmailRequestTarget(target) {
+  return {
+    clientKey: target?.deliveryKey || '',
+    linkId: compactText(target?.link?.id),
+    personId: compactText(target?.person?.id),
+    recipientName: compactText(target?.person?.name),
+    recipientEmail: compactText(target?.person?.email),
+    recipientAudience: compactText(target?.audience),
+    recipientRoles: Array.isArray(target?.person?.roles) ? target.person.roles : [],
+    url: getAccessLinkUrl(target?.link),
+    expiresAt: target?.link?.expiresAt || null
+  }
+}
+
+function buildSoutenanceResponseDeadlineCopy(person) {
+  const roles = getAccessPersonRoles(person)
+
+  if (roles.includes('chef_projet')) {
+    return 'Merci de faire votre retour dans les 3 jours uniquement si une modification est indispensable.'
+  }
+
+  if (roles.includes('expert')) {
+    return 'Merci de faire votre retour dans les 5 jours maximum uniquement si une modification est indispensable.'
+  }
+
+  return ''
+}
+
+function listEntryEmailTargets(entry, selectedPhaseFilters = DEFAULT_ACCESS_PHASE_FILTERS) {
+  const selectedPhaseSet = new Set(selectedPhaseFilters)
+  const targets = []
+  const soutenanceTargets = []
+
+  if (selectedPhaseSet.has('vote')) {
+    for (const link of Array.isArray(entry?.voteLinks) ? entry.voteLinks : []) {
+      targets.push({ phase: 'vote', link })
+    }
+  }
+
+  if (selectedPhaseSet.has('soutenance')) {
+    for (const link of Array.isArray(entry?.soutenanceLinks) ? entry.soutenanceLinks : []) {
+      soutenanceTargets.push({ phase: 'soutenance', link })
+    }
+  }
+
+  const primarySoutenanceTarget = selectPrimarySoutenanceEmailTarget(soutenanceTargets)
+  if (primarySoutenanceTarget) {
+    return [primarySoutenanceTarget]
+  }
+
+  targets.push(...soutenanceTargets)
+
+  if (selectedPhaseSet.has('arbitrage')) {
+    for (const link of Array.isArray(entry?.arbitrageLinks) ? entry.arbitrageLinks : []) {
+      targets.push({ phase: 'arbitrage', link })
+    }
+  }
+
+  return targets
+}
+
+function buildEntryEmailState({ entry, year, selectedPhaseFilters, ledger }) {
+  const targets = listEntryEmailTargets(entry, selectedPhaseFilters)
+    .filter((target) => getAccessLinkUrl(target.link))
+  const sendableTargets = targets.filter((target) => canPrepareAccessEmail(entry?.person, target.link))
+
+  if (targets.length > 0 && sendableTargets.length === 0) {
+    return {
+      variant: 'blocked',
+      label: 'Email manquant',
+      detail: '0 prêt',
+      sentCount: 0,
+      preparedCount: 0,
+      totalCount: 0
+    }
+  }
+
+  if (sendableTargets.length === 0) {
+    return {
+      variant: 'none',
+      label: 'Aucun email',
+      detail: 'Aucun lien prêt',
+      sentCount: 0,
+      preparedCount: 0,
+      totalCount: 0
+    }
+  }
+
+  let sentCount = 0
+  let preparedCount = 0
+  let failedCount = 0
+  let lastSentAt = null
+  let lastPreparedAt = null
+
+  for (const target of sendableTargets) {
+    const { delivery } = getEffectiveEmailDelivery({
+      year,
+      person: entry?.person,
+      link: target.link,
+      phase: target.phase,
+      ledger
+    })
+
+    if (isEmailDeliverySent(delivery)) {
+      sentCount += 1
+      const sentTime = delivery?.sentAt ? new Date(delivery.sentAt).getTime() : 0
+      if (sentTime && (!lastSentAt || sentTime > new Date(lastSentAt).getTime())) {
+        lastSentAt = delivery.sentAt
+      }
+    } else if (isEmailDeliveryPrepared(delivery)) {
+      preparedCount += 1
+      const preparedAt = delivery?.preparedAt || delivery?.sentAt
+      const preparedTime = preparedAt ? new Date(preparedAt).getTime() : 0
+      if (preparedTime && (!lastPreparedAt || preparedTime > new Date(lastPreparedAt).getTime())) {
+        lastPreparedAt = preparedAt
+      }
+    } else if (compactText(delivery?.status).toLowerCase() === 'failed') {
+      failedCount += 1
+    }
+  }
+
+  if (sentCount === sendableTargets.length) {
+    return {
+      variant: 'sent',
+      label: 'Email transmis',
+      detail: lastSentAt ? formatDateTime(lastSentAt) : `${sentCount}/${sendableTargets.length}`,
+      sentCount,
+      preparedCount,
+      totalCount: sendableTargets.length
+    }
+  }
+
+  if (preparedCount === sendableTargets.length) {
+    return {
+      variant: 'prepared',
+      label: 'Outlook préparé',
+      detail: lastPreparedAt ? formatDateTime(lastPreparedAt) : `${preparedCount}/${sendableTargets.length}`,
+      sentCount,
+      preparedCount,
+      totalCount: sendableTargets.length
+    }
+  }
+
+  const handledCount = sentCount + preparedCount
+  const hasMixedHandledDeliveries = sentCount > 0 && preparedCount > 0
+  if (handledCount > 0) {
+    return {
+      variant: 'partial',
+      label: hasMixedHandledDeliveries
+        ? 'Traitement partiel'
+        : preparedCount > 0
+          ? 'Préparation partielle'
+          : 'Transmission partielle',
+      detail: `${handledCount}/${sendableTargets.length}`,
+      sentCount,
+      preparedCount,
+      totalCount: sendableTargets.length
+    }
+  }
+
+  if (failedCount > 0) {
+    return {
+      variant: 'failed',
+      label: 'Échec email',
+      detail: `${failedCount} échec${failedCount > 1 ? 's' : ''}`,
+      sentCount,
+      preparedCount,
+      totalCount: sendableTargets.length
+    }
+  }
+
+  return {
+    variant: 'pending',
+    label: 'À envoyer',
+    detail: `${sendableTargets.length} prêt${sendableTargets.length > 1 ? 's' : ''}`,
+    sentCount,
+    preparedCount,
+    totalCount: sendableTargets.length
+  }
+}
+
+function buildAccessEmailSummary(people, year, ledger, selectedPhaseFilters) {
+  let readyCount = 0
+  let sentCount = 0
+  let preparedCount = 0
+  let blockedCount = 0
+  let failedCount = 0
+  let lastSentAt = null
+  let lastPreparedAt = null
+
+  for (const entry of Array.isArray(people) ? people : []) {
+    const targets = listEntryEmailTargets(entry, selectedPhaseFilters)
+      .filter((target) => getAccessLinkUrl(target.link))
+
+    for (const target of targets) {
+      if (!canPrepareAccessEmail(entry?.person, target.link)) {
+        blockedCount += 1
+        continue
+      }
+
+      readyCount += 1
+      const { delivery } = getEffectiveEmailDelivery({
+        year,
+        person: entry?.person,
+        link: target.link,
+        phase: target.phase,
+        ledger
+      })
+
+      if (isEmailDeliverySent(delivery)) {
+        sentCount += 1
+        const sentTime = delivery?.sentAt ? new Date(delivery.sentAt).getTime() : 0
+        if (sentTime && (!lastSentAt || sentTime > new Date(lastSentAt).getTime())) {
+          lastSentAt = delivery.sentAt
+        }
+      } else if (isEmailDeliveryPrepared(delivery)) {
+        preparedCount += 1
+        const preparedAt = delivery?.preparedAt || delivery?.sentAt
+        const preparedTime = preparedAt ? new Date(preparedAt).getTime() : 0
+        if (preparedTime && (!lastPreparedAt || preparedTime > new Date(lastPreparedAt).getTime())) {
+          lastPreparedAt = preparedAt
+        }
+      } else if (compactText(delivery?.status).toLowerCase() === 'failed') {
+        failedCount += 1
+      }
+    }
+  }
+
+  const handledCount = sentCount + preparedCount
+  const pendingCount = Math.max(readyCount - handledCount, 0)
+  const ratio = readyCount > 0 ? handledCount / readyCount : 0
+  const variant = readyCount <= 0
+    ? blockedCount > 0 ? 'blocked' : 'none'
+    : sentCount === readyCount
+      ? 'sent'
+      : preparedCount === readyCount
+        ? 'prepared'
+        : handledCount > 0
+          ? 'partial'
+          : failedCount > 0
+            ? 'failed'
+            : 'pending'
+
+  return {
+    readyCount,
+    sentCount,
+    preparedCount,
+    pendingCount,
+    blockedCount,
+    failedCount,
+    lastSentAt,
+    lastPreparedAt,
+    ratio,
+    variant,
+    progressLabel: readyCount > 0
+      ? sentCount > 0 && preparedCount > 0
+        ? `${handledCount}/${readyCount} traités`
+        : preparedCount > 0
+          ? `${handledCount}/${readyCount} préparés`
+          : `${sentCount}/${readyCount} transmis`
+      : blockedCount > 0
+        ? 'Email manquant'
+        : 'Aucun lien prêt'
+  }
+}
+
+function getEmailDeliveryDisplayMeta(delivery, canPrepareEmail) {
+  const status = compactText(delivery?.status).toLowerCase()
+
+  if (isEmailDeliveryPrepared(delivery)) {
+    const preparedAt = delivery?.preparedAt || delivery?.sentAt
+    const preparedAtLabel = preparedAt ? formatDateTime(preparedAt) : ''
+    return {
+      variant: 'prepared',
+      label: 'Outlook préparé',
+      detail: preparedAtLabel ? `Préparé le ${preparedAtLabel}` : 'Brouillon Outlook ouvert',
+      buttonLabel: 'Réouvrir Outlook',
+      buttonIcon: MailIcon
+    }
+  }
+
+  if (status === 'sent') {
+    const sentAtLabel = delivery?.sentAt ? formatDateTime(delivery.sentAt) : ''
+    return {
+      variant: 'sent',
+      label: 'Email transmis',
+      detail: sentAtLabel ? `Transmis le ${sentAtLabel}` : 'Transmission enregistrée',
+      buttonLabel: 'Réouvrir Outlook',
+      buttonIcon: CheckIcon
+    }
+  }
+
+  if (status === 'failed') {
+    return {
+      variant: 'failed',
+      label: 'Échec email',
+      detail: delivery?.error || 'Envoi automatique échoué',
+      buttonLabel: 'Réessayer via Outlook',
+      buttonIcon: MailIcon
+    }
+  }
+
+  if (status === 'skipped') {
+    return {
+      variant: 'blocked',
+      label: 'Email ignoré',
+      detail: 'Envoi automatique désactivé',
+      buttonLabel: 'Préparer Outlook',
+      buttonIcon: MailIcon
+    }
+  }
+
+  return {
+    variant: canPrepareEmail ? 'pending' : 'blocked',
+    label: canPrepareEmail ? 'À envoyer' : 'Email impossible',
+    detail: canPrepareEmail ? 'Outlook non transmis' : 'Adresse ou lien manquant',
+    buttonLabel: 'Préparer Outlook',
+    buttonIcon: MailIcon
+  }
+}
+
+function buildAccessEmailDraft({ year, person, link, phase, label, subtitle }) {
+  const personName = compactText(person?.name)
+  const greeting = personName ? `Bonjour ${personName},` : 'Bonjour,'
+  const url = getAccessLinkUrl(link)
+  const reference = compactText(link?.reference || label)
+  const expiryValue = link?.expiresAt
+    ? formatDateTime(link.expiresAt)
+    : 'selon la configuration active'
+  const expiryLine = link?.expiresAt
+    ? `Validité du lien: ${expiryValue}.`
+    : 'Validité du lien: selon la configuration active.'
+  const soutenanceResponseDeadlineCopy = buildSoutenanceResponseDeadlineCopy(person)
+  const tpiLines = getVoteLinkTpiEntries(link)
+    .map((tpi) => [
+      compactText(tpi.reference),
+      compactText(tpi.candidateName),
+      compactText(tpi.roleLabel)
+    ].filter(Boolean).join(' - '))
+    .filter(Boolean)
+
+  const phaseCopy = {
+    vote: {
+      subject: reference ? `Vote TPI - ${reference}` : `Vote TPI ${year}`,
+      intro: 'Voici votre lien personnel pour accéder au vote TPI.'
+    },
+    soutenance: {
+      subject: `Horaire des défenses TPI ${year} - lien personnel`,
+      intro: `L’horaire des défenses TPI ${year} est publié. Vous pouvez consulter votre vue personnelle avec le lien ci-dessous.`,
+      extraLines: [
+        'Ce lien donne aussi accès au téléchargement iCal et, si nécessaire, au formulaire de demande de modification.',
+        'Merci de considérer l’horaire comme définitif. Une demande de modification ne doit être déposée qu’en cas d’empêchement réel et important, après avoir vérifié qu’aucune adaptation de votre côté n’est possible.',
+        'Les possibilités de déplacement sont très limitées. Toute demande sera examinée, mais aucune modification ne peut être garantie.'
+      ]
+    },
+    arbitrage: {
+      subject: reference ? `Arbitrage TPI - ${reference}` : `Arbitrage TPI ${year}`,
+      intro: 'Voici votre lien personnel pour répondre à la proposition d’arbitrage.'
+    }
+  }[phase] || {
+    subject: `Lien d'accès TPI ${year}`,
+    intro: 'Voici votre lien personnel d’accès.'
+  }
+
+  const contextLines = [
+    phase === 'arbitrage' && link?.proposedSlotLabel ? `Créneau proposé: ${link.proposedSlotLabel}` : '',
+    phase === 'vote' && tpiLines.length > 0 ? `Dossiers concernés:\n${tpiLines.map((line) => `- ${line}`).join('\n')}` : ''
+  ].filter(Boolean)
+
+  if (phase === 'soutenance') {
+    return {
+      to: compactText(person?.email),
+      subject: phaseCopy.subject,
+      body: [
+        greeting,
+        '',
+        `L’horaire des défenses TPI ${year} est publié.`,
+        '',
+        'Vous pouvez consulter votre vue personnelle avec le lien ci-dessous.',
+        '',
+        '**Lien personnel**',
+        url,
+        '',
+        '**Important**',
+        'Ce lien donne aussi accès au téléchargement iCal et, si nécessaire, au formulaire de demande de modification.',
+        '',
+        ...(soutenanceResponseDeadlineCopy
+          ? [
+              '**Retour attendu**',
+              soutenanceResponseDeadlineCopy,
+              ''
+            ]
+          : []),
+        'Merci de considérer l’horaire comme définitif.',
+        '',
+        'Une demande de modification ne doit être déposée qu’en cas d’empêchement réel et important, après avoir vérifié qu’aucune adaptation de votre côté n’est possible.',
+        '',
+        'Les possibilités de déplacement sont très limitées. Toute demande sera examinée, mais aucune modification ne peut être garantie.',
+        '',
+        '**Validité du lien**',
+        `${expiryValue}.`,
+        '',
+        'Ce lien est personnel.',
+        '',
+        'Meilleures salutations'
+      ].join('\n')
+    }
+  }
+
+  return {
+    to: compactText(person?.email),
+    subject: phaseCopy.subject,
+    body: [
+      greeting,
+      '',
+      phaseCopy.intro,
+      ...contextLines,
+      ...(Array.isArray(phaseCopy.extraLines) ? ['', ...phaseCopy.extraLines] : []),
+      '',
+      phase === 'soutenance' ? 'Ouvrir ma vue personnelle:' : '',
+      url,
+      '',
+      expiryLine,
+      'Ce lien est personnel.',
+      '',
+      'Meilleures salutations'
+    ].filter((line) => line !== '').join('\n')
+  }
+}
+
+function buildMailtoUrl({ to, subject, body }) {
+  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
+
+function openMailtoDraft(mailtoUrl) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const openedWindow = typeof window.open === 'function'
+      ? window.open(mailtoUrl, '_blank', 'noopener,noreferrer')
+      : null
+
+    if (!openedWindow && window.location) {
+      window.location.href = mailtoUrl
+    }
+  } catch (error) {
+    if (window.location) {
+      window.location.href = mailtoUrl
+    }
+  }
+}
+
+function buildAccessSummaryMetrics(summary = {}) {
+  return [
+    {
+      id: 'people',
+      label: 'Personnes',
+      value: summary.peopleCount || 0,
+      detail: 'Destinataires uniques'
+    },
+    {
+      id: 'vote',
+      label: 'Votes',
+      value: summary.voteLinkCount || 0,
+      detail: `${summary.voteGeneratedLinkCount || 0} prêts`,
+      variant: 'vote'
+    },
+    {
+      id: 'soutenance',
+      label: 'Défenses',
+      value: summary.soutenanceLinkCount || 0,
+      detail: `${summary.soutenanceGeneratedLinkCount || 0} prêts`,
+      variant: 'soutenance'
+    },
+    {
+      id: 'arbitrage',
+      label: 'Arbitrages',
+      value: summary.arbitrageLinkCount || 0,
+      detail: `${summary.arbitrageGeneratedLinkCount || 0} prêts`,
+      variant: 'arbitrage'
+    },
+    {
+      id: 'generated',
+      label: 'Disponibles',
+      value: summary.generatedLinkCount || 0,
+      detail: 'Liens utilisables',
+      variant: 'ok'
+    },
+    {
+      id: 'unavailable',
+      label: 'À reprendre',
+      value: summary.unavailableGeneratedLinkCount || 0,
+      detail: 'Indisponibles',
+      variant: summary.unavailableGeneratedLinkCount > 0 ? 'warning' : 'neutral'
+    }
+  ]
+}
+
+const AccessMetricRow = ({ metric }) => {
+  return (
+    <div className={`token-access-summary-row is-${metric.variant || 'neutral'}`.trim()}>
+      <span className='token-access-summary-row-label'>{metric.label}</span>
+      <strong>{metric.value}</strong>
+      {metric.detail ? <small>{metric.detail}</small> : null}
+    </div>
+  )
+}
+
+const AccessPhaseRow = ({ phase }) => {
+  return (
+    <article className={`token-access-phase-row is-${phase.variant || 'neutral'}`.trim()}>
+      <div className='token-access-phase-row-copy'>
+        <span>{phase.label}</span>
+        <small>{phase.status}</small>
+      </div>
+      <strong>{phase.metric}</strong>
+    </article>
+  )
+}
+
+const AccessOverviewCard = ({ item }) => {
+  const Icon = item.icon || ClipboardIcon
+  const accessibleLabel = [item.label, item.value, item.detail]
+    .filter((part) => part !== null && part !== undefined && part !== '')
+    .join(' · ')
+
+  return (
+    <article
+      className={`token-access-overview-card is-${item.variant || 'neutral'}`.trim()}
+      aria-label={accessibleLabel}
+    >
+      <span className='token-access-overview-icon' aria-hidden='true'>
+        <Icon />
+      </span>
+      <span>{item.label}</span>
+      <strong>{item.value}</strong>
+      {item.detail ? <small>{item.detail}</small> : null}
+    </article>
+  )
+}
+
+const AccessNotice = ({ tone = 'info', role = 'status', children, action = null }) => (
+  <div className={`token-generator-notice is-${tone}${action ? ' has-action' : ''}`.trim()} role={role}>
+    <span className='token-generator-notice-icon' aria-hidden='true'>
+      {tone === 'success' ? <CheckIcon /> : tone === 'warning' || tone === 'danger' ? <AlertIcon /> : <ClipboardIcon />}
+    </span>
+    <span className='token-generator-notice-copy'>{children}</span>
+    {action ? <span className='token-generator-notice-action'>{action}</span> : null}
+  </div>
+)
+
 const LinkRow = ({
   label,
   subtitle,
@@ -747,10 +1324,11 @@ const LinkRow = ({
   generated = false,
   recoverable = true,
   availabilityStatus = '',
+  emailDelivery = null,
+  canPrepareEmail = false,
+  onPrepareEmail,
   onCopy,
-  onOpen,
-  onEmail = null,
-  canEmail = true
+  onOpen
 }) => {
   const hasUrl = typeof url === 'string' && url.length > 0
   const normalizedStatus = String(availabilityStatus || '').trim().toLowerCase()
@@ -792,10 +1370,8 @@ const LinkRow = ({
     generated,
     recoverable
   })
-  const canPrepareEmail = hasUrl && canEmail !== false
-  const emailUnavailableTitle = hasUrl
-    ? `Ré-envoi indisponible: ${statusLabel.toLowerCase()}.`
-    : unavailableTitle
+  const emailMeta = getEmailDeliveryDisplayMeta(emailDelivery, canPrepareEmail)
+  const EmailButtonIcon = emailMeta.buttonIcon || MailIcon
   const [isCopied, setIsCopied] = useState(false)
   const copyResetTimerRef = useRef(null)
 
@@ -829,13 +1405,19 @@ const LinkRow = ({
   }
 
   return (
-    <article className='token-access-link-row'>
+    <article className={`token-access-link-row is-${displayStatus} has-email-${emailMeta.variant}`.trim()}>
       <div className='token-access-link-copy'>
         <div className='token-access-link-head'>
           <strong>{label}</strong>
           <div className='token-access-link-meta'>
             {subtitle ? <span>{subtitle}</span> : null}
             <span className={`token-access-badge is-${statusVariant}`.trim()}>{statusLabel}</span>
+            {emailMeta.variant === 'sent' ? (
+              <span className='token-access-email-chip is-sent'>Transmis</span>
+            ) : null}
+            {emailMeta.variant === 'prepared' ? (
+              <span className='token-access-email-chip is-prepared'>Préparé</span>
+            ) : null}
           </div>
         </div>
 
@@ -883,283 +1465,591 @@ const LinkRow = ({
         <span className='token-access-link-expiry'>
           {expiryLabel}
         </span>
+
+        {emailMeta.detail ? (
+          <span className={`token-access-link-email-state is-${emailMeta.variant}`.trim()}>
+            {emailMeta.detail}
+          </span>
+        ) : null}
       </div>
 
       <div className='token-access-link-actions'>
         <button
           type='button'
-          className={`token-access-btn secondary${isCopied ? ' is-success' : ''}`}
+          className={`token-access-icon-btn secondary${isCopied ? ' is-success' : ''}`}
           onClick={hasUrl ? handleCopyAction : undefined}
           disabled={!hasUrl}
           title={hasUrl ? `Copier le lien : ${url}` : unavailableTitle}
           aria-label={`Copier le lien ${label}`}
         >
-          {isCopied ? 'Copié ✓' : 'Copier'}
+          <IconButtonContent label={isCopied ? 'Lien copié' : `Copier le lien ${label}`} icon={isCopied ? CheckIcon : ClipboardIcon} />
         </button>
         <button
           type='button'
-          className='token-access-btn primary'
+          className='token-access-icon-btn primary'
           onClick={hasUrl ? onOpen : undefined}
           disabled={!hasUrl}
           title={hasUrl ? `Ouvrir le lien : ${url}` : unavailableTitle}
           aria-label={`Ouvrir le lien ${label}`}
         >
-          Ouvrir
+          <IconButtonContent label={`Ouvrir le lien ${label}`} icon={ArrowRightIcon} />
         </button>
-        {onEmail ? (
-          <button
-            type='button'
-            className='token-access-btn secondary'
-            onClick={canPrepareEmail ? onEmail : undefined}
-            disabled={!canPrepareEmail}
-            title={canPrepareEmail ? 'Préparer un email Outlook pour ce lien.' : emailUnavailableTitle}
-            aria-label={`Préparer un email ${label}`}
-          >
-            Email
-          </button>
-        ) : null}
+        <button
+          type='button'
+          className={`token-access-icon-btn email is-${emailMeta.variant}`.trim()}
+          onClick={canPrepareEmail ? onPrepareEmail : undefined}
+          disabled={!canPrepareEmail}
+          title={canPrepareEmail ? `${emailMeta.buttonLabel}: ${label}` : emailMeta.detail}
+          aria-label={`${emailMeta.buttonLabel} pour ${label}`}
+        >
+          <IconButtonContent label={`${emailMeta.buttonLabel} pour ${label}`} icon={EmailButtonIcon} />
+        </button>
       </div>
     </article>
   )
 }
 
-const PersonCard = ({ entry, onCopy, onOpen, onEmailLink }) => {
-  const roleLabels = Array.isArray(entry?.person?.roles)
-    ? entry.person.roles.map((role) => formatRoleLabel(role))
-    : []
+const PersonCard = ({
+  entry,
+  selectedYear,
+  selectedPhaseFilters = DEFAULT_ACCESS_PHASE_FILTERS,
+  emailDeliveryLedger = {},
+  onPrepareEmail,
+  onCopy,
+  onOpen
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const selectedPhaseSet = new Set(selectedPhaseFilters)
+  const showVoteGroup = selectedPhaseSet.has('vote')
+  const showSoutenanceGroup = selectedPhaseSet.has('soutenance')
+  const showArbitrageGroup = selectedPhaseSet.has('arbitrage')
+  const personRoles = Array.isArray(entry?.person?.roles) ? entry.person.roles : []
+  const roleLabels = personRoles.map((role) => getTpiRelationRoleLabel(role))
   const voteLinks = Array.isArray(entry?.voteLinks) ? entry.voteLinks : []
   const soutenanceLinks = Array.isArray(entry?.soutenanceLinks) ? entry.soutenanceLinks : []
   const arbitrageLinks = Array.isArray(entry?.arbitrageLinks) ? entry.arbitrageLinks : []
+  const shouldShowArbitrageGroup = showArbitrageGroup && (
+    arbitrageLinks.length > 0 ||
+    personRoles.some(isExpertRole)
+  )
+  const hasVisiblePhaseGroup = showVoteGroup || showSoutenanceGroup || shouldShowArbitrageGroup
   const voteTpiCount = voteLinks.reduce((total, link) => total + getVoteLinkTpiCount(link), 0)
+  const personName = entry?.person?.name || 'Personne sans nom'
+  const personCountSummary = [
+    formatNonZeroCount(voteTpiCount, 'TPI à voter', 'TPI à voter'),
+    formatNonZeroCount(soutenanceLinks.length, 'défense'),
+    formatNonZeroCount(arbitrageLinks.length, 'arbitrage')
+  ].filter(Boolean).join(' · ') || 'Aucun lien'
+  const personContext = [
+    ...roleLabels,
+    entry?.person?.site
+  ].filter(Boolean).join(' · ')
+  const emailState = buildEntryEmailState({
+    entry,
+    year: selectedYear,
+    selectedPhaseFilters,
+    ledger: emailDeliveryLedger
+  })
+  const handledEmailCount = (emailState.sentCount || 0) + (emailState.preparedCount || 0)
+  const toggleLabel = isExpanded ? `Réduire le bloc de ${personName}` : `Ouvrir le bloc de ${personName}`
+  const ToggleIcon = isExpanded ? ChevronDownIcon : ChevronRightIcon
 
   return (
-    <article className='token-access-person-card'>
-      <header className='token-access-person-head'>
-        <div className='token-access-person-identity'>
-          <strong>{entry?.person?.name || 'Personne sans nom'}</strong>
-          <span>{entry?.person?.email || 'Email manquant'}</span>
+    <article className={`token-access-person-card is-email-${emailState.variant}${isExpanded ? ' is-expanded' : ' is-collapsed'}`.trim()}>
+      <header className={`token-access-person-head${isExpanded ? ' is-expanded' : ''}`.trim()}>
+        <div className='token-access-person-main'>
+          <span className='token-access-person-avatar' aria-hidden='true'>
+            {getPersonInitials(entry?.person?.name, entry?.person?.email)}
+          </span>
+          <div className='token-access-person-identity'>
+            <strong>{personName}</strong>
+            <span>{entry?.person?.email || 'Email manquant'}</span>
+            {handledEmailCount > 0 ? (
+              <span className={`token-access-email-state-badge is-${emailState.variant}`.trim()}>
+                {emailState.variant === 'sent'
+                  ? 'Email transmis'
+                  : emailState.variant === 'prepared'
+                    ? 'Outlook préparé'
+                    : emailState.sentCount > 0 && emailState.preparedCount > 0
+                      ? `${handledEmailCount}/${emailState.totalCount} traités`
+                      : emailState.preparedCount > 0
+                        ? `${handledEmailCount}/${emailState.totalCount} préparés`
+                        : `${handledEmailCount}/${emailState.totalCount} transmis`}
+              </span>
+            ) : null}
+          </div>
         </div>
 
-        <div className='token-access-person-meta'>
-          <span className='token-access-count-chip'>
-            {voteTpiCount} TPI à voter
-          </span>
-          <span className='token-access-count-chip'>
-            {soutenanceLinks.length} défense{soutenanceLinks.length > 1 ? 's' : ''}
-          </span>
-          <span className='token-access-count-chip'>
-            {arbitrageLinks.length} arbitrage{arbitrageLinks.length > 1 ? 's' : ''}
-          </span>
-        </div>
+        {!isExpanded ? (
+          <div className='token-access-person-meta'>
+            {personCountSummary}
+          </div>
+        ) : null}
+
+        <button
+          type='button'
+          className='token-access-icon-btn secondary token-access-person-collapse-btn'
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((current) => !current)}
+          title={toggleLabel}
+        >
+          <IconButtonContent label={toggleLabel} icon={ToggleIcon} />
+        </button>
       </header>
 
-      <div className='token-access-badges'>
-        {roleLabels.map((roleLabel) => (
-          <span key={roleLabel} className='token-access-badge'>
-            {roleLabel}
-          </span>
-        ))}
+      {isExpanded ? (
+        <div className='token-access-person-body'>
+          {personContext ? <p className='token-access-person-context'>{personContext}</p> : null}
 
-        {entry?.person?.site ? (
-          <span className='token-access-badge is-neutral'>{entry.person.site}</span>
-        ) : null}
+          {!hasVisiblePhaseGroup ? (
+            <p className='token-access-empty-inline'>
+              Aucun type de lien sélectionné.
+            </p>
+          ) : null}
+
+          {showVoteGroup ? (
+            <section className='token-access-link-group'>
+              <div className='token-access-section-head'>
+                <h3>
+                  <VoteIcon aria-hidden='true' />
+                  Liens de vote
+                </h3>
+              </div>
+
+              {voteLinks.length > 0 ? (
+                <div className='token-access-link-list'>
+                  {voteLinks.map((link, index) => {
+                    const label = formatVoteLinkLabel(link)
+                    const subtitle = formatVoteLinkSubtitle(link)
+                    const { deliveryKey, delivery } = getEffectiveEmailDelivery({
+                      year: selectedYear,
+                      person: entry?.person,
+                      link,
+                      phase: 'vote',
+                      ledger: emailDeliveryLedger
+                    })
+
+                    return (
+                      <LinkRow
+                        key={link.url || `${entry?.person?.id}-vote-${link.reference || index}`}
+                        label={label}
+                        subtitle={subtitle}
+                        details={buildVoteLinkDetails(link)}
+                        url={link.url}
+                        expiresAt={link.expiresAt}
+                        revokedAt={link.revokedAt}
+                        generated={link.generated === true}
+                        recoverable={link.recoverable !== false}
+                        availabilityStatus={link.availabilityStatus}
+                        emailDelivery={delivery}
+                        canPrepareEmail={canPrepareAccessEmail(entry?.person, link)}
+                        onPrepareEmail={() => onPrepareEmail?.({
+                          deliveryKey,
+                          person: entry?.person,
+                          link,
+                          phase: 'vote',
+                          label,
+                          subtitle
+                        })}
+                        onCopy={() => onCopy(link.url)}
+                        onOpen={() => onOpen(link.url)}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className='token-access-empty-inline'>
+                  Aucun lien de vote actif pour cette personne.
+                </p>
+              )}
+            </section>
+          ) : null}
+
+          {shouldShowArbitrageGroup ? (
+            <section className='token-access-link-group'>
+              <div className='token-access-section-head'>
+                <h3>
+                  <WorkflowIcon aria-hidden='true' />
+                  Liens d’arbitrage
+                </h3>
+              </div>
+
+              {arbitrageLinks.length > 0 ? (
+                <div className='token-access-link-list'>
+                  {arbitrageLinks.map((link, index) => {
+                    const label = formatArbitrageLinkLabel(link)
+                    const subtitle = formatArbitrageLinkSubtitle(link)
+                    const { deliveryKey, delivery } = getEffectiveEmailDelivery({
+                      year: selectedYear,
+                      person: entry?.person,
+                      link,
+                      phase: 'arbitrage',
+                      ledger: emailDeliveryLedger
+                    })
+
+                    return (
+                      <LinkRow
+                        key={link.url || `${entry?.person?.id}-arbitrage-${link.proposalId || index}`}
+                        label={label}
+                        subtitle={subtitle}
+                        details={buildArbitrageLinkDetails(link)}
+                        url={link.url}
+                        expiresAt={link.expiresAt}
+                        generated={link.generated === true}
+                        recoverable={link.recoverable !== false}
+                        availabilityStatus={link.availabilityStatus}
+                        emailDelivery={delivery}
+                        canPrepareEmail={canPrepareAccessEmail(entry?.person, link)}
+                        onPrepareEmail={() => onPrepareEmail?.({
+                          deliveryKey,
+                          person: entry?.person,
+                          link,
+                          phase: 'arbitrage',
+                          label,
+                          subtitle
+                        })}
+                        onCopy={() => onCopy(link.url)}
+                        onOpen={() => onOpen(link.url)}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className='token-access-empty-inline'>
+                  Aucun lien d’arbitrage généré pour cette personne.
+                </p>
+              )}
+            </section>
+          ) : null}
+
+          {showSoutenanceGroup ? (
+            <section className='token-access-link-group'>
+              <div className='token-access-section-head'>
+                <h3>
+                  <BriefcaseIcon aria-hidden='true' />
+                  Liens de consultation des défenses
+                </h3>
+              </div>
+
+              {soutenanceLinks.length > 0 ? (
+                <div className='token-access-link-list'>
+                  {soutenanceLinks.map((link) => {
+                    const label = formatSoutenanceLinkLabel(link)
+                    const subtitle = formatSoutenanceLinkSubtitle()
+                    const { deliveryKey, delivery } = getEffectiveEmailDelivery({
+                      year: selectedYear,
+                      person: entry?.person,
+                      link,
+                      phase: 'soutenance',
+                      ledger: emailDeliveryLedger
+                    })
+
+                    return (
+                      <LinkRow
+                        key={`${entry?.person?.id}-publication-${link.publicationVersion || 0}`}
+                        label={label}
+                        subtitle={subtitle}
+                        url={link.url}
+                        expiresAt={link.expiresAt}
+                        revokedAt={link.revokedAt}
+                        generated={link.generated === true}
+                        recoverable={link.recoverable !== false}
+                        availabilityStatus={link.availabilityStatus}
+                        emailDelivery={delivery}
+                        canPrepareEmail={canPrepareAccessEmail(entry?.person, link)}
+                        onPrepareEmail={() => onPrepareEmail?.({
+                          deliveryKey,
+                          person: entry?.person,
+                          link,
+                          phase: 'soutenance',
+                          label,
+                          subtitle
+                        })}
+                        onCopy={() => onCopy(link.url)}
+                        onOpen={() => onOpen(link.url)}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className='token-access-empty-inline'>
+                  Aucun lien de défense disponible pour cette personne.
+                </p>
+              )}
+            </section>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+const SoutenanceEmailAutomationPanel = ({
+  targets = [],
+  selectedKeys = {},
+  selectedCount = 0,
+  pendingCount = 0,
+  projectLeadGroup = {},
+  expertGroup = {},
+  preview = null,
+  testEmailAddress = '',
+  isPreviewLoading = false,
+  isSending = false,
+  onPreview,
+  onSendTest,
+  onSendSelection,
+  onSendProjectLeads,
+  onSendExperts,
+  onTestEmailChange,
+  onToggleTarget,
+  onSelectPending,
+  onClearSelection,
+  onCollapse
+}) => {
+  const hasTargets = targets.length > 0
+  const previewSubject = compactText(preview?.subject)
+  const canSendTest = hasTargets && testEmailAddress.trim() && !isSending
+
+  return (
+    <section id='token-access-email-automation-panel' className='token-access-email-automation' aria-label='Envoi automatique des emails défense'>
+      <div className='token-access-email-automation-head'>
+        <span className='token-access-email-automation-icon' aria-hidden='true'>
+          <SendIcon />
+        </span>
+        <div>
+          <h2>Email HTML Défenses</h2>
+          <p>{pendingCount}/{targets.length} à transmettre par SMTP</p>
+        </div>
+        <button
+          type='button'
+          className='token-access-icon-btn secondary token-access-email-automation-close'
+          aria-label='Réduire le module email HTML'
+          aria-expanded='true'
+          aria-controls='token-access-email-automation-panel'
+          onClick={onCollapse}
+        >
+          <IconButtonContent label='Réduire le module email HTML' icon={ChevronRightIcon} />
+        </button>
       </div>
 
-      <section className='token-access-link-group'>
-        <div className='token-access-section-head'>
-          <h3>Liens de vote</h3>
-          <span>{voteTpiCount} TPI</span>
+      <div className='token-access-email-control-grid'>
+        <section className='token-access-email-control-group is-preparation' aria-label='Préparation email HTML'>
+          <div className='token-access-email-control-title'>
+            <ClipboardIcon aria-hidden='true' />
+            <span>
+              <strong>Préparation</strong>
+              <small>Rendu et test privé</small>
+            </span>
+          </div>
+          <div className='token-access-email-control-row is-preparation-row'>
+            <label className='token-access-email-test-control' htmlFor='soutenance-email-test'>
+              <span>Email test</span>
+              <input
+                id='soutenance-email-test'
+                type='email'
+                placeholder='adresse privée'
+                value={testEmailAddress}
+                onChange={(event) => onTestEmailChange?.(event.target.value)}
+              />
+            </label>
+            <button
+              type='button'
+              className='token-access-email-pill-button'
+              onClick={onPreview}
+              disabled={!hasTargets || isPreviewLoading || isSending}
+            >
+              <ClipboardIcon aria-hidden='true' />
+              <span>{isPreviewLoading ? 'Prévisualisation...' : 'Prévisualiser'}</span>
+            </button>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-primary'
+              onClick={onSendTest}
+              disabled={!canSendTest}
+            >
+              <MailIcon aria-hidden='true' />
+              <span>Test</span>
+            </button>
+          </div>
+        </section>
+
+        <section className='token-access-email-control-group is-batch' aria-label='Envoi email HTML par lot'>
+          <div className='token-access-email-control-title'>
+            <SendIcon aria-hidden='true' />
+            <span>
+              <strong>Lots</strong>
+              <small>CDP puis experts</small>
+            </span>
+          </div>
+          <div className='token-access-email-control-row is-two-columns'>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-primary'
+              onClick={onSendProjectLeads}
+              disabled={(projectLeadGroup.pendingCount || 0) === 0 || isSending}
+            >
+              <SendIcon aria-hidden='true' />
+              <span>Envoyer CDP</span>
+              <strong>{projectLeadGroup.pendingCount || 0}/{projectLeadGroup.totalCount || 0}</strong>
+            </button>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-primary'
+              onClick={onSendExperts}
+              disabled={(expertGroup.pendingCount || 0) === 0 || isSending}
+            >
+              <SendIcon aria-hidden='true' />
+              <span>Envoyer experts</span>
+              <strong>{expertGroup.pendingCount || 0}/{expertGroup.totalCount || 0}</strong>
+            </button>
+          </div>
+        </section>
+
+        <section className='token-access-email-control-group is-selection' aria-label='Envoi email HTML par sélection'>
+          <div className='token-access-email-control-title'>
+            <CheckIcon aria-hidden='true' />
+            <span>
+              <strong>Sélection</strong>
+              <small>{selectedCount} choisi{selectedCount > 1 ? 's' : ''}</small>
+            </span>
+          </div>
+          <div className='token-access-email-control-row'>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-muted'
+              onClick={onSelectPending}
+              disabled={pendingCount === 0 || isSending}
+            >
+              <CheckIcon aria-hidden='true' />
+              <span>À envoyer</span>
+            </button>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-muted'
+              onClick={onClearSelection}
+              disabled={selectedCount === 0 || isSending}
+            >
+              <RefreshIcon aria-hidden='true' />
+              <span>Effacer</span>
+            </button>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-primary'
+              onClick={onSendSelection}
+              disabled={selectedCount === 0 || isSending}
+            >
+              <SendIcon aria-hidden='true' />
+              <span>Envoyer sélection</span>
+              <strong>{selectedCount}</strong>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <div className='token-access-email-automation-grid'>
+        <div className='token-access-email-book' role='list' aria-label='Carnet d’adresses défense'>
+          {targets.length === 0 ? (
+            <p className='token-access-email-book-empty'>
+              Aucun lien de défense disponible.
+            </p>
+          ) : targets.map((target) => {
+            const deliveryMeta = getEmailDeliveryDisplayMeta(target.delivery, true)
+            const isChecked = selectedKeys[target.deliveryKey] === true
+            const isSendable = isSoutenanceEmailTargetSmtpSendable(target)
+
+            return (
+              <label
+                key={target.deliveryKey}
+                className={`token-access-email-book-row is-${deliveryMeta.variant}${isChecked ? ' is-selected' : ''}`.trim()}
+                role='listitem'
+              >
+                <input
+                  type='checkbox'
+                  checked={isChecked}
+                  disabled={!isSendable || isSending}
+                  onChange={(event) => onToggleTarget?.(target.deliveryKey, event.target.checked)}
+                />
+                <span className='token-access-email-book-person'>
+                  <strong>{target.person?.name || target.person?.email}</strong>
+                  <small>{target.person?.email || 'Email manquant'}</small>
+                </span>
+                <span className={`token-access-email-book-audience is-${target.audience}`.trim()}>
+                  {target.audienceLabel}
+                </span>
+                <span className={`token-access-email-book-state is-${deliveryMeta.variant}`.trim()}>
+                  {isSendable ? 'À envoyer' : deliveryMeta.label}
+                </span>
+              </label>
+            )
+          })}
         </div>
 
-        {voteLinks.length > 0 ? (
-          <div className='token-access-link-list'>
-            {voteLinks.map((link, index) => (
-              <LinkRow
-                key={link.url || `${entry?.person?.id}-vote-${link.reference || index}`}
-                label={formatVoteLinkLabel(link)}
-                subtitle={formatVoteLinkSubtitle(link)}
-                badges={[
-                  { label: link.roleLabel || formatRoleLabel(link.role), variant: 'vote' },
-                  link.redirectPath ? { label: link.redirectPath, variant: 'neutral' } : null
-                ].filter(Boolean)}
-                details={buildVoteLinkDetails(link)}
-                url={link.url}
-                expiresAt={link.expiresAt}
-                revokedAt={link.revokedAt}
-                generated={link.generated === true}
-                recoverable={link.recoverable !== false}
-                availabilityStatus={link.availabilityStatus}
-                onCopy={() => onCopy(link.url)}
-                onOpen={() => onOpen(link.url)}
-                onEmail={() => onEmailLink(entry, link)}
-                canEmail={canPrepareEmailForLink(link)}
-              />
-            ))}
+        <div className='token-access-email-preview'>
+          <div className='token-access-email-preview-head'>
+            <strong>Prévisualisation</strong>
+            {previewSubject ? <span>{previewSubject}</span> : null}
           </div>
-        ) : (
-          <p className='token-access-empty-inline'>
-            Aucun lien de vote actif pour cette personne.
-          </p>
-        )}
-      </section>
-
-      <section className='token-access-link-group'>
-        <div className='token-access-section-head'>
-          <h3>Liens d’arbitrage</h3>
-          <span>{arbitrageLinks.length}</span>
+          {preview?.html ? (
+            <iframe
+              title='Prévisualisation du template email défense'
+              srcDoc={preview.html}
+            />
+          ) : (
+            <div className='token-access-email-preview-empty'>
+              <ClipboardIcon aria-hidden='true' />
+              <span>Prévisualisez le template avant l’envoi.</span>
+            </div>
+          )}
         </div>
-
-        {arbitrageLinks.length > 0 ? (
-          <div className='token-access-link-list'>
-            {arbitrageLinks.map((link, index) => (
-              <LinkRow
-                key={link.url || `${entry?.person?.id}-arbitrage-${link.proposalId || index}`}
-                label={formatArbitrageLinkLabel(link)}
-                subtitle={formatArbitrageLinkSubtitle(link)}
-                badges={[
-                  { label: 'Arbitrage', variant: 'arbitrage' },
-                  link.roleLabel ? { label: link.roleLabel, variant: 'neutral' } : null,
-                  { label: formatArbitrageProposalStatus(link.status), variant: 'neutral' },
-                  { label: formatArbitrageResponseStatus(link.responseStatus), variant: link.responseStatus === 'accepted' ? 'ok' : link.responseStatus === 'rejected' ? 'warning' : 'neutral' },
-                  link.devMode ? { label: 'DEV', variant: 'neutral' } : null
-                ].filter(Boolean)}
-                details={buildArbitrageLinkDetails(link)}
-                url={link.url}
-                expiresAt={link.expiresAt}
-                generated={link.generated === true}
-                recoverable={link.recoverable !== false}
-                availabilityStatus={link.availabilityStatus}
-                onCopy={() => onCopy(link.url)}
-                onOpen={() => onOpen(link.url)}
-                onEmail={() => onEmailLink(entry, link)}
-                canEmail={canPrepareEmailForLink(link)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className='token-access-empty-inline'>
-            Aucun lien d’arbitrage généré pour cette personne.
-          </p>
-        )}
-      </section>
-
-      <section className='token-access-link-group'>
-        <div className='token-access-section-head'>
-          <h3>Liens de consultation des défenses</h3>
-          <span>{soutenanceLinks.length}</span>
-        </div>
-
-        {soutenanceLinks.length > 0 ? (
-          <div className='token-access-link-list'>
-            {soutenanceLinks.map((link) => (
-              <LinkRow
-                key={`${entry?.person?.id}-publication-${link.publicationVersion || 0}`}
-                label={`Publication ${link.publicationVersion || 'active'}`}
-                subtitle='Vue filtrée sur les défenses publiées'
-                badges={[
-                  { label: 'Défense', variant: 'soutenance' },
-                  link.redirectPath ? { label: link.redirectPath, variant: 'neutral' } : null
-                ].filter(Boolean)}
-                url={link.url}
-                expiresAt={link.expiresAt}
-                revokedAt={link.revokedAt}
-                generated={link.generated === true}
-                recoverable={link.recoverable !== false}
-                availabilityStatus={link.availabilityStatus}
-                onCopy={() => onCopy(link.url)}
-                onOpen={() => onOpen(link.url)}
-                onEmail={() => onEmailLink(entry, link)}
-                canEmail={canPrepareEmailForLink(link)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className='token-access-empty-inline'>
-            Aucun lien de défense disponible pour cette personne.
-          </p>
-        )}
-      </section>
-    </article>
+      </div>
+    </section>
   )
 }
 
 const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const location = useLocation()
   const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const requestedYear = Number.parseInt(queryParams.get('year') || '', 10)
-  const requestedLinkType = queryParams.get('type')
+  const requestedLinkType = queryParams.get('phase') || queryParams.get('type')
   const accessLinkRequestIdRef = useRef(0)
-  const skipNextAccessLinkPreviewRef = useRef(null)
   const [selectedYear, setSelectedYear] = useState(() => (
-    YEARS_CONFIG.isSupportedYear(requestedYear)
-      ? requestedYear
-      : YEARS_CONFIG.getCurrentYear()
+    getStoredAccessYear() || YEARS_CONFIG.getCurrentYear()
   ))
   const [searchQuery, setSearchQuery] = useState('')
-  const [linkTypeFilter, setLinkTypeFilter] = useState(() => (
-    LINK_TYPE_FILTER_VALUES.has(requestedLinkType)
-      ? requestedLinkType
-      : 'all'
+  const [linkTypeFilters, setLinkTypeFilters] = useState(() => (
+    ACCESS_PHASE_FILTER_VALUES.has(requestedLinkType)
+      ? [requestedLinkType]
+      : DEFAULT_ACCESS_PHASE_FILTERS
   ))
   const [previewPayload, setPreviewPayload] = useState(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const [selectedPublicationVersion, setSelectedPublicationVersion] = useState('active')
-  const [emailSettings, setEmailSettings] = useState(DEFAULT_EMAIL_SETTINGS)
-  const [publicationSettings, setPublicationSettings] = useState(DEFAULT_PUBLICATION_SETTINGS)
   const [accessLinkSettings, setAccessLinkSettings] = useState(DEFAULT_ACCESS_LINK_SETTINGS)
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const [usePublicationSiteLinks, setUsePublicationSiteLinks] = useState(false)
   const [useVotePublicationSiteLinks, setUseVotePublicationSiteLinks] = useState(false)
-  const [prepareWithOutlook, setPrepareWithOutlook] = useState(true)
-  const [invitationDrafts, setInvitationDrafts] = useState([])
-
-  const availableYears = useMemo(
-    () => YEARS_CONFIG.getAvailableYears().slice().reverse(),
-    []
-  )
-
-  useEffect(() => {
-    let isCancelled = false
-
-    const loadCatalogSettings = async () => {
-      try {
-        const catalog = await planningCatalogService.getGlobal()
-        if (isCancelled) {
-          return
-        }
-
-        const normalizedSettings = normalizeEmailSettings(catalog?.emailSettings)
-        setEmailSettings(normalizedSettings)
-        setPublicationSettings(normalizePublicationSettings(catalog?.publicationSettings))
-        setPrepareWithOutlook(normalizedSettings.defaultDeliveryMode !== 'automatic')
-      } catch (error) {
-        if (!isCancelled) {
-          setEmailSettings(DEFAULT_EMAIL_SETTINGS)
-          setPublicationSettings(DEFAULT_PUBLICATION_SETTINGS)
-          setPrepareWithOutlook(true)
-        }
-      }
-    }
-
-    loadCatalogSettings()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [])
+  const [showCandidateBlocks, setShowCandidateBlocks] = useState(getStoredShowCandidatesPreference)
+  const [isSummaryPanelCollapsed, setIsSummaryPanelCollapsed] = useState(true)
+  const [isEmailAutomationPanelCollapsed, setIsEmailAutomationPanelCollapsed] = useState(true)
+  const [emailDeliveryLedger, setEmailDeliveryLedger] = useState(() => readAccessEmailDeliveryLedger(
+    getStoredAccessYear() || YEARS_CONFIG.getCurrentYear()
+  ))
+  const [selectedSoutenanceEmailKeys, setSelectedSoutenanceEmailKeys] = useState({})
+  const [soutenanceEmailPreview, setSoutenanceEmailPreview] = useState(null)
+  const [testEmailAddress, setTestEmailAddress] = useState('')
+  const [isEmailPreviewLoading, setIsEmailPreviewLoading] = useState(false)
+  const [isAutomaticEmailSending, setIsAutomaticEmailSending] = useState(false)
 
   useEffect(() => {
     let isCancelled = false
 
     const loadYearLinkDefaults = async () => {
       const [statusResult, voteStatusResult, configResult] = await Promise.allSettled([
-        workflowPlanningService.getStaticPublicationStatus(selectedYear),
-        workflowPlanningService.getStaticVotePublicationStatus(selectedYear),
-        planningConfigService.getByYear(selectedYear)
+        workflowCoordinationService.getStaticPublicationStatus(selectedYear),
+        workflowCoordinationService.getStaticVotePublicationStatus(selectedYear),
+        coordinationConfigService.getByYear(selectedYear)
       ])
 
       if (isCancelled) {
@@ -1175,14 +2065,12 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       setStaticPublicationInfo(status)
       setStaticVotePublicationInfo(voteStatus)
       setAccessLinkSettings(normalizedLinkSettings)
-      setUsePublicationSiteLinks(
-        normalizedLinkSettings.defaultSoutenanceLinkTarget === 'publication' &&
-        Boolean(typeof status?.publicUrl === 'string' && status.publicUrl.trim())
+      const hasSiteTarget = Boolean(
+        (typeof status?.publicUrl === 'string' && status.publicUrl.trim()) ||
+        (typeof voteStatus?.publicUrl === 'string' && voteStatus.publicUrl.trim())
       )
-      setUseVotePublicationSiteLinks(
-        normalizedLinkSettings.defaultVoteLinkTarget === 'static' &&
-        Boolean(typeof voteStatus?.publicUrl === 'string' && voteStatus.publicUrl.trim())
-      )
+      setUsePublicationSiteLinks(hasSiteTarget)
+      setUseVotePublicationSiteLinks(hasSiteTarget)
     }
 
     loadYearLinkDefaults()
@@ -1193,44 +2081,62 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   }, [selectedYear])
 
   useEffect(() => {
-    if (YEARS_CONFIG.isSupportedYear(requestedYear)) {
-      setSelectedYear(requestedYear)
-    }
-  }, [requestedYear])
+    persistCoordinationYear(selectedYear)
+  }, [selectedYear])
 
   useEffect(() => {
-    if (LINK_TYPE_FILTER_VALUES.has(requestedLinkType)) {
-      setLinkTypeFilter(requestedLinkType)
+    setEmailDeliveryLedger(readAccessEmailDeliveryLedger(selectedYear))
+  }, [selectedYear])
+
+  useEffect(() => {
+    writeStorageValue(STORAGE_KEYS.ACCESS_LINK_SHOW_CANDIDATES, showCandidateBlocks ? 'true' : 'false')
+  }, [showCandidateBlocks])
+
+  useEffect(() => {
+    if (ACCESS_PHASE_FILTER_VALUES.has(requestedLinkType)) {
+      setLinkTypeFilters([requestedLinkType])
     }
   }, [requestedLinkType])
 
-  useEffect(() => {
-    setInvitationDrafts([])
-  }, [selectedPublicationVersion])
+  const activeLinkTypeFilterSet = useMemo(() => new Set(linkTypeFilters), [linkTypeFilters])
+  const areAllLinkTypeFiltersActive = linkTypeFilters.length === DEFAULT_ACCESS_PHASE_FILTERS.length
+  const toggleLinkTypeFilter = useCallback((value) => {
+    if (!ACCESS_PHASE_FILTER_VALUES.has(value)) {
+      return
+    }
 
-  useEffect(() => {
-    setSelectedPublicationVersion('active')
-    setInvitationDrafts([])
-  }, [selectedYear])
+    setLinkTypeFilters((current) => {
+      const nextSet = new Set(Array.isArray(current) ? current.filter((item) => ACCESS_PHASE_FILTER_VALUES.has(item)) : [])
+      if (nextSet.has(value)) {
+        nextSet.delete(value)
+      } else {
+        nextSet.add(value)
+      }
+
+      return DEFAULT_ACCESS_PHASE_FILTERS.filter((item) => nextSet.has(item))
+    })
+  }, [])
 
   const filteredPeople = useMemo(() => {
     const people = Array.isArray(previewPayload?.people) ? previewPayload.people : []
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     return people.filter((entry) => {
+      if (!showCandidateBlocks && isCandidateAccessEntry(entry)) {
+        return false
+      }
+
       const hasVoteLinks = Array.isArray(entry?.voteLinks) && entry.voteLinks.length > 0
       const hasSoutenanceLinks = Array.isArray(entry?.soutenanceLinks) && entry.soutenanceLinks.length > 0
       const hasArbitrageLinks = Array.isArray(entry?.arbitrageLinks) && entry.arbitrageLinks.length > 0
 
-      if (linkTypeFilter === 'vote' && !hasVoteLinks) {
-        return false
-      }
+      const matchesSelectedLinkType = (
+        (activeLinkTypeFilterSet.has('vote') && hasVoteLinks) ||
+        (activeLinkTypeFilterSet.has('soutenance') && hasSoutenanceLinks) ||
+        (activeLinkTypeFilterSet.has('arbitrage') && hasArbitrageLinks)
+      )
 
-      if (linkTypeFilter === 'soutenance' && !hasSoutenanceLinks) {
-        return false
-      }
-
-      if (linkTypeFilter === 'arbitrage' && !hasArbitrageLinks) {
+      if (!areAllLinkTypeFiltersActive && !matchesSelectedLinkType) {
         return false
       }
 
@@ -1273,7 +2179,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
       return searchCorpus.includes(normalizedQuery)
     })
-  }, [linkTypeFilter, previewPayload?.people, searchQuery])
+  }, [activeLinkTypeFilterSet, areAllLinkTypeFiltersActive, previewPayload?.people, searchQuery, showCandidateBlocks])
 
   const staticPublicationPublicUrl = typeof staticPublicationInfo?.publicUrl === 'string'
     ? staticPublicationInfo.publicUrl.trim()
@@ -1281,61 +2187,62 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const staticVotePublicationPublicUrl = typeof staticVotePublicationInfo?.publicUrl === 'string'
     ? staticVotePublicationInfo.publicUrl.trim()
     : ''
-  const configuredPublicationBaseUrl = normalizePublicationSettings(publicationSettings).publicBaseUrl
-  const publicationTargetLabel = formatUrlHost(staticPublicationPublicUrl || configuredPublicationBaseUrl)
+  const localTargetLabel = formatUrlHost(
+    typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+  ) || 'localhost'
+  const publicationTargetLabel = formatUrlHost(staticPublicationPublicUrl || 'https://tpi26.ch')
   const votePublicationTargetLabel = formatUrlHost(staticVotePublicationPublicUrl)
   const canUsePublicationSiteLinks = Boolean(staticPublicationPublicUrl)
   const canUseVotePublicationSiteLinks = Boolean(staticVotePublicationPublicUrl)
-  const accessLinkTargetOptions = useMemo(() => ({
-    ...(usePublicationSiteLinks && canUsePublicationSiteLinks
-      ? {
-          soutenanceLinkTarget: 'publication',
-          soutenancePublicUrl: staticPublicationPublicUrl
-        }
-      : {}),
-    ...(useVotePublicationSiteLinks && canUseVotePublicationSiteLinks
-      ? {
-          voteLinkTarget: 'static',
-          votePublicUrl: staticVotePublicationPublicUrl
-        }
-      : {})
-  }), [
-    canUsePublicationSiteLinks,
-    canUseVotePublicationSiteLinks,
+  const canUseSiteLinks = canUsePublicationSiteLinks || canUseVotePublicationSiteLinks
+  const useSiteLinks = usePublicationSiteLinks || useVotePublicationSiteLinks
+  const accessLinkTargetOptions = useMemo(() => {
+    if (!useSiteLinks) {
+      return {}
+    }
+
+    return {
+      soutenanceLinkTarget: 'publication',
+      ...(staticPublicationPublicUrl ? { soutenancePublicUrl: staticPublicationPublicUrl } : {}),
+      voteLinkTarget: 'static',
+      ...(staticVotePublicationPublicUrl ? { votePublicUrl: staticVotePublicationPublicUrl } : {})
+    }
+  }, [
     staticPublicationPublicUrl,
     staticVotePublicationPublicUrl,
-    usePublicationSiteLinks,
-    useVotePublicationSiteLinks
+    useSiteLinks
   ])
 
   useEffect(() => {
-    if (usePublicationSiteLinks && !canUsePublicationSiteLinks) {
+    if (useSiteLinks && !canUseSiteLinks) {
       setUsePublicationSiteLinks(false)
-    }
-  }, [canUsePublicationSiteLinks, usePublicationSiteLinks])
-
-  useEffect(() => {
-    if (useVotePublicationSiteLinks && !canUseVotePublicationSiteLinks) {
       setUseVotePublicationSiteLinks(false)
     }
-  }, [canUseVotePublicationSiteLinks, useVotePublicationSiteLinks])
+  }, [canUseSiteLinks, useSiteLinks])
+  const setAccessDestinationMode = useCallback((mode) => {
+    if (mode === 'site') {
+      setUsePublicationSiteLinks(canUseSiteLinks)
+      setUseVotePublicationSiteLinks(canUseSiteLinks)
+      return
+    }
 
-  const loadAccessLinksPreview = useCallback(async ({ silent = false, publicationVersionValue = selectedPublicationVersion } = {}) => {
+    setUsePublicationSiteLinks(false)
+    setUseVotePublicationSiteLinks(false)
+  }, [canUseSiteLinks])
+
+  const loadAccessLinksPreview = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++accessLinkRequestIdRef.current
     setIsPreviewLoading(true)
     setErrorMessage('')
     if (!silent) {
       setSuccessMessage('')
     }
-    setInvitationDrafts([])
 
     try {
-      const publicationVersion = getPublicationVersionRequest(publicationVersionValue)
-      const preview = await workflowPlanningService.previewAccessLinks(
+      const preview = await workflowCoordinationService.previewAccessLinks(
         selectedYear,
         window.location.origin,
         {
-          ...(publicationVersion ? { publicationVersion } : {}),
           ...accessLinkTargetOptions
         }
       )
@@ -1347,7 +2254,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       setPreviewPayload(preview)
       if (!silent) {
         setSuccessMessage(
-          `Aperçu préparé: ${preview?.summary?.peopleCount || 0} personne(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense, ${preview?.summary?.arbitrageLinkCount || 0} lien(s) arbitrage, ${preview?.summary?.generatedLinkCount || 0} accès disponible(s).`
+          `Liens chargés: ${preview?.summary?.peopleCount || 0} personne(s), ${preview?.summary?.voteLinkCount || 0} lien(s) vote, ${preview?.summary?.soutenanceLinkCount || 0} lien(s) défense, ${preview?.summary?.arbitrageLinkCount || 0} lien(s) arbitrage, ${preview?.summary?.generatedLinkCount || 0} accès disponible(s).`
         )
       }
     } catch (error) {
@@ -1357,31 +2264,24 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
       setPreviewPayload(null)
       setErrorMessage(
-        error?.data?.error || error?.message || 'Impossible de préparer l’aperçu des liens d’accès.'
+        error?.data?.error || error?.message || 'Impossible de charger les liens d’accès.'
       )
     } finally {
       setIsPreviewLoading(false)
     }
-  }, [selectedPublicationVersion, selectedYear, accessLinkTargetOptions])
-
-  const handleGeneratePreview = useCallback(async () => {
-    await loadAccessLinksPreview({ silent: false })
-  }, [loadAccessLinksPreview])
+  }, [selectedYear, accessLinkTargetOptions])
 
   const handleGenerateLinks = useCallback(async () => {
     const requestId = ++accessLinkRequestIdRef.current
     setIsGenerating(true)
     setErrorMessage('')
     setSuccessMessage('')
-    setInvitationDrafts([])
 
     try {
-      const publicationVersion = getPublicationVersionRequest(selectedPublicationVersion)
-      const result = await workflowPlanningService.generateAccessLinks(
+      const result = await workflowCoordinationService.generateAccessLinks(
         selectedYear,
         window.location.origin,
         {
-          ...(publicationVersion ? { publicationVersion } : {}),
           ...accessLinkTargetOptions
         }
       )
@@ -1390,9 +2290,29 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         return
       }
 
+      const publicationRefresh = result?.publicationRefresh || null
+      if (publicationRefresh?.votePublication) {
+        setStaticVotePublicationInfo(publicationRefresh.votePublication)
+      }
+      if (publicationRefresh?.soutenancePublication) {
+        setStaticPublicationInfo(publicationRefresh.soutenancePublication)
+      }
+
       setPreviewPayload(result)
+      setSearchQuery('')
+      setLinkTypeFilters(DEFAULT_ACCESS_PHASE_FILTERS)
+      const autoPublishedDefenseVersion = result?.contexts?.soutenance?.autoPublishedPublicationVersion
+      const warnings = Array.isArray(result?.warnings) ? result.warnings.filter(Boolean) : []
       setSuccessMessage(
-        `${result?.summary?.peopleCount || 0} personne(s) préparée(s), ${result?.summary?.voteLinkCount || 0} lien(s) vote, ${result?.summary?.soutenanceLinkCount || 0} lien(s) défense généré(s), ${result?.summary?.arbitrageLinkCount || 0} lien(s) arbitrage affiché(s).`
+        `${result?.summary?.peopleCount || 0} personne(s) préparée(s), ${result?.summary?.voteGeneratedLinkCount || 0}/${result?.summary?.voteLinkCount || 0} accès vote disponibles, ${result?.summary?.soutenanceGeneratedLinkCount || 0}/${result?.summary?.soutenanceLinkCount || 0} accès défense disponibles, ${result?.summary?.arbitrageLinkCount || 0} accès arbitrage affiché(s).${
+          autoPublishedDefenseVersion ? ` Publication défense v${autoPublishedDefenseVersion} créée depuis la planification confirmée.` : ''
+        }${
+          publicationRefresh?.votePublication?.publicUrl ? ` Mini-site vote rafraîchi: ${publicationRefresh.votePublication.publicUrl}` : ''
+        }${
+          publicationRefresh?.soutenancePublication?.publicUrl ? ` Mini-site défense rafraîchi: ${publicationRefresh.soutenancePublication.publicUrl}` : ''
+        }${
+          warnings.length > 0 ? ` Attention: ${warnings.join(' ')}` : ''
+        }`
       )
     } catch (error) {
       if (requestId !== accessLinkRequestIdRef.current) {
@@ -1405,16 +2325,13 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedPublicationVersion, selectedYear, accessLinkTargetOptions])
-
+  }, [
+    accessLinkTargetOptions,
+    selectedYear
+  ])
   useEffect(() => {
-    if (skipNextAccessLinkPreviewRef.current === selectedPublicationVersion) {
-      skipNextAccessLinkPreviewRef.current = null
-      return
-    }
-
     loadAccessLinksPreview({ silent: true })
-  }, [loadAccessLinksPreview, selectedPublicationVersion])
+  }, [loadAccessLinksPreview])
 
   const handleCopy = async (url) => {
     try {
@@ -1432,112 +2349,394 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const openOutlookDraft = (draft) => {
-    if (!draft?.mailto) {
+  const handlePrepareEmail = useCallback(({
+    deliveryKey,
+    person,
+    link,
+    phase,
+    label,
+    subtitle
+  }) => {
+    if (!deliveryKey || !canPrepareAccessEmail(person, link)) {
+      setErrorMessage('Impossible de préparer cet email: lien ou adresse manquante.')
       return
     }
 
-    window.location.href = draft.mailto
-  }
-
-  const handlePrepareOutlookInvitations = () => {
-    if (!prepareWithOutlook) {
-      setErrorMessage("L'envoi automatique n'est pas activé pour le moment. Cochez Outlook pour préparer les messages.")
-      setSuccessMessage('')
-      return
-    }
-
-    if (emailPreparationBlockedByPublication) {
-      setErrorMessage("La publication sélectionnée ne correspond pas aux liens affichés. Préparez l'aperçu ou régénérez les liens pour cette publication.")
-      setSuccessMessage('')
-      return
-    }
-
-    const drafts = availableInvitationDrafts
-
-    if (drafts.length === 0) {
-      setInvitationDrafts([])
-      setErrorMessage("Aucun lien disponible avec email ne correspond au filtre actuel.")
-      setSuccessMessage('')
-      return
-    }
-
-    setInvitationDrafts(drafts)
-    setErrorMessage('')
-    setSuccessMessage(
-      `${drafts.length} email${drafts.length > 1 ? 's' : ''} Outlook préparé${drafts.length > 1 ? 's' : ''}. Le premier brouillon va s'ouvrir.`
-    )
-    openOutlookDraft(drafts[0])
-  }
-
-  const handlePrepareSingleOutlookLinkEmail = (entry, link) => {
-    if (!prepareWithOutlook) {
-      setErrorMessage("L'envoi automatique n'est pas activé pour le moment. Cochez Outlook pour préparer les messages.")
-      setSuccessMessage('')
-      return
-    }
-
-    if (!link?.url) {
-      setErrorMessage("Ce lien n'est pas disponible. Régénérez-le avant de préparer l'email.")
-      setSuccessMessage('')
-      return
-    }
-
-    if (!canPrepareEmailForLink(link)) {
-      setErrorMessage("Ce lien n'est plus réutilisable. Régénérez-le avant de préparer l'email.")
-      setSuccessMessage('')
-      return
-    }
-
-    if (getInvitationLinkType(link) === 'soutenance' && !isPublicationSelectionSynced) {
-      setErrorMessage("La publication sélectionnée ne correspond pas aux liens affichés. Préparez l'aperçu ou régénérez les liens pour cette publication.")
-      setSuccessMessage('')
-      return
-    }
-
-    const draft = buildInvitationDraft({
-      entry,
-      link,
+    const draft = buildAccessEmailDraft({
       year: selectedYear,
-      emailSettings
+      person,
+      link,
+      phase,
+      label,
+      subtitle
     })
+    const sentAt = new Date().toISOString()
 
-    if (!draft.to) {
-      setErrorMessage("Impossible de préparer l'email: destinataire manquant.")
-      setSuccessMessage('')
+    openMailtoDraft(buildMailtoUrl(draft))
+    setEmailDeliveryLedger((current) => {
+      const next = {
+        ...current,
+        [deliveryKey]: {
+          status: 'prepared',
+          source: 'outlook',
+          preparedAt: sentAt,
+          recipientEmail: compactText(person?.email),
+          linkType: phase,
+          linkLabel: label,
+          linkUrl: getAccessLinkUrl(link),
+          coversChangeRequests: phase === 'soutenance'
+        }
+      }
+      writeAccessEmailDeliveryLedger(selectedYear, next)
+      return next
+    })
+    setErrorMessage('')
+    setSuccessMessage(`Email Outlook préparé pour ${person?.name || person?.email} (${label}).`)
+  }, [selectedYear])
+
+  const soutenanceEmailAutomationTargets = useMemo(() => {
+    const targets = []
+
+    for (const entry of Array.isArray(previewPayload?.people) ? previewPayload.people : []) {
+      if (!showCandidateBlocks && isCandidateAccessEntry(entry)) {
+        continue
+      }
+
+      const target = buildSoutenanceEmailTarget({
+        entry,
+        year: selectedYear,
+        ledger: emailDeliveryLedger
+      })
+
+      if (!target) {
+        continue
+      }
+
+      if (!compactText(target.link?.id)) {
+        continue
+      }
+
+      const audience = getSoutenanceEmailAudience(entry?.person)
+      targets.push({
+        ...target,
+        audience,
+        audienceLabel: getSoutenanceEmailAudienceLabel(audience)
+      })
+    }
+
+    return targets.sort((left, right) => {
+      const leftAudience = String(left.audience || '')
+      const rightAudience = String(right.audience || '')
+      if (leftAudience !== rightAudience) {
+        return leftAudience.localeCompare(rightAudience)
+      }
+
+      return String(left.person?.name || left.person?.email || '').localeCompare(
+        String(right.person?.name || right.person?.email || '')
+      )
+    })
+  }, [emailDeliveryLedger, previewPayload?.people, selectedYear, showCandidateBlocks])
+
+  const soutenanceEmailAutomationGroups = useMemo(() => ({
+    projectLeads: buildSoutenanceEmailAutomationGroup(
+      soutenanceEmailAutomationTargets.filter((target) => target.audience === 'cdp')
+    ),
+    standaloneExperts: buildSoutenanceEmailAutomationGroup(
+      soutenanceEmailAutomationTargets.filter((target) => target.audience === 'expert')
+    ),
+    all: buildSoutenanceEmailAutomationGroup(soutenanceEmailAutomationTargets)
+  }), [soutenanceEmailAutomationTargets])
+
+  const selectedSoutenanceEmailTargets = useMemo(() => (
+    soutenanceEmailAutomationTargets.filter((target) => selectedSoutenanceEmailKeys[target.deliveryKey] === true)
+  ), [selectedSoutenanceEmailKeys, soutenanceEmailAutomationTargets])
+
+  useEffect(() => {
+    const validKeys = new Set(soutenanceEmailAutomationTargets.map((target) => target.deliveryKey))
+    setSelectedSoutenanceEmailKeys((current) => {
+      const next = {}
+      let changed = false
+
+      for (const [key, isSelected] of Object.entries(isPlainObject(current) ? current : {})) {
+        if (isSelected === true && validKeys.has(key)) {
+          next[key] = true
+        } else {
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+  }, [soutenanceEmailAutomationTargets])
+
+  const handleToggleSoutenanceEmailSelection = useCallback((deliveryKey, checked) => {
+    if (!deliveryKey) {
       return
     }
 
-    setInvitationDrafts([draft])
+    setSelectedSoutenanceEmailKeys((current) => {
+      const next = { ...(isPlainObject(current) ? current : {}) }
+      if (checked) {
+        next[deliveryKey] = true
+      } else {
+        delete next[deliveryKey]
+      }
+
+      return next
+    })
+  }, [])
+
+  const handleSelectPendingSoutenanceEmails = useCallback(() => {
+    const next = {}
+    for (const target of soutenanceEmailAutomationGroups.all.pendingTargets || []) {
+      next[target.deliveryKey] = true
+    }
+    setSelectedSoutenanceEmailKeys(next)
+  }, [soutenanceEmailAutomationGroups.all.pendingTargets])
+
+  const handleClearSoutenanceEmailSelection = useCallback(() => {
+    setSelectedSoutenanceEmailKeys({})
+  }, [])
+
+  const getDefaultSoutenanceEmailTarget = useCallback(() => (
+    selectedSoutenanceEmailTargets[0] ||
+    soutenanceEmailAutomationGroups.all.pendingTargets?.[0] ||
+    soutenanceEmailAutomationTargets[0] ||
+    null
+  ), [
+    selectedSoutenanceEmailTargets,
+    soutenanceEmailAutomationGroups.all.pendingTargets,
+    soutenanceEmailAutomationTargets
+  ])
+
+  const handlePreviewSoutenanceEmailTemplate = useCallback(async () => {
+    const target = getDefaultSoutenanceEmailTarget()
+    if (!target) {
+      setErrorMessage('Aucun lien défense disponible pour prévisualiser le template.')
+      return
+    }
+
+    setIsEmailPreviewLoading(true)
     setErrorMessage('')
-    setSuccessMessage(`Email Outlook préparé pour ${draft.name}.`)
-    openOutlookDraft(draft)
-  }
+
+    try {
+      const preview = await workflowCoordinationService.previewSoutenanceAccessEmail(
+        selectedYear,
+        buildSoutenanceEmailRequestTarget(target)
+      )
+      setSoutenanceEmailPreview(preview)
+    } catch (error) {
+      setErrorMessage(
+        error?.data?.error || error?.message || 'Impossible de prévisualiser le template email.'
+      )
+    } finally {
+      setIsEmailPreviewLoading(false)
+    }
+  }, [getDefaultSoutenanceEmailTarget, selectedYear])
+
+  const applySoutenanceEmailSendResults = useCallback((targets, response, batchLabel) => {
+    const targetByKey = new Map((Array.isArray(targets) ? targets : []).map((target) => [target.deliveryKey, target]))
+    const ledgerEntries = {}
+    const sentKeys = new Set()
+
+    for (const result of Array.isArray(response?.results) ? response.results : []) {
+      const deliveryKey = result.clientKey || result.deliveryKey
+      const target = targetByKey.get(deliveryKey)
+      if (!deliveryKey || !target) {
+        continue
+      }
+
+      if (result.deliveryStatus === 'sent') {
+        sentKeys.add(deliveryKey)
+        ledgerEntries[deliveryKey] = {
+          status: 'sent',
+          source: 'system',
+          sentAt: result.sentAt || new Date().toISOString(),
+          recipientEmail: compactText(result.recipientEmail || target.person?.email),
+          linkType: 'soutenance',
+          linkLabel: target.label,
+          linkUrl: getAccessLinkUrl(target.link),
+          messageId: compactText(result.messageId),
+          coversChangeRequests: true,
+          batch: batchLabel
+        }
+      } else if (result.deliveryStatus === 'failed') {
+        ledgerEntries[deliveryKey] = {
+          status: 'failed',
+          source: 'system',
+          recipientEmail: compactText(result.recipientEmail || target.person?.email),
+          linkType: 'soutenance',
+          linkLabel: target.label,
+          linkUrl: getAccessLinkUrl(target.link),
+          error: result.error || 'Envoi automatique échoué',
+          coversChangeRequests: true,
+          batch: batchLabel
+        }
+      } else if (result.deliveryStatus === 'skipped' && result.sentAt) {
+        sentKeys.add(deliveryKey)
+        ledgerEntries[deliveryKey] = {
+          status: 'sent',
+          source: 'system',
+          sentAt: result.sentAt,
+          recipientEmail: compactText(result.recipientEmail || target.person?.email),
+          linkType: 'soutenance',
+          linkLabel: target.label,
+          linkUrl: getAccessLinkUrl(target.link),
+          messageId: compactText(result.messageId),
+          coversChangeRequests: true,
+          batch: batchLabel
+        }
+      }
+    }
+
+    if (Object.keys(ledgerEntries).length > 0) {
+      setEmailDeliveryLedger((current) => {
+        const next = {
+          ...(isPlainObject(current) ? current : {}),
+          ...ledgerEntries
+        }
+        writeAccessEmailDeliveryLedger(selectedYear, next)
+        return next
+      })
+    }
+
+    if (sentKeys.size > 0) {
+      setSelectedSoutenanceEmailKeys((current) => {
+        const next = { ...(isPlainObject(current) ? current : {}) }
+        for (const key of sentKeys) {
+          delete next[key]
+        }
+        return next
+      })
+    }
+  }, [selectedYear])
+
+  const handleSendSoutenanceEmailTargets = useCallback(async (targets, batchLabel, options = {}) => {
+    const selectedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
+    const testEmail = compactText(options.testEmail)
+    const sendableTargets = testEmail
+      ? selectedTargets.filter((target) => compactText(target?.link?.id) && canPrepareAccessEmail(target.person, target.link))
+      : selectedTargets.filter(isSoutenanceEmailTargetSmtpSendable)
+
+    if (sendableTargets.length === 0) {
+      setErrorMessage(testEmail
+        ? 'Aucun lien défense disponible pour envoyer un test.'
+        : 'Aucun destinataire sélectionné ne peut être transmis par SMTP.')
+      return
+    }
+
+    setIsAutomaticEmailSending(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const response = await workflowCoordinationService.sendSoutenanceAccessEmails(
+        selectedYear,
+        sendableTargets.map(buildSoutenanceEmailRequestTarget),
+        {
+          testEmail,
+          baseUrl: typeof window !== 'undefined' ? window.location.origin : null
+        }
+      )
+
+      if (!testEmail) {
+        applySoutenanceEmailSendResults(sendableTargets, response, batchLabel)
+        loadAccessLinksPreview({ silent: true })
+      }
+
+      const summary = response?.summary || {}
+      if (testEmail) {
+        const firstFailure = Array.isArray(response?.results)
+          ? response.results.find((entry) => entry?.deliveryStatus === 'failed')
+          : null
+
+        if (response?.success === false || (summary.failedCount || 0) > 0) {
+          setErrorMessage(firstFailure?.error || 'Email HTML de test non envoyé.')
+          return
+        }
+
+        setSuccessMessage(`Email HTML de test envoyé à ${testEmail}.`)
+      } else {
+        setSuccessMessage(
+          `${summary.sentCount || 0} email(s) HTML transmis pour ${batchLabel}. ${
+            summary.skippedCount ? `${summary.skippedCount} déjà envoyé(s). ` : ''
+          }${
+            summary.failedCount ? `${summary.failedCount} échec(s).` : ''
+          }`.trim()
+        )
+      }
+    } catch (error) {
+      setErrorMessage(
+        error?.data?.error || error?.message || 'Erreur lors de l’envoi automatique des emails.'
+      )
+    } finally {
+      setIsAutomaticEmailSending(false)
+    }
+  }, [applySoutenanceEmailSendResults, loadAccessLinksPreview, selectedYear])
+
+  const handleSendSelectedSoutenanceEmails = useCallback(() => {
+    handleSendSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection')
+  }, [handleSendSoutenanceEmailTargets, selectedSoutenanceEmailTargets])
+
+  const handleSendProjectLeadSoutenanceEmails = useCallback(() => {
+    handleSendSoutenanceEmailTargets(
+      soutenanceEmailAutomationGroups.projectLeads.pendingTargets,
+      'les chefs de projet'
+    )
+  }, [handleSendSoutenanceEmailTargets, soutenanceEmailAutomationGroups.projectLeads.pendingTargets])
+
+  const handleSendStandaloneExpertSoutenanceEmails = useCallback(() => {
+    handleSendSoutenanceEmailTargets(
+      soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets,
+      'les experts'
+    )
+  }, [handleSendSoutenanceEmailTargets, soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets])
+
+  const handleSendSoutenanceEmailTest = useCallback(() => {
+    const target = getDefaultSoutenanceEmailTarget()
+    handleSendSoutenanceEmailTargets(target ? [target] : [], 'test', {
+      testEmail: testEmailAddress
+    })
+  }, [getDefaultSoutenanceEmailTarget, handleSendSoutenanceEmailTargets, testEmailAddress])
+
+  const outlookPreparedCount = useMemo(() => (
+    Object.values(isPlainObject(emailDeliveryLedger) ? emailDeliveryLedger : {})
+      .filter(isLocalOutlookPreparedDelivery)
+      .length
+  ), [emailDeliveryLedger])
+
+  const handleResetOutlookPrepared = useCallback(() => {
+    const currentLedger = isPlainObject(emailDeliveryLedger) ? emailDeliveryLedger : {}
+    const nextLedger = {}
+    let removedCount = 0
+
+    for (const [key, delivery] of Object.entries(currentLedger)) {
+      if (isLocalOutlookPreparedDelivery(delivery)) {
+        removedCount += 1
+      } else {
+        nextLedger[key] = delivery
+      }
+    }
+
+    if (removedCount === 0) {
+      return
+    }
+
+    writeAccessEmailDeliveryLedger(selectedYear, nextLedger)
+    setEmailDeliveryLedger(nextLedger)
+    setErrorMessage('')
+    setSuccessMessage(`${removedCount} état(s) Outlook préparé réinitialisé(s).`)
+  }, [emailDeliveryLedger, selectedYear])
 
   const previewSummary = previewPayload?.summary || null
   const previewContexts = previewPayload?.contexts || {}
-  const workflowLabel = formatWorkflowLabel(previewPayload?.workflowState)
-  const publicationVersion = previewContexts?.soutenance?.publicationVersion
-  const availablePublicationVersions = Array.isArray(previewContexts?.soutenance?.availableVersions)
-    ? previewContexts.soutenance.availableVersions
-    : []
-  const publicationVersionOptions = buildPublicationVersionOptions(previewContexts?.soutenance)
-  const selectedPublicationVersionValue = publicationVersionOptions.some((option) => option.value === selectedPublicationVersion)
-    ? selectedPublicationVersion
-    : 'active'
-  const selectedPublicationRequest = getPublicationVersionRequest(selectedPublicationVersionValue)
-  const currentPublicationVersion = getPublicationVersionRequest(previewContexts?.soutenance?.publicationVersion)
-  const currentRequestedPublicationVersion = getPublicationVersionRequest(previewContexts?.soutenance?.requestedPublicationVersion)
-  const activePublicationVersion = getPublicationVersionRequest(
-    publicationVersionOptions.find((option) => option.isActive)?.value
+  const phaseReadiness = previewSummary ? buildAccessPhaseReadiness(previewSummary, previewContexts) : []
+  const summaryMetrics = previewSummary ? buildAccessSummaryMetrics(previewSummary) : []
+  const workflowLabel = formatWorkflowPhases(
+    previewPayload?.workflowPhases,
+    previewPayload?.workflowState
   )
-  const isPublicationSelectionSynced = !previewPayload
-    ? true
-    : selectedPublicationRequest
-      ? currentPublicationVersion === selectedPublicationRequest
-      : currentRequestedPublicationVersion === null ||
-        (activePublicationVersion !== null && currentPublicationVersion === activePublicationVersion)
-  const hasGeneratedSoutenanceLinks = Boolean(previewPayload?.summary?.soutenanceGeneratedLinkCount)
+  const publicationVersion = previewContexts?.soutenance?.publicationVersion
   const hasKnownGeneratedLinks = Boolean(
     previewPayload?.hasGeneratedLinks ||
     previewPayload?.summary?.unavailableGeneratedLinkCount ||
@@ -1546,82 +2745,111 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     previewPayload?.summary?.exhaustedGeneratedLinkCount ||
     previewPayload?.summary?.unrecoverableGeneratedLinkCount
   )
-  const suggestedPublicationWithLinks = availablePublicationVersions.find((entry) => {
-    const version = getPublicationVersionRequest(entry?.version)
-    return (
-      version &&
-      version !== currentPublicationVersion &&
-      getPublicationRecoverableLinkCount(entry) > 0
-    )
-  })
-  const shouldSuggestPublicationWithLinks = Boolean(
-    previewPayload &&
-    !hasGeneratedSoutenanceLinks &&
-    suggestedPublicationWithLinks
-  )
-  const suggestedPublicationLinkCount = getPublicationRecoverableLinkCount(suggestedPublicationWithLinks)
   const hasActiveFilters = Boolean(
     searchQuery.trim() ||
-    linkTypeFilter !== 'all' ||
-    selectedPublicationVersionValue !== 'active'
+    !areAllLinkTypeFiltersActive
   )
-  const publicationFilterLabel = publicationVersionOptions.find((option) => (
-    option.value === selectedPublicationVersionValue
-  ))?.label
-  const linkTypeFilterLabel = LINK_TYPE_FILTERS.find((option) => option.value === linkTypeFilter)?.label || 'Tous les liens'
   const resetFilters = useCallback(() => {
     setSearchQuery('')
-    setLinkTypeFilter('all')
-    setSelectedPublicationVersion('active')
+    setLinkTypeFilters(DEFAULT_ACCESS_PHASE_FILTERS)
   }, [])
-  const availableInvitationDrafts = useMemo(() => buildInvitationDrafts(filteredPeople, {
-    year: selectedYear,
-    selectedPublicationVersion: selectedPublicationVersionValue,
-    emailSettings,
-    linkTypeFilter
-  }), [emailSettings, filteredPeople, linkTypeFilter, selectedPublicationVersionValue, selectedYear])
-  const hasAvailableInvitationDrafts = availableInvitationDrafts.length > 0
-  const emailPreparationBlockedByPublication = !isPublicationSelectionSynced &&
-    availableInvitationDrafts.some((draft) => draft.type === 'soutenance')
-  const prepareEmailsTitle = emailPreparationBlockedByPublication
-    ? "Préparez ou générez les liens pour la publication sélectionnée."
-    : !hasAvailableInvitationDrafts
-      ? "Aucun lien disponible avec email ne correspond au filtre actuel."
-      : prepareWithOutlook
-        ? 'Préparer les emails Outlook pour les liens filtrés.'
-        : "L'envoi automatique est désactivé pour le moment."
-  const generateLinksLabel = hasKnownGeneratedLinks ? 'Regénérer les liens' : 'Générer les liens'
+  const generateLinksLabel = hasKnownGeneratedLinks ? 'Regénérer tous les accès' : 'Générer tous les accès'
   const generateLinksTitle = hasKnownGeneratedLinks
-    ? 'Remplacer les liens d’accès admin déjà générés.'
-    : 'Générer les liens d’accès.'
-  const isBusy = isPreviewLoading || isGenerating
-  const publicationDefaultHint = accessLinkSettings.defaultSoutenanceLinkTarget === 'publication'
-    ? ' Cible par défaut configurée.'
-    : ''
-  const votePublicationDefaultHint = accessLinkSettings.defaultVoteLinkTarget === 'static'
-    ? ' Cible par défaut configurée.'
-    : ''
-  const publicationSiteLinksTitle = canUsePublicationSiteLinks
-    ? `Générer les liens de défense vers ${staticPublicationPublicUrl}.${publicationDefaultHint}`
-    : `URL publique de publication indisponible. Vérifiez la configuration et la génération statique.${publicationDefaultHint}`
-  const votePublicationSiteLinksTitle = canUseVotePublicationSiteLinks
-    ? `Générer les liens de vote vers ${staticVotePublicationPublicUrl}.${votePublicationDefaultHint}`
-    : `URL publique de vote statique indisponible. Générez la publication vote avant de cibler le mini-site.${votePublicationDefaultHint}`
-  const handleShowSuggestedPublication = async () => {
-    if (!suggestedPublicationWithLinks?.version) {
-      return
+    ? "Remplacer tous les accès générables."
+    : "Générer tous les accès générables."
+  const isBusy = isPreviewLoading || isGenerating || isAutomaticEmailSending
+  const previewStatusLabel = isGenerating
+    ? 'Génération'
+    : isPreviewLoading
+      ? 'Lecture'
+      : previewPayload
+        ? previewPayload.linksGenerated
+          ? 'Générés'
+          : previewPayload.hasGeneratedLinks
+            ? 'Partiels'
+            : 'Chargés'
+        : 'Non chargés'
+  const previewStatusVariant = previewPayload?.linksGenerated
+    ? 'ok'
+    : previewPayload?.hasGeneratedLinks
+      ? 'warning'
+      : previewPayload
+        ? 'neutral'
+        : 'pending'
+  const generatedLinkCount = previewSummary?.generatedLinkCount || 0
+  const expectedLinkCount = (
+    (previewSummary?.voteLinkCount || 0) +
+    (previewSummary?.soutenanceLinkCount || 0) +
+    (previewSummary?.arbitrageLinkCount || 0)
+  )
+  const generatedLinkProgress = previewSummary
+    ? `${generatedLinkCount}/${expectedLinkCount} disponible${generatedLinkCount > 1 ? 's' : ''}`
+    : 'Aucun compteur chargé'
+  const publicationOverviewLabel = publicationVersion
+    ? `v${publicationVersion}`
+    : 'Absente'
+  const defenseDestinationLabel = usePublicationSiteLinks
+    ? publicationTargetLabel || 'Publication'
+    : localTargetLabel
+  const voteDestinationLabel = useVotePublicationSiteLinks
+    ? votePublicationTargetLabel || 'Mini-site'
+    : localTargetLabel
+  const accessDestinationLabel = defenseDestinationLabel === voteDestinationLabel
+    ? defenseDestinationLabel
+    : `${defenseDestinationLabel} / ${voteDestinationLabel}`
+  const overviewCards = [
+    {
+      id: 'workflow',
+      label: 'Workflow',
+      value: workflowLabel,
+      detail: 'Phase active',
+      icon: WorkflowIcon
+    },
+    {
+      id: 'links',
+      label: 'Liens',
+      value: previewStatusLabel,
+      detail: generatedLinkProgress,
+      icon: KeyIcon,
+      variant: previewStatusVariant
+    },
+    {
+      id: 'publication',
+      label: 'Publication',
+      value: publicationOverviewLabel,
+      detail: 'Publication active',
+      icon: BriefcaseIcon,
+      variant: publicationVersion ? 'soutenance' : 'pending'
+    },
+    {
+      id: 'targets',
+      label: 'Cibles',
+      value: accessDestinationLabel,
+      detail: 'Défenses / votes',
+      icon: ArrowRightIcon,
+      variant: usePublicationSiteLinks || useVotePublicationSiteLinks ? 'ok' : 'neutral'
     }
-
-    const versionValue = String(suggestedPublicationWithLinks.version)
-    skipNextAccessLinkPreviewRef.current = versionValue
-    setSelectedPublicationVersion(versionValue)
-    setErrorMessage('')
-    setSuccessMessage('')
-    await loadAccessLinksPreview({
-      silent: false,
-      publicationVersionValue: versionValue
-    })
+  ]
+  const statusPanelDescription = previewSummary
+    ? `${filteredPeople.length}/${previewSummary.peopleCount || 0} personne(s)`
+    : 'Chargement en cours'
+  const statusPanelCompactCount = previewSummary
+    ? `${filteredPeople.length}/${previewSummary.peopleCount || 0}`
+    : '...'
+  const emailDeliverySummary = useMemo(() => buildAccessEmailSummary(
+    filteredPeople,
+    selectedYear,
+    emailDeliveryLedger,
+    linkTypeFilters
+  ), [emailDeliveryLedger, filteredPeople, linkTypeFilters, selectedYear])
+  const emailDeliveryProgressStyle = {
+    '--token-access-email-progress': `${Math.round(emailDeliverySummary.ratio * 100)}%`
   }
+  const emailAutomationTotalCount = soutenanceEmailAutomationGroups.all.totalCount || 0
+  const emailAutomationPendingCount = soutenanceEmailAutomationGroups.all.pendingCount || 0
+  const emailAutomationCompactCount = previewSummary
+    ? `${emailAutomationPendingCount}/${emailAutomationTotalCount}`
+    : '...'
 
   return (
     <div className='token-generator-page page-with-toolbar'>
@@ -1630,362 +2858,329 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         className='token-generator-tools'
         eyebrow='Accès'
         title='Liens d’accès'
-        description='Aperçu puis génération des magic links.'
-        meta={
-          <div className='token-access-toolbar-meta'>
-            <span className='page-tools-chip'>{workflowLabel}</span>
-            <span className='page-tools-chip'>
-              Publication {publicationVersion ? `v${publicationVersion}` : 'absente'}
-            </span>
-            {previewPayload ? (
-              <span className='page-tools-chip'>
-                {previewPayload.linksGenerated
-                  ? 'Liens générés'
-                  : previewPayload.hasGeneratedLinks
-                    ? 'Liens partiels'
-                    : 'Aperçu seul'}
-              </span>
-            ) : null}
-            <span className='page-tools-chip'>
-              {usePublicationSiteLinks ? `Site publication · ${publicationTargetLabel || 'non défini'}` : 'Site application'}
-            </span>
-            {useVotePublicationSiteLinks ? (
-              <span className='page-tools-chip'>
-                Vote statique · {votePublicationTargetLabel || 'non défini'}
-              </span>
-            ) : null}
-          </div>
-        }
-        toggleArrow={toggleArrow}
-        isArrowUp={isArrowUp}
-        ariaLabel='Outils des liens d accès'
-      >
-        <div className='page-tools-grid token-access-toolbar-grid'>
-          <label className='page-tools-field' htmlFor='year'>
-            <span className='page-tools-field-label'>Année</span>
-            <select
-              id='year'
-              className='page-tools-field-control'
-              value={selectedYear}
-              onChange={(event) => setSelectedYear(Number.parseInt(event.target.value, 10))}
-            >
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className='page-tools-field' htmlFor='access-search'>
-            <span className='page-tools-field-label'>Recherche</span>
-            <input
-              id='access-search'
-              type='search'
-              className='page-tools-field-control'
-              placeholder='Nom, email, référence, candidat...'
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-          </label>
-
-          <label className='page-tools-field' htmlFor='link-type-filter'>
-            <span className='page-tools-field-label'>Type</span>
-            <select
-              id='link-type-filter'
-              className='page-tools-field-control'
-              value={linkTypeFilter}
-              onChange={(event) => setLinkTypeFilter(event.target.value)}
-            >
-              {LINK_TYPE_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className='page-tools-field' htmlFor='publication-version-filter'>
-            <span className='page-tools-field-label'>Publication</span>
-            <select
-              id='publication-version-filter'
-              className='page-tools-field-control'
-              value={selectedPublicationVersionValue}
-              onChange={(event) => setSelectedPublicationVersion(event.target.value)}
-              disabled={isBusy}
-            >
-              {publicationVersionOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className='page-tools-field token-access-publication-checkbox' htmlFor='use-publication-site-links'>
-            <span className='page-tools-field-label'>Site</span>
-            <span className='token-access-checkbox-row' title={publicationSiteLinksTitle}>
-              <input
-                id='use-publication-site-links'
-                type='checkbox'
-                checked={usePublicationSiteLinks}
-                onChange={(event) => setUsePublicationSiteLinks(event.target.checked)}
-                disabled={isBusy || !canUsePublicationSiteLinks}
-              />
-              <span>Publication</span>
-            </span>
-          </label>
-
-          <label className='page-tools-field token-access-publication-checkbox' htmlFor='use-vote-publication-site-links'>
-            <span className='page-tools-field-label'>Votes</span>
-            <span className='token-access-checkbox-row' title={votePublicationSiteLinksTitle}>
-              <input
-                id='use-vote-publication-site-links'
-                type='checkbox'
-                checked={useVotePublicationSiteLinks}
-                onChange={(event) => setUseVotePublicationSiteLinks(event.target.checked)}
-                disabled={isBusy || !canUseVotePublicationSiteLinks}
-              />
-              <span>Mini-site</span>
-            </span>
-          </label>
-
-          <div className='page-tools-field page-tools-field-action'>
-            <button
-              type='button'
-              className='page-tools-action-btn secondary'
-              onClick={handleGeneratePreview}
-              disabled={isBusy}
-              title={isPreviewLoading ? 'Préparation de l’aperçu en cours.' : 'Préparer l’aperçu des liens d’accès.'}
-              aria-label={isPreviewLoading ? 'Préparation de l’aperçu en cours.' : 'Préparer l’aperçu des liens d’accès.'}
-            >
-              {isPreviewLoading ? 'Préparation...' : 'Préparer l’aperçu'}
-            </button>
-          </div>
-
-          <div className='page-tools-field page-tools-field-action'>
+        actions={
+          <div className='token-access-toolbar-actions'>
             <button
               type='button'
               className='page-tools-action-btn primary'
               onClick={handleGenerateLinks}
               disabled={isBusy}
               title={isGenerating ? 'Génération des liens en cours.' : generateLinksTitle}
-              aria-label={isGenerating ? 'Génération des liens en cours.' : generateLinksTitle}
+              aria-label={isGenerating ? 'Génération...' : generateLinksLabel}
             >
-              {isGenerating ? 'Génération...' : generateLinksLabel}
-            </button>
-          </div>
-
-          <label className='page-tools-field token-access-mail-checkbox' htmlFor='prepare-with-outlook'>
-            <span className='page-tools-field-label'>Email</span>
-            <span className='token-access-checkbox-row'>
-              <input
-                id='prepare-with-outlook'
-                type='checkbox'
-                checked={prepareWithOutlook}
-                onChange={(event) => setPrepareWithOutlook(event.target.checked)}
+              <IconButtonContent
+                label={isGenerating ? 'Génération...' : generateLinksLabel}
+                icon={KeyIcon}
+                showLabel
               />
-              <span>Outlook manuel</span>
-            </span>
-          </label>
-
-          <div className='page-tools-field page-tools-field-action'>
-            <button
-              type='button'
-              className='page-tools-action-btn secondary'
-              onClick={handlePrepareOutlookInvitations}
-              disabled={
-                isBusy ||
-                !hasAvailableInvitationDrafts ||
-                !prepareWithOutlook ||
-                emailPreparationBlockedByPublication
-              }
-              title={prepareEmailsTitle}
-              aria-label='Préparer emails Outlook'
-            >
-              Préparer emails
             </button>
           </div>
-        </div>
+        }
+        toggleArrow={toggleArrow}
+        isArrowUp={isArrowUp}
+        ariaLabel='Outils des liens d accès'
+        bodyClassName='token-access-toolbar-body'
+      >
+        <div className='token-access-tools-menu'>
+          {isSummaryPanelCollapsed || (previewSummary && isEmailAutomationPanelCollapsed) || outlookPreparedCount > 0 ? (
+            <div className='token-access-summary-floating-row'>
+              {isSummaryPanelCollapsed ? (
+                <button
+                  type='button'
+                  className='token-access-summary-floating token-access-summary-floating--toolbar'
+                  aria-label='Ouvrir la synthèse des accès'
+                  aria-expanded='false'
+                  aria-controls='token-access-summary-panel'
+                  onClick={() => setIsSummaryPanelCollapsed(false)}
+                >
+                  <KeyIcon aria-hidden='true' />
+                  <span>Synthèse</span>
+                  <strong>{statusPanelCompactCount}</strong>
+                </button>
+              ) : null}
 
-        <div className='token-access-toolbar-note'>
-          L’aperçu recharge les liens déjà générés quand ils sont encore valides, et signale les liens expirés ou révoqués. La génération remplace les liens admin du site choisi. Les liens d’arbitrage sont visibles ici uniquement après création dans le module planning vote. L’envoi automatique reste désactivé: le mode Outlook prépare des brouillons de ré-envoi pour les liens vote, défense et arbitrage.
-        </div>
-        {hasActiveFilters ? (
-          <div className='token-access-active-filters'>
-            <span>Filtres actifs :</span>
-            {searchQuery ? <span className='token-access-filter-chip'>Recherche : «{searchQuery}»</span> : null}
-            {linkTypeFilter !== 'all' ? <span className='token-access-filter-chip'>{linkTypeFilterLabel}</span> : null}
-            {selectedPublicationVersionValue !== 'active' ? (
-              <span className='token-access-filter-chip'>
-                {publicationFilterLabel || `Publication ${selectedPublicationVersionValue}`}
+              {previewSummary && isEmailAutomationPanelCollapsed ? (
+                <button
+                  type='button'
+                  className='token-access-summary-floating token-access-summary-floating--toolbar token-access-email-menu'
+                  aria-label='Ouvrir le module email HTML'
+                  aria-expanded='false'
+                  aria-controls='token-access-email-automation-panel'
+                  onClick={() => setIsEmailAutomationPanelCollapsed(false)}
+                >
+                  <SendIcon aria-hidden='true' />
+                  <span>Emails HTML</span>
+                  <strong>{emailAutomationCompactCount}</strong>
+                </button>
+              ) : null}
+
+              {outlookPreparedCount > 0 ? (
+                <button
+                  type='button'
+                  className='token-access-summary-floating token-access-summary-floating--toolbar token-access-summary-reset'
+                  aria-label={`Réinitialiser ${outlookPreparedCount} Outlook préparé`}
+                  title={`Réinitialiser ${outlookPreparedCount} état(s) Outlook préparé.`}
+                  onClick={handleResetOutlookPrepared}
+                >
+                  <RefreshIcon aria-hidden='true' />
+                  <span>Reset Outlook</span>
+                  <strong>{outlookPreparedCount}</strong>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <section className='token-access-stats-panel' aria-label='État du module liens d’accès'>
+            <div className='token-access-stats-panel-head'>
+              <strong>État des accès</strong>
+              <span>{generatedLinkProgress}</span>
+            </div>
+            <div className='token-access-overview-strip'>
+              {overviewCards.map((item) => (
+                <AccessOverviewCard key={item.id} item={item} />
+              ))}
+            </div>
+          </section>
+
+          <div className='token-access-tools-primary'>
+            <label className='token-access-search-control' htmlFor='access-search'>
+              <span className='page-tools-field-label'>Recherche</span>
+              <span className='token-access-search-input-shell'>
+                <SearchIcon aria-hidden='true' />
+                <input
+                  id='access-search'
+                  type='search'
+                  className='page-tools-field-control'
+                  placeholder='Nom, email, référence, candidat...'
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
               </span>
-            ) : null}
-            <button
-              type='button'
-              className='token-access-filter-reset'
-              onClick={resetFilters}
-              title='Effacer la recherche et les filtres'
+            </label>
+
+            <div className='token-access-phase-control' role='group' aria-label='Filtrer par type de lien'>
+              <div className='token-access-phase-segment'>
+                {ACCESS_PHASE_FILTERS.map((option) => (
+                  <button
+                    key={option.value}
+                    type='button'
+                    className={`token-access-phase-option${activeLinkTypeFilterSet.has(option.value) ? ' is-active' : ''}`.trim()}
+                    aria-pressed={activeLinkTypeFilterSet.has(option.value)}
+                    onClick={() => toggleLinkTypeFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label
+              className={`token-access-checkbox-control${!useSiteLinks ? ' is-active' : ''}`.trim()}
+              title={canUseSiteLinks ? 'Basculer entre URLs locales et site public.' : 'Aucune URL publique disponible.'}
             >
-              Réinitialiser
-            </button>
+              <input
+                type='checkbox'
+                checked={!useSiteLinks}
+                onChange={(event) => setAccessDestinationMode(event.target.checked ? 'local' : 'site')}
+              />
+              <span className='token-access-checkbox-copy'>
+                <strong>Local</strong>
+              </span>
+              <span className='token-access-checkbox-mark' aria-hidden='true' />
+            </label>
+
+            <label className={`token-access-checkbox-control${showCandidateBlocks ? ' is-active' : ''}`.trim()}>
+              <input
+                type='checkbox'
+                checked={showCandidateBlocks}
+                onChange={(event) => setShowCandidateBlocks(event.target.checked)}
+              />
+              <span className='token-access-checkbox-copy'>
+                <strong>{CANDIDATE_ROLE_LABEL}s</strong>
+              </span>
+              <span className='token-access-checkbox-mark' aria-hidden='true' />
+            </label>
           </div>
-        ) : null}
+        </div>
+
       </PageToolbar>
 
       <section className='token-generator-results'>
         <div className='token-generator-results-shell'>
           {errorMessage ? (
-            <div className='token-generator-alert' role='alert'>
+            <AccessNotice tone='danger' role='alert'>
               {errorMessage}
-            </div>
+            </AccessNotice>
           ) : null}
 
           {successMessage ? (
-            <div className='token-generator-success' role='status'>
+            <AccessNotice tone='success'>
               {successMessage}
-            </div>
+            </AccessNotice>
           ) : null}
 
           {previewSummary?.unrecoverableGeneratedLinkCount > 0 ? (
-            <div className='token-generator-alert' role='status'>
+            <AccessNotice tone='danger'>
               {previewSummary.unrecoverableGeneratedLinkCount} lien(s) généré(s) avant la persistance ne peuvent pas être reconstruits. Régénérez une fois pour les rendre relisibles.
-            </div>
+            </AccessNotice>
           ) : null}
 
-          {shouldSuggestPublicationWithLinks ? (
-            <div className='token-generator-alert token-generator-alert-action' role='status'>
-              <span>
-                La publication affichée v{publicationVersion || 'active'} n’a pas de lien disponible.
-                {' '}
-                Des liens existent pour la publication v{suggestedPublicationWithLinks.version}
-                {' '}
-                ({suggestedPublicationLinkCount} lien{suggestedPublicationLinkCount > 1 ? 's' : ''}).
-              </span>
-              <button
-                type='button'
-                className='token-access-btn secondary'
-                onClick={handleShowSuggestedPublication}
-                disabled={isBusy}
-              >
-                Afficher v{suggestedPublicationWithLinks.version}
-              </button>
-            </div>
-          ) : null}
+          <div className={`token-access-results-layout${previewSummary ? '' : ' is-empty'}${isSummaryPanelCollapsed ? ' has-collapsed-summary' : ''}`.trim()}>
+            <aside className={`token-access-status-rail${isSummaryPanelCollapsed ? ' is-hidden' : ''}`.trim()} aria-label='Synthèse des accès'>
+              {!isSummaryPanelCollapsed ? (
+                <section id='token-access-summary-panel' className='token-access-status-panel token-access-status-overview'>
+                    <div className='token-access-panel-head'>
+                      <span className='token-access-panel-icon' aria-hidden='true'>
+                        <KeyIcon />
+                      </span>
+                      <div className='token-access-panel-title'>
+                        <h2>Synthèse</h2>
+                        <p>{statusPanelDescription}</p>
+                      </div>
+                      <button
+                        type='button'
+                        className='token-access-icon-btn secondary token-access-summary-toggle'
+                        aria-label='Réduire la synthèse des accès'
+                        aria-expanded='true'
+                        aria-controls='token-access-summary-panel'
+                        onClick={() => setIsSummaryPanelCollapsed(true)}
+                      >
+                        <IconButtonContent label='Réduire la synthèse des accès' icon={ChevronRightIcon} />
+                      </button>
+                    </div>
 
-          {previewSummary ? (
-            <div className='token-access-summary-grid'>
-              <article className='token-access-summary-card'>
-                <span>Personnes</span>
-                <strong>{previewSummary.peopleCount || 0}</strong>
-              </article>
+                    {previewSummary ? (
+                      <>
+                        <div className='token-access-summary-list' aria-label='Compteurs des accès'>
+                          {summaryMetrics.map((metric) => (
+                            <AccessMetricRow key={metric.id} metric={metric} />
+                          ))}
+                        </div>
 
-              <article className='token-access-summary-card'>
-                <span>Liens vote</span>
-                <strong>{previewSummary.voteLinkCount || 0}</strong>
-              </article>
+                        <div className='token-access-status-section'>
+                          <h3>Phases</h3>
+                          <div className='token-access-phase-list' aria-label='État des accès par phase'>
+                            {phaseReadiness.map((phase) => (
+                              <AccessPhaseRow key={phase.id} phase={phase} />
+                            ))}
+                          </div>
+                        </div>
 
-              <article className='token-access-summary-card'>
-                <span>Liens défense</span>
-                <strong>{previewSummary.soutenanceLinkCount || 0}</strong>
-              </article>
+                        <div className={`token-access-email-console is-${emailDeliverySummary.variant}`.trim()}>
+                          <div className='token-access-email-console-head'>
+                            <span className='token-access-email-console-icon' aria-hidden='true'>
+                              <SendIcon />
+                            </span>
+                            <div>
+                              <h3>Console email</h3>
+                              <p>{emailDeliverySummary.progressLabel}</p>
+                            </div>
+                          </div>
+                          <div
+                            className='token-access-email-progress'
+                            style={emailDeliveryProgressStyle}
+                            aria-hidden='true'
+                          >
+                            <span />
+                          </div>
+                          <div className='token-access-email-console-metrics'>
+                            <span>
+                              <strong>{emailDeliverySummary.pendingCount}</strong>
+                              à envoyer
+                            </span>
+                            <span>
+                              <strong>{emailDeliverySummary.blockedCount}</strong>
+                              bloqué{emailDeliverySummary.blockedCount > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          {emailDeliverySummary.lastSentAt || emailDeliverySummary.lastPreparedAt ? (
+                            <small>
+                              Dernier: {formatDateTime(emailDeliverySummary.lastSentAt || emailDeliverySummary.lastPreparedAt)}
+                            </small>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <div className='token-access-status-placeholder'>
+                        <ClipboardIcon aria-hidden='true' />
+                        <span>Les compteurs s’affichent dès que les liens sont chargés.</span>
+                      </div>
+                    )}
+                </section>
+              ) : null}
+            </aside>
 
-              <article className='token-access-summary-card'>
-                <span>Liens arbitrage</span>
-                <strong>{previewSummary.arbitrageLinkCount || 0}</strong>
-              </article>
+            <main className='token-access-main-panel'>
+              {previewSummary && !isEmailAutomationPanelCollapsed ? (
+                <SoutenanceEmailAutomationPanel
+                  targets={soutenanceEmailAutomationTargets}
+                  selectedKeys={selectedSoutenanceEmailKeys}
+                  selectedCount={selectedSoutenanceEmailTargets.length}
+                  pendingCount={soutenanceEmailAutomationGroups.all.pendingCount}
+                  projectLeadGroup={soutenanceEmailAutomationGroups.projectLeads}
+                  expertGroup={soutenanceEmailAutomationGroups.standaloneExperts}
+                  preview={soutenanceEmailPreview}
+                  testEmailAddress={testEmailAddress}
+                  isPreviewLoading={isEmailPreviewLoading}
+                  isSending={isAutomaticEmailSending}
+                  onPreview={handlePreviewSoutenanceEmailTemplate}
+                  onSendTest={handleSendSoutenanceEmailTest}
+                  onSendSelection={handleSendSelectedSoutenanceEmails}
+                  onSendProjectLeads={handleSendProjectLeadSoutenanceEmails}
+                  onSendExperts={handleSendStandaloneExpertSoutenanceEmails}
+                  onTestEmailChange={setTestEmailAddress}
+                  onToggleTarget={handleToggleSoutenanceEmailSelection}
+                  onSelectPending={handleSelectPendingSoutenanceEmails}
+                  onClearSelection={handleClearSoutenanceEmailSelection}
+                  onCollapse={() => setIsEmailAutomationPanelCollapsed(true)}
+                />
+              ) : null}
 
-              <article className='token-access-summary-card'>
-                <span>Accès disponibles</span>
-                <strong>{previewSummary.generatedLinkCount || 0}</strong>
-              </article>
-
-              <article className='token-access-summary-card'>
-                <span>Indisponibles</span>
-                <strong>{previewSummary.unavailableGeneratedLinkCount || 0}</strong>
-              </article>
-
-              <article className='token-access-summary-card'>
-                <span>Votes en attente</span>
-                <strong>{previewContexts?.vote?.tpiCount || 0} TPI</strong>
-              </article>
-            </div>
-          ) : null}
-
-          {invitationDrafts.length > 0 ? (
-            <section className='token-access-draft-panel' aria-label='Emails Outlook préparés'>
-              <div className='token-access-draft-head'>
-                <div>
-                  <h3>Emails Outlook</h3>
+              {!previewSummary ? (
+                <div className='token-generator-empty-state'>
+                  <h3>{isPreviewLoading ? 'Chargement des liens' : 'Aucun lien chargé'}</h3>
                   <p>
-                    Ouvrez les brouillons un par un, puis vérifiez et envoyez depuis Outlook.
+                    {isPreviewLoading
+                      ? 'Lecture des liens déjà générés.'
+                      : 'Les accès se chargent automatiquement. Vous pouvez générer les liens disponibles si nécessaire.'}
                   </p>
                 </div>
-                <span>{invitationDrafts.length}</span>
-              </div>
-
-              <div className='token-access-draft-list'>
-                {invitationDrafts.map((draft) => (
-                  <article key={draft.key} className='token-access-draft-row'>
-                    <div className='token-access-draft-copy'>
-                      <strong>{draft.name}</strong>
-                      <span>{draft.to}</span>
-                      <small>{formatDraftTypeLabel(draft.type)} · {draft.subject}</small>
-                    </div>
+              ) : filteredPeople.length === 0 ? (
+                <div className='token-generator-empty-state'>
+                  <h3>Aucun résultat</h3>
+                  <p>
+                    {hasActiveFilters
+                      ? `Aucun résultat pour le filtre actuel${searchQuery ? ` (recherche : ${searchQuery})` : ''}.`
+                      : 'Aucun lien disponible pour cette vue.'}
+                  </p>
+                  {hasActiveFilters ? (
                     <button
                       type='button'
-                      className='token-access-btn secondary'
-                      onClick={() => openOutlookDraft(draft)}
-                      aria-label={`Ouvrir l'email Outlook pour ${draft.name}`}
+                      className='token-access-btn token-access-filter-reset'
+                      onClick={resetFilters}
                     >
-                      Ouvrir Outlook
+                      Réinitialiser les filtres
                     </button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {!previewSummary ? (
-            <div className='token-generator-empty-state'>
-              <h3>{isPreviewLoading ? 'Chargement des liens' : 'Aucun aperçu préparé'}</h3>
-              <p>
-                {isPreviewLoading
-                  ? 'Lecture des liens déjà générés pour cette année.'
-                  : 'Choisissez une année, puis préparez l’aperçu.'}
-              </p>
-            </div>
-          ) : filteredPeople.length === 0 ? (
-            <div className='token-generator-empty-state'>
-              <h3>Aucun résultat</h3>
-              <p>
-                {hasActiveFilters
-                  ? `Aucun résultat pour le filtre actuel${searchQuery ? ` (recherche : ${searchQuery})` : ''}.`
-                  : 'Aucun lien disponible pour cette vue.'}
-              </p>
-              {hasActiveFilters ? (
-                <button
-                  type='button'
-                  className='token-access-btn token-access-filter-reset'
-                  onClick={resetFilters}
-                >
-                  Réinitialiser les filtres
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <div className='token-access-person-list'>
-              {filteredPeople.map((entry) => (
-                <PersonCard
-                  key={entry?.person?.id || entry?.person?.email}
-                  entry={entry}
-                  onCopy={handleCopy}
-                  onOpen={handleOpen}
-                  onEmailLink={handlePrepareSingleOutlookLinkEmail}
-                />
-              ))}
-            </div>
-          )}
+                  ) : null}
+                </div>
+              ) : (
+                <div className='token-access-person-list'>
+                  {filteredPeople.map((entry) => (
+                    <PersonCard
+                      key={entry?.person?.id || entry?.person?.email}
+                      entry={entry}
+                      selectedYear={selectedYear}
+                      selectedPhaseFilters={linkTypeFilters}
+                      emailDeliveryLedger={emailDeliveryLedger}
+                      onPrepareEmail={handlePrepareEmail}
+                      onCopy={handleCopy}
+                      onOpen={handleOpen}
+                    />
+                  ))}
+                </div>
+              )}
+            </main>
+          </div>
         </div>
       </section>
     </div>

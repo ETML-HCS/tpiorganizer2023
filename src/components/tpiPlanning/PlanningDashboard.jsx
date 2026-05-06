@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { authPlanningService, planningCatalogService, planningConfigService, resolutionProposalService, tpiPlanningService, slotService, voteService, workflowPlanningService } from '../../services/planningService'
+import { authCoordinationService, coordinationCatalogService, coordinationConfigService, resolutionProposalService, tpiCoordinationService, slotService, voteService, workflowCoordinationService } from '../../services/coordinationService'
 import { IS_DEBUG, ROUTES } from '../../config/appConfig'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
 import TpiPlanningList from './TpiPlanningList'
@@ -12,6 +12,7 @@ import PageToolbar from '../shared/PageToolbar'
 import {
   AlertIcon,
   ArrowRightIcon,
+  CalendarIcon,
   CheckIcon,
   CloseIcon,
   FileTextIcon,
@@ -30,10 +31,14 @@ import {
 } from '../tpiDetail/tpiDetailUtils'
 import {
   MANUAL_REQUIRED_STATUSES,
-  normalizePlanningStatus,
-  PLANNING_STATUS
-} from '../../constants/planningStatus'
-import { getPlanningPerimeterState } from '../../utils/planningScopeUtils'
+  normalizeCoordinationStatus,
+  COORDINATION_STATUS
+} from '../../constants/coordinationStatus'
+import {
+  VOTING_STAKEHOLDER_ROLES,
+  getTpiRelationRoleLabel
+} from '../../utils/stakeholderRules'
+import { getPlanningPerimeterState } from '../../utils/coordinationScopeUtils'
 import { buildValidationToast, extractValidationResultFromError } from '../../utils/workflowFeedback'
 import { YEARS_CONFIG } from '../../config/appConfig'
 import './PlanningDashboard.css'
@@ -48,16 +53,16 @@ const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== 'test'
 
 function logWorkflowDebug(...args) {
   if (shouldLogWorkflowDebug) {
-    console.log(...args)
+    console.debug(...args)
   }
 }
 
 const STATUS_FILTER_LABELS = {
   all: 'Tous les statuts',
-  [PLANNING_STATUS.DRAFT]: 'Brouillons',
-  [PLANNING_STATUS.VOTING]: 'En vote',
-  [PLANNING_STATUS.CONFIRMED]: 'Confirmes',
-  [PLANNING_STATUS.MANUAL_REQUIRED]: 'Intervention requise'
+  [COORDINATION_STATUS.DRAFT]: 'Brouillons',
+  [COORDINATION_STATUS.VOTING]: 'En vote',
+  [COORDINATION_STATUS.CONFIRMED]: 'Confirmes',
+  [COORDINATION_STATUS.MANUAL_REQUIRED]: 'Intervention requise'
 }
 
 const TAB_PRESENTATIONS = {
@@ -104,7 +109,7 @@ const VALIDATION_ISSUE_LABELS = {
   legacy_tpi_missing_reference: 'Référence GestionTPI manquante',
   legacy_tpi_missing_stakeholders: 'Parties prenantes incomplètes',
   legacy_tpi_unresolved_stakeholders: 'Parties prenantes non validées',
-  legacy_tpi_not_imported: 'Absent de Planning'
+  legacy_tpi_not_imported: 'Absent de Coordination'
 }
 
 function getApiErrorMessage(err, fallbackMessage) {
@@ -121,6 +126,11 @@ function getValidationIssueLabel(issue) {
   }
 
   return VALIDATION_ISSUE_LABELS[issue.type] || issue.type
+}
+
+function isValidationWarningIssue(issue) {
+  return compactText(issue?.severity).toLowerCase() === 'warning' ||
+    issue?.isConstraintOverride === true
 }
 
 function getPersonId(value) {
@@ -221,28 +231,22 @@ function formatValidationCheckedAt(value) {
 }
 
 function getVoterRoleLabel(role) {
-  if (!role) {
-    return ""
-  }
-
-  if (role === "expert1") {
-    return "Expert 1"
-  }
-
-  if (role === "expert2") {
-    return "Expert 2"
-  }
-
-  if (role === "chef_projet") {
-    return "Chef de projet"
-  }
-
-  return compactText(role)
+  return getTpiRelationRoleLabel(role)
 }
 
-const VOTE_ROLE_ORDER = ['expert1', 'expert2', 'chef_projet']
-const RESOLUTION_RECIPIENT_ROLES = ['chef_projet', 'expert1', 'expert2']
-const DEFAULT_RESOLUTION_RECIPIENT_ROLES = ['chef_projet']
+const VOTE_ROLE_ORDER = VOTING_STAKEHOLDER_ROLES
+const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
+const PROJECT_LEAD_ROLE = 'chef_projet'
+const RESOLUTION_RECIPIENT_ROLES = [
+  PROJECT_LEAD_ROLE,
+  ...VOTING_STAKEHOLDER_ROLES.filter((role) => role !== PROJECT_LEAD_ROLE)
+]
+const DEFAULT_RESOLUTION_RECIPIENT_ROLES = RESOLUTION_RECIPIENT_ROLES.includes(PROJECT_LEAD_ROLE)
+  ? [PROJECT_LEAD_ROLE]
+  : RESOLUTION_RECIPIENT_ROLES.slice(0, 1)
+const EXPERT_RESOLUTION_RECIPIENT_ROLES = RESOLUTION_RECIPIENT_ROLES.filter((role) =>
+  role !== PROJECT_LEAD_ROLE
+)
 
 function normalizeResolutionRecipientRoles(value) {
   const source = Array.isArray(value) ? value : DEFAULT_RESOLUTION_RECIPIENT_ROLES
@@ -371,6 +375,67 @@ function formatVoteDate(value) {
     month: '2-digit',
     year: 'numeric'
   })
+}
+
+function toPlanningDateKey(value) {
+  const rawValue = compactText(value)
+  if (!rawValue) {
+    return ''
+  }
+
+  const isoDateMatch = rawValue.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (isoDateMatch) {
+    return isoDateMatch[1]
+  }
+
+  const date = new Date(rawValue)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 10)
+}
+
+function formatPlanningDateKey(value) {
+  const dateKey = toPlanningDateKey(value)
+  if (!dateKey) {
+    return ''
+  }
+
+  const date = new Date(`${dateKey}T12:00:00`)
+  if (Number.isNaN(date.getTime())) {
+    return dateKey
+  }
+
+  return date.toLocaleDateString('fr-CH', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
+}
+
+function addSlotDateKey(target, slot) {
+  const dateKey = toPlanningDateKey(slot?.date)
+  if (dateKey) {
+    target.add(dateKey)
+  }
+}
+
+function getTpiPlanningDateKeys(tpi) {
+  const dateKeys = new Set()
+
+  addSlotDateKey(dateKeys, tpi?.confirmedSlot)
+
+  if (Array.isArray(tpi?.proposedSlots)) {
+    tpi.proposedSlots.forEach((proposedSlot) => addSlotDateKey(dateKeys, proposedSlot?.slot))
+  }
+
+  if (Array.isArray(tpi?.voteDecision?.slots)) {
+    tpi.voteDecision.slots.forEach((decisionSlot) => addSlotDateKey(dateKeys, decisionSlot?.slot))
+  }
+
+  return Array.from(dateKeys)
 }
 
 function formatVoteDeadline(value) {
@@ -1027,7 +1092,7 @@ function buildVoteWorkflowRow(tpi) {
   const constraintSummary = buildVoteConstraintRowSummary({ decisionSlots, roleEntries })
   const respondedRoles = roleEntries.filter((entry) => hasVoteRoleResponded(entry.status))
   const missingRoles = roleEntries.filter((entry) => !hasVoteRoleResponded(entry.status))
-  const normalizedStatus = normalizePlanningStatus(tpi?.status)
+  const normalizedStatus = normalizeCoordinationStatus(tpi?.status)
   const hasManualStatus = MANUAL_REQUIRED_STATUSES.includes(normalizedStatus)
   const hasProposal = roleEntries.some((entry) => getVoteRoleTone(entry.status) === 'proposal')
   const hasSpecialRequest = roleEntries.some((entry) =>
@@ -1040,7 +1105,7 @@ function buildVoteWorkflowRow(tpi) {
   let bucket = 'other'
   if (hasManualStatus) {
     bucket = 'manual'
-  } else if (normalizedStatus === PLANNING_STATUS.CONFIRMED) {
+  } else if (normalizedStatus === COORDINATION_STATUS.CONFIRMED) {
     bucket = 'confirmed'
   } else if (missingRoles.length > 0) {
     bucket = 'pending'
@@ -1052,7 +1117,7 @@ function buildVoteWorkflowRow(tpi) {
     tpi,
     id: compactText(tpi?._id) || compactText(tpi?.reference),
     reference: compactText(tpi?.reference) || 'TPI',
-    candidate: formatPersonName(tpi?.candidat, 'Candidat non renseigne'),
+    candidate: formatPersonName(tpi?.candidat, `${CANDIDATE_ROLE_LABEL} non renseigne`),
     status: normalizedStatus,
     roleEntries,
     respondedCount: respondedRoles.length,
@@ -1102,6 +1167,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [conflicts, setConflicts] = useState([])
   const [workflow, setWorkflow] = useState(null)
   const [activeSnapshot, setActiveSnapshot] = useState(null)
+  const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const [magicLinkViewer, setMagicLinkViewer] = useState(null)
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
@@ -1132,14 +1198,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   // Filtres
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
 
   const fetchStaticVotePublicationStatus = useCallback(async () => {
-    if (!isAdmin || typeof workflowPlanningService.getStaticVotePublicationStatus !== 'function') {
+    if (!isAdmin || typeof workflowCoordinationService.getStaticVotePublicationStatus !== 'function') {
       return null
     }
 
     try {
-      return await workflowPlanningService.getStaticVotePublicationStatus(year)
+      return await workflowCoordinationService.getStaticVotePublicationStatus(year)
     } catch (err) {
       if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
         console.warn('Statut publication vote statique indisponible:', err)
@@ -1148,8 +1215,23 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [year, isAdmin])
 
+  const fetchStaticPublicationStatus = useCallback(async () => {
+    if (!isAdmin || typeof workflowCoordinationService.getStaticPublicationStatus !== 'function') {
+      return null
+    }
+
+    try {
+      return await workflowCoordinationService.getStaticPublicationStatus(year)
+    } catch (err) {
+      if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
+        console.warn('Statut publication defenses statique indisponible:', err)
+      }
+      return null
+    }
+  }, [year, isAdmin])
+
   const tryAutoSyncStaticVotes = useCallback(async () => {
-    if (!isAdmin || typeof workflowPlanningService.syncStaticVotePublication !== 'function') {
+    if (!isAdmin || typeof workflowCoordinationService.syncStaticVotePublication !== 'function') {
       return undefined
     }
 
@@ -1167,7 +1249,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     staticVoteAutoSyncYearsRef.current.add(yearKey)
 
     try {
-      const result = await workflowPlanningService.syncStaticVotePublication(year)
+      const result = await workflowCoordinationService.syncStaticVotePublication(year)
       const syncedAt = new Date().toISOString()
 
       return {
@@ -1205,7 +1287,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     try {
       const staticVoteAutoSyncResponse = await tryAutoSyncStaticVotes()
       const snapshotRequest = isAdmin
-        ? Promise.resolve(workflowPlanningService.getActiveSnapshot(year))
+        ? Promise.resolve(workflowCoordinationService.getActiveSnapshot(year))
           .catch(err => {
             if (err?.status === 404) {
               return null
@@ -1215,7 +1297,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         : Promise.resolve(null)
 
       const workflowRequest = isAdmin
-        ? workflowPlanningService.getYearState(year)
+        ? workflowCoordinationService.getYearState(year)
         : Promise.resolve(null)
 
       const staticVotePublicationRequest = isAdmin
@@ -1224,14 +1306,18 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           : fetchStaticVotePublicationStatus()
         : Promise.resolve(null)
 
-      const planningConfigRequest = Promise.resolve(planningConfigService.getByYear(year)).catch(err => {
+      const staticPublicationRequest = isAdmin
+        ? fetchStaticPublicationStatus()
+        : Promise.resolve(null)
+
+      const planningConfigRequest = Promise.resolve(coordinationConfigService.getByYear(year)).catch(err => {
         if (err?.status === 404) {
           return null
         }
         throw err
       })
 
-      const planningCatalogRequest = Promise.resolve(planningCatalogService.getGlobal()).catch(err => {
+      const planningCatalogRequest = Promise.resolve(coordinationCatalogService.getGlobal()).catch(err => {
         console.error('Erreur lors du chargement du catalogue central:', err)
         return null
       })
@@ -1259,16 +1345,18 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         workflowResponse,
         snapshotResponse,
         legacyTpisResponse,
+        staticPublicationResponse,
         staticVotePublicationResponse
       ] = await Promise.all([
         planningConfigRequest,
         planningCatalogRequest,
-        tpiPlanningService.getByYear(year),
+        tpiCoordinationService.getByYear(year),
         slotService.getCalendar(year),
         votesRequest,
         workflowRequest,
         snapshotRequest,
         legacyTpisRequest,
+        staticPublicationRequest,
         staticVotePublicationRequest
       ])
 
@@ -1287,11 +1375,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       setPendingVotes(safeVotesResponse)
       setWorkflow(workflowResponse)
       setActiveSnapshot(snapshotResponse)
+      setStaticPublicationInfo(staticPublicationResponse)
       setStaticVotePublicationInfo(staticVotePublicationResponse)
       
       // Identifier les conflits
       const tpisWithConflicts = safeTpisResponse.filter(tpi =>
-        MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(tpi.status)) || 
+        MANUAL_REQUIRED_STATUSES.includes(normalizeCoordinationStatus(tpi.status)) ||
         tpi.votingSession?.hasConflicts
       )
       setConflicts(tpisWithConflicts)
@@ -1302,7 +1391,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     } finally {
       setIsLoading(false)
     }
-  }, [year, isAdmin, fetchStaticVotePublicationStatus, tryAutoSyncStaticVotes])
+  }, [year, isAdmin, fetchStaticPublicationStatus, fetchStaticVotePublicationStatus, tryAutoSyncStaticVotes])
 
   useEffect(() => {
     let isCancelled = false
@@ -1316,7 +1405,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       }
 
       try {
-        const resolved = await workflowPlanningService.resolveMagicLink(magicLinkToken)
+        const resolved = await workflowCoordinationService.resolveMagicLink(magicLinkToken)
 
         if (resolved?.type !== 'vote') {
           if (!isCancelled) {
@@ -1327,7 +1416,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         }
 
         if (resolved?.sessionToken) {
-          authPlanningService.setSessionToken(resolved.sessionToken)
+          authCoordinationService.setSessionToken(resolved.sessionToken)
         }
 
         if (resolved?.viewer) {
@@ -1336,7 +1425,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             role: resolved.role || null
           }
 
-          authPlanningService.setCurrentUser(viewer)
+          authCoordinationService.setCurrentUser(viewer)
 
           if (!isCancelled) {
             setMagicLinkViewer(viewer)
@@ -1392,12 +1481,43 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return tpis.filter(tpi => isTpiVisibleForViewer(tpi, scopedViewerId))
   }, [tpis, isAdmin, magicLinkViewer])
 
+  const planningDateOptions = useMemo(() => {
+    const dateKeys = new Set()
+
+    visibleTpis.forEach((tpi) => {
+      getTpiPlanningDateKeys(tpi).forEach((dateKey) => dateKeys.add(dateKey))
+    })
+
+    return Array.from(dateKeys)
+      .sort((left, right) => left.localeCompare(right))
+      .map((value) => ({
+        value,
+        label: formatPlanningDateKey(value) || value
+      }))
+  }, [visibleTpis])
+
+  useEffect(() => {
+    if (!dateFilter) {
+      return
+    }
+
+    const stillAvailable = planningDateOptions.some((option) => option.value === dateFilter)
+    if (!stillAvailable) {
+      setDateFilter('')
+    }
+  }, [dateFilter, planningDateOptions])
+
   const filteredTpis = useMemo(() => {
     return visibleTpis.filter(tpi => {
-      const normalizedStatus = normalizePlanningStatus(tpi.status)
+      const normalizedStatus = normalizeCoordinationStatus(tpi.status)
 
       // Filtre par statut
       if (statusFilter !== 'all' && normalizedStatus !== statusFilter) {
+        return false
+      }
+
+      // Filtre par date de créneau
+      if (dateFilter && !getTpiPlanningDateKeys(tpi).includes(dateFilter)) {
         return false
       }
       
@@ -1414,7 +1534,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       
       return true
     })
-  }, [visibleTpis, statusFilter, searchQuery])
+  }, [visibleTpis, statusFilter, dateFilter, searchQuery])
 
   /**
    * Statistiques globales
@@ -1422,12 +1542,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const stats = useMemo(() => {
     return {
       total: visibleTpis.length,
-      draft: visibleTpis.filter(t => normalizePlanningStatus(t.status) === PLANNING_STATUS.DRAFT).length,
-      voting: visibleTpis.filter(t => normalizePlanningStatus(t.status) === PLANNING_STATUS.VOTING).length,
-      confirmed: visibleTpis.filter(t => normalizePlanningStatus(t.status) === PLANNING_STATUS.CONFIRMED).length,
+      draft: visibleTpis.filter(t => normalizeCoordinationStatus(t.status) === COORDINATION_STATUS.DRAFT).length,
+      voting: visibleTpis.filter(t => normalizeCoordinationStatus(t.status) === COORDINATION_STATUS.VOTING).length,
+      confirmed: visibleTpis.filter(t => normalizeCoordinationStatus(t.status) === COORDINATION_STATUS.CONFIRMED).length,
       conflicts: conflicts.length,
       pendingVotes: isAdmin
-        ? visibleTpis.filter(t => normalizePlanningStatus(t.status) !== PLANNING_STATUS.DRAFT).length
+        ? visibleTpis.filter(t => normalizeCoordinationStatus(t.status) !== COORDINATION_STATUS.DRAFT).length
         : pendingVotes.length
     }
   }, [visibleTpis, conflicts, pendingVotes, isAdmin])
@@ -1438,8 +1558,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
 
     return visibleTpis.filter((tpi) => {
-      const normalizedStatus = normalizePlanningStatus(tpi.status)
-      return normalizedStatus !== PLANNING_STATUS.DRAFT
+      const normalizedStatus = normalizeCoordinationStatus(tpi.status)
+      return normalizedStatus !== COORDINATION_STATUS.DRAFT
     })
   }, [visibleTpis, isAdmin])
 
@@ -1449,8 +1569,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
 
     return filteredTpis.filter((tpi) => {
-      const normalizedStatus = normalizePlanningStatus(tpi.status)
-      return normalizedStatus !== PLANNING_STATUS.DRAFT
+      const normalizedStatus = normalizeCoordinationStatus(tpi.status)
+      return normalizedStatus !== COORDINATION_STATUS.DRAFT
     })
   }, [filteredTpis, isAdmin])
 
@@ -1585,6 +1705,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const hasLegacyImportGap = notImportedLegacyTpisByPlanningPerimeter.length > 0
   const validationAnnotations = useMemo(() => {
     const issues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
+    const blockingIssues = issues.filter((issue) => !isValidationWarningIssue(issue))
+    const warningIssues = issues.filter(isValidationWarningIssue)
 
     if (issues.length === 0) {
       return {
@@ -1592,6 +1714,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         impactedTpiCount: 0,
         orphanIssues: [],
         totalIssues: 0,
+        blockingIssueCount: 0,
+        warningCount: 0,
         checkedAtLabel: formatValidationCheckedAt(validationResult?.checkedAt)
       }
     }
@@ -1676,16 +1800,51 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       impactedTpiCount: Object.keys(byTpiId).length,
       orphanIssues,
       totalIssues: issues.length,
+      blockingIssueCount: blockingIssues.length,
+      warningCount: warningIssues.length,
       checkedAtLabel: formatValidationCheckedAt(validationResult?.checkedAt)
     }
   }, [tpis, validationResult])
+  const validationBlockingIssueCount = Number(
+    validationAnnotations.blockingIssueCount ?? validationAnnotations.totalIssues ?? 0
+  )
+  const validationWarningCount = Number(validationAnnotations.warningCount || 0)
+  const validationHasBlockingIssues = validationBlockingIssueCount > 0
+  const validationHasWarnings = !validationHasBlockingIssues && validationWarningCount > 0
 
+  const workflowPhases = workflow?.phases || {}
+  const isWorkflowPhaseActive = (phase) => {
+    if (workflowPhases?.[phase] && typeof workflowPhases[phase].active === 'boolean') {
+      return workflowPhases[phase].active
+    }
+
+    if (phase === 'planning') {
+      return (workflow?.state || 'planning') === 'planning'
+    }
+
+    if (phase === 'votes') {
+      return workflow?.state === 'voting_open'
+    }
+
+    if (phase === 'defenses') {
+      return workflow?.state === 'published'
+    }
+
+    return false
+  }
+  const activeWorkflowPhaseLabels = [
+    isWorkflowPhaseActive('planning') ? 'Planification' : '',
+    isWorkflowPhaseActive('votes') ? 'Votes' : '',
+    isWorkflowPhaseActive('arbitrage') ? 'Arbitrage' : '',
+    isWorkflowPhaseActive('defenses') ? 'Défenses' : ''
+  ].filter(Boolean)
   const workflowState = workflow?.state || 'planning'
-  const workflowLabel = WORKFLOW_LABELS[workflowState] || workflowState
+  const workflowLabel = activeWorkflowPhaseLabels.length > 0
+    ? activeWorkflowPhaseLabels.join(' + ')
+    : WORKFLOW_LABELS[workflowState] || workflowState
   const hasActiveSnapshot = Boolean(activeSnapshot?.version)
-  const isPlanningState = workflowState === 'planning'
-  const isVotingState = workflowState === 'voting_open'
-  const isPublishedState = workflowState === 'published'
+  const isVotingState = isWorkflowPhaseActive('votes')
+  const isPublishedState = isWorkflowPhaseActive('defenses')
   const isScopedVoteViewer = Boolean(!isAdmin && magicLinkViewer?.personId)
   const hasSuccessfulValidation =
     !validationResult ||
@@ -1694,9 +1853,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const hasBlockedValidation = Boolean(validationResult) &&
     Number(validationResult?.year) === Number(year) &&
     validationResult?.summary?.isValid === false
-  const canStartVotes = isPlanningState && hasActiveSnapshot && hasSuccessfulValidation
-  const canPublishDirect = isPlanningState && canStartVotes && !hasLegacyImportGap
-  const canPublish = canPublishDirect || isVotingState || isPublishedState
+  const canStartVotes = !hasLegacyImportGap
+  const canPublish = !hasLegacyImportGap
 
   const selectedTpiValidationMessages = useMemo(() => {
     if (!selectedTpi) {
@@ -1720,7 +1878,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const selectedTpiCandidateLabel = useMemo(() => {
     return formatPersonName(
       selectedTpi?.candidat,
-      'Candidat non renseigné'
+      `${CANDIDATE_ROLE_LABEL} non renseigné`
     )
   }, [selectedTpi])
   const selectedTpiSubjectLabel = useMemo(() => {
@@ -1748,7 +1906,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     selectedTpiVoteEntries.filter((entry) => hasVoteRoleResponded(entry.status)).length
   ), [selectedTpiVoteEntries])
   const selectedTpiManualAction = useMemo(() => {
-    return MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(selectedTpi?.status))
+    return MANUAL_REQUIRED_STATUSES.includes(normalizeCoordinationStatus(selectedTpi?.status))
   }, [selectedTpi])
   const focusedTpiMatch = useMemo(() => {
     if (!requestedFocus) {
@@ -1778,6 +1936,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       setStatusFilter('all')
     }
 
+    if (dateFilter) {
+      setDateFilter('')
+    }
+
     if (searchQuery !== requestedFocus) {
       setSearchQuery(requestedFocus)
     }
@@ -1802,6 +1964,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     appliedFocus,
     isLoading,
     activeTab,
+    dateFilter,
     searchQuery,
     statusFilter,
     visibleTpis,
@@ -1883,6 +2046,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     setSearchQuery('')
     setSelectedTpi(null)
     setStatusFilter('all')
+    setDateFilter('')
 
     navigate(
       {
@@ -1898,7 +2062,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
    */
   const handleProposeSlots = useCallback(async (tpiId) => {
     try {
-      const result = await tpiPlanningService.proposeSlots(tpiId)
+      const result = await tpiCoordinationService.proposeSlots(tpiId)
       
       if (result.success) {
         // Recharger les données
@@ -1918,7 +2082,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
    */
   const handleForceSlot = useCallback(async (tpiId, slotId, reason) => {
     try {
-      const result = await tpiPlanningService.forceSlot(tpiId, slotId, reason)
+      const result = await tpiCoordinationService.forceSlot(tpiId, slotId, reason)
       
       if (result.success) {
         await loadData()
@@ -1964,7 +2128,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
 
     try {
-      const result = await tpiPlanningService.forceSlot(
+      const result = await tpiCoordinationService.forceSlot(
         tpiId,
         slotId,
         buildAdminSlotForceReason(reference, slot)
@@ -2006,7 +2170,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     setProposalMoveLoadingKey(`${tpiId}:${slotId}`)
 
     try {
-      const simulation = await tpiPlanningService.simulateMoveToSlot(tpiId, slotId)
+      const simulation = await tpiCoordinationService.simulateMoveToSlot(tpiId, slotId)
       setProposalMoveReview({
         ...review,
         status: 'ready',
@@ -2057,7 +2221,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     setError(null)
 
     try {
-      const result = await tpiPlanningService.moveToSlot(
+      const result = await tpiCoordinationService.moveToSlot(
         tpiId,
         slotId,
         buildVoteProposalMoveReason(proposalMoveReview.tpi, proposalMoveReview.summary, proposalMoveReview.slot)
@@ -2270,7 +2434,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
     const result = await executeWorkflowAction({
       actionKey: 'validate',
-      run: () => workflowPlanningService.validatePlanification(year),
+      run: () => workflowCoordinationService.validatePlanification(year),
       successBuilder: null,
       errorFallback: 'Erreur lors de la validation de la planification.',
       onSuccess: (validationResult) => {
@@ -2278,6 +2442,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         if (Number(validationResult?.summary?.issueCount || 0) > 0) {
           setStatusFilter('all')
           setSearchQuery('')
+          setDateFilter('')
           setActiveTab('list')
         }
 
@@ -2329,7 +2494,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     await executeWorkflowAction({
       actionKey: 'autoPlan',
       confirmMessage: `Reconstruire automatiquement la planification ${year} ? Les créneaux proposés actuels seront recalculés à partir de la configuration.`,
-      run: () => workflowPlanningService.automatePlanification(year),
+      run: () => workflowCoordinationService.automatePlanification(year),
       successBuilder: (result) => {
         const summary = result?.summary || {}
         const syncSummary = result?.sync || {}
@@ -2337,16 +2502,20 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         const totalTpis = Number(summary.totalTpis || 0)
         const plannedCount = Number(summary.plannedCount || 0)
         const manualRequiredCount = Number(summary.manualRequiredCount || 0)
+        const constraintOverrideCount = Number(summary.constraintOverrideCount || 0)
         const issueCount = Number(validationSummary.issueCount || 0)
         const syncCreatedCount = Number(syncSummary.createdCount || 0)
+        const constraintText = constraintOverrideCount > 0
+          ? ` ${constraintOverrideCount} TPI placé(s) avec alerte de contrainte.`
+          : ''
         const suffix = issueCount > 0
           ? ` ${issueCount} anomalie(s) restent à corriger.`
-          : ' Planning prêt pour vérification.'
+          : ' Planification prête pour vérification.'
         const syncPrefix = syncCreatedCount > 0
           ? `${syncCreatedCount} TPI intégré(s) depuis GestionTPI dans le workflow. `
           : ''
 
-        return `${syncPrefix}Planification automatique: ${plannedCount}/${totalTpis} TPI placés, ${manualRequiredCount} en manuel, ${Number(summary.slotCount || 0)} créneau(x) généré(s).${suffix}`
+        return `${syncPrefix}Planification automatique: ${plannedCount}/${totalTpis} TPI placés, ${manualRequiredCount} en manuel, ${Number(summary.slotCount || 0)} créneau(x) généré(s).${constraintText}${suffix}`
       },
       errorFallback: 'Erreur lors de la planification automatique.',
       reloadAfterSuccess: true,
@@ -2355,9 +2524,14 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           setValidationResult(result.validation)
         }
 
-        if (Number(result?.summary?.manualRequiredCount || 0) > 0 || Number(result?.validation?.summary?.issueCount || 0) > 0) {
+        if (
+          Number(result?.summary?.manualRequiredCount || 0) > 0 ||
+          Number(result?.summary?.constraintOverrideCount || 0) > 0 ||
+          Number(result?.validation?.summary?.issueCount || 0) > 0
+        ) {
           setStatusFilter('all')
           setSearchQuery('')
+          setDateFilter('')
           setActiveTab('list')
         }
       }
@@ -2368,7 +2542,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     const result = await executeWorkflowAction({
       actionKey: 'freeze',
       confirmMessage: `Confirmer le gel du snapshot de planification ${year} ?`,
-      run: () => workflowPlanningService.freezePlanification(year),
+      run: () => workflowCoordinationService.freezePlanification(year),
       successBuilder: (result) => `Snapshot v${result?.snapshot?.version || '?'} gele avec succes.`,
       errorFallback: 'Erreur lors du freeze de la planification.',
       reloadAfterSuccess: true
@@ -2385,17 +2559,11 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handleStartVotesCampaign = useCallback(async () => {
     const result = await executeWorkflowAction({
       actionKey: 'startVotes',
-      confirmMessage: 'Confirmer l ouverture de la campagne de votes ?',
-      run: () => workflowPlanningService.startVotes(year),
+      confirmMessage: 'Confirmer l ouverture de la campagne de votes sans envoyer d emails ?',
+      run: () => workflowCoordinationService.startVotesWithoutEmails(year),
       successBuilder: (result) => {
         const tpiCount = result?.tpiCount || 0
-        const successfulEmails = result?.successfulEmails || 0
-        const totalEmails = result?.totalEmails || 0
-        const emailSuffix = successfulEmails < totalEmails
-          ? ` Attention: ${totalEmails - successfulEmails} envoi(s) ont échoué.`
-          : ''
-
-        return `Campagne ouverte: ${tpiCount} TPI synchronises, ${successfulEmails}/${totalEmails} emails envoyes.${emailSuffix}`
+        return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye automatiquement.`
       },
       errorFallback: 'Erreur lors du lancement de la campagne de votes.',
       onError: (_errorMessage, error) => {
@@ -2404,6 +2572,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           setValidationResult(validationFromError)
           setStatusFilter('all')
           setSearchQuery('')
+          setDateFilter('')
           setActiveTab('list')
         }
       },
@@ -2413,7 +2582,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     if (result?.workflowState) {
       setWorkflow(prev => ({
         ...(prev || {}),
-        state: result.workflowState
+        state: result.workflowState,
+        ...(result?.workflow?.phases ? { phases: result.workflow.phases } : {})
       }))
     }
   }, [year, executeWorkflowAction])
@@ -2422,7 +2592,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     const result = await executeWorkflowAction({
       actionKey: 'startVotesNoEmail',
       confirmMessage: 'Confirmer l ouverture de la campagne de votes sans envoyer d emails ?',
-      run: () => workflowPlanningService.startVotesWithoutEmails(year),
+      run: () => workflowCoordinationService.startVotesWithoutEmails(year),
       successBuilder: (result) => {
         const tpiCount = result?.tpiCount || 0
         return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
@@ -2434,6 +2604,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           setValidationResult(validationFromError)
           setStatusFilter('all')
           setSearchQuery('')
+          setDateFilter('')
           setActiveTab('list')
         }
       },
@@ -2443,7 +2614,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     if (result?.workflowState) {
       setWorkflow(prev => ({
         ...(prev || {}),
-        state: result.workflowState
+        state: result.workflowState,
+        ...(result?.workflow?.phases ? { phases: result.workflow.phases } : {})
       }))
     }
   }, [year, executeWorkflowAction])
@@ -2451,7 +2623,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handleRemindVotes = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'remindVotes',
-      run: () => workflowPlanningService.remindVotes(year),
+      run: () => workflowCoordinationService.remindVotes(year),
       successBuilder: (result) =>
         `Relances envoyees: ${result?.emailsSucceeded || 0}/${result?.emailsSent || 0}.`,
       errorFallback: 'Erreur lors de la relance des votes.',
@@ -2463,7 +2635,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     await executeWorkflowAction({
       actionKey: 'closeVotes',
       confirmMessage: 'Confirmer la cloture de la campagne de votes ?',
-      run: () => workflowPlanningService.closeVotes(year),
+      run: () => workflowCoordinationService.closeVotes(year),
       successBuilder: (result) =>
         `Cloture terminee: ${result?.confirmedCount || 0} confirmes, ${result?.manualRequiredCount || 0} en manuel.`,
       errorFallback: 'Erreur lors de la cloture des votes.',
@@ -2471,14 +2643,29 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     })
   }, [year, executeWorkflowAction])
 
+  const soutenanceSiteLinkOptions = useMemo(() => {
+    const publicUrl = typeof staticPublicationInfo?.publicUrl === 'string'
+      ? staticPublicationInfo.publicUrl.trim()
+      : ''
+
+    return publicUrl
+      ? {
+          soutenanceLinkTarget: 'publication',
+          soutenancePublicUrl: publicUrl
+        }
+      : {}
+  }, [staticPublicationInfo?.publicUrl])
+
   const handlePublishDefinitive = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'publish',
       confirmMessage: 'Confirmer la publication definitive des défenses ?',
-      run: () => workflowPlanningService.publishDefinitive(year),
+      run: () => workflowCoordinationService.publishDefinitive(year, null, soutenanceSiteLinkOptions),
       successBuilder: (result) => {
         const sent = result?.sentLinks
-        const sentLabel = sent
+        const sentLabel = sent?.emailsSkipped
+          ? ' Liens défense: non envoyes automatiquement.'
+          : sent
           ? ` Liens défense: ${sent.emailsSucceeded || 0}/${sent.emailsSent || 0}.`
           : ''
         return (result?.message || 'Publication definitive terminee.') + sentLabel
@@ -2486,24 +2673,24 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       errorFallback: 'Erreur lors de la publication definitive.',
       reloadAfterSuccess: true
     })
-  }, [year, executeWorkflowAction])
+  }, [year, executeWorkflowAction, soutenanceSiteLinkOptions])
 
   const handleSendPublicationLinks = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'sendLinks',
-      run: () => workflowPlanningService.sendPublicationLinks(year),
+      run: () => workflowCoordinationService.sendPublicationLinks(year, soutenanceSiteLinkOptions),
       successBuilder: (result) => {
         const sent = result?.sentLinks
         return `Liens défense envoyes: ${sent?.emailsSucceeded || 0}/${sent?.emailsSent || 0}.`
       },
       errorFallback: 'Erreur lors de l envoi des liens défense.'
     })
-  }, [year, executeWorkflowAction])
+  }, [year, executeWorkflowAction, soutenanceSiteLinkOptions])
 
   const handleGenerateStaticVotePublication = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'staticVoteGenerate',
-      run: () => workflowPlanningService.generateStaticVotePublication(year),
+      run: () => workflowCoordinationService.generateStaticVotePublication(year),
       successBuilder: (result) =>
         `Mini-site vote genere: ${result?.groupCount || 0} vote(s), ${result?.accessLinkCount || 0} lien(s).`,
       errorFallback: 'Erreur lors de la generation du mini-site vote.',
@@ -2515,7 +2702,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     await executeWorkflowAction({
       actionKey: 'staticVotePublish',
       confirmMessage: 'Confirmer la publication FTP du mini-site vote ?',
-      run: () => workflowPlanningService.publishStaticVotePublication(year),
+      run: () => workflowCoordinationService.publishStaticVotePublication(year),
       successBuilder: (result) => `Mini-site vote publie: ${result?.publicUrl || 'URL publique disponible'}.`,
       errorFallback: 'Erreur lors de la publication FTP du mini-site vote.',
       onSuccess: (result) => setStaticVotePublicationInfo(prev => ({
@@ -2529,7 +2716,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handleSyncStaticVotePublication = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'staticVoteSync',
-      run: () => workflowPlanningService.syncStaticVotePublication(year),
+      run: () => workflowCoordinationService.syncStaticVotePublication(year),
       successBuilder: (result) =>
         `Mini-site synchronise: ${result?.voteImportedCount ?? result?.importedCount ?? 0}/${result?.voteReceivedCount ?? result?.receivedCount ?? 0} vote(s), ${result?.arbitrageImportedCount || 0}/${result?.arbitrageReceivedCount || 0} arbitrage(s), ${result?.failedCount || 0} erreur(s).`,
       errorFallback: 'Erreur lors de la synchronisation des votes statiques.',
@@ -2562,8 +2749,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       ? parsedYear
       : YEARS_CONFIG.getCurrentYear()
 
-    authPlanningService.clearSession()
-    navigate(`${ROUTES.PLANNING}/${targetYear}`)
+    authCoordinationService.clearSession()
+    navigate(`${ROUTES.COORDINATION}/${targetYear}`)
   }, [navigate, year])
 
   // Onglets de navigation
@@ -2604,6 +2791,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [activeTab, isAdmin])
   const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || STATUS_FILTER_LABELS.all
+  const dateFilterLabel = planningDateOptions.find((option) => option.value === dateFilter)?.label ||
+    (dateFilter ? formatPlanningDateKey(dateFilter) || dateFilter : '')
   const activeViewCount = (() => {
     if (activeTab === 'list') {
       return filteredTpis.length
@@ -2675,7 +2864,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     compactText(slot?.slotId) === compactText(resolutionProposalDraft?.slotId)
   ) || resolutionProposalSlotOptions[0] || null
   const resolutionProposalReference = compactText(resolutionProposalDraft?.tpi?.reference) || 'TPI'
-  const resolutionProposalCandidate = formatPersonName(resolutionProposalDraft?.tpi?.candidat, 'Candidat non renseigné')
+  const resolutionProposalCandidate = formatPersonName(resolutionProposalDraft?.tpi?.candidat, `${CANDIDATE_ROLE_LABEL} non renseigné`)
   const resolutionProposalDevLinks = Array.isArray(resolutionProposalDraft?.sentProposal?.devLinks)
     ? resolutionProposalDraft.sentProposal.devLinks
     : []
@@ -2720,7 +2909,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       <div className="planning-dashboard loading">
         <div className="loading-spinner">
           <div className="spinner"></div>
-          <p>Chargement de la planification...</p>
+          <p>Chargement de la coordination...</p>
         </div>
       </div>
     )
@@ -2741,7 +2930,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         id="tools"
         className="planning-dashboard-tools"
         flatHeader
-        title={`Planning ${year}`}
+        title={`Coordination ${year}`}
         description="Workflow, votes, publication."
         meta={
           <div className="planning-dashboard-stats">
@@ -2763,7 +2952,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             </span>
             {isAdmin && isVotingState && (
               <Link
-                to={`${ROUTES.PLANIFICATION_VOTES.replace(':year', String(year))}?tab=votes`}
+                to={`${ROUTES.COORDINATION_VOTES.replace(':year', String(year))}?tab=votes`}
                 className="page-tools-chip planning-dashboard-votes-link"
                 title="Ouvrir le suivi des votes de cette année."
               >
@@ -2779,7 +2968,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         }
         toggleArrow={toggleArrow}
         isArrowUp={isArrowUp}
-        ariaLabel="Outils de planification"
+        ariaLabel="Outils de coordination"
       />
 
       {hasDashboardNotices && (
@@ -2824,7 +3013,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <strong>Les TPI legacy existent, mais pas dans la collection de planification.</strong>
                 <p>
                   {legacyTpiCount} fiche{legacyTpiCount > 1 ? 's' : ''} sont encore dans `tpiList_{year}`.
-                  La page `/planning/{year}` lit `tpiPlannings`, qui est vide pour cette année.
+                  La page `/coordination/{year}` lit `tpiPlannings`, qui est vide pour cette année.
                 </p>
               </div>
               <button
@@ -2896,6 +3085,11 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
               {statusFilterLabel}
               </span>
             ) : null}
+            {dateFilter ? (
+              <span className="planning-command-chip is-emphasis">
+                Date: {dateFilterLabel}
+              </span>
+            ) : null}
             {searchQuery ? (
               <span className="planning-command-chip is-emphasis">
                 Recherche: {searchQuery}
@@ -2949,20 +3143,39 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="status-filter"
+            aria-label="Filtrer par statut"
           >
             <option value="all">Tous les statuts</option>
-            <option value={PLANNING_STATUS.DRAFT}>Brouillons</option>
-            <option value={PLANNING_STATUS.VOTING}>En vote</option>
-            <option value={PLANNING_STATUS.CONFIRMED}>Confirmés</option>
-            <option value={PLANNING_STATUS.MANUAL_REQUIRED}>Intervention requise</option>
+            <option value={COORDINATION_STATUS.DRAFT}>Brouillons</option>
+            <option value={COORDINATION_STATUS.VOTING}>En vote</option>
+            <option value={COORDINATION_STATUS.CONFIRMED}>Confirmés</option>
+            <option value={COORDINATION_STATUS.MANUAL_REQUIRED}>Intervention requise</option>
           </select>
+
+          <label className={`date-filter-shell ${dateFilter ? 'is-active' : ''}`.trim()}>
+            <CalendarIcon className="date-filter-icon" />
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="date-filter"
+              aria-label="Filtrer par date de défense"
+              disabled={planningDateOptions.length === 0}
+            >
+              <option value="">Toutes les dates</option>
+              {planningDateOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {isAdmin && (
             <button
               className="btn-refresh"
               onClick={loadData}
-              title="Actualiser les données du planning."
-              aria-label="Actualiser les données du planning."
+              title="Actualiser les données de coordination."
+              aria-label="Actualiser les données de coordination."
             >
               <RefreshIcon className="button-icon" />
               Actualiser
@@ -3038,25 +3251,37 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         {activeTab === 'list' && (
           <>
             {validationResult && (
-              <section className={`validation-feedback-panel ${validationAnnotations.totalIssues > 0 ? 'has-issues' : 'is-valid'}`}>
+              <section className={`validation-feedback-panel ${
+                validationHasBlockingIssues
+                  ? 'has-issues'
+                  : validationHasWarnings
+                    ? 'has-warnings'
+                    : 'is-valid'
+              }`}>
                 <div className="validation-feedback-main">
                   <div>
                     <strong>
-                      {validationAnnotations.totalIssues > 0
+                      {validationHasBlockingIssues
                         ? 'Dernière vérification: des corrections sont nécessaires.'
+                        : validationHasWarnings
+                          ? 'Dernière vérification: contraintes indiquées.'
                         : 'Dernière vérification: aucune anomalie bloquante.'}
                     </strong>
                     <p>
-                      {validationAnnotations.totalIssues > 0
+                      {validationHasBlockingIssues
                         ? validationAnnotations.impactedTpiCount > 0
                           ? `${validationAnnotations.impactedTpiCount} TPI sont marqués dans la liste${validationAnnotations.checkedAtLabel ? ` depuis le ${validationAnnotations.checkedAtLabel}` : ''}.`
                           : `${validationAnnotations.orphanIssues.length} TPI doivent être corrigés dans GestionTPI${validationAnnotations.checkedAtLabel ? ` depuis le ${validationAnnotations.checkedAtLabel}` : ''}.`
-                        : `Le planning est valide${validationAnnotations.checkedAtLabel ? ` au ${validationAnnotations.checkedAtLabel}` : ''}.`}
+                        : validationHasWarnings
+                          ? `${validationWarningCount} avertissement(s) de contrainte sont indiqués sur les TPI concernés${validationAnnotations.checkedAtLabel ? ` depuis le ${validationAnnotations.checkedAtLabel}` : ''}.`
+                        : `La planification est valide${validationAnnotations.checkedAtLabel ? ` au ${validationAnnotations.checkedAtLabel}` : ''}.`}
                     </p>
                   </div>
                   <div className="validation-feedback-summary">
-                    <span className={`validation-feedback-badge ${validationAnnotations.totalIssues > 0 ? 'critical' : 'success'}`}>
-                      {validationAnnotations.totalIssues} anomalie{validationAnnotations.totalIssues > 1 ? 's' : ''}
+                    <span className={`validation-feedback-badge ${validationHasBlockingIssues ? 'critical' : validationHasWarnings ? 'warning' : 'success'}`}>
+                      {validationHasWarnings && !validationHasBlockingIssues
+                        ? `${validationWarningCount} avertissement${validationWarningCount > 1 ? 's' : ''}`
+                        : `${validationBlockingIssueCount} anomalie${validationBlockingIssueCount > 1 ? 's' : ''}`}
                     </span>
                     <span className="validation-feedback-badge">
                       {validationAnnotations.impactedTpiCount} TPI marqué{validationAnnotations.impactedTpiCount > 1 ? 's' : ''}
@@ -3072,7 +3297,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 {validationAnnotations.orphanIssues.length > 0 && (
                   <div className="validation-feedback-orphans">
                     <div className="validation-feedback-orphans-head">
-                      <strong>TPI absents de la liste Planning</strong>
+                      <strong>TPI absents de la liste Coordination</strong>
                     <button
                       type="button"
                       className="validation-feedback-link"
@@ -3124,13 +3349,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           <VoteCommandCenter
             year={year}
             workflowState={workflowState}
-            isPlanningState={isPlanningState}
-            isVotingState={isVotingState}
             isPublishedState={isPublishedState}
             hasActiveSnapshot={hasActiveSnapshot}
             canStartVotes={canStartVotes}
             canPublish={canPublish}
-            canPublishDirect={canPublishDirect}
             hasLegacyImportGap={hasLegacyImportGap}
             hasBlockedValidation={hasBlockedValidation}
             workflowActionLoading={workflowActionLoading}
@@ -3320,31 +3542,30 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <div className="vote-resolution-recipient-presets">
                   <button
                     type="button"
-                    className={resolutionProposalRecipientRoles.length === 1 && resolutionProposalRecipientRoles[0] === 'chef_projet'
+                    className={resolutionProposalRecipientRoles.length === 1 && resolutionProposalRecipientRoles[0] === PROJECT_LEAD_ROLE
                       ? 'is-active'
                       : ''}
                     disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
                     onClick={() => {
                       setResolutionProposalDraft((current) => ({
                         ...current,
-                        recipientRoles: ['chef_projet']
+                        recipientRoles: [PROJECT_LEAD_ROLE]
                       }))
                     }}
                   >
-                    Chef de projet
+                    {getVoterRoleLabel(PROJECT_LEAD_ROLE)}
                   </button>
                   <button
                     type="button"
-                    className={resolutionProposalRecipientRoles.length === 2 &&
-                      resolutionProposalRecipientRoles.includes('expert1') &&
-                      resolutionProposalRecipientRoles.includes('expert2')
+                    className={resolutionProposalRecipientRoles.length === EXPERT_RESOLUTION_RECIPIENT_ROLES.length &&
+                      EXPERT_RESOLUTION_RECIPIENT_ROLES.every((role) => resolutionProposalRecipientRoles.includes(role))
                       ? 'is-active'
                       : ''}
                     disabled={resolutionProposalSubmitting || resolutionProposalHasDevResult}
                     onClick={() => {
                       setResolutionProposalDraft((current) => ({
                         ...current,
-                        recipientRoles: ['expert1', 'expert2']
+                        recipientRoles: EXPERT_RESOLUTION_RECIPIENT_ROLES
                       }))
                     }}
                   >
@@ -3621,7 +3842,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
           >
             <div className="panel-header">
               <div className="panel-header-copy">
-                <span className="panel-kicker">Fiche planning</span>
+                <span className="panel-kicker">Fiche coordination</span>
                 <h3 id="planning-detail-panel-title">
                   <FileTextIcon className="section-title-icon" />
                   {compactText(selectedTpi.reference) ? selectedTpi.reference : 'Détails TPI'}
@@ -3660,15 +3881,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   <h4>Participants</h4>
                   <dl className="planning-detail-list">
                     <div>
-                      <dt>Expert 1</dt>
+                      <dt>{getVoterRoleLabel('expert1')}</dt>
                       <dd>{formatPersonName(selectedTpi.expert1, 'Non renseigné')}</dd>
                     </div>
                     <div>
-                      <dt>Expert 2</dt>
+                      <dt>{getVoterRoleLabel('expert2')}</dt>
                       <dd>{formatPersonName(selectedTpi.expert2, 'Non renseigné')}</dd>
                     </div>
                     <div>
-                      <dt>Chef de projet</dt>
+                      <dt>{getVoterRoleLabel('chef_projet')}</dt>
                       <dd>{formatPersonName(selectedTpi.chefProjet, 'Non renseigné')}</dd>
                     </div>
                   </dl>
@@ -3677,7 +3898,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                 <section className="planning-detail-card">
                   <h4>Votes</h4>
                   <div className="planning-detail-vote-status">
-                    <strong>{selectedTpiRespondedVoteCount}/3 réponses</strong>
+                    <strong>{selectedTpiRespondedVoteCount}/{VOTE_ROLE_ORDER.length} réponses</strong>
                     <span>{selectedTpiManualAction ? 'Résolution requise' : selectedTpiStatusMeta.label}</span>
                   </div>
                   <div className="planning-detail-role-grid">

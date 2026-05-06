@@ -2,7 +2,7 @@ const crypto = require('crypto')
 const mongoose = require('mongoose')
 const { ensureDatabaseConnection } = require('../config/dbConfig')
 const PublicationDeploymentConfig = require('../models/publicationDeploymentConfigModel')
-const PlanningSharedCatalog = require('../models/planningSharedCatalogModel')
+const PlanningSharedCatalog = require('../models/coordinationSharedCatalogModel')
 
 const CONFIG_KEY = 'static-publication'
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'

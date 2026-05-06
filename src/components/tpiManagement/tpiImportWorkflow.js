@@ -1,4 +1,5 @@
 import { splitTags } from './tpiManagementUtils.js'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules.js'
 
 const normalizeText = (value = '') =>
   String(value)
@@ -99,19 +100,19 @@ export const IMPORT_FIELD_DEFS = [
   },
   {
     key: 'boss',
-    label: 'Encadrant',
+    label: getTpiRelationRoleLabel('chef_projet'),
     required: true,
     aliases: ['Encadrant', 'Chef de projet', 'ChefProjet', 'Responsable', 'Boss']
   },
   {
     key: 'expert1',
-    label: 'Expert 1',
+    label: getTpiRelationRoleLabel('expert1'),
     required: true,
     aliases: ['Expert 1', 'Expert1', 'Expert-1']
   },
   {
     key: 'expert2',
-    label: 'Expert 2',
+    label: getTpiRelationRoleLabel('expert2'),
     required: true,
     aliases: ['Expert 2', 'Expert2', 'Expert-2']
   },

@@ -29,4 +29,9 @@ test('deleteTpiCatalogByYear rejects an invalid year', async () => {
     () => deleteTpiCatalogByYear('abc', () => ({ deleteMany: async () => ({ deletedCount: 0 }) })),
     /Année invalide\./
   )
+
+  await assert.rejects(
+    () => deleteTpiCatalogByYear('2026abc', () => ({ deleteMany: async () => ({ deletedCount: 0 }) })),
+    /Année invalide\./
+  )
 })

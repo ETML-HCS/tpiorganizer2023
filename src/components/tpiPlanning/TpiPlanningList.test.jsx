@@ -43,7 +43,7 @@ describe('TpiPlanningList', () => {
               'Aucune date de défense configuree pour cette classe.'
             ],
             messages: [
-              "TPI-2026-001 n'a aucun créneau proposé ou confirmé dans Planning. Raison: Aucune date de défense configuree pour cette classe.",
+              "TPI-2026-001 n'a aucun créneau proposé ou confirmé dans Coordination. Raison: Aucune date de défense configuree pour cette classe.",
               'TPI-2026-001 ne peut pas être synchronisé: parties prenantes incomplètes.'
             ]
           }

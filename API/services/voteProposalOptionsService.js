@@ -692,7 +692,7 @@ function buildConfiguredSlotProposalOptions(slotDocuments = [], {
       score: null,
       reason: slotDocument.status === 'available'
         ? 'Créneau disponible selon la configuration'
-        : 'Fenêtre de planning proposée selon la configuration',
+        : 'Fenêtre de coordination proposée selon la configuration',
       display: buildProposalOptionDisplay(slotDocument, planningConfig, tpi),
       availabilityStatus: slotDocument.status === 'available' ? 'available' : 'planning_window'
     })

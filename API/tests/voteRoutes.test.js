@@ -5,7 +5,7 @@ const mongoose = require('mongoose')
 
 const { loadTestApp } = require('./helpers/loadTestApp')
 const Vote = require('../models/voteModel')
-const TpiPlanning = require('../models/tpiPlanningModel')
+const TpiPlanning = require('../models/tpiCoordinationModel')
 const schedulingService = require('../services/schedulingService')
 
 const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
@@ -75,7 +75,7 @@ function makeFindQuery(result) {
   }
 }
 
-test('POST /api/planning/votes/bulk enregistre OK, alternatives et exception', async () => {
+test('POST /api/coordination/votes/bulk enregistre OK, alternatives et exception', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['expert1'])
   const { app, restoreEnv } = loadTestApp({
@@ -150,7 +150,7 @@ test('POST /api/planning/votes/bulk enregistre OK, alternatives et exception', a
   createAndStoreVote(voteIds.alt3)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/bulk`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/bulk`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -187,7 +187,7 @@ test('POST /api/planning/votes/bulk enregistre OK, alternatives et exception', a
   }
 })
 
-test('POST /api/planning/votes/bulk refuse un 4e créneau préféré', async () => {
+test('POST /api/coordination/votes/bulk refuse un 4e créneau préféré', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['expert1'])
   const { app, restoreEnv } = loadTestApp({
@@ -262,7 +262,7 @@ test('POST /api/planning/votes/bulk refuse un 4e créneau préféré', async () 
   createAndStoreVote(voteIds.vote4)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/bulk`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/bulk`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -293,7 +293,7 @@ test('POST /api/planning/votes/bulk refuse un 4e créneau préféré', async () 
   }
 })
 
-test('POST /api/planning/votes/respond/:tpiId enregistre une proposition scoped sur le TPI', async () => {
+test('POST /api/coordination/votes/respond/:tpiId enregistre une proposition scoped sur le TPI', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
   const fixedSlotId = new mongoose.Types.ObjectId().toString()
@@ -387,7 +387,7 @@ test('POST /api/planning/votes/respond/:tpiId enregistre une proposition scoped 
   ]
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -416,7 +416,7 @@ test('POST /api/planning/votes/respond/:tpiId enregistre une proposition scoped 
   }
 })
 
-test('POST /api/planning/votes/respond/:tpiId refuse demande hors liste et créneau proposé ensemble', async () => {
+test('POST /api/coordination/votes/respond/:tpiId refuse demande hors liste et créneau proposé ensemble', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
   const fixedVoteId = new mongoose.Types.ObjectId().toString()
@@ -447,7 +447,7 @@ test('POST /api/planning/votes/respond/:tpiId refuse demande hors liste et crén
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -473,7 +473,7 @@ test('POST /api/planning/votes/respond/:tpiId refuse demande hors liste et crén
   }
 })
 
-test('POST /api/planning/votes/respond/:tpiId conserve la seule disponibilité dans le commentaire', async () => {
+test('POST /api/coordination/votes/respond/:tpiId conserve la seule disponibilité dans le commentaire', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
   const fixedSlotId = new mongoose.Types.ObjectId().toString()
@@ -564,7 +564,7 @@ test('POST /api/planning/votes/respond/:tpiId conserve la seule disponibilité d
   ]
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -596,7 +596,7 @@ test('POST /api/planning/votes/respond/:tpiId conserve la seule disponibilité d
   }
 })
 
-test('POST /api/planning/votes/respond/:tpiId refuse une seule disponibilité non proposée', async () => {
+test('POST /api/coordination/votes/respond/:tpiId refuse une seule disponibilité non proposée', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
   const fixedVoteId = new mongoose.Types.ObjectId().toString()
@@ -627,7 +627,7 @@ test('POST /api/planning/votes/respond/:tpiId refuse une seule disponibilité no
   const { server, baseUrl } = await startServer(app)
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -650,7 +650,7 @@ test('POST /api/planning/votes/respond/:tpiId refuse une seule disponibilité no
   }
 })
 
-test('POST /api/planning/votes/respond/:tpiId enregistre une réponse OK simple sur la date fixée', async () => {
+test('POST /api/coordination/votes/respond/:tpiId enregistre une réponse OK simple sur la date fixée', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
   const fixedSlotId = new mongoose.Types.ObjectId().toString()
@@ -750,7 +750,7 @@ test('POST /api/planning/votes/respond/:tpiId enregistre une réponse OK simple 
   ]
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -799,7 +799,7 @@ test('POST /api/planning/votes/respond/:tpiId enregistre une réponse OK simple 
   }
 })
 
-test('POST /api/planning/votes/respond/:tpiId enregistre une contrainte dure', async () => {
+test('POST /api/coordination/votes/respond/:tpiId enregistre une contrainte dure', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
   const fixedSlotId = new mongoose.Types.ObjectId().toString()
@@ -894,7 +894,7 @@ test('POST /api/planning/votes/respond/:tpiId enregistre une contrainte dure', a
   ]
 
   try {
-    const response = await fetch(`${baseUrl}/api/planning/votes/respond/${scopedTpiId}`, {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

@@ -1,0 +1,149 @@
+{
+  "registryRoles": [
+    "candidat",
+    "expert",
+    "chef_projet",
+    "admin"
+  ],
+  "roleLabels": {
+    "candidat": "Candidat",
+    "expert": "Expert",
+    "chef_projet": "Chef de projet",
+    "admin": "Administrateur"
+  },
+  "roleResponsibilities": {
+    "candidat": [
+      "Lié à une ou plusieurs années de candidature.",
+      "Visible dans Gestion TPI, Coordination et Défenses."
+    ],
+    "expert": [
+      "Peut être Expert 1 ou Expert 2 sur un TPI.",
+      "Reçoit les demandes de vote si les emails sont activés."
+    ],
+    "chef_projet": [
+      "Correspond à l’ancien champ encadrant/boss.",
+      "Reçoit les votes et arbitrages liés au TPI."
+    ],
+    "admin": [
+      "Rôle applicatif hors relation TPI.",
+      "Peut s'ajouter aux rôles TPI sans participer aux affectations candidat/expert/chef."
+    ]
+  },
+  "roleAliases": {
+    "candidat": [
+      "candidate",
+      "student"
+    ],
+    "expert": [
+      "expert1",
+      "expert_1",
+      "expert2",
+      "expert_2"
+    ],
+    "chef_projet": [
+      "chefprojet",
+      "chef_de_projet",
+      "project_lead",
+      "project_manager",
+      "responsable",
+      "boss"
+    ],
+    "admin": [
+      "administrator"
+    ]
+  },
+  "tpiRelations": [
+    {
+      "key": "candidat",
+      "label": "candidat",
+      "displayLabel": "Candidat",
+      "registryRole": "candidat",
+      "planningField": "candidat",
+      "slotAssignmentField": "assignments.candidat",
+      "legacyIdField": "candidatPersonId",
+      "legacyNamePaths": [
+        "candidat"
+      ],
+      "responsibility": "Présente le TPI et reçoit la date de défense."
+    },
+    {
+      "key": "expert1",
+      "label": "expert1",
+      "displayLabel": "Expert 1",
+      "registryRole": "expert",
+      "planningField": "expert1",
+      "slotAssignmentField": "assignments.expert1",
+      "legacyIdField": "expert1PersonId",
+      "legacyNamePaths": [
+        "experts.1",
+        "expert1"
+      ],
+      "aliases": [
+        "expert_1",
+        "expert 1"
+      ],
+      "responsibility": "Vote les propositions et participe à la défense."
+    },
+    {
+      "key": "expert2",
+      "label": "expert2",
+      "displayLabel": "Expert 2",
+      "registryRole": "expert",
+      "planningField": "expert2",
+      "slotAssignmentField": "assignments.expert2",
+      "legacyIdField": "expert2PersonId",
+      "legacyNamePaths": [
+        "experts.2",
+        "expert2"
+      ],
+      "aliases": [
+        "expert_2",
+        "expert 2"
+      ],
+      "responsibility": "Vote les propositions et participe à la défense."
+    },
+    {
+      "key": "chef_projet",
+      "label": "chef_projet",
+      "displayLabel": "Chef de projet",
+      "registryRole": "chef_projet",
+      "planningField": "chefProjet",
+      "slotAssignmentField": "assignments.chefProjet",
+      "legacyIdField": "bossPersonId",
+      "legacyNamePaths": [
+        "boss",
+        "chefProjet"
+      ],
+      "aliases": [
+        "chef projet",
+        "chef de projet",
+        "responsable",
+        "boss"
+      ],
+      "responsibility": "Vote, arbitre les contraintes et représente l’entreprise."
+    }
+  ],
+  "votingStakeholderRoles": [
+    "expert1",
+    "expert2",
+    "chef_projet"
+  ],
+  "importColumnMappings": {
+    "expert": "name",
+    "candidat": "name",
+    "nom": "name",
+    "nomcomplet": "name",
+    "personne": "name",
+    "stakeholder": "name",
+    "email": "email",
+    "mail": "email",
+    "adressemail": "email",
+    "expertmail": "email",
+    "tel": "phone",
+    "telephone": "phone",
+    "phone": "phone",
+    "mobile": "phone",
+    "site": "site",
+    "lieu": "site"
+  }
+}

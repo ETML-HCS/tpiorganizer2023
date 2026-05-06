@@ -873,6 +873,26 @@
   color: #b91c1c;
 }
 
+.tpi-tag.tpi-lifecycle-tag.is-danger {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+}
+
+.tpi-tag.tpi-lifecycle-tag.is-warning {
+  background: rgba(245, 158, 11, 0.18);
+  color: #92400e;
+}
+
+.tpi-tag.tpi-lifecycle-tag.is-success {
+  background: rgba(28, 123, 75, 0.14);
+  color: var(--tpi-success);
+}
+
+.tpi-tag.tpi-lifecycle-tag.is-muted {
+  background: rgba(23, 32, 51, 0.07);
+  color: var(--tpi-muted);
+}
+
 .tpi-tag.tpi-tag-focus {
   background: rgba(23, 86, 214, 0.12);
   color: var(--tpi-accent);
@@ -1381,6 +1401,19 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.tpi-form-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tpi-form-status-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .containerForm {
@@ -2035,6 +2068,18 @@
   box-sizing: border-box;
 }
 
+.tpi-import-year-context strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(23, 32, 51, 0.1);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--tpi-ink);
+  font-size: 0.92rem;
+}
+
 .tpi-import-note,
 .tpi-import-empty {
   margin: 0;
@@ -2296,8 +2341,8 @@
 
 .tpi-toolbar-row {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(300px, 1fr) minmax(320px, 1.15fr);
-  grid-template-areas: "display quality axes";
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.15fr);
+  grid-template-areas: "display axes";
   gap: 12px;
   margin-top: 12px;
 }
@@ -2316,10 +2361,6 @@
 
 .tpi-control-panel-view {
   grid-area: display;
-}
-
-.tpi-control-panel-quality {
-  grid-area: quality;
 }
 
 .tpi-control-panel-axes {
@@ -2433,20 +2474,6 @@
   color: var(--tpi-warning);
   font-weight: 800;
   cursor: pointer;
-}
-
-.tpi-control-empty {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  width: fit-content;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(22, 116, 73, 0.18);
-  background: #effaf3;
-  color: var(--tpi-success);
-  font-size: 0.82rem;
-  font-weight: 800;
 }
 
 .tpi-list-mini-stats {
@@ -2704,7 +2731,6 @@
     grid-template-columns: 1fr;
     grid-template-areas:
       "display"
-      "quality"
       "axes";
   }
 
@@ -2736,7 +2762,9 @@
   }
 
   .tpi-card-meta,
-  .tpi-form-date-grid {
+  .tpi-form-date-grid,
+  .tpi-form-status-grid,
+  .tpi-form-status-links {
     grid-template-columns: 1fr;
   }
 
@@ -2906,4 +2934,277 @@
 
 .tpi-management-page #tools.tpi-management-tools {
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.tpi-management-year-value {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(23, 32, 51, 0.1);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--tpi-ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+/* Minimal Gestion TPI hero */
+.tpi-management-page .tpi-management-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 62px;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--app-surface, #ffffff);
+}
+
+.tpi-management-page .tpi-management-hero-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tpi-management-page .tpi-management-hero-copy h1 {
+  margin: 0;
+  color: var(--tpi-ink);
+  font-size: 1.1rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.tpi-management-page .tpi-management-hero-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  justify-self: end;
+  width: auto;
+  min-width: 0;
+}
+
+.tpi-management-planning-filter,
+.tpi-management-stakeholder-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 3px;
+  border: 1px solid var(--tpi-line);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--tpi-panel);
+  white-space: nowrap;
+}
+
+.tpi-management-planning-filter button,
+.tpi-management-stakeholder-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tpi-muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.tpi-management-planning-filter button:hover,
+.tpi-management-stakeholder-filter button:hover {
+  color: var(--tpi-ink);
+  background: #ffffff;
+}
+
+.tpi-management-planning-filter button.active,
+.tpi-management-stakeholder-filter button.active {
+  border-color: rgba(36, 87, 167, 0.2);
+  background: #ffffff;
+  color: var(--tpi-accent);
+}
+
+.tpi-management-planning-filter strong,
+.tpi-management-stakeholder-filter strong {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(36, 87, 167, 0.1);
+  color: var(--tpi-accent);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.tpi-management-search-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--tpi-line);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--tpi-panel);
+  box-shadow: none;
+}
+
+.tpi-management-search-label {
+  color: var(--tpi-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tpi-management-page .tpi-management-hero-search {
+  width: min(32vw, 260px);
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tpi-ink);
+  font-size: 0.86rem;
+  box-shadow: none;
+}
+
+.tpi-management-page .tpi-management-hero-search:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.tpi-management-page .tpi-management-search-panel:focus-within {
+  border-color: rgba(36, 87, 167, 0.36);
+  box-shadow: 0 0 0 3px rgba(36, 87, 167, 0.08);
+}
+
+.tpi-management-focus-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid rgba(36, 87, 167, 0.22);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--tpi-accent-soft);
+  color: var(--tpi-accent);
+  white-space: nowrap;
+}
+
+.tpi-management-focus-panel span {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tpi-management-focus-panel strong {
+  font-size: 0.84rem;
+}
+
+.tpi-list-shell {
+  margin-top: 8px;
+}
+
+.tpi-toolbar-row {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-areas: "display axes";
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+
+.tpi-view-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tpi-control-panel-head .tpi-view-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--tpi-line);
+  border-radius: var(--app-radius-card, 8px);
+  background: var(--tpi-panel);
+  color: var(--tpi-ink);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .tpi-toolbar-row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "display"
+      "axes";
+  }
+}
+
+@media (max-width: 900px) {
+  .tpi-management-page .tpi-management-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .tpi-management-page .tpi-management-hero-side {
+    justify-self: stretch;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .tpi-management-page .tpi-management-hero-search {
+    width: min(100%, 320px);
+  }
+
+  .tpi-management-planning-filter,
+  .tpi-management-stakeholder-filter {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .tpi-management-page .tpi-management-hero-copy {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .tpi-management-page .tpi-management-hero-side,
+  .tpi-management-planning-filter,
+  .tpi-management-stakeholder-filter,
+  .tpi-management-search-panel,
+  .tpi-management-focus-panel {
+    width: 100%;
+  }
+
+  .tpi-management-planning-filter,
+  .tpi-management-stakeholder-filter {
+    justify-content: stretch;
+  }
+
+  .tpi-management-planning-filter button,
+  .tpi-management-stakeholder-filter button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .tpi-management-search-panel {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 8px;
+  }
+
+  .tpi-management-page .tpi-management-hero-search {
+    width: 100%;
+  }
 }

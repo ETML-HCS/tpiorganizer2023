@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import {
+  getCoordinationStatusLabel,
   MANUAL_REQUIRED_STATUSES,
-  normalizePlanningStatus,
-  PLANNING_STATUS
-} from '../../constants/planningStatus'
+  normalizeCoordinationStatus,
+  COORDINATION_STATUS
+} from '../../constants/coordinationStatus'
 import {
   AlertIcon,
   BriefcaseIcon,
@@ -22,6 +23,10 @@ import {
   WrenchIcon
 } from '../shared/InlineIcons'
 import { getPlanningClassDisplayInfo, getPlanningClassPeriod } from './planningClassUtils'
+import {
+  VOTING_STAKEHOLDER_ROLES,
+  getTpiRelationRoleLabel
+} from '../../utils/stakeholderRules'
 import './TpiPlanningList.css'
 
 function getPlannedSlot(tpi) {
@@ -72,6 +77,8 @@ function formatPersonName(person) {
   return compactText(person)
 }
 
+const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
+
 function getClassDisplayContext(tpi, classTypes, planningCatalogSites) {
   const tpiSite = tpi?.site || tpi?.lieu?.site
   const classInfo = getPlanningClassDisplayInfo(tpi?.classe, classTypes, planningCatalogSites, tpiSite)
@@ -94,11 +101,21 @@ function getClassDisplayContext(tpi, classTypes, planningCatalogSites) {
 }
 
 const STATUS_META = {
-  [PLANNING_STATUS.DRAFT]: { label: 'Brouillon', Icon: DocumentIcon },
-  [PLANNING_STATUS.VOTING]: { label: 'En vote', Icon: CalendarIcon },
-  [PLANNING_STATUS.CONFIRMED]: { label: 'Confirmé', Icon: CheckIcon },
-  [PLANNING_STATUS.MANUAL_REQUIRED]: { label: 'Intervention requise', Icon: AlertIcon }
+  [COORDINATION_STATUS.DRAFT]: { Icon: DocumentIcon },
+  [COORDINATION_STATUS.PENDING_SLOTS]: { Icon: CalendarIcon },
+  [COORDINATION_STATUS.VOTING]: { Icon: CalendarIcon },
+  [COORDINATION_STATUS.PENDING_VALIDATION]: { Icon: AlertIcon },
+  [COORDINATION_STATUS.CONFIRMED]: { Icon: CheckIcon },
+  [COORDINATION_STATUS.MANUAL_REQUIRED]: { Icon: AlertIcon },
+  [COORDINATION_STATUS.COMPLETED]: { Icon: CheckIcon },
+  [COORDINATION_STATUS.CANCELLED]: { Icon: CloseIcon }
 }
+
+const VOTE_SUMMARY_FIELD_BY_ROLE = Object.freeze({
+  expert1: 'expert1Voted',
+  expert2: 'expert2Voted',
+  chef_projet: 'chefProjetVoted'
+})
 
 function getValidationIssueDetail(annotation) {
   if (!annotation?.count) {
@@ -134,17 +151,14 @@ const getStatusMeta = (status) => {
     }
   }
 
-  const normalizedStatus = normalizePlanningStatus(status)
-  return STATUS_META[normalizedStatus] || {
-    label: status || 'Inconnu',
-    Icon: AlertIcon
-  }
-}
+  const normalizedStatus = normalizeCoordinationStatus(status)
+  const meta = STATUS_META[normalizedStatus] || {}
 
-const ROLE_LABELS = {
-  expert1: 'Expert 1',
-  expert2: 'Expert 2',
-  chef_projet: 'Chef'
+  return {
+    ...meta,
+    label: getCoordinationStatusLabel(normalizedStatus),
+    Icon: meta.Icon || AlertIcon
+  }
 }
 
 const getVoteDecisionMeta = (status) => {
@@ -203,8 +217,8 @@ const TpiPlanningList = ({
       }
 
       let valueA, valueB
-      const normalizedStatusA = normalizePlanningStatus(a.status)
-      const normalizedStatusB = normalizePlanningStatus(b.status)
+      const normalizedStatusA = normalizeCoordinationStatus(a.status)
+      const normalizedStatusB = normalizeCoordinationStatus(b.status)
 
       switch (sortField) {
         case 'reference':
@@ -253,8 +267,8 @@ const TpiPlanningList = ({
   }, [])
 
   const isTpiActionable = useCallback((tpi) => {
-    const normalizedStatus = normalizePlanningStatus(tpi?.status)
-    return normalizedStatus === PLANNING_STATUS.DRAFT ||
+    const normalizedStatus = normalizeCoordinationStatus(tpi?.status)
+    return normalizedStatus === COORDINATION_STATUS.DRAFT ||
       MANUAL_REQUIRED_STATUSES.includes(normalizedStatus)
   }, [])
 
@@ -299,12 +313,10 @@ const TpiPlanningList = ({
     const voteStats = tpi.voteStats || {}
     const voteRoleStatus = tpi.voteRoleStatus || {}
     const acceptedVotes = Number(voteStats.acceptedVotes || 0) + Number(voteStats.preferredVotes || 0)
-    const votesReceived = [
-      voteSummary.expert1Voted,
-      voteSummary.expert2Voted,
-      voteSummary.chefProjetVoted
-    ].filter(Boolean).length
-    const votesRequired = 3
+    const votesReceived = VOTING_STAKEHOLDER_ROLES
+      .map((role) => voteSummary[VOTE_SUMMARY_FIELD_BY_ROLE[role]])
+      .filter(Boolean).length
+    const votesRequired = VOTING_STAKEHOLDER_ROLES.length
     const deadline = tpi.votingSession.deadline
     const hasConflicts = (tpi.conflicts || []).length > 0
 
@@ -337,7 +349,7 @@ const TpiPlanningList = ({
           <div className="vote-role-summary" aria-label="État des votes par rôle">
             {Object.entries(voteRoleStatus).map(([role, status]) => {
               const meta = getVoteDecisionMeta(status)
-              const roleLabel = ROLE_LABELS[role] || role
+              const roleLabel = getTpiRelationRoleLabel(role, role)
 
               return (
                 <span key={role} className={`vote-role-chip ${meta.tone}`}>
@@ -381,10 +393,10 @@ const TpiPlanningList = ({
           <thead>
             <tr>
               {renderSortHeader('reference', 'Référence')}
-              {renderSortHeader('candidat', 'Candidat')}
-              <th>Expert 1</th>
-              <th>Expert 2</th>
-              <th>Chef de projet</th>
+              {renderSortHeader('candidat', CANDIDATE_ROLE_LABEL)}
+              <th>{getTpiRelationRoleLabel('expert1')}</th>
+              <th>{getTpiRelationRoleLabel('expert2')}</th>
+              <th>{getTpiRelationRoleLabel('chef_projet')}</th>
               {renderSortHeader('status', 'Statut')}
               {renderSortHeader('date', 'Date défense')}
               {showActionsColumn && <th>Actions</th>}
@@ -402,7 +414,7 @@ const TpiPlanningList = ({
               return (
               <React.Fragment key={tpi._id}>
                 {(() => {
-                  const normalizedStatus = normalizePlanningStatus(tpi.status)
+                  const normalizedStatus = normalizeCoordinationStatus(tpi.status)
                   const statusMeta = getStatusMeta(tpi.status)
                   const StatusIcon = statusMeta.Icon
                   const candidateName = formatCandidateName(tpi.candidat)
@@ -516,7 +528,7 @@ const TpiPlanningList = ({
                         {getStatusLabel(tpi.status)}
                       </span>
                     ) : null}
-                    {(tpi.voteStats?.totalVotes || 0) > 0 && normalizedStatus === PLANNING_STATUS.VOTING && (
+                    {(tpi.voteStats?.totalVotes || 0) > 0 && normalizedStatus === COORDINATION_STATUS.VOTING && (
                       <div className="vote-mini-summary">
                         <span className="vote-mini-ok">
                           <CheckIcon className="vote-metric-icon" />
@@ -534,11 +546,11 @@ const TpiPlanningList = ({
                         )}
                       </div>
                     )}
-                    {showVoteRoleDetails && normalizedStatus === PLANNING_STATUS.VOTING ? (
+                    {showVoteRoleDetails && normalizedStatus === COORDINATION_STATUS.VOTING ? (
                       <div className="vote-role-summary compact">
                         {Object.entries(voteRoleStatus).map(([role, status]) => {
                           const meta = getVoteDecisionMeta(status)
-                          const roleLabel = ROLE_LABELS[role] || role
+                          const roleLabel = getTpiRelationRoleLabel(role, role)
 
                           return (
                             <span key={role} className={`vote-role-chip ${meta.tone}`}>
@@ -567,7 +579,7 @@ const TpiPlanningList = ({
                   </td>
                   {showActionsColumn && (
                     <td className="cell-actions">
-                      {normalizedStatus === PLANNING_STATUS.DRAFT && (
+                      {normalizedStatus === COORDINATION_STATUS.DRAFT && (
                         <button
                           className="btn-action btn-vote"
                           onClick={(e) => {
@@ -581,7 +593,7 @@ const TpiPlanningList = ({
                           <span>Lancer vote</span>
                         </button>
                       )}
-                      {MANUAL_REQUIRED_STATUSES.includes(normalizePlanningStatus(tpi.status)) && (
+                      {MANUAL_REQUIRED_STATUSES.includes(normalizeCoordinationStatus(tpi.status)) && (
                         <button
                           className="btn-action btn-resolve"
                           onClick={(e) => {

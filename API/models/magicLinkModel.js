@@ -1,6 +1,7 @@
 const mongoose = require('mongoose')
+const { ACCESS_LINK_TYPE_VALUES } = require('../modules/accessLinks/constants')
 
-const MAGIC_LINK_TYPES = ['vote', 'soutenance']
+const MAGIC_LINK_TYPES = ACCESS_LINK_TYPE_VALUES
 
 const magicLinkSchema = new mongoose.Schema({
   tokenHash: {
@@ -63,6 +64,24 @@ const magicLinkSchema = new mongoose.Schema({
   lastUsedAt: {
     type: Date,
     default: null
+  },
+  emailDeliveryStatus: {
+    type: String,
+    enum: ['', 'pending', 'sent', 'failed', 'skipped'],
+    default: '',
+    index: true
+  },
+  emailSentAt: {
+    type: Date,
+    default: null
+  },
+  emailDeliveryError: {
+    type: String,
+    default: ''
+  },
+  emailMessageId: {
+    type: String,
+    default: ''
   },
   revokedAt: {
     type: Date,

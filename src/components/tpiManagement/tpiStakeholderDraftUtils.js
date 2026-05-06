@@ -1,20 +1,10 @@
-const PLACEHOLDER_EMPTY_VALUES = new Set(['null', 'undefined'])
-
-const normalizeWhitespace = (value = '') => {
-  const normalizedValue = String(value ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  return PLACEHOLDER_EMPTY_VALUES.has(normalizedValue.toLowerCase())
-    ? ''
-    : normalizedValue
-}
-
-const normalizeFold = (value = '') =>
-  normalizeWhitespace(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
+import {
+  getStakeholderRoleLabel,
+  normalizeCandidateYears,
+  normalizeFold,
+  normalizeWhitespace,
+  splitStakeholderName
+} from '../../utils/stakeholderRules'
 
 const uniqueList = (values = []) =>
   Array.from(
@@ -25,41 +15,8 @@ const uniqueList = (values = []) =>
     )
   )
 
-export const splitStakeholderDraftName = (value = '') => {
-  const parts = normalizeWhitespace(value).split(' ').filter(Boolean)
-
-  if (parts.length === 0) {
-    return {
-      firstName: '',
-      lastName: ''
-    }
-  }
-
-  if (parts.length === 1) {
-    return {
-      firstName: parts[0],
-      lastName: ''
-    }
-  }
-
-  return {
-    firstName: parts.slice(0, -1).join(' '),
-    lastName: parts[parts.length - 1]
-  }
-}
-
-export const getStakeholderRoleLabel = (role = '') => {
-  switch (String(role || '').trim()) {
-    case 'candidat':
-      return 'Candidat'
-    case 'expert':
-      return 'Expert'
-    case 'chef_projet':
-      return 'Chef de projet'
-    default:
-      return 'Partie prenante'
-  }
-}
+export const splitStakeholderDraftName = splitStakeholderName
+export { getStakeholderRoleLabel }
 
 const buildDraftKey = (entry = {}) => {
   const role = normalizeWhitespace(entry.role || 'unknown')
@@ -86,16 +43,13 @@ const normalizeDraftEntry = (entry = {}) => {
     year: normalizedYear,
     site: normalizeWhitespace(entry.site),
     entreprise: normalizeWhitespace(entry.entreprise),
-    candidateYears: uniqueList(
+    candidateYears: normalizeCandidateYears(
       Array.isArray(entry.candidateYears)
         ? entry.candidateYears
         : normalizedRole === 'candidat' && normalizedYear
           ? [normalizedYear]
           : []
-    )
-      .map((value) => Number.parseInt(value, 10))
-      .filter((value) => Number.isInteger(value))
-      .sort((left, right) => right - left),
+    ).sort((left, right) => right - left),
     refs: uniqueList(entry.refs).sort((left, right) =>
       left.localeCompare(right, 'fr', { numeric: true, sensitivity: 'base' })
     ),

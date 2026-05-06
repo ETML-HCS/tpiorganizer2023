@@ -1,19 +1,17 @@
 const crypto = require('crypto')
+const mongoose = require('mongoose')
 
-const Person = require('../models/personModel')
-const { MagicLink } = require('../models/magicLinkModel')
-const planningConfigService = require('./planningConfigService')
-const { buildDefensePublicPath } = require('../utils/publicRoutes')
-
-const DEFAULT_EXPIRY_HOURS = Object.freeze({
-  vote: 24 * 7,
-  soutenance: 24 * 4
-})
-
-const DEFAULT_MAX_USES = Object.freeze({
-  vote: 20,
-  soutenance: 60
-})
+const Person = require('../../models/personModel')
+const { MagicLink } = require('../../models/magicLinkModel')
+const { AccessLinkLog } = require('../../models/accessLinkLogModel')
+const coordinationConfigService = require('../../services/coordinationConfigService')
+const { buildDefensePublicPath } = require('../../utils/publicRoutes')
+const {
+  ACCESS_LINK_TYPES,
+  DEFAULT_EXPIRY_HOURS,
+  DEFAULT_MAX_USES,
+  isAccessLinkType
+} = require('./constants')
 
 function toDisplayName(person) {
   if (!person) {
@@ -27,7 +25,7 @@ function toDisplayName(person) {
 }
 
 function getExpiryHours(type) {
-  const envKey = type === 'vote'
+  const envKey = type === ACCESS_LINK_TYPES.VOTE
     ? 'MAGIC_LINK_VOTE_EXPIRY_HOURS'
     : 'MAGIC_LINK_SOUTENANCE_EXPIRY_HOURS'
 
@@ -40,7 +38,7 @@ function getExpiryHours(type) {
 }
 
 function getMaxUses(type) {
-  const envKey = type === 'vote'
+  const envKey = type === ACCESS_LINK_TYPES.VOTE
     ? 'MAGIC_LINK_VOTE_MAX_USES'
     : 'MAGIC_LINK_SOUTENANCE_MAX_USES'
 
@@ -62,8 +60,8 @@ function buildEnvAccessLinkFallback() {
 }
 
 async function getAccessLinkSettingsForYear(year) {
-  const planningConfig = await planningConfigService.getPlanningConfigIfAvailable(year)
-  return planningConfigService.normalizeAccessLinkSettings(
+  const planningConfig = await coordinationConfigService.getPlanningConfigIfAvailable(year)
+  return coordinationConfigService.normalizeAccessLinkSettings(
     planningConfig?.accessLinkSettings,
     buildEnvAccessLinkFallback()
   )
@@ -77,12 +75,12 @@ async function resolveMagicLinkPolicy({
   accessLinkSettings = null
 }) {
   const settings = accessLinkSettings
-    ? planningConfigService.normalizeAccessLinkSettings(accessLinkSettings, buildEnvAccessLinkFallback())
+    ? coordinationConfigService.normalizeAccessLinkSettings(accessLinkSettings, buildEnvAccessLinkFallback())
     : await getAccessLinkSettingsForYear(year)
-  const configuredExpiryHours = type === 'vote'
+  const configuredExpiryHours = type === ACCESS_LINK_TYPES.VOTE
     ? settings.voteLinkValidityHours
     : settings.soutenanceLinkValidityHours
-  const configuredMaxUses = type === 'vote'
+  const configuredMaxUses = type === ACCESS_LINK_TYPES.VOTE
     ? settings.voteLinkMaxUses
     : settings.soutenanceLinkMaxUses
 
@@ -120,6 +118,28 @@ function normalizeRecipientEmail(person, recipientEmail = null) {
     : typeof person?.email === 'string' && person.email.trim().length > 0
       ? person.email.trim().toLowerCase()
       : ''
+}
+
+function normalizePersonObjectId(person) {
+  const personId = person?._id
+
+  return mongoose.isObjectIdOrHexString(personId) ? personId : null
+}
+
+function applyMagicLinkTargetQuery(query, person, recipientEmail, errorMessage) {
+  const personId = normalizePersonObjectId(person)
+
+  if (personId) {
+    query.personId = personId
+    return
+  }
+
+  if (recipientEmail) {
+    query.recipientEmail = recipientEmail
+    return
+  }
+
+  throw new Error(errorMessage)
 }
 
 function applyScopeFilters(query, scope = {}) {
@@ -186,6 +206,10 @@ function buildStoredMagicLinkResponse(link, baseUrl) {
     redirectPath: link?.redirectPath,
     url: canExposeUrl ? buildMagicLinkUrl(baseUrl, link.redirectPath, rawToken) : null,
     expiresAt: link?.expiresAt || null,
+    deliveryStatus: link?.emailDeliveryStatus || '',
+    deliveryError: link?.emailDeliveryError || '',
+    sentAt: link?.emailSentAt || null,
+    emailMessageId: link?.emailMessageId || '',
     revokedAt: link?.revokedAt || null,
     maxUses: Number(link?.maxUses || 0),
     usageCount: Number(link?.usageCount || 0),
@@ -194,6 +218,160 @@ function buildStoredMagicLinkResponse(link, baseUrl) {
     recoverable: Boolean(rawToken),
     availabilityStatus
   }
+}
+
+function compactLogText(value, maxLength = 512) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim().slice(0, maxLength)
+}
+
+function normalizeLogRequest(context = {}) {
+  const request = context?.request || context || {}
+  const headers = request.headers || {}
+  const getHeader = typeof request.get === 'function'
+    ? (name) => request.get(name)
+    : (name) => headers[name] || headers[name.toLowerCase()]
+
+  return {
+    ip: compactLogText(
+      request.ip ||
+      request.remoteAddress ||
+      request.connection?.remoteAddress ||
+      headers['x-forwarded-for'] ||
+      '',
+      128
+    ),
+    userAgent: compactLogText(
+      request.userAgent ||
+      getHeader('user-agent') ||
+      '',
+      512
+    )
+  }
+}
+
+function buildAccessLogPayload({
+  status,
+  reason = '',
+  tokenHash = '',
+  link = null,
+  context = {}
+}) {
+  const requestContext = normalizeLogRequest(context)
+  const normalizedYear = Number.parseInt(link?.year, 10)
+
+  return {
+    tokenHash: compactLogText(tokenHash, 128),
+    type: isAccessLinkType(link?.type) ? link.type : null,
+    year: Number.isInteger(normalizedYear) ? normalizedYear : null,
+    personId: mongoose.isObjectIdOrHexString(link?.personId) ? link.personId : null,
+    recipientEmail: normalizeRecipientEmail(null, link?.recipientEmail),
+    status,
+    reason: compactLogText(reason),
+    redirectPath: compactLogText(link?.redirectPath, 256),
+    role: link?.role || null,
+    scope: link?.scope && typeof link.scope === 'object' ? link.scope : {},
+    ip: requestContext.ip,
+    userAgent: requestContext.userAgent
+  }
+}
+
+async function logAccessLinkAttempt(payload) {
+  try {
+    return await AccessLinkLog.create(buildAccessLogPayload(payload))
+  } catch (error) {
+    console.error('Erreur journal acces magic link:', error)
+    return null
+  }
+}
+
+function serializeAccessLog(row = {}) {
+  return {
+    id: row?._id ? String(row._id) : '',
+    tokenHash: row.tokenHash || '',
+    type: row.type || null,
+    year: row.year || null,
+    personId: row.personId ? String(row.personId) : null,
+    recipientEmail: row.recipientEmail || '',
+    status: row.status || '',
+    reason: row.reason || '',
+    redirectPath: row.redirectPath || '',
+    role: row.role || null,
+    scope: row.scope || {},
+    ip: row.ip || '',
+    userAgent: row.userAgent || '',
+    createdAt: row.createdAt || null
+  }
+}
+
+function getModifiedCount(result = {}) {
+  return Number(result.modifiedCount ?? result.nModified ?? 0)
+}
+
+async function reserveMagicLinkUsage(link, now) {
+  const result = await MagicLink.updateOne(
+    {
+      _id: link._id,
+      revokedAt: null,
+      expiresAt: { $gt: now },
+      $or: [
+        { maxUses: { $lte: 0 } },
+        { $expr: { $lt: ['$usageCount', '$maxUses'] } }
+      ]
+    },
+    {
+      $inc: { usageCount: 1 },
+      $set: {
+        lastUsedAt: now,
+        updatedAt: now
+      }
+    }
+  )
+
+  return getModifiedCount(result) === 1
+}
+
+async function listAccessLogs({
+  year,
+  type = null,
+  status = null,
+  personId = null,
+  limit = 100
+} = {}) {
+  const query = {}
+  const normalizedYear = Number.parseInt(year, 10)
+
+  if (Number.isInteger(normalizedYear)) {
+    query.year = normalizedYear
+  }
+
+  if (isAccessLinkType(type)) {
+    query.type = type
+  }
+
+  const normalizedStatus = compactLogText(status, 64)
+  if (normalizedStatus) {
+    query.status = normalizedStatus
+  }
+
+  if (mongoose.isObjectIdOrHexString(personId)) {
+    query.personId = personId
+  }
+
+  const normalizedLimit = Number.parseInt(limit, 10)
+  const boundedLimit = Number.isInteger(normalizedLimit)
+    ? Math.min(Math.max(normalizedLimit, 1), 500)
+    : 100
+
+  const rows = await AccessLinkLog.find(query)
+    .sort({ createdAt: -1 })
+    .limit(boundedLimit)
+    .lean()
+
+  return (rows || []).map(serializeAccessLog)
 }
 
 async function createTypedMagicLink({
@@ -210,7 +388,7 @@ async function createTypedMagicLink({
   accessLinkSettings = null,
   persistToken = false
 }) {
-  if (!['vote', 'soutenance'].includes(type)) {
+  if (!isAccessLinkType(type)) {
     throw new Error('Type de magic link invalide.')
   }
 
@@ -248,7 +426,7 @@ async function createTypedMagicLink({
     type,
     year,
     recipientEmail: normalizedRecipientEmail,
-    personId: person?._id || null,
+    personId: normalizePersonObjectId(person),
     personName: toDisplayName(person),
     role,
     scope,
@@ -280,10 +458,10 @@ async function createVoteMagicLink({
   persistToken = false
 }) {
   return await createTypedMagicLink({
-    type: 'vote',
+    type: ACCESS_LINK_TYPES.VOTE,
     year,
     baseUrl,
-    redirectPath: redirectPath || `/planning/${year}`,
+    redirectPath: redirectPath || `/coordination/${year}`,
     person,
     recipientEmail,
     role,
@@ -304,7 +482,7 @@ async function createSoutenanceMagicLink({
   persistToken = false
 }) {
   return await createTypedMagicLink({
-    type: 'soutenance',
+    type: ACCESS_LINK_TYPES.SOUTENANCE,
     year,
     baseUrl,
     redirectPath: redirectPath || buildDefensePublicPath(year),
@@ -326,7 +504,7 @@ async function revokeActiveMagicLinks({
   sources = [],
   excludeIds = []
 }) {
-  if (!['vote', 'soutenance'].includes(type)) {
+  if (!isAccessLinkType(type)) {
     throw new Error('Type de magic link invalide.')
   }
 
@@ -344,13 +522,12 @@ async function revokeActiveMagicLinks({
     expiresAt: { $gt: new Date() }
   }
 
-  if (person?._id) {
-    query.personId = person._id
-  } else if (normalizedRecipientEmail) {
-    query.recipientEmail = normalizedRecipientEmail
-  } else {
-    throw new Error('Personne cible invalide pour revocation magic link.')
-  }
+  applyMagicLinkTargetQuery(
+    query,
+    person,
+    normalizedRecipientEmail,
+    'Personne cible invalide pour revocation magic link.'
+  )
 
   const normalizedSources = normalizeSourceFilters(sources)
 
@@ -386,7 +563,7 @@ async function findReusableMagicLink({
   sources = [],
   baseUrl
 }) {
-  if (!['vote', 'soutenance'].includes(type)) {
+  if (!isAccessLinkType(type)) {
     throw new Error('Type de magic link invalide.')
   }
 
@@ -407,13 +584,12 @@ async function findReusableMagicLink({
     expiresAt: { $gt: new Date() }
   }
 
-  if (person?._id) {
-    query.personId = person._id
-  } else if (normalizedRecipientEmail) {
-    query.recipientEmail = normalizedRecipientEmail
-  } else {
-    throw new Error('Personne cible invalide pour magic link.')
-  }
+  applyMagicLinkTargetQuery(
+    query,
+    person,
+    normalizedRecipientEmail,
+    'Personne cible invalide pour magic link.'
+  )
 
   const normalizedSources = normalizeSourceFilters(sources)
   if (normalizedSources.length > 0) {
@@ -423,7 +599,7 @@ async function findReusableMagicLink({
   applyScopeFilters(query, scope)
 
   const links = await MagicLink.find(query)
-    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt')
+    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
     .sort({ createdAt: -1 })
     .lean()
 
@@ -444,7 +620,7 @@ async function findLatestMagicLinkStatus({
   sources = [],
   baseUrl
 }) {
-  if (!['vote', 'soutenance'].includes(type)) {
+  if (!isAccessLinkType(type)) {
     throw new Error('Type de magic link invalide.')
   }
 
@@ -463,13 +639,12 @@ async function findLatestMagicLinkStatus({
     type
   }
 
-  if (person?._id) {
-    query.personId = person._id
-  } else if (normalizedRecipientEmail) {
-    query.recipientEmail = normalizedRecipientEmail
-  } else {
-    throw new Error('Personne cible invalide pour magic link.')
-  }
+  applyMagicLinkTargetQuery(
+    query,
+    person,
+    normalizedRecipientEmail,
+    'Personne cible invalide pour magic link.'
+  )
 
   const normalizedSources = normalizeSourceFilters(sources)
   if (normalizedSources.length > 0) {
@@ -479,11 +654,84 @@ async function findLatestMagicLinkStatus({
   applyScopeFilters(query, scope)
 
   const latestLink = await MagicLink.findOne(query)
-    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt revokedAt')
+    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt revokedAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
     .sort({ createdAt: -1 })
     .lean()
 
   return latestLink ? buildStoredMagicLinkResponse(latestLink, baseUrl) : null
+}
+
+async function findMagicLinkForEmailDelivery({
+  id,
+  year,
+  type,
+  baseUrl
+}) {
+  if (!mongoose.isObjectIdOrHexString(id)) {
+    return null
+  }
+
+  const normalizedYear = Number.parseInt(year, 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour magic link.')
+  }
+
+  if (!isAccessLinkType(type)) {
+    throw new Error('Type de magic link invalide.')
+  }
+
+  if (!baseUrl || typeof baseUrl !== 'string') {
+    throw new Error('baseUrl requis.')
+  }
+
+  const link = await MagicLink.findOne({
+    _id: id,
+    year: normalizedYear,
+    type
+  })
+    .select('+rawToken type year recipientEmail personId personName redirectPath expiresAt maxUses usageCount scope createdAt revokedAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
+    .lean()
+
+  if (!link) {
+    return null
+  }
+
+  return {
+    raw: link,
+    public: buildStoredMagicLinkResponse(link, baseUrl)
+  }
+}
+
+async function markMagicLinkEmailDelivery({
+  id,
+  status,
+  messageId = '',
+  error = '',
+  sentAt = new Date()
+}) {
+  if (!mongoose.isObjectIdOrHexString(id)) {
+    return null
+  }
+
+  const normalizedStatus = ['sent', 'failed', 'skipped', 'pending'].includes(status)
+    ? status
+    : 'failed'
+  const parsedSentAt = sentAt instanceof Date ? sentAt : new Date(sentAt || Date.now())
+  const update = {
+    emailDeliveryStatus: normalizedStatus,
+    emailMessageId: String(messageId || ''),
+    emailDeliveryError: String(error || '').slice(0, 1000),
+    updatedAt: new Date()
+  }
+
+  if (normalizedStatus === 'sent') {
+    update.emailSentAt = Number.isNaN(parsedSentAt.getTime()) ? new Date() : parsedSentAt
+  } else if (normalizedStatus === 'failed') {
+    update.emailSentAt = null
+  }
+
+  await MagicLink.updateOne({ _id: id }, { $set: update })
+  return update
 }
 
 async function listSoutenancePublicationAccessLinkStats({
@@ -498,7 +746,7 @@ async function listSoutenancePublicationAccessLinkStats({
   const now = new Date()
   const query = {
     year: normalizedYear,
-    type: 'soutenance',
+    type: ACCESS_LINK_TYPES.SOUTENANCE,
     'scope.kind': 'published_soutenances'
   }
 
@@ -633,46 +881,107 @@ function isTokenLooksValid(rawToken) {
   )
 }
 
-async function resolveMagicLink(rawToken) {
+async function resolveMagicLink(rawToken, context = {}) {
+  const normalizedToken = typeof rawToken === 'string' ? rawToken.trim() : ''
+
   if (!isTokenLooksValid(rawToken)) {
+    await logAccessLinkAttempt({
+      status: 'invalid',
+      reason: 'Token invalide.',
+      tokenHash: normalizedToken ? hashToken(normalizedToken) : '',
+      context
+    })
+
     const error = new Error('Token invalide.')
     error.statusCode = 400
     throw error
   }
 
-  const normalizedToken = rawToken.trim()
   const tokenHash = hashToken(normalizedToken)
   const now = new Date()
 
   const magicLink = await MagicLink.findOne({ tokenHash })
 
   if (!magicLink) {
+    await logAccessLinkAttempt({
+      status: 'not_found',
+      reason: 'Magic link introuvable.',
+      tokenHash,
+      context
+    })
+
     const error = new Error('Magic link introuvable.')
     error.statusCode = 404
     throw error
   }
 
   if (magicLink.revokedAt) {
+    await logAccessLinkAttempt({
+      status: 'revoked',
+      reason: 'Magic link revoque.',
+      tokenHash,
+      link: magicLink,
+      context
+    })
+
     const error = new Error('Magic link revoque.')
     error.statusCode = 410
     throw error
   }
 
   if (magicLink.expiresAt.getTime() <= now.getTime()) {
+    await logAccessLinkAttempt({
+      status: 'expired',
+      reason: 'Magic link expire.',
+      tokenHash,
+      link: magicLink,
+      context
+    })
+
     const error = new Error('Magic link expire.')
     error.statusCode = 410
     throw error
   }
 
   if (magicLink.maxUses > 0 && magicLink.usageCount >= magicLink.maxUses) {
+    await logAccessLinkAttempt({
+      status: 'exhausted',
+      reason: 'Magic link deja consomme.',
+      tokenHash,
+      link: magicLink,
+      context
+    })
+
     const error = new Error('Magic link deja consomme.')
     error.statusCode = 410
     throw error
   }
 
-  magicLink.usageCount += 1
+  const usageReserved = await reserveMagicLinkUsage(magicLink, now)
+
+  if (!usageReserved) {
+    await logAccessLinkAttempt({
+      status: 'exhausted',
+      reason: 'Magic link deja consomme.',
+      tokenHash,
+      link: magicLink,
+      context
+    })
+
+    const error = new Error('Magic link deja consomme.')
+    error.statusCode = 410
+    throw error
+  }
+
+  magicLink.usageCount = Number(magicLink.usageCount || 0) + 1
   magicLink.lastUsedAt = now
-  await magicLink.save()
+
+  await logAccessLinkAttempt({
+    status: 'success',
+    tokenHash,
+    link: magicLink,
+    context
+  })
 
   let person = null
   if (magicLink.personId) {
@@ -695,7 +1004,11 @@ module.exports = {
   revokeActiveMagicLinks,
   findReusableMagicLink,
   findLatestMagicLinkStatus,
+  findMagicLinkForEmailDelivery,
+  markMagicLinkEmailDelivery,
   listSoutenancePublicationAccessLinkStats,
+  listAccessLogs,
+  logAccessLinkAttempt,
   resolveMagicLink,
   isTokenLooksValid
 }

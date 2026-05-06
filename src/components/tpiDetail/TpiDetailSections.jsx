@@ -27,14 +27,15 @@ import {
   isLikelyUrl,
   readObjectId
 } from './tpiDetailUtils'
+import { getTpiRelationRoleLabel } from '../../utils/stakeholderRules'
 
 import './TpiDetailPage.css'
 
 const STAKEHOLDER_ROLE_META = {
-  candidat: { label: 'Candidat', routeRole: 'candidat' },
-  expert1: { label: 'Expert 1', routeRole: 'expert' },
-  expert2: { label: 'Expert 2', routeRole: 'expert' },
-  chef_projet: { label: 'Chef de projet', routeRole: 'chef_projet' }
+  candidat: { label: getTpiRelationRoleLabel('candidat'), routeRole: 'candidat' },
+  expert1: { label: getTpiRelationRoleLabel('expert1'), routeRole: 'expert' },
+  expert2: { label: getTpiRelationRoleLabel('expert2'), routeRole: 'expert' },
+  chef_projet: { label: getTpiRelationRoleLabel('chef_projet'), routeRole: 'chef_projet' }
 }
 
 const DetailItem = ({ label, value, tone = '' }) => (
@@ -103,12 +104,12 @@ function normalizeSupplementalIssue(issue, index) {
 
     return {
       key: `validation-${index}-${message}`,
-      type: 'Validation planning',
+      type: 'Validation coordination',
       message
     }
   }
 
-  const type = compactText(issue?.type) || 'Validation planning'
+  const type = compactText(issue?.type) || 'Validation coordination'
   const message = compactText(issue?.message)
 
   if (!message) {
@@ -164,7 +165,7 @@ function getComparisonStatusMeta(status) {
     case 'legacy_only':
       return { label: 'Legacy seul', tone: 'secondary' }
     case 'planning_only':
-      return { label: 'Planning seul', tone: 'secondary' }
+      return { label: 'Coordination seule', tone: 'secondary' }
     default:
       return { label: 'Absent', tone: 'muted' }
   }
@@ -277,7 +278,7 @@ function buildRemediationCards({
   planningTpi,
   stakeholderState,
   plannedSlot,
-  planningStatus,
+  coordinationStatus,
   workflowReference,
   legacyRef,
   detailReturnPath
@@ -303,7 +304,7 @@ function buildRemediationCards({
       priority: 1,
       tone: 'warning',
       title: 'Créer la fiche GestionTPI',
-      description: 'Le TPI existe dans Planning, mais aucune fiche legacy correspondante n’a été trouvée.',
+      description: 'Le TPI existe dans Coordination, mais aucune fiche legacy correspondante n’a été trouvée.',
       tags: ['GestionTPI absent', 'Préremplissage possible'],
       actions: [
         {
@@ -317,7 +318,7 @@ function buildRemediationCards({
         },
         {
           key: 'open-planning',
-          label: 'Voir dans Planning',
+          label: 'Voir dans Coordination',
           to: buildPlanningFocusLink(dossier?.year, focusReference),
           tone: 'secondary'
         }
@@ -351,7 +352,7 @@ function buildRemediationCards({
       tone: 'warning',
       title: 'Compléter les parties prenantes',
       description: `Rôles manquants dans GestionTPI: ${missingRoleLabels.join(', ')}.`,
-      tags: ['Blocage import planning'],
+      tags: ['Blocage import coordination'],
       actions: [
         {
           key: 'edit-stakeholders',
@@ -409,7 +410,7 @@ function buildRemediationCards({
       tags: ['Workflow absent'],
       actions: [
         {
-          key: 'planning-votes',
+          key: 'coordination-votes',
           label: 'Voir le suivi de planification',
           to: buildPlanningTabLink(dossier?.year, 'votes', { focus: focusReference }),
           tone: 'primary'
@@ -427,15 +428,15 @@ function buildRemediationCards({
   if (dossier?.planning?.exists && !plannedSlot && focusReference) {
     cards.push({
       key: 'missing-slot',
-      priority: planningStatus.toLowerCase() === 'published' ? 1 : 2,
-      tone: planningStatus.toLowerCase() === 'published' ? 'warning' : 'secondary',
+      priority: coordinationStatus.toLowerCase() === 'published' ? 1 : 2,
+      tone: coordinationStatus.toLowerCase() === 'published' ? 'warning' : 'secondary',
       title: 'Assigner un créneau',
       description: 'Aucun créneau confirmé n’est visible pour ce TPI dans le workflow.',
       tags: ['Créneau manquant'],
       actions: [
         {
           key: 'planning-slot',
-          label: 'Ouvrir Planning',
+          label: 'Ouvrir Coordination',
           to: buildPlanningFocusLink(dossier?.year, focusReference),
           tone: 'primary'
         }
@@ -447,7 +448,7 @@ function buildRemediationCards({
     dossier?.planning?.exists &&
     Number(dossier?.planning?.voteSummary?.pendingVotes || 0) > 0 &&
     focusReference &&
-    ['voting', 'voting_open', 'confirmed'].includes(planningStatus.toLowerCase())
+    ['voting', 'voting_open', 'confirmed'].includes(coordinationStatus.toLowerCase())
   ) {
     cards.push({
       key: 'pending-votes',
@@ -458,7 +459,7 @@ function buildRemediationCards({
       tags: ['Workflow en cours'],
       actions: [
         {
-          key: 'planning-votes-open',
+          key: 'coordination-votes-open',
           label: 'Ouvrir le suivi des votes',
           to: buildPlanningTabLink(dossier?.year, 'votes', { focus: focusReference }),
           tone: 'primary'
@@ -485,7 +486,7 @@ function buildHealthSummary({
   mergedIssues,
   stakeholderState,
   plannedSlot,
-  planningStatusMeta
+  coordinationStatusMeta
 }) {
   const hasLegacy = Boolean(dossier?.legacy?.exists)
   const hasPlanning = Boolean(dossier?.planning?.exists)
@@ -504,7 +505,7 @@ function buildHealthSummary({
       summary: 'Le dossier est exploitable tel quel. Aucune correction immédiate n’est visible sur la fiche.',
       checkpoints: [
         { key: 'legacy', label: 'GestionTPI', value: hasLegacy ? 'OK' : 'Absente', tone: hasLegacy ? 'ready' : 'warning' },
-        { key: 'planning', label: 'Planning', value: hasPlanning ? planningStatusMeta.label : 'Absent', tone: hasPlanning ? 'ready' : 'warning' },
+        { key: 'coordination', label: 'Coordination', value: hasPlanning ? coordinationStatusMeta.label : 'Absent', tone: hasPlanning ? 'ready' : 'warning' },
         { key: 'blockers', label: 'Blocages', value: 'Aucun', tone: 'ready' },
         { key: 'next', label: 'Suite', value: 'Aucune action urgente', tone: 'ready' }
       ],
@@ -520,7 +521,7 @@ function buildHealthSummary({
       summary: `Des éléments bloquants empêchent le dossier d’être complet ou exploitable sans intervention (${blockingCount}).`,
       checkpoints: [
         { key: 'legacy', label: 'GestionTPI', value: hasLegacy ? 'Présente' : 'À créer', tone: hasLegacy ? 'ready' : 'warning' },
-        { key: 'planning', label: 'Planning', value: hasPlanning ? planningStatusMeta.label : 'Absent', tone: hasPlanning ? '' : 'warning' },
+        { key: 'coordination', label: 'Coordination', value: hasPlanning ? coordinationStatusMeta.label : 'Absent', tone: hasPlanning ? '' : 'warning' },
         { key: 'blockers', label: 'Blocages', value: String(blockingCount), tone: 'warning' },
         { key: 'next', label: 'Priorité', value: nextCard?.title || 'Analyser le dossier', tone: nextCard ? 'warning' : '' }
       ],
@@ -535,7 +536,7 @@ function buildHealthSummary({
     summary: `Le dossier est lisible, mais ${mergedIssues.length} point(s) de cohérence ou de suivi demandent encore une action.`,
     checkpoints: [
       { key: 'legacy', label: 'GestionTPI', value: hasLegacy ? 'Présente' : 'Absente', tone: hasLegacy ? 'ready' : 'warning' },
-      { key: 'planning', label: 'Planning', value: hasPlanning ? planningStatusMeta.label : 'Absent', tone: hasPlanning ? '' : 'warning' },
+      { key: 'coordination', label: 'Coordination', value: hasPlanning ? coordinationStatusMeta.label : 'Absent', tone: hasPlanning ? '' : 'warning' },
       { key: 'issues', label: 'Contrôles', value: String(mergedIssues.length), tone: mergedIssues.length > 0 ? 'warning' : 'ready' },
       { key: 'next', label: 'Prochaine action', value: nextCard?.title || 'Ajuster les données', tone: '' }
     ],
@@ -635,8 +636,8 @@ const TpiDetailSections = ({
   const stakeholderState = dossier?.legacy?.stakeholderState || null
   const votes = Array.isArray(dossier?.planning?.votes) ? dossier.planning.votes : []
   const plannedSlot = dossier?.planning?.plannedSlot || null
-  const planningStatus = compactText(planningTpi?.status)
-  const planningStatusMeta = getPlanningStatusMeta(planningStatus)
+  const coordinationStatus = compactText(planningTpi?.status)
+  const coordinationStatusMeta = getPlanningStatusMeta(coordinationStatus)
   const tags = Array.isArray(legacyTpi?.tags) ? legacyTpi.tags.filter(Boolean) : []
   const candidateName = formatPersonName(planningTpi?.candidat, compactText(legacyTpi?.candidat))
   const subject = compactText(planningTpi?.sujet) || compactText(legacyTpi?.sujet) || 'Sujet non renseigné'
@@ -678,12 +679,12 @@ const TpiDetailSections = ({
       tone: 'warning'
     } : null,
     focusReference ? {
-      key: 'planning',
-      label: 'Voir dans Planning',
+      key: 'coordination',
+      label: 'Voir dans Coordination',
       to: buildPlanningFocusLink(dossier?.year, focusReference),
       tone: 'primary'
     } : null,
-    planningStatus.toLowerCase() === 'published' && focusReference ? {
+    coordinationStatus.toLowerCase() === 'published' && focusReference ? {
       key: 'soutenance',
       label: 'Voir dans Défenses',
       to: buildSoutenanceFocusLink(dossier?.year, focusReference),
@@ -711,7 +712,7 @@ const TpiDetailSections = ({
     planningTpi,
     stakeholderState,
     plannedSlot,
-    planningStatus,
+    coordinationStatus,
     workflowReference,
     legacyRef,
     detailReturnPath
@@ -743,10 +744,26 @@ const TpiDetailSections = ({
       compactText(legacyTpi?.lieu?.entreprise),
       compactText(planningTpi?.entreprise?.nom)
     ),
-    buildComparisonRow('Candidat', compactText(legacyTpi?.candidat), formatPersonName(planningTpi?.candidat)),
-    buildComparisonRow('Expert 1', getLegacyExpert(legacyTpi, '1'), formatPersonName(planningTpi?.expert1)),
-    buildComparisonRow('Expert 2', getLegacyExpert(legacyTpi, '2'), formatPersonName(planningTpi?.expert2)),
-    buildComparisonRow('Chef de projet', compactText(legacyTpi?.boss), formatPersonName(planningTpi?.chefProjet))
+    buildComparisonRow(
+      getTpiRelationRoleLabel('candidat'),
+      compactText(legacyTpi?.candidat),
+      formatPersonName(planningTpi?.candidat)
+    ),
+    buildComparisonRow(
+      getTpiRelationRoleLabel('expert1'),
+      getLegacyExpert(legacyTpi, '1'),
+      formatPersonName(planningTpi?.expert1)
+    ),
+    buildComparisonRow(
+      getTpiRelationRoleLabel('expert2'),
+      getLegacyExpert(legacyTpi, '2'),
+      formatPersonName(planningTpi?.expert2)
+    ),
+    buildComparisonRow(
+      getTpiRelationRoleLabel('chef_projet'),
+      compactText(legacyTpi?.boss),
+      formatPersonName(planningTpi?.chefProjet)
+    )
   ]), [legacyTpi, planningTpi])
   const comparisonSummary = useMemo(() => comparisonRows.reduce((summary, row) => {
     summary[row.status] = Number(summary[row.status] || 0) + 1
@@ -772,7 +789,7 @@ const TpiDetailSections = ({
     mergedIssues,
     stakeholderState,
     plannedSlot,
-    planningStatusMeta
+    coordinationStatusMeta
   })
   const quickEditFields = useMemo(() => ([
     { key: 'sujet', label: 'Sujet', type: 'text', placeholder: 'Sujet du TPI' },
@@ -887,11 +904,11 @@ const TpiDetailSections = ({
   const planningVotesSection = (
     <CollapsibleSection
       id='tpi-detail-planning'
-      title='Planning et votes'
+      title='Coordination et votes'
       description='Créneau, statut workflow et réponses.'
     >
       <div className='tpi-detail-grid'>
-        <DetailItem label='Statut workflow' value={planningStatusMeta.label} tone={planningStatusMeta.tone} />
+        <DetailItem label='Statut workflow' value={coordinationStatusMeta.label} tone={coordinationStatusMeta.tone} />
         <DetailItem label='Créneau retenu' value={plannedSlotLabel} tone={plannedSlot ? 'ready' : 'warning'} />
         <DetailItem
           label='Votes reçus'
@@ -915,15 +932,15 @@ const TpiDetailSections = ({
       {workflowVoteSummary ? (
         <div className='tpi-detail-inline-list'>
           <span>
-            <span className='tpi-detail-inline-label'>Expert 1</span>
+            <span className='tpi-detail-inline-label'>{STAKEHOLDER_ROLE_META.expert1.label}</span>
             <strong>{workflowVoteSummary.expert1Voted ? 'voté' : 'en attente'}</strong>
           </span>
           <span>
-            <span className='tpi-detail-inline-label'>Expert 2</span>
+            <span className='tpi-detail-inline-label'>{STAKEHOLDER_ROLE_META.expert2.label}</span>
             <strong>{workflowVoteSummary.expert2Voted ? 'voté' : 'en attente'}</strong>
           </span>
           <span>
-            <span className='tpi-detail-inline-label'>Chef de projet</span>
+            <span className='tpi-detail-inline-label'>{STAKEHOLDER_ROLE_META.chef_projet.label}</span>
             <strong>{workflowVoteSummary.chefProjetVoted ? 'voté' : 'en attente'}</strong>
           </span>
         </div>
@@ -1054,9 +1071,9 @@ const TpiDetailSections = ({
               tone={legacyRef ? '' : 'warning'}
             />
             <DetailItem
-              label='Statut planning'
-              value={planningStatusMeta.label}
-              tone={planningStatusMeta.tone}
+              label='Statut coordination'
+              value={coordinationStatusMeta.label}
+              tone={coordinationStatusMeta.tone}
             />
             <DetailItem
               label='Créneau'
@@ -1089,7 +1106,7 @@ const TpiDetailSections = ({
                   <div className='tpi-detail-direct-action-card'>
                     <div className='tpi-detail-direct-action-copy'>
                       <strong>Créer une fiche GestionTPI de base ici</strong>
-                      <p>Initialise la fiche avec la référence, les personnes et les informations Planning disponibles.</p>
+                      <p>Initialise la fiche avec la référence, les personnes et les informations Coordination disponibles.</p>
                     </div>
 
                     <button
@@ -1112,16 +1129,16 @@ const TpiDetailSections = ({
 
                     {availablePlanningSuggestionCount > 0 ? (
                       <div className='tpi-detail-direct-suggestions'>
-                        <span>{availablePlanningSuggestionCount} reprise(s) possible(s) depuis Planning</span>
+                        <span>{availablePlanningSuggestionCount} reprise(s) possible(s) depuis Coordination</span>
                         <button
                           type='button'
                           className='tpi-detail-direct-button'
                           onClick={handleApplyAllPlanningValues}
                           disabled={isQuickActionPending}
-                          title='Reprendre toutes les valeurs Planning disponibles'
+                          title='Reprendre toutes les valeurs Coordination disponibles'
                         >
                           <RefreshIcon className='tpi-detail-direct-button-icon' />
-                          <span>Reprendre toutes les valeurs Planning</span>
+                          <span>Reprendre toutes les valeurs Coordination</span>
                         </button>
                       </div>
                     ) : null}
@@ -1143,10 +1160,10 @@ const TpiDetailSections = ({
                                   type='button'
                                   className='tpi-detail-quick-edit-field-action'
                                   onClick={() => handleApplyPlanningValue(field.key)}
-                                  title={`Reprendre la valeur Planning pour ${field.label}`}
+                                  title={`Reprendre la valeur Coordination pour ${field.label}`}
                                 >
                                   <RefreshIcon className='tpi-detail-direct-button-icon' />
-                                  <span className='sr-only'>{`Reprendre la valeur Planning pour ${field.label}`}</span>
+                                  <span className='sr-only'>{`Reprendre la valeur Coordination pour ${field.label}`}</span>
                                 </button>
                               ) : null}
                             </div>
@@ -1160,7 +1177,7 @@ const TpiDetailSections = ({
                             />
                             {compactText(quickEditPlanningValues[field.key]) ? (
                               <small className='tpi-detail-quick-edit-hint'>
-                                <span>Planning</span>
+                                <span>Coordination</span>
                                 <strong>{quickEditPlanningValues[field.key]}</strong>
                               </small>
                             ) : null}
@@ -1230,7 +1247,7 @@ const TpiDetailSections = ({
             {showComparisonSection ? (
               <CollapsibleSection
                 id='tpi-detail-comparison'
-                title='Lecture croisée GestionTPI / Planning'
+                title='Lecture croisée GestionTPI / Coordination'
                 description='Uniquement les champs qui servent à décider ou corriger.'
                 defaultOpen={comparisonAttentionCount > 0}
               >
@@ -1300,7 +1317,7 @@ const TpiDetailSections = ({
                         <tr>
                           <th>Champ</th>
                           <th>GestionTPI</th>
-                          <th>Planning</th>
+                          <th>Coordination</th>
                           <th>Statut</th>
                         </tr>
                       </thead>
@@ -1469,7 +1486,7 @@ const TpiDetailSections = ({
             <CollapsibleSection
               id='tpi-detail-issues'
               title='Contrôles de cohérence'
-              description='Écarts GestionTPI / Planning.'
+              description='Écarts GestionTPI / Coordination.'
               meta={(
                 <span className='tpi-detail-pill is-warning'>
                   {mergedIssues.length} point(s) à corriger

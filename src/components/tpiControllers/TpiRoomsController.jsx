@@ -34,13 +34,15 @@ export const createTpiCollectionForYear = async (year, roomData) => {
   }
 }
 
-export const publishSoutenancesFromPlanning = async year => {
+export const publishSoutenancesFromPlanification = async year => {
   try {
-    return await soutenancesService.publishFromPlanning(year)
+    return await soutenancesService.publishFromPlanification(year)
   } catch (error) {
     console.error(
-      `Erreur réseau lors de la publication des défenses depuis le planning pour l'année ${year}: ${error.message}`
+      `Erreur réseau lors de la publication des défenses depuis la planification pour l'année ${year}: ${error.message}`
     )
     throw error
   }
 }
+
+export const publishSoutenancesFromPlanning = publishSoutenancesFromPlanification
