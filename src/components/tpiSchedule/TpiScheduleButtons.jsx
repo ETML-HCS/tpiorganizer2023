@@ -39,6 +39,7 @@ import {
   normalizeSoutenanceDateEntries
 } from "./soutenanceDateUtils"
 import { isValidationWarningIssue } from "./tpiScheduleValidationUtils"
+import { STATIC_VOTE_REGENERATION_NOTICE } from "../../constants/staticVotePublication"
 
 const formatPublicationTargetLabel = (url) => {
   const rawUrl = typeof url === "string" ? url.trim() : ""
@@ -1698,6 +1699,9 @@ const TpiScheduleButtons = ({
                       <p>
                         Publie uniquement les formulaires PHP accessibles par liens personnels.
                         Le suivi reste dans l'application et la synchronisation se lance au chargement.
+                      </p>
+                      <p className="planning-static-publication-warning">
+                        {STATIC_VOTE_REGENERATION_NOTICE}
                       </p>
                       <div
                         className={`planning-static-publication-status planning-static-publication-status--${staticVotePublicationStatusTone}`}

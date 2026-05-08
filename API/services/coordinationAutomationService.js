@@ -3,6 +3,7 @@ const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
 const { createTpiRoomModel } = require('../models/tpiRoomsModels')
 const {
+  areConsecutiveTimeSteps,
   MIN_TPI_PER_OPEN_ROOM,
   MAX_CONSECUTIVE_TPI,
   buildTimelineIndex,
@@ -786,8 +787,9 @@ function exceedsConsecutiveLimit(state, timeline, personId, timeKey, maxConsecut
 
   let leftIndex = candidateIndex
   while (leftIndex > 0) {
+    const currentKey = timeline.timeSteps[leftIndex]
     const previousKey = timeline.timeSteps[leftIndex - 1]
-    if (!occupiedKeys?.has(previousKey)) {
+    if (!areConsecutiveTimeSteps(previousKey, currentKey) || !occupiedKeys?.has(previousKey)) {
       break
     }
     leftIndex -= 1
@@ -795,8 +797,9 @@ function exceedsConsecutiveLimit(state, timeline, personId, timeKey, maxConsecut
 
   let rightIndex = candidateIndex
   while (rightIndex < timeline.timeSteps.length - 1) {
+    const currentKey = timeline.timeSteps[rightIndex]
     const nextKey = timeline.timeSteps[rightIndex + 1]
-    if (!occupiedKeys?.has(nextKey)) {
+    if (!areConsecutiveTimeSteps(currentKey, nextKey) || !occupiedKeys?.has(nextKey)) {
       break
     }
     rightIndex += 1
@@ -2024,6 +2027,111 @@ async function syncLegacyRoomsFromAutomaticPlanning(year, slots = [], tasks = []
   return legacyRooms
 }
 
+function buildLegacyRoomKeyFromSlot(slot) {
+  const dateKey = toIsoDateKey(slot?.date)
+  const site = compactText(slot?.room?.site)
+  const roomName = compactText(slot?.room?.name)
+
+  return dateKey && site && roomName
+    ? `${site}|${roomName}|${dateKey}`
+    : ''
+}
+
+function buildCurrentPlanningTask(tpi) {
+  const tpiId = toObjectIdString(tpi)
+
+  if (!tpiId) {
+    return null
+  }
+
+  return {
+    tpiId,
+    reference: compactText(tpi?.reference),
+    tpi,
+    automaticPlanningWarnings: normalizeConstraintIssues(tpi?.conflicts || [])
+  }
+}
+
+async function syncLegacyRoomsFromCurrentPlanning(year) {
+  const normalizedYear = Number.parseInt(String(year), 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour la synchronisation depuis la coordination.')
+  }
+
+  const planningConfig = await getPlanningConfig(normalizedYear)
+  const rawTpis = await TpiPlanning.find({ year: normalizedYear })
+    .populate('candidat')
+    .populate('expert1')
+    .populate('expert2')
+    .populate('chefProjet')
+    .lean()
+  const slots = await Slot.find({ year: normalizedYear })
+    .sort({ date: 1, 'room.site': 1, 'room.name': 1, period: 1 })
+    .lean()
+  const result = buildLegacyRoomsFromCurrentPlanningState(
+    normalizedYear,
+    slots,
+    rawTpis,
+    planningConfig
+  )
+  const RoomModel = createTpiRoomModel(normalizedYear)
+
+  await RoomModel.deleteMany({})
+
+  if (result.legacyRooms.length > 0) {
+    await RoomModel.insertMany(result.legacyRooms, { ordered: true })
+  }
+
+  return result
+}
+
+function buildLegacyRoomsFromCurrentPlanningState(year, slots = [], tpis = [], planningConfig = null) {
+  const normalizedYear = Number.parseInt(String(year), 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour la reconstruction legacy.')
+  }
+
+  const tasks = filterPlanifiableTpis(tpis, planningConfig)
+    .filter((tpi) => !['cancelled'].includes(compactText(tpi?.status)))
+    .map(buildCurrentPlanningTask)
+    .filter(Boolean)
+  const taskById = new Map(tasks.map((task) => [task.tpiId, task]))
+  const occupiedRoomKeys = new Set()
+
+  for (const slot of Array.isArray(slots) ? slots : []) {
+    const assignedTpiId = toObjectIdString(slot?.assignedTpi)
+
+    if (assignedTpiId && taskById.has(assignedTpiId)) {
+      const roomKey = buildLegacyRoomKeyFromSlot(slot)
+      if (roomKey) {
+        occupiedRoomKeys.add(roomKey)
+      }
+    }
+  }
+
+  const legacySlots = (Array.isArray(slots) ? slots : []).filter((slot) => {
+    const assignedTpiId = toObjectIdString(slot?.assignedTpi)
+    return (
+      (assignedTpiId && taskById.has(assignedTpiId)) ||
+      occupiedRoomKeys.has(buildLegacyRoomKeyFromSlot(slot))
+    )
+  })
+  const legacyRooms = buildLegacyRoomsFromAutomaticSlots(normalizedYear, legacySlots, tasks)
+  const syncedTpiIds = new Set(
+    legacySlots
+      .map((slot) => toObjectIdString(slot?.assignedTpi))
+      .filter((assignedTpiId) => assignedTpiId && taskById.has(assignedTpiId))
+  )
+
+  return {
+    year: normalizedYear,
+    roomCount: legacyRooms.length,
+    slotCount: legacySlots.length,
+    tpiCount: syncedTpiIds.size,
+    legacyRooms
+  }
+}
+
 async function autoPlanYear(year) {
   const coordinationYear = Number.parseInt(String(year), 10)
   if (!Number.isInteger(coordinationYear)) {
@@ -2226,6 +2334,8 @@ module.exports = {
   autoPlanYear,
   buildAutomaticSlotDocuments,
   buildLegacyRoomsFromAutomaticSlots,
+  buildLegacyRoomsFromCurrentPlanningState,
   computeAutomaticAssignments,
-  resolveTaskAllowedDateKeys
+  resolveTaskAllowedDateKeys,
+  syncLegacyRoomsFromCurrentPlanning
 }

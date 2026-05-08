@@ -764,6 +764,51 @@ body {
   display: none;
 }
 
+@media (max-width: 767px) {
+  .static-soutenance-page .static-filter-result {
+    white-space: normal;
+    line-height: 1.3;
+  }
+
+  .static-soutenance-page .static-admin-filters .soutenance-toolbar-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .static-soutenance-page .static-admin-filters .soutenance-filter-block {
+    min-width: 0;
+  }
+
+  .static-soutenance-page .soutenance-person-ical {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .static-soutenance-page .soutenance-person-ical-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .static-soutenance-page .soutenance-person-ical-button,
+  .static-soutenance-page .soutenance-person-vote-button {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: center;
+  }
+}
+
+@media (max-width: 430px) {
+  .static-soutenance-page .static-admin-filters .soutenance-toolbar-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media print {
   body {
     background: #ffffff;
@@ -876,7 +921,10 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         <div class="soutenance-toolbar-hero-content">
           <div class="title">Défenses ${escapeHtml(normalizedYear)}</div>
           <p class="soutenance-toolbar-greeting">Version statique publiée pour consultation.</p>
-          <span class="static-filter-result" id="result-count"></span>
+          <div class="soutenance-hero-meta">
+            <span class="static-filter-result" id="result-count"></span>
+            <span class="soutenance-view-status static-hidden" id="view-status"></span>
+          </div>
         </div>
         <button
           type="button"
@@ -973,7 +1021,7 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           aria-label="Afficher la vue générale administrateur"
           aria-pressed="false"
           disabled
-        >Vue générale admin</button>
+        >Vue admin</button>
       </div>
     </section>
   </div>
@@ -998,6 +1046,7 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       var focusBanner = document.getElementById('focus-banner');
       var focusTitle = document.getElementById('focus-title');
       var focusText = document.getElementById('focus-text');
+      var viewStatus = document.getElementById('view-status');
       var personIcalNode = document.getElementById('static-person-ical');
       var personIcalButton = document.getElementById('static-person-ical-download');
       var personIcalLabel = document.getElementById('static-person-ical-label');
@@ -1120,9 +1169,16 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           }
 
           seen.add(label);
-          options.push(label);
+          options.push({
+            label: label,
+            sortValue: getSortableDateValue(room.date)
+          });
           return options;
-        }, []);
+        }, []).sort(function (left, right) {
+          return left.sortValue - right.sortValue || compareText(left.label, right.label);
+        }).map(function (option) {
+          return option.label;
+        });
       }
 
       function populateAdminFilters() {
@@ -1269,6 +1325,69 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         return startTime && endTime ? startTime + ' - ' + endTime : 'Horaire indisponible';
       }
 
+      function getSortableDateValue(value) {
+        var time = new Date(value).getTime();
+        return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+      }
+
+      function getSortableTimeValue(value) {
+        var match = String(value || '').match(/^(\\d{1,2}):(\\d{2})/);
+        if (!match) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+
+        var hours = Number.parseInt(match[1], 10);
+        var minutes = Number.parseInt(match[2], 10);
+        if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+
+        return (hours * 60) + minutes;
+      }
+
+      function compareText(left, right) {
+        return String(left || '').localeCompare(String(right || ''), 'fr', {
+          numeric: true,
+          sensitivity: 'base'
+        });
+      }
+
+      function getFirstPublishedSlotSort(room) {
+        var publishedSlots = getRoomSlots(room).filter(function (slot) {
+          return Boolean(slot.tpiData && slot.tpiData.refTpi);
+        });
+        var firstSlot = publishedSlots[0] || {};
+        var displayedSlot = firstSlot.displayedSlot || {};
+        var tpi = firstSlot.tpiData || {};
+
+        return {
+          date: getSortableDateValue(room && room.date),
+          time: getSortableTimeValue(displayedSlot.startTime),
+          slotIndex: Number.isInteger(firstSlot.index) ? firstSlot.index : Number.MAX_SAFE_INTEGER,
+          site: room && room.site ? room.site : '',
+          room: room && room.name ? room.name : '',
+          candidate: tpi.candidat || '',
+          reference: tpi.refTpi || ''
+        };
+      }
+
+      function compareRoomsByFirstPublishedSlot(left, right) {
+        var leftSort = getFirstPublishedSlotSort(left);
+        var rightSort = getFirstPublishedSlotSort(right);
+
+        return leftSort.date - rightSort.date ||
+          leftSort.time - rightSort.time ||
+          leftSort.slotIndex - rightSort.slotIndex ||
+          compareText(leftSort.site, rightSort.site) ||
+          compareText(leftSort.room, rightSort.room) ||
+          compareText(leftSort.candidate, rightSort.candidate) ||
+          compareText(leftSort.reference, rightSort.reference);
+      }
+
+      function sortRoomsByChronology(sourceRooms) {
+        return (Array.isArray(sourceRooms) ? sourceRooms : []).slice().sort(compareRoomsByFirstPublishedSlot);
+      }
+
       function shouldShowEmptySlots() {
         if ((magicLinkViewer && !isAdminGeneralViewActive()) || magicLinkPending || magicLinkError) {
           return false;
@@ -1335,12 +1454,14 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       }
 
       function getFilteredRooms() {
-        return rooms.flatMap(function (room) {
+        var filteredRooms = rooms.flatMap(function (room) {
           if (!roomMatches(room)) return [];
           var tpis = (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).filter(tpiMatches);
           if (tpis.length === 0) return [];
           return Object.assign({}, room, { tpiDatas: tpis });
         });
+
+        return sortRoomsByChronology(filteredRooms);
       }
 
       function getMagicLinkViewerRooms() {
@@ -1348,13 +1469,15 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           return [];
         }
 
-        return rooms.flatMap(function (room) {
+        var viewerRooms = rooms.flatMap(function (room) {
           var tpis = (Array.isArray(room.tpiDatas) ? room.tpiDatas : []).filter(function (tpi) {
             return tpi && tpi.refTpi && doesTpiMatchViewer(tpi, magicLinkViewer);
           });
 
           return tpis.length > 0 ? [Object.assign({}, room, { tpiDatas: tpis })] : [];
         });
+
+        return sortRoomsByChronology(viewerRooms);
       }
 
       function escapeIcsText(value) {
@@ -1543,7 +1666,7 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         adminViewToggle.classList.toggle('static-hidden', !hasAdminAccess);
         adminViewToggle.disabled = !hasAdminAccess;
         adminViewToggle.setAttribute('aria-pressed', isGeneralView ? 'true' : 'false');
-        adminViewToggle.textContent = isGeneralView ? 'Vue personnelle' : 'Vue générale admin';
+        adminViewToggle.textContent = isGeneralView ? 'Vue perso' : 'Vue admin';
         adminViewToggle.setAttribute(
           'aria-label',
           isGeneralView
@@ -1832,7 +1955,28 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         return viewParam === 'admin' || viewParam === 'general' || adminParam === '1' || adminParam === 'true';
       }
 
+      function hideFocusBanner() {
+        focusBanner.className = 'soutenance-focus-banner static-hidden';
+        focusTitle.textContent = '';
+        focusText.textContent = '';
+      }
+
+      function renderViewStatus(label, description) {
+        if (!viewStatus) {
+          return;
+        }
+
+        var statusLabel = String(label || '').trim();
+        var statusDescription = String(description || statusLabel).trim();
+        viewStatus.classList.toggle('static-hidden', !statusLabel);
+        viewStatus.textContent = statusLabel;
+        viewStatus.title = statusDescription;
+        viewStatus.setAttribute('aria-label', statusDescription);
+      }
+
       function renderFocusBanner(filteredRooms) {
+        renderViewStatus('', '');
+
         if (magicLinkPending) {
           focusBanner.className = 'soutenance-focus-banner is-ready';
           focusTitle.textContent = 'Lien magique en cours de vérification';
@@ -1848,23 +1992,27 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
         }
 
         if (isAdminGeneralViewActive()) {
-          focusBanner.className = 'soutenance-focus-banner is-ready';
-          focusTitle.textContent = 'Vue générale admin';
-          focusText.textContent = 'Toutes les défenses publiées sont affichées. Seuls les filtres date et type de classe restent appliqués.';
+          hideFocusBanner();
+          renderViewStatus(
+            'Vue générale admin',
+            'Toutes les défenses publiées sont affichées. Seuls les filtres date et type de classe restent appliqués.'
+          );
           return;
         }
 
         if (magicLinkViewer && (magicLinkViewer.name || magicLinkViewer.personId)) {
-          focusBanner.className = 'soutenance-focus-banner is-ready';
-          focusTitle.textContent = 'Vue personnelle';
-          focusText.textContent = magicLinkViewer.name
-            ? 'Défenses liées à ' + magicLinkViewer.name + '.'
-            : 'Défenses liées à votre lien magique.';
+          hideFocusBanner();
+          renderViewStatus(
+            'Vue personnelle',
+            magicLinkViewer.name
+              ? 'Défenses liées à ' + magicLinkViewer.name + '.'
+              : 'Défenses liées à votre lien magique.'
+          );
           return;
         }
 
         if (!filters.reference) {
-          focusBanner.classList.add('static-hidden');
+          hideFocusBanner();
           return;
         }
 
@@ -2885,6 +3033,7 @@ module.exports = {
   generateStaticDefensesSite,
   getFtpConfig,
   getIndexPath,
+  getPublicUrl,
   getStaticPublicationStatus,
   joinSlashPaths,
   listStaticPublicationAccessLinks,

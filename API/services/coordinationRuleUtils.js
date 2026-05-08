@@ -43,6 +43,29 @@ function toTimeStepKey(dateValue, period) {
   return `${dateKey}#${period}`
 }
 
+function parseTimeStepKey(key) {
+  const [dateKey, periodText] = String(key || '').split('#')
+  const period = Number.parseInt(periodText, 10)
+
+  if (!dateKey || !Number.isInteger(period)) {
+    return null
+  }
+
+  return { dateKey, period }
+}
+
+function areConsecutiveTimeSteps(leftKey, rightKey) {
+  const left = parseTimeStepKey(leftKey)
+  const right = parseTimeStepKey(rightKey)
+
+  return Boolean(
+    left &&
+    right &&
+    left.dateKey === right.dateKey &&
+    right.period === left.period + 1
+  )
+}
+
 function slotContainsPerson(slot, personId) {
   if (!slot || !personId) {
     return false
@@ -117,6 +140,7 @@ function buildOccupiedStepKeys(slots, personId) {
 }
 
 module.exports = {
+  areConsecutiveTimeSteps,
   buildOccupiedStepKeys,
   buildTimelineIndex,
   getMaxConsecutiveTpiLimit,

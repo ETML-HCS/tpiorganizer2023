@@ -1552,6 +1552,15 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   white-space: nowrap;
 }
 
+#tools.planning-tools .planning-static-publication-copy p.planning-static-publication-warning {
+  grid-column: 1 / -1;
+  color: #b45309;
+  font-weight: 700;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 #tools.planning-tools .planning-static-publication-status {
   display: grid;
   gap: 2px;

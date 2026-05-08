@@ -208,7 +208,8 @@ test('Email service should build mail options from configured sender settings', 
       senderName: 'Secretariat TPI',
       senderEmail: 'SECRETARIAT@example.com',
       replyToEmail: 'tpi.admin@example.com'
-    }
+    },
+    env: {}
   })
 
   assert.equal(mailOptions.from, '"Secretariat TPI" <secretariat@example.com>')
@@ -230,49 +231,113 @@ test('Email service should build arbitrage sender from configured settings', () 
       senderArbitrageName: 'Arbitrage TPI',
       senderArbitrageEmail: 'ARBITRAGE@example.com'
     },
-    fromArbitrage: true
+    fromArbitrage: true,
+    env: {}
   })
 
   assert.equal(mailOptions.from, '"Arbitrage TPI" <arbitrage@example.com>')
 })
 
 test('Email service should let arbitrage environment sender override catalog settings', () => {
-  const previousArbitrageFrom = process.env.SMTP_FROM_ARBITRAGE
-  const previousArbitrageName = process.env.SMTP_FROM_NAME_ARBITRAGE
-  process.env.SMTP_FROM_ARBITRAGE = 'env-arbitrage@example.com'
-  process.env.SMTP_FROM_NAME_ARBITRAGE = 'Env Arbitrage'
-
-  try {
-    const mailOptions = emailService.buildMailOptions({
-      to: 'expert@example.com',
-      emailContent: {
-        subject: 'Test',
-        text: 'Texte',
-        html: '<p>Texte</p>'
-      },
-      emailSettings: {
-        senderName: 'Secretariat TPI',
-        senderEmail: 'secretariat@example.com',
-        senderArbitrageName: 'Catalog Arbitrage',
-        senderArbitrageEmail: 'catalog-arbitrage@example.com'
-      },
-      fromArbitrage: true
-    })
-
-    assert.equal(mailOptions.from, '"Env Arbitrage" <env-arbitrage@example.com>')
-  } finally {
-    if (previousArbitrageFrom === undefined) {
-      delete process.env.SMTP_FROM_ARBITRAGE
-    } else {
-      process.env.SMTP_FROM_ARBITRAGE = previousArbitrageFrom
+  const mailOptions = emailService.buildMailOptions({
+    to: 'expert@example.com',
+    emailContent: {
+      subject: 'Test',
+      text: 'Texte',
+      html: '<p>Texte</p>'
+    },
+    emailSettings: {
+      senderName: 'Secretariat TPI',
+      senderEmail: 'secretariat@example.com',
+      senderArbitrageName: 'Catalog Arbitrage',
+      senderArbitrageEmail: 'catalog-arbitrage@example.com'
+    },
+    fromArbitrage: true,
+    env: {
+      SMTP_FROM_ARBITRAGE: 'env-arbitrage@example.com',
+      SMTP_FROM_NAME_ARBITRAGE: 'Env Arbitrage',
+      SMTP_ALLOWED_FROM_DOMAINS: 'example.com'
     }
+  })
 
-    if (previousArbitrageName === undefined) {
-      delete process.env.SMTP_FROM_NAME_ARBITRAGE
-    } else {
-      process.env.SMTP_FROM_NAME_ARBITRAGE = previousArbitrageName
-    }
-  }
+  assert.equal(mailOptions.from, '"Env Arbitrage" <env-arbitrage@example.com>')
+})
+
+test('Email service should align automatic sender headers with configured SMTP domain', () => {
+  const mailOptions = emailService.buildMailOptions({
+    to: 'expert@example.com',
+    emailContent: {
+      subject: 'Test',
+      text: 'Texte',
+      html: '<p>Texte</p>'
+    },
+    emailSettings: {
+      senderName: 'Secretariat TPI',
+      senderEmail: 'secretariat@example.com'
+    },
+    env: {
+      SMTP_FROM: '"TPI 2026" <notifications@tpi26.ch>',
+      SMTP_USER: 'notifications@tpi26.ch'
+    },
+    messageType: 'voteRequest'
+  })
+
+  assert.equal(mailOptions.from, '"TPI 2026" <notifications@tpi26.ch>')
+  assert.equal(mailOptions.replyTo, 'secretariat@example.com')
+  assert.deepEqual(mailOptions.envelope, {
+    from: 'notifications@tpi26.ch',
+    to: 'expert@example.com'
+  })
+  assert.match(mailOptions.messageId, /^<tpi-.+@tpi26\.ch>$/)
+  assert.equal(mailOptions.headers['Auto-Submitted'], 'auto-generated')
+  assert.equal(mailOptions.headers['X-Auto-Response-Suppress'], 'All')
+  assert.equal(mailOptions.headers['X-TPI-Organizer-Template'], 'voterequest')
+  assert.equal(mailOptions.headers['List-Unsubscribe'], '<mailto:secretariat@example.com?subject=unsubscribe>')
+})
+
+test('Email service should support explicit List-Unsubscribe settings', () => {
+  const mailOptions = emailService.buildMailOptions({
+    to: 'expert@example.com',
+    emailContent: {
+      subject: 'Test',
+      text: 'Texte',
+      html: '<p>Texte</p>'
+    },
+    emailSettings: {
+      senderName: 'Secretariat TPI',
+      senderEmail: 'notifications@example.com',
+      replyToEmail: 'support@example.com'
+    },
+    env: {
+      SMTP_FROM: '"TPI 2026" <notifications@example.com>',
+      SMTP_LIST_UNSUBSCRIBE_EMAIL: 'unsubscribe@example.com',
+      SMTP_LIST_UNSUBSCRIBE_URL: 'https://example.com/unsubscribe'
+    },
+    messageType: 'voteRequest'
+  })
+
+  assert.equal(
+    mailOptions.headers['List-Unsubscribe'],
+    '<https://example.com/unsubscribe>, <mailto:unsubscribe@example.com?subject=unsubscribe>'
+  )
+})
+
+test('SMTP transport config should include optional DKIM signing settings', () => {
+  const config = emailService.getSmtpTransportConfig({
+    SMTP_HOST: 'smtp.example.com',
+    SMTP_PORT: '587',
+    SMTP_USER: 'notifications@example.com',
+    SMTP_PASS: 'app-password',
+    SMTP_FROM: 'Notifications <notifications@example.com>',
+    SMTP_DKIM_SELECTOR: 'mail',
+    SMTP_DKIM_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----'
+  })
+
+  assert.deepEqual(config.dkim, {
+    domainName: 'example.com',
+    keySelector: 'mail',
+    privateKey: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----'
+  })
 })
 
 test('Email voteRequest template should use configured link validity label', () => {
@@ -414,6 +479,96 @@ test('Email reminder digest should reflect configured brand', () => {
   assert.match(email.subject, /^\[Commission TPI\]/)
   assert.match(email.html, /Commission TPI - Votes en attente/)
   assert.match(email.text, /Commission TPI - Rappel votes/)
+})
+
+test('Email templates should avoid phishing-style urgency cues', () => {
+  const emailSettings = {
+    senderName: 'Commission TPI',
+    senderEmail: 'noreply@example.ch',
+    replyToEmail: 'support@example.ch'
+  }
+  const buildData = (data = {}) => emailService.buildTemplateData(data, {
+    emailSettings,
+    expiresInHours: 168
+  })
+  const tpiEntry = {
+    reference: 'TPI-2026-001',
+    candidateName: 'Alice Student',
+    subject: 'Machine Learning',
+    roleLabel: 'Expert',
+    slots: [
+      { date: '13.06.2026', period: 'Matin', startTime: '08:00', endTime: '12:00', room: 'Salle 1' }
+    ]
+  }
+  const samples = [
+    emailService.emailTemplates.voteRequest(buildData({
+      recipientName: 'Jean Expert',
+      candidateName: 'Alice Student',
+      tpiReference: 'TPI-2026-001',
+      tpiSubject: 'Machine Learning',
+      role: 'Expert',
+      slots: tpiEntry.slots,
+      deadline: '12.06.2026',
+      magicLinkUrl: 'https://tpi26.ch/propose-2026/token'
+    })),
+    emailService.emailTemplates.voteRequestDigest(buildData({
+      recipientName: 'Jean Expert',
+      year: 2026,
+      tpiCount: 1,
+      tpis: [tpiEntry],
+      deadline: '12.06.2026',
+      magicLinkUrl: 'https://tpi26.ch/propose-2026/token'
+    })),
+    emailService.emailTemplates.resolutionProposal(buildData({
+      recipientName: 'Jean Expert',
+      tpiReference: 'TPI-2026-001',
+      candidateName: 'Alice Student',
+      tpiSubject: 'Machine Learning',
+      roleLabel: 'Expert',
+      proposedSlotLabel: '13.06.2026, 08:00 - 12:00, Salle 1',
+      deadline: '12.06.2026',
+      magicLinkUrl: 'https://tpi26.ch/arbitrage-2026/token'
+    })),
+    emailService.emailTemplates.voteReminder(buildData({
+      recipientName: 'Jean Expert',
+      candidateName: 'Alice Student',
+      deadline: '12.06.2026',
+      magicLinkUrl: 'https://tpi26.ch/propose-2026/token'
+    })),
+    emailService.emailTemplates.voteReminderDigest(buildData({
+      recipientName: 'Jean Expert',
+      year: 2026,
+      tpiCount: 1,
+      tpis: [tpiEntry],
+      deadline: '12.06.2026',
+      magicLinkUrl: 'https://tpi26.ch/propose-2026/token'
+    })),
+    emailService.emailTemplates.soutenanceConfirmation(buildData({
+      recipientName: 'Jean Expert',
+      candidateName: 'Alice Student',
+      tpiReference: 'TPI-2026-001',
+      date: '13.06.2026',
+      time: '08:00 - 12:00',
+      room: 'Salle 1',
+      site: 'Lausanne',
+      expert1: 'Jean Expert',
+      expert2: 'Eva Expert',
+      chefProjet: 'Paul Projet',
+      calendarUrl: 'https://tpi26.ch/calendar.ics'
+    })),
+    emailService.emailTemplates.manualInterventionRequired(buildData({
+      candidateName: 'Alice Student',
+      conflictReason: 'Aucun créneau commun',
+      adminUrl: 'https://tpi26.ch/admin'
+    }))
+  ]
+  const phishingMarkers = /⚠️|🚨|✅|🎓|📋|📅|👥|⏰|ACTION REQUISE|Voter maintenant|Cliquez sur ce lien|immédiatement|urgent|urgence|#dc3545|#dc2626/iu
+
+  for (const email of samples) {
+    const content = `${email.subject}\n${email.html}\n${email.text}`
+    assert.doesNotMatch(content, phishingMarkers)
+    assert.match(content, /Commission TPI/)
+  }
 })
 
 test('Email service should ignore unsafe configured header addresses', () => {

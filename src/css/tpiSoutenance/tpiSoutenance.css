@@ -24,6 +24,9 @@
   --soutenance-pill-radius: 999px;
   --soutenance-grid-label-min: 88px;
   --soutenance-grid-actions: 44px;
+  --soutenance-slot-card-height: 232px;
+  --soutenance-slot-time-height: 30px;
+  --soutenance-slot-row-height: 38px;
   --soutenance-contrast-strong: #e2e8f0;
   --soutenance-room-header-badge-height: 1.18rem;
   --soutenance-room-header-date-height: 1.1rem;
@@ -232,6 +235,33 @@
   font-weight: 800;
   letter-spacing: 0.05em;
   white-space: nowrap;
+}
+
+.tpi-soutenance-page .soutenance-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  min-width: 0;
+}
+
+.tpi-soutenance-page .soutenance-view-status {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 4px 9px;
+  border: 1px solid rgba(248, 250, 252, 0.42);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-transform: none;
 }
 
 .tpi-soutenance-page .soutenance-hero-fullscreen-action {
@@ -544,6 +574,9 @@
   padding: 8px;
   gap: 8px;
   --soutenance-row-gap: 4px;
+  --soutenance-slot-card-height: 184px;
+  --soutenance-slot-time-height: 20px;
+  --soutenance-slot-row-height: 34px;
   --soutenance-room-header-badge-height: 0.9rem;
   --soutenance-room-header-date-height: 0.84rem;
   --soutenance-room-header-title-height: 1.06rem;
@@ -682,7 +715,7 @@
   width: 100%;
   display: grid;
   grid-template-columns: repeat(var(--soutenance-grid-columns), minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: var(--soutenance-space-3);
 }
 
@@ -710,6 +743,9 @@
 
 .tpi-soutenance-page.is-compact .salle {
   padding: 10px;
+  --soutenance-slot-card-height: 204px;
+  --soutenance-slot-time-height: 24px;
+  --soutenance-slot-row-height: 36px;
 }
 
 .tpi-soutenance-page.is-compact .room-header .room-header-date {
@@ -1210,7 +1246,11 @@
 }
 
 .tpi-soutenance-page .tpi-slot {
-  grid-template-rows: auto;
+  height: var(--soutenance-slot-card-height);
+  min-height: var(--soutenance-slot-card-height);
+  grid-template-rows: var(--soutenance-slot-time-height) repeat(4, minmax(0, var(--soutenance-slot-row-height)));
+  align-content: stretch;
+  overflow: hidden;
 }
 
 .tpi-soutenance-page .slot-time {
@@ -1236,11 +1276,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 0;
 }
 
 .tpi-soutenance-page .slot-time-row .slot-time {
   flex: 1 1 auto;
   min-width: 0;
+  height: 100%;
+  min-height: 0;
 }
 
 .tpi-soutenance-page .slot-time--range {
@@ -1411,6 +1454,11 @@
   padding: 5px 6px;
   border-radius: 8px;
   background: #fcfdff;
+}
+
+.tpi-soutenance-page .tpi-slot .tpi-row-block {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tpi-soutenance-page .tpi-row-block--candidate {

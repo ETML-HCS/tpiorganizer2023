@@ -20,6 +20,7 @@ jest.mock('../../services/coordinationService', () => ({
     generateAccessLinks: jest.fn(),
     previewSoutenanceAccessEmail: jest.fn(),
     sendSoutenanceAccessEmails: jest.fn(),
+    resetAccessLinkEmailDeliveries: jest.fn(),
     generateStaticVotePublication: jest.fn(),
     publishStaticVotePublication: jest.fn()
   }
@@ -55,6 +56,11 @@ const emptyAccessPreview = {
     arbitrage: {}
   },
   people: []
+}
+
+const localAccessTargetOptions = {
+  soutenanceLinkTarget: 'app',
+  voteLinkTarget: 'app'
 }
 
 function createAccessPreview(overrides = {}) {
@@ -116,6 +122,10 @@ beforeEach(() => {
       messageId: 'test-message'
     }))
   }))
+  workflowCoordinationService.resetAccessLinkEmailDeliveries.mockResolvedValue({
+    success: true,
+    modifiedCount: 1
+  })
   workflowCoordinationService.generateStaticVotePublication.mockResolvedValue({
     publicUrl: 'https://votes.example.ch/votes-2026/'
   })
@@ -194,7 +204,7 @@ describe('GenToken generation command', () => {
     expect(workflowCoordinationService.generateAccessLinks).toHaveBeenCalledWith(
       2026,
       window.location.origin,
-      {}
+      localAccessTargetOptions
     )
 
     await waitFor(() => {
@@ -225,12 +235,13 @@ describe('GenToken generation command', () => {
       expect(workflowCoordinationService.generateAccessLinks).toHaveBeenCalledWith(
         2026,
         window.location.origin,
-        {}
+        localAccessTargetOptions
       )
     })
   })
 
   test('transmet les cibles publication et mini-site statique à la génération globale', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
     coordinationConfigService.getByYear.mockResolvedValue({
       accessLinkSettings: {
         defaultSoutenanceLinkTarget: 'publication',
@@ -277,11 +288,46 @@ describe('GenToken generation command', () => {
         votePublicUrl: 'https://votes.example.ch/votes-2026/'
       }
     )
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Régénérer le mini-site vote'))
     expect(workflowCoordinationService.generateStaticVotePublication).not.toHaveBeenCalled()
     expect(workflowCoordinationService.publishStaticVotePublication).not.toHaveBeenCalled()
+
+    confirmSpy.mockRestore()
+  })
+
+  test('annule la génération globale si la régénération du mini-site vote est refusée', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false)
+    coordinationConfigService.getByYear.mockResolvedValue({
+      accessLinkSettings: {
+        defaultVoteLinkTarget: 'static'
+      }
+    })
+    workflowCoordinationService.getStaticVotePublicationStatus.mockResolvedValue({
+      publicUrl: 'https://votes.example.ch/votes-2026/'
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText(/conserve le dossier distant data\//i)).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /générer tous les accès/i }))
+
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('votes web non importés'))
+    expect(workflowCoordinationService.generateAccessLinks).not.toHaveBeenCalled()
+
+    confirmSpy.mockRestore()
   })
 
   test('permet de revenir aux URLs locales depuis le mode site', async () => {
+    coordinationConfigService.getByYear.mockResolvedValue({
+      accessLinkSettings: {
+        defaultSoutenanceLinkTarget: 'publication',
+        defaultVoteLinkTarget: 'static'
+      }
+    })
     workflowCoordinationService.getStaticPublicationStatus.mockResolvedValue({
       publicUrl: 'https://publication.example.ch/defenses'
     })
@@ -295,22 +341,25 @@ describe('GenToken generation command', () => {
       </MemoryRouter>
     )
 
-    const localToggle = await screen.findByRole('checkbox', { name: /local/i })
-    await waitFor(() => expect(localToggle).not.toBeChecked())
+    const defenseSiteToggle = await screen.findByRole('checkbox', { name: /liens de défense/i })
+    const voteSiteToggle = await screen.findByRole('checkbox', { name: /liens de vote/i })
+    await waitFor(() => expect(defenseSiteToggle).toBeChecked())
+    expect(voteSiteToggle).toBeChecked()
 
-    fireEvent.click(localToggle)
+    fireEvent.click(defenseSiteToggle)
+    fireEvent.click(voteSiteToggle)
     fireEvent.click(await screen.findByRole('button', { name: /générer tous les accès/i }))
 
     await waitFor(() => {
       expect(workflowCoordinationService.generateAccessLinks).toHaveBeenCalledWith(
         2026,
         window.location.origin,
-        {}
+        localAccessTargetOptions
       )
     })
   })
 
-  test('force aussi les défenses sur le site quand seule l URL vote est connue côté front', async () => {
+  test('ne masque pas les liens locaux quand seule une URL publique existe côté front', async () => {
     workflowCoordinationService.getStaticPublicationStatus.mockResolvedValue({})
     workflowCoordinationService.getStaticVotePublicationStatus.mockResolvedValue({
       publicUrl: 'https://tpi26.ch/votes-2026/'
@@ -322,6 +371,43 @@ describe('GenToken generation command', () => {
       </MemoryRouter>
     )
 
+    const defenseSiteToggle = await screen.findByRole('checkbox', { name: /liens de défense/i })
+    const voteSiteToggle = await screen.findByRole('checkbox', { name: /liens de vote/i })
+    await waitFor(() => expect(defenseSiteToggle).not.toBeChecked())
+    expect(defenseSiteToggle).toBeDisabled()
+    expect(voteSiteToggle).not.toBeChecked()
+
+    fireEvent.click(await screen.findByRole('button', { name: /générer tous les accès/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.generateAccessLinks).toHaveBeenCalledWith(
+        2026,
+        window.location.origin,
+        localAccessTargetOptions
+      )
+    })
+  })
+
+  test('permet de cibler le site uniquement pour les liens de défense', async () => {
+    workflowCoordinationService.getStaticPublicationStatus.mockResolvedValue({
+      publicUrl: 'https://publication.example.ch/defenses'
+    })
+    workflowCoordinationService.getStaticVotePublicationStatus.mockResolvedValue({
+      publicUrl: 'https://votes.example.ch/votes-2026/'
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    const defenseSiteToggle = await screen.findByRole('checkbox', { name: /liens de défense/i })
+    const voteSiteToggle = await screen.findByRole('checkbox', { name: /liens de vote/i })
+    await waitFor(() => expect(defenseSiteToggle).not.toBeChecked())
+    expect(voteSiteToggle).not.toBeChecked()
+
+    fireEvent.click(defenseSiteToggle)
     fireEvent.click(await screen.findByRole('button', { name: /générer tous les accès/i }))
 
     await waitFor(() => {
@@ -330,8 +416,8 @@ describe('GenToken generation command', () => {
         window.location.origin,
         {
           soutenanceLinkTarget: 'publication',
-          voteLinkTarget: 'static',
-          votePublicUrl: 'https://tpi26.ch/votes-2026/'
+          soutenancePublicUrl: 'https://publication.example.ch/defenses',
+          voteLinkTarget: 'app'
         }
       )
     })
@@ -978,12 +1064,13 @@ describe('GenToken generation command', () => {
     const body = query.get('body')
 
     expect(query.get('subject')).toContain('Horaire des défenses TPI 2026')
-    expect(body).toContain('**Lien personnel**')
-    expect(body).toContain('**Important**')
-    expect(body).toContain('**Retour attendu**')
+    expect(body).toContain('Lien personnel')
+    expect(body).toContain('Important')
+    expect(body).toContain('Retour attendu')
     expect(body).toContain('Merci de faire votre retour dans les 5 jours maximum')
     expect(body).not.toContain('Pour les experts')
-    expect(body).toContain('**Validité du lien**')
+    expect(body).toContain('Validité du lien')
+    expect(body).not.toContain('**')
     expect(body).toContain('L’horaire des défenses TPI 2026 est publié.\n\nVous pouvez consulter')
     expect(body).toContain('Merci de considérer l’horaire comme définitif')
     expect(body).toContain('aucune modification ne peut être garantie')
@@ -1101,7 +1188,8 @@ describe('GenToken generation command', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
     expect(await screen.findByRole('heading', { name: /email html défenses/i })).toBeInTheDocument()
 
-    fireEvent.click(await screen.findByRole('button', { name: /envoyer cdp/i }))
+    const batchGroup = screen.getByRole('region', { name: /envoi email html par lot/i })
+    fireEvent.click(within(batchGroup).getByRole('button', { name: /cdp/i }))
 
     await waitFor(() => {
       expect(workflowCoordinationService.sendSoutenanceAccessEmails).toHaveBeenCalledWith(
@@ -1122,6 +1210,377 @@ describe('GenToken generation command', () => {
     })
 
     expect(await screen.findByText(/1 email\(s\) HTML transmis pour les chefs de projet/i)).toBeInTheDocument()
+  })
+
+  test('prépare les emails HTML défense par lot CDP via Outlook manuel', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => ({}))
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        soutenanceLinkCount: 1,
+        soutenanceGeneratedLinkCount: 1,
+        generatedLinkCount: 1
+      },
+      people: [
+        {
+          person: {
+            id: 'person-cdp',
+            name: 'Camille Projet',
+            email: 'camille.projet@example.ch',
+            roles: ['chef_projet'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              id: 'link-cdp',
+              type: 'soutenance',
+              publicationVersion: 2,
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              url: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp',
+              generated: true,
+              availabilityStatus: 'available'
+            }
+          ],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser outlook pour transmettre/i }))
+    const batchGroup = screen.getByRole('region', { name: /envoi email html par lot/i })
+    fireEvent.click(within(batchGroup).getByRole('button', { name: /cdp/i }))
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/^mailto:camille\.projet%40example\.ch\?/),
+        '_blank',
+        'noopener,noreferrer'
+      )
+    })
+    expect(workflowCoordinationService.sendSoutenanceAccessEmails).not.toHaveBeenCalled()
+    expect(await screen.findByText(/1 brouillon\(s\) Outlook préparé\(s\) pour les chefs de projet/i)).toBeInTheDocument()
+
+    const deliveryStore = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.ACCESS_LINK_EMAIL_DELIVERIES))
+    const [delivery] = Object.values(deliveryStore['2026'])
+    expect(delivery).toEqual(expect.objectContaining({
+      status: 'prepared',
+      source: 'outlook',
+      recipientEmail: 'camille.projet@example.ch',
+      linkUrl: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp'
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: /reset outlook/i }))
+
+    await waitFor(() => {
+      const resetStore = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.ACCESS_LINK_EMAIL_DELIVERIES))
+      expect(Object.values(resetStore['2026'] || {})).toHaveLength(0)
+    })
+    expect(await screen.findByText(/1 brouillon\(s\) Outlook défense réinitialisé\(s\)/i)).toBeInTheDocument()
+    openSpy.mockRestore()
+  })
+
+  test('ouvre les brouillons Outlook par file manuelle pour éviter le blocage navigateur', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => ({}))
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 3,
+        soutenanceLinkCount: 3,
+        soutenanceGeneratedLinkCount: 3,
+        generatedLinkCount: 3
+      },
+      people: [
+        ['person-cdp-1', 'Camille Projet', 'camille.projet@example.ch', 'token-cdp-1'],
+        ['person-cdp-2', 'Chloé Projet', 'chloe.projet@example.ch', 'token-cdp-2'],
+        ['person-cdp-3', 'Denis Projet', 'denis.projet@example.ch', 'token-cdp-3']
+      ].map(([id, name, email, token]) => ({
+        person: {
+          id,
+          name,
+          email,
+          roles: ['chef_projet'],
+          site: ''
+        },
+        voteLinks: [],
+        soutenanceLinks: [
+          {
+            id: `link-${id}`,
+            type: 'soutenance',
+            publicationVersion: 2,
+            expiresAt: '2026-05-14T21:00:00.000Z',
+            url: `https://tpi26.ch/soutenances-2026/?ml=${token}`,
+            generated: true,
+            availabilityStatus: 'available'
+          }
+        ],
+        arbitrageLinks: []
+      }))
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser outlook pour transmettre/i }))
+    fireEvent.click(within(screen.getByRole('region', { name: /envoi email html par lot/i })).getByRole('button', { name: /cdp/i }))
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(await screen.findByText(/1\/3 brouillon\(s\) Outlook ouvert\(s\) pour les chefs de projet/i)).toBeInTheDocument()
+    const getOutlookQueueStatus = () => document.querySelector('.token-access-email-outlook-queue')
+    expect(getOutlookQueueStatus()).toHaveTextContent(/2\s*brouillons Outlook en attente/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /ouvrir brouillon suivant/i }))
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(2)
+    })
+    expect(getOutlookQueueStatus()).toHaveTextContent(/1\s*brouillon Outlook en attente/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /ouvrir brouillon suivant/i }))
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(3)
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /ouvrir brouillon suivant/i })).not.toBeInTheDocument()
+    })
+
+    const openedUrls = openSpy.mock.calls.map(([url]) => url).join('\n')
+    expect(openedUrls).toContain('token-cdp-1')
+    expect(openedUrls).toContain('token-cdp-2')
+    expect(openedUrls).toContain('token-cdp-3')
+
+    await waitFor(() => {
+      const deliveryStore = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.ACCESS_LINK_EMAIL_DELIVERIES))
+      expect(Object.values(deliveryStore['2026'] || {})).toHaveLength(3)
+    })
+
+    openSpy.mockRestore()
+  })
+
+  test('ne double pas le premier brouillon Outlook quand window.open retourne null', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null)
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 2,
+        soutenanceLinkCount: 2,
+        soutenanceGeneratedLinkCount: 2,
+        generatedLinkCount: 2
+      },
+      people: [
+        ['person-cdp-1', 'Camille Projet', 'camille.projet@example.ch', 'token-cdp-1'],
+        ['person-cdp-2', 'Chloé Projet', 'chloe.projet@example.ch', 'token-cdp-2']
+      ].map(([id, name, email, token]) => ({
+        person: {
+          id,
+          name,
+          email,
+          roles: ['chef_projet'],
+          site: ''
+        },
+        voteLinks: [],
+        soutenanceLinks: [
+          {
+            id: `link-${id}`,
+            type: 'soutenance',
+            publicationVersion: 2,
+            expiresAt: '2026-05-14T21:00:00.000Z',
+            url: `https://tpi26.ch/soutenances-2026/?ml=${token}`,
+            generated: true,
+            availabilityStatus: 'available'
+          }
+        ],
+        arbitrageLinks: []
+      }))
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser outlook pour transmettre/i }))
+    fireEvent.click(within(screen.getByRole('region', { name: /envoi email html par lot/i })).getByRole('button', { name: /cdp/i }))
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(1)
+    })
+
+    const firstUrl = openSpy.mock.calls[0][0]
+    expect(firstUrl).toContain('token-cdp-1')
+
+    fireEvent.click(screen.getByRole('button', { name: /ouvrir brouillon suivant/i }))
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(2)
+    })
+    expect(openSpy.mock.calls[1][0]).toContain('token-cdp-2')
+    expect(openSpy.mock.calls.filter(([url]) => url === firstUrl)).toHaveLength(1)
+
+    openSpy.mockRestore()
+  })
+
+  test('le carnet email respecte le toggle candidats', async () => {
+    window.localStorage.setItem(STORAGE_KEYS.ACCESS_LINK_SHOW_CANDIDATES, 'false')
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 2,
+        soutenanceLinkCount: 2,
+        soutenanceGeneratedLinkCount: 2,
+        generatedLinkCount: 2
+      },
+      people: [
+        {
+          person: {
+            id: 'person-expert',
+            name: 'Eva Expert',
+            email: 'eva.expert@example.ch',
+            roles: ['expert'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              id: 'link-expert',
+              type: 'soutenance',
+              publicationVersion: 2,
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              url: 'https://tpi26.ch/soutenances-2026/?ml=token-expert',
+              generated: true,
+              availabilityStatus: 'available'
+            }
+          ],
+          arbitrageLinks: []
+        },
+        {
+          person: {
+            id: 'person-candidate',
+            name: 'Camille Candidate',
+            email: 'camille.candidate@example.ch',
+            roles: ['candidat'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              id: 'link-candidate',
+              type: 'soutenance',
+              publicationVersion: 2,
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              url: 'https://tpi26.ch/soutenances-2026/?ml=token-candidate',
+              generated: true,
+              availabilityStatus: 'available'
+            }
+          ],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('Eva Expert')).toBeInTheDocument()
+    expect(screen.queryByText('Camille Candidate')).not.toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+
+    const getAddressBook = () => screen.getByRole('list', { name: /carnet d.adresses défense/i })
+    expect(within(getAddressBook()).queryByText('Camille Candidate')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /candidats/i }))
+
+    await waitFor(() => {
+      expect(within(getAddressBook()).getByText('Camille Candidate')).toBeInTheDocument()
+    })
+    expect(within(getAddressBook()).getByText('Candidat', {
+      selector: '.token-access-email-book-audience'
+    })).toBeInTheDocument()
+
+    fireEvent.click(within(screen.getByRole('region', { name: /envoi email html par lot/i })).getByRole('button', { name: /tous/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.sendSoutenanceAccessEmails).toHaveBeenCalledWith(
+        2026,
+        expect.arrayContaining([
+          expect.objectContaining({ recipientEmail: 'eva.expert@example.ch' }),
+          expect.objectContaining({ recipientEmail: 'camille.candidate@example.ch' })
+        ]),
+        expect.objectContaining({ baseUrl: window.location.origin })
+      )
+    })
+  })
+
+  test('réinitialise les envois SMTP défense déjà transmis', async () => {
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        soutenanceLinkCount: 1,
+        soutenanceGeneratedLinkCount: 1,
+        generatedLinkCount: 1
+      },
+      people: [
+        {
+          person: {
+            id: 'person-cdp',
+            name: 'Camille Projet',
+            email: 'camille.projet@example.ch',
+            roles: ['chef_projet'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              id: '507f1f77bcf86cd799439011',
+              type: 'soutenance',
+              publicationVersion: 2,
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              url: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp',
+              generated: true,
+              availabilityStatus: 'available',
+              deliveryStatus: 'sent',
+              sentAt: '2026-05-06T12:00:00.000Z'
+            }
+          ],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /reset envois/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.resetAccessLinkEmailDeliveries).toHaveBeenCalledWith(
+        2026,
+        {
+          type: 'soutenance',
+          linkIds: ['507f1f77bcf86cd799439011']
+        }
+      )
+    })
+    expect(await screen.findByText(/1 envoi\(s\) défense réinitialisé\(s\)/i)).toBeInTheDocument()
   })
 
   test('affiche une erreur si le test email HTML échoue côté SMTP', async () => {
@@ -1239,5 +1698,52 @@ describe('GenToken generation command', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ouvrir le bloc de Eva Expert/i }))
 
     expect(screen.getByText(/Transmis le 06\.05\.2026/i)).toBeInTheDocument()
+  })
+
+  test('affiche quand un lien personnel a été ouvert', async () => {
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        voteLinkCount: 1,
+        voteGeneratedLinkCount: 1,
+        generatedLinkCount: 1
+      },
+      people: [
+        {
+          person: {
+            id: 'person-reader',
+            name: 'Rina Reader',
+            email: 'rina.reader@example.ch',
+            roles: ['expert'],
+            site: ''
+          },
+          voteLinks: [
+            {
+              type: 'vote',
+              reference: 'TPI-2026-77',
+              subject: 'Sujet',
+              url: 'https://tpi26.ch/votes-2026/?ml=token-reader',
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              generated: true,
+              availabilityStatus: 'available',
+              usageCount: 1,
+              lastUsedAt: '2026-05-06T10:30:00.000Z'
+            }
+          ],
+          soutenanceLinks: [],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026&phase=vote']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le bloc de Rina Reader/i }))
+
+    expect(await screen.findByText(/Ouvert le 06\.05\.2026/i)).toBeInTheDocument()
   })
 })

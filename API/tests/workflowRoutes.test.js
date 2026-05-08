@@ -513,7 +513,7 @@ test('GET /api/workflow/:year/access-links/logs retourne les logs admin filtres'
   }
 })
 
-test('POST /api/workflow/:year/access-links/generate rejects publication target without public URL', async () => {
+test('POST /api/workflow/:year/access-links/email-deliveries/reset reset les statuts SMTP', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
   const { app, restoreEnv } = loadTestApp({
@@ -522,10 +522,99 @@ test('POST /api/workflow/:year/access-links/generate rejects publication target 
   })
 
   const workflowService = require('../services/workflowService')
-  const staticDefensePublicationService = require('../services/staticDefensePublicationService')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
+  let resetPayload = null
   const restore = [
-    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published' })),
-    patchMethod(staticDefensePublicationService, 'getStaticPublicationStatus', async () => ({ publicUrl: '' }))
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(accessLinkTokenService, 'resetMagicLinkEmailDeliveries', async (payload) => {
+      resetPayload = payload
+      return {
+        matchedCount: 2,
+        modifiedCount: 2,
+        resetAt: '2026-05-07T12:00:00.000Z'
+      }
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/email-deliveries/reset`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: 'soutenance',
+        linkIds: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439012']
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.deepEqual(resetPayload, {
+      year: 2026,
+      type: 'soutenance',
+      ids: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439012']
+    })
+    assert.equal(body.modifiedCount, 2)
+    assert.equal(body.requestedLinkCount, 2)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/access-links/generate utilise le fallback URL publique défense', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const accessLinkPreviewModule = require('../modules/accessLinks/previewService')
+  const staticDefensePublicationService = require('../services/staticDefensePublicationService')
+  let previewPayload = null
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published', phases: {} })),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(staticDefensePublicationService, 'getStaticPublicationStatus', async () => ({ publicUrl: '' })),
+    patchMethod(staticDefensePublicationService, 'getPublicUrl', async () => 'https://publication.example.ch/defenses/'),
+    patchMethod(staticDefensePublicationService, 'generateStaticDefensesSite', async () => ({
+      publicUrl: 'https://publication.example.ch/defenses/'
+    })),
+    patchMethod(staticDefensePublicationService, 'publishStaticDefensesSite', async () => ({
+      publicUrl: 'https://publication.example.ch/defenses/',
+      publishedAt: '2026-05-05T10:00:00.000Z'
+    })),
+    patchMethod(accessLinkPreviewModule, 'buildAccessLinkPreview', async (payload) => {
+      previewPayload = payload
+      return {
+        year: payload.year,
+        linksGenerated: true,
+        hasGeneratedLinks: true,
+        summary: {
+          peopleCount: 0,
+          voteLinkCount: 0,
+          voteGeneratedLinkCount: 0,
+          soutenanceLinkCount: 0,
+          soutenanceGeneratedLinkCount: 0,
+          arbitrageLinkCount: 0,
+          generatedLinkCount: 0
+        },
+        contexts: {
+          vote: {},
+          soutenance: {},
+          arbitrage: {}
+        },
+        people: []
+      }
+    })
   ]
   const { server, baseUrl } = await startServer(app)
 
@@ -539,9 +628,12 @@ test('POST /api/workflow/:year/access-links/generate rejects publication target 
       body: JSON.stringify({ soutenanceLinkTarget: 'publication' })
     })
 
-    assert.equal(response.status, 400)
+    assert.equal(response.status, 200)
     const body = await response.json()
-    assert.equal(body.error, 'URL publique de publication invalide ou absente.')
+    assert.equal(previewPayload.soutenanceBaseUrl, 'https://publication.example.ch')
+    assert.equal(previewPayload.soutenanceRedirectPath, '/defenses/')
+    assert.equal(previewPayload.soutenanceLinkTarget, 'publication')
+    assert.equal(body.publicationRefresh.soutenancePublication.publicUrl, 'https://publication.example.ch/defenses/')
   } finally {
     while (restore.length > 0) {
       restore.pop()()

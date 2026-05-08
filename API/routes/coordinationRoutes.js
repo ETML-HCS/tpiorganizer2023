@@ -117,6 +117,15 @@ function getFrontendBaseUrl(req) {
 
 async function getResolutionProposalLinkOptions(req, year) {
   const fallbackBaseUrl = getFrontendBaseUrl(req)
+  const planningConfig = await getPlanningConfigIfAvailable(year)
+  const accessLinkSettings = normalizeAccessLinkSettings(planningConfig?.accessLinkSettings)
+
+  if (accessLinkSettings.defaultVoteLinkTarget !== 'static') {
+    return {
+      baseUrl: fallbackBaseUrl,
+      linkTarget: 'app'
+    }
+  }
 
   if (!staticVotePublicationService.canBuildStaticVoteArbitrageLinks()) {
     return {

@@ -1206,6 +1206,13 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
+    .vote-shell,
+    .vote-card,
+    .vote-card *,
+    .vote-header,
+    .vote-summary {
+      min-width: 0;
+    }
     body {
       margin: 0;
       min-height: 100vh;
@@ -1215,17 +1222,17 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     button, input, textarea { font: inherit; }
     button { -webkit-tap-highlight-color: transparent; }
     .vote-shell {
-      width: min(1180px, calc(100vw - 28px));
+      width: min(1080px, calc(100vw - 24px));
       margin: 0 auto;
-      padding: 20px 0 36px;
+      padding: 12px 0 26px;
     }
     .vote-header {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(280px, 350px);
-      gap: 16px;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+      gap: 10px;
       align-items: stretch;
-      margin-bottom: 14px;
-      padding: 16px;
+      margin-bottom: 10px;
+      padding: 11px;
       background: rgba(255, 255, 255, .92);
       border: 1px solid rgba(215, 222, 232, .95);
       border-radius: 8px;
@@ -1234,23 +1241,23 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-header-main {
       display: grid;
       align-content: center;
-      gap: 8px;
+      gap: 6px;
     }
     .vote-kicker {
       display: inline-flex;
       align-items: center;
-      min-height: 24px;
-      padding: 2px 8px;
+      min-height: 21px;
+      padding: 1px 7px;
       border-radius: 999px;
       background: var(--accent-soft);
       color: var(--accent-strong);
-      font-size: .78rem;
+      font-size: .74rem;
       font-weight: 700;
       letter-spacing: .04em;
       text-transform: uppercase;
     }
-    .vote-header h1 { margin: 0; font-size: 1.72rem; line-height: 1.08; letter-spacing: 0; }
-    .vote-header p { margin: 0; color: var(--muted); line-height: 1.35; }
+    .vote-header h1 { margin: 0; font-size: 1.48rem; line-height: 1.08; letter-spacing: 0; }
+    .vote-header p { margin: 0; color: var(--muted); line-height: 1.3; }
     .vote-viewer-line {
       display: flex;
       align-items: center;
@@ -1269,17 +1276,17 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-summary {
       display: grid;
       align-content: center;
-      gap: 8px;
-      padding: 10px;
+      gap: 6px;
+      padding: 7px;
       background: #f8faf9;
       border: 1px solid var(--line);
       border-radius: 8px;
     }
-    .vote-summary strong { font-size: 1.12rem; letter-spacing: 0; }
-    .vote-summary span, .vote-summary small { color: var(--muted); line-height: 1.35; }
+    .vote-summary strong { font-size: 1.04rem; letter-spacing: 0; }
+    .vote-summary span, .vote-summary small { color: var(--muted); line-height: 1.3; }
     .vote-progress {
       width: 100%;
-      height: 8px;
+      height: 6px;
       overflow: hidden;
       border-radius: 999px;
       background: #dde5eb;
@@ -1292,16 +1299,16 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       background: linear-gradient(90deg, var(--accent), var(--info));
       transition: width .18s ease;
     }
-    .vote-list { display: grid; gap: 16px; }
+    .vote-list { display: grid; gap: 10px; }
     .vote-date-group {
       display: grid;
-      gap: 8px;
+      gap: 6px;
     }
     .vote-date-header {
       display: flex;
       justify-content: space-between;
       align-items: end;
-      gap: 10px;
+      gap: 8px;
       padding: 2px 2px 0;
     }
     .vote-date-header h2 {
@@ -1313,13 +1320,13 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-date-progress {
       display: inline-flex;
       align-items: center;
-      min-height: 24px;
-      padding: 3px 8px;
+      min-height: 21px;
+      padding: 2px 7px;
       border-radius: 999px;
       background: #fff;
       border: 1px solid var(--line);
       color: var(--muted);
-      font-size: .82rem;
+      font-size: .78rem;
       font-weight: 700;
       white-space: nowrap;
     }
@@ -1330,16 +1337,16 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     .vote-date-cards {
       display: grid;
-      gap: 10px;
+      gap: 7px;
     }
     .vote-period-group {
       display: grid;
-      gap: 8px;
+      gap: 6px;
     }
     .vote-period-header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       color: var(--muted);
       font-size: .82rem;
       font-weight: 800;
@@ -1355,8 +1362,8 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-period-count {
       display: inline-flex;
       align-items: center;
-      min-height: 20px;
-      padding: 1px 7px;
+      min-height: 18px;
+      padding: 1px 6px;
       border-radius: 999px;
       background: var(--soft);
       color: var(--muted);
@@ -1367,7 +1374,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     .vote-period-cards {
       display: grid;
-      gap: 10px;
+      gap: 7px;
     }
     .vote-card {
       display: grid;
@@ -1384,7 +1391,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     .vote-card.is-sent-compact {
       gap: 0;
-      padding: 10px;
+      padding: 8px;
     }
     .vote-card.is-just-sent {
       animation: voteSentIn .32s ease-out;
@@ -1439,49 +1446,53 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       justify-content: space-between;
       gap: 10px;
       align-items: flex-start;
-      padding: 13px 14px;
+      padding: 8px 10px;
       border-bottom: 1px solid var(--line);
       background: #fff;
     }
     .vote-reference {
       display: block;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
       color: var(--accent-strong);
-      font-size: .78rem;
+      font-size: .74rem;
       font-weight: 700;
       letter-spacing: .03em;
       text-transform: uppercase;
     }
-    .vote-card h2 { margin: 0; font-size: 1.08rem; line-height: 1.25; letter-spacing: 0; }
-    .vote-card p { margin: 4px 0 0; color: var(--muted); line-height: 1.42; }
+    .vote-card h2 { margin: 0; font-size: 1.02rem; line-height: 1.22; letter-spacing: 0; }
+    .vote-card p { margin: 2px 0 0; color: var(--muted); line-height: 1.34; }
     .vote-card-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
-      margin-top: 7px;
+      gap: 4px;
+      margin-top: 5px;
     }
     .vote-card-meta span {
       display: inline-flex;
       align-items: center;
-      min-height: 22px;
-      padding: 2px 7px;
+      min-height: 19px;
+      padding: 1px 6px;
       border-radius: 999px;
       background: var(--soft);
       color: var(--muted);
-      font-size: .8rem;
+      font-size: .76rem;
       font-weight: 700;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .vote-chip {
       display: inline-flex;
       align-items: center;
-      min-height: 24px;
-      padding: 3px 8px;
+      min-height: 21px;
+      padding: 2px 7px;
       border-radius: 999px;
       background: var(--warning-soft);
       color: var(--warning);
-      font-size: .84rem;
+      font-size: .8rem;
       font-weight: 700;
       white-space: nowrap;
+      max-width: 100%;
     }
     .vote-chip.is-submitted {
       background: var(--accent-soft);
@@ -1489,20 +1500,34 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     .vote-section {
       border-top: 1px solid var(--line);
-      padding-top: 8px;
+      padding-top: 6px;
     }
     .vote-card-main-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(270px, 330px);
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 286px);
+      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-areas:
+        "content side"
+        "content remark";
       align-items: stretch;
     }
     .vote-card-content {
+      grid-area: content;
       display: grid;
-      gap: 10px;
-      padding: 12px 14px;
+      gap: 6px;
+      padding: 8px 10px;
     }
     .vote-card-side {
-      padding: 12px;
+      grid-area: side;
+      padding: 8px;
+      border-left: 1px solid var(--line);
+      background: #f8fafc;
+    }
+    .vote-card-aside-remark {
+      grid-area: remark;
+      display: grid;
+      min-height: 0;
+      padding: 0 8px 8px;
       border-left: 1px solid var(--line);
       background: #f8fafc;
     }
@@ -1512,16 +1537,16 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       padding-top: 0;
     }
     .vote-section h3 {
-      margin: 0 0 5px;
-      font-size: .78rem;
+      margin: 0 0 3px;
+      font-size: .74rem;
       color: var(--ink);
       letter-spacing: .02em;
       text-transform: uppercase;
     }
     .vote-slot {
       display: grid;
-      gap: 5px;
-      padding: 8px;
+      gap: 4px;
+      padding: 6px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fbfcfe;
@@ -1530,67 +1555,75 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       border-color: rgba(15, 118, 110, .35);
       background: #f8fcfb;
     }
-    .vote-slot strong { font-size: 1rem; line-height: 1.35; }
+    .vote-slot strong { font-size: .96rem; line-height: 1.28; }
     .vote-slot-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
+      gap: 4px;
     }
     .vote-slot-meta span {
       display: inline-flex;
       align-items: center;
-      min-height: 22px;
-      padding: 2px 7px;
+      min-height: 19px;
+      padding: 1px 6px;
       border-radius: 999px;
       background: var(--soft);
       color: var(--muted);
-      font-size: .82rem;
+      font-size: .78rem;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .vote-mode {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      gap: 4px;
     }
     .vote-choice,
     .vote-proposal,
-    .vote-special-toggle {
+    .vote-special-toggle,
+    .vote-period-button {
       display: flex;
-      gap: 6px;
+      gap: 5px;
       align-items: flex-start;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 8px;
+      padding: 6px;
       background: #fff;
       cursor: pointer;
       transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
     }
     .vote-choice:hover,
     .vote-proposal:hover,
-    .vote-special-toggle:hover {
+    .vote-special-toggle:hover,
+    .vote-period-button:hover:not(:disabled) {
       border-color: rgba(15, 118, 110, .42);
     }
     .vote-choice:focus-within,
     .vote-proposal:focus-within,
     .vote-special-toggle:focus-within,
-    .vote-only-availability:focus-within {
+    .vote-only-availability:focus-within,
+    .vote-period-button:focus-visible {
       outline: 3px solid rgba(15, 118, 110, .18);
       outline-offset: 2px;
     }
     .vote-choice.is-selected,
     .vote-proposal.is-selected,
     .vote-special-toggle.is-selected,
-    .vote-only-availability.is-selected {
+    .vote-only-availability.is-selected,
+    .vote-period-button.is-selected {
       border-color: var(--accent);
       background: var(--accent-soft);
       box-shadow: inset 0 0 0 1px rgba(15, 118, 110, .16);
     }
-    .vote-proposal.vote-load-easy { border-left: 4px solid #16a34a; }
-    .vote-proposal.vote-load-medium { border-left: 4px solid #d97706; }
-    .vote-proposal.vote-load-busy { border-left: 4px solid #dc2626; }
+    .vote-proposal.vote-load-easy { border-color: rgba(22, 163, 74, .32); }
+    .vote-proposal.vote-load-medium { border-color: rgba(217, 119, 6, .36); }
+    .vote-proposal.vote-load-busy { border-color: rgba(220, 38, 38, .36); }
     .vote-choice.is-disabled,
     .vote-proposal.is-disabled,
     .vote-special-toggle.is-disabled,
-    .vote-only-availability.is-disabled {
+    .vote-only-availability.is-disabled,
+    .vote-period-button:disabled {
       cursor: default;
       opacity: .58;
     }
@@ -1604,91 +1637,152 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-proposal strong,
     .vote-special-toggle strong {
       display: block;
-      font-size: .9rem;
-      line-height: 1.3;
+      font-size: .86rem;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
     .vote-choice small {
       display: block;
-      margin-top: 2px;
+      margin-top: 1px;
       color: var(--muted);
-      font-size: .78rem;
-      line-height: 1.3;
+      font-size: .75rem;
+      line-height: 1.25;
     }
-    .vote-proposal span span {
+    .vote-proposal span span,
+    .vote-period-button span span {
       display: block;
       color: var(--muted);
-      font-size: .78rem;
-      line-height: 1.3;
+      font-size: .74rem;
+      line-height: 1.25;
       margin-top: 1px;
     }
     .vote-proposal-meta {
       display: flex;
-      gap: 4px;
+      gap: 3px;
       align-items: center;
       flex-wrap: wrap;
       margin-top: 2px;
     }
-    .vote-proposal .vote-proposal-meta span {
+    .vote-proposal .vote-proposal-meta span,
+    .vote-period-button .vote-proposal-meta span {
       display: inline-flex;
       margin-top: 0;
     }
-    .vote-load-chip {
+    .vote-load-chip,
+    .vote-queue-chip {
       display: inline-flex;
       align-items: center;
-      min-height: 17px;
-      padding: 1px 6px;
+      min-height: 16px;
+      padding: 0 5px;
       border-radius: 999px;
-      font-size: .72rem;
+      font-size: .68rem;
       font-weight: 700;
     }
     .vote-load-chip.vote-load-easy {
       color: #166534;
-      background: #dcfce7;
+      background: #e8f8ee;
     }
     .vote-load-chip.vote-load-medium {
       color: #92400e;
-      background: #fef3c7;
+      background: #fff5d6;
     }
     .vote-load-chip.vote-load-busy {
       color: #991b1b;
-      background: #fee2e2;
+      background: #ffe8e8;
     }
-    .vote-proposals { display: grid; gap: 6px; }
+    .vote-queue-chip {
+      color: #4b5563;
+      background: #eef2f7;
+    }
+    .vote-proposals { display: grid; gap: 5px; }
     .vote-proposal-day {
       display: grid;
-      grid-template-columns: minmax(135px, .75fr) minmax(0, 2.8fr);
-      gap: 6px;
+      grid-template-columns: minmax(112px, .62fr) minmax(0, 3fr);
+      gap: 5px;
       align-items: stretch;
-      padding: 6px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcfe;
+      padding: 5px;
+      border: 1px solid #dfe7ef;
+      border-radius: 7px;
+      background: linear-gradient(180deg, #fff 0, #fbfcfe 100%);
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .vote-proposal-day.has-selection {
+      border-color: rgba(15, 118, 110, .38);
+      background: linear-gradient(180deg, #f8fcfb 0, #fff 100%);
+      box-shadow: inset 2px 0 0 rgba(15, 118, 110, .72);
     }
     .vote-proposal-day h4 {
+      display: flex;
+      align-items: center;
       margin: 0;
-      align-self: center;
-      font-size: .84rem;
-      line-height: 1.35;
+      padding: 5px 6px;
+      border-radius: 7px;
+      background: #f0f5f7;
+      color: #263344;
+      font-size: .8rem;
+      line-height: 1.25;
       letter-spacing: 0;
     }
-    .vote-proposal-periods {
+    .vote-day-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px;
+      align-items: stretch;
+    }
+    .vote-day-hidden-options {
+      display: none;
+    }
+    .vote-day-segments {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 5px;
+      gap: 3px;
     }
-    .vote-proposal-periods .vote-proposal,
-    .vote-proposal-periods .vote-only-availability {
+    .vote-proposal-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .vote-period-button,
+    .vote-day-controls .vote-only-availability {
       min-height: 34px;
       align-items: center;
-      padding: 6px 7px;
+      padding: 5px 6px;
+    }
+    .vote-period-button {
+      justify-content: center;
+      text-align: center;
+      color: var(--ink);
+    }
+    .vote-period-button > span {
+      display: grid;
+      justify-items: center;
+      gap: 2px;
+      min-width: 0;
+    }
+    .vote-period-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      color: var(--accent);
+    }
+    .vote-period-icon svg {
+      display: block;
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
     }
     .vote-only-availability {
       display: flex;
-      gap: 6px;
-      align-items: flex-start;
-      border: 1px solid rgba(138, 90, 0, .28);
-      border-radius: 8px;
-      padding: 6px 7px;
+      gap: 4px;
+      align-items: center;
+      justify-content: center;
+      border: 1px dashed rgba(138, 90, 0, .38);
+      border-radius: 7px;
+      padding: 5px 6px;
       background: var(--warning-soft);
       cursor: pointer;
       transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
@@ -1704,36 +1798,65 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       opacity: .58;
     }
     .vote-only-availability input {
-      margin-top: 2px;
-      accent-color: var(--warning);
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
     }
     .vote-only-availability strong {
       display: block;
-      font-size: .84rem;
-      line-height: 1.3;
-    }
-    .vote-proposal-context {
-      margin: -1px 0 5px;
-      color: var(--muted);
       font-size: .8rem;
-      line-height: 1.35;
+      line-height: 1.25;
+    }
+    .vote-proposal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 5px;
+      padding: 6px 7px;
+      border: 1px solid rgba(15, 118, 110, .18);
+      border-radius: 8px;
+      background: linear-gradient(180deg, #f6fbfa 0, #fff 100%);
+    }
+    .vote-section .vote-proposal-title {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      margin: 0;
+    }
+    .vote-proposal-title::before {
+      content: "";
+      width: 5px;
+      height: 18px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--accent);
     }
     .vote-proposal-count {
       display: inline-flex;
       align-items: center;
       width: fit-content;
-      min-height: 21px;
-      margin-bottom: 5px;
-      padding: 1px 7px;
+      min-height: 19px;
+      padding: 1px 6px;
       border-radius: 999px;
       background: var(--soft);
       color: var(--muted);
-      font-size: .8rem;
+      font-size: .75rem;
       font-weight: 700;
+    }
+    .vote-proposal-head .vote-proposal-count {
+      flex: 0 0 auto;
+    }
+    .vote-proposal-count.is-limit {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
     }
     .vote-empty-note {
       margin: 0;
-      padding: 8px;
+      padding: 6px;
       border: 1px dashed var(--line);
       border-radius: 8px;
       color: var(--muted);
@@ -1741,43 +1864,54 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     }
     .vote-remark {
       display: grid;
-      gap: 6px;
+      gap: 4px;
       margin-top: 0;
+    }
+    .vote-card-aside-remark .vote-remark {
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+      height: 100%;
+      padding-top: 6px;
+      border-top: 1px solid var(--line);
     }
     .vote-remark label {
       color: var(--ink);
-      font-size: .9rem;
+      font-size: .84rem;
       font-weight: 700;
     }
     .vote-remark textarea {
       width: 100%;
-      min-height: 48px;
+      min-height: 36px;
+      height: 100%;
       resize: vertical;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 8px 9px;
+      padding: 6px 7px;
       background: #fff;
       color: var(--ink);
     }
     .vote-special {
       display: grid;
-      gap: 6px;
+      gap: 5px;
     }
     .vote-special-fields {
       display: grid;
-      grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
-      gap: 6px;
+      grid-template-columns: minmax(0, 170px) minmax(0, 1fr);
+      gap: 5px;
+      align-items: start;
     }
     .vote-special-fields input,
     .vote-special-fields textarea {
       width: 100%;
+      min-height: 32px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 8px 9px;
+      padding: 5px 6px;
       background: #fff;
       color: var(--ink);
+      line-height: 1.2;
     }
-    .vote-special-fields textarea { min-height: 52px; resize: vertical; }
+    .vote-special-fields textarea { height: 32px; resize: vertical; }
     .vote-special-fields input:focus,
     .vote-special-fields textarea:focus,
     .vote-remark textarea:focus,
@@ -1789,24 +1923,26 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       border-top: 1px solid var(--line);
-      padding: 10px 14px;
+      padding: 7px 10px;
       background: #fbfcfe;
     }
     .vote-status { color: var(--muted); font-size: .92rem; line-height: 1.4; }
     .vote-status.is-error { color: var(--danger); }
     .vote-status.is-success { color: var(--accent-strong); font-weight: 700; }
     .vote-submit {
-      min-height: 36px;
+      min-height: 32px;
       border: 0;
       border-radius: 8px;
       background: var(--accent);
       color: white;
-      padding: 8px 12px;
+      padding: 7px 11px;
       font-weight: 700;
       cursor: pointer;
       box-shadow: 0 8px 20px rgba(15, 118, 110, .20);
+      white-space: normal;
+      text-align: center;
     }
     .vote-submit:hover:not(:disabled) { background: var(--accent-strong); }
     .vote-submit:disabled { opacity: .58; cursor: default; box-shadow: none; }
@@ -1819,8 +1955,8 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       box-shadow: var(--shadow);
     }
     @media (max-width: 780px) {
-      .vote-shell { width: min(100vw - 20px, 1120px); padding: 12px 0 24px; }
-      .vote-header { grid-template-columns: 1fr; padding: 12px; }
+      .vote-shell { width: min(100vw - 18px, 1080px); padding: 10px 0 22px; }
+      .vote-header { grid-template-columns: 1fr; padding: 10px; }
       .vote-header h1 { font-size: 1.42rem; }
       .vote-date-header {
         display: grid;
@@ -1830,10 +1966,30 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         width: fit-content;
       }
       .vote-card-main-grid { grid-template-columns: 1fr; }
+      .vote-card-main-grid {
+        grid-template-rows: auto;
+        grid-template-areas:
+          "side"
+          "content"
+          "remark";
+      }
       .vote-card-side {
-        order: -1;
         border-left: 0;
         border-top: 1px solid var(--line);
+      }
+      .vote-card-aside-remark {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+        padding: 8px 10px;
+      }
+      .vote-card-aside-remark .vote-remark {
+        grid-template-rows: none;
+        height: auto;
+        padding-top: 0;
+        border-top: 0;
+      }
+      .vote-card-aside-remark .vote-remark textarea {
+        height: 38px;
       }
       .vote-card-header,
       .vote-actions {
@@ -1844,8 +2000,42 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       .vote-mode,
       .vote-special-fields { grid-template-columns: 1fr; }
       .vote-proposal-day,
-      .vote-proposal-periods { grid-template-columns: 1fr; }
+      .vote-day-controls,
+      .vote-day-segments { grid-template-columns: 1fr; }
       .vote-submit { width: 100%; }
+    }
+    @media (max-width: 520px) {
+      .vote-shell { width: min(100vw - 14px, 1080px); }
+      .vote-header { gap: 8px; margin-bottom: 8px; }
+      .vote-summary small,
+      .vote-viewer-line,
+      .vote-card h2,
+      .vote-slot strong {
+        overflow-wrap: anywhere;
+      }
+      .vote-card-header,
+      .vote-card-content,
+      .vote-card-side,
+      .vote-card-aside-remark,
+      .vote-actions {
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+      .vote-choice,
+      .vote-proposal,
+      .vote-special-toggle,
+      .vote-only-availability {
+        padding: 7px;
+      }
+      .vote-proposal-head {
+        display: grid;
+        justify-items: start;
+      }
+      .vote-date-progress,
+      .vote-chip,
+      .vote-period-count {
+        white-space: normal;
+      }
     }
   </style>
 </head>
@@ -2132,29 +2322,23 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_PROPOSALS;
       }
 
+      function getCardMaxProposals(card) {
+        var value = Number.parseInt(card.dataset.maxProposals || String(DEFAULT_MAX_PROPOSALS), 10);
+        return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_PROPOSALS;
+      }
+
+      function getProposalLimitMessage(maxProposals) {
+        return 'Maximum ' + maxProposals + ' demi-journée' + (maxProposals > 1 ? 's' : '') + ' par réponse.';
+      }
+
       function isSpecialRequestAllowed(group) {
         return !(group && group.voteSettings && group.voteSettings.allowSpecialRequest === false);
       }
 
-      function formatProposalContext(group) {
-        var context = group && group.proposalContext ? group.proposalContext : {};
-        var classLabel = context.candidateClassLabel || (group && group.tpi ? group.tpi.classe : '');
-        var labels = Array.isArray(context.allowedDateLabels) ? context.allowedDateLabels.filter(Boolean) : [];
-
-        if (labels.length > 0) {
-          return (classLabel ? classLabel + ': ' : '') + labels.join(', ');
-        }
-
-        if (classLabel) {
-          return 'Options ' + classLabel;
-        }
-
-        return 'Demi-journées disponibles';
-      }
-
       function getProposalDateLabel(option) {
         var slot = option && option.slot ? option.slot : {};
-        return slot.dateLabel || slot.label || 'Date possible';
+        var label = slot.dateLabel || slot.label || 'Date possible';
+        return String(label).indexOf(' | ') !== -1 ? String(label).split(' | ')[0] : label;
       }
 
       function getProposalDateKey(option) {
@@ -2239,24 +2423,24 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         if (normalizedCapacity && ratio >= .8) {
           return {
             tone: 'busy',
-            label: 'Chargé',
-            title: 'Plus difficile à organiser: beaucoup de préférences pointent déjà vers cette demi-journée.'
+            label: 'Très demandé',
+            title: 'Indicateur de génération: beaucoup de préférences pointaient déjà vers cette demi-journée.'
           };
         }
 
         if (normalizedCapacity && ratio >= .5) {
           return {
             tone: 'medium',
-            label: 'À coordonner',
-            title: 'Organisation possible, mais la demi-journée demande déjà un peu de coordination.'
+            label: 'Déjà demandé',
+            title: 'Indicateur de génération: plusieurs préférences pointaient déjà vers cette demi-journée.'
           };
         }
 
         if (normalizedCount > 0 || normalizedCapacity) {
           return {
             tone: 'easy',
-            label: 'Souple',
-            title: 'Demi-journée plutôt simple à exploiter pour l’instant.'
+            label: 'Peu demandé',
+            title: 'Indicateur de génération: peu de préférences pointaient vers cette demi-journée.'
           };
         }
 
@@ -2297,8 +2481,100 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         }
 
         var selectedCount = card.querySelectorAll('input[data-proposal-slot]:checked').length;
-        var maxProposals = Number.parseInt(card.dataset.maxProposals || String(DEFAULT_MAX_PROPOSALS), 10);
+        var maxProposals = getCardMaxProposals(card);
         counter.textContent = selectedCount + '/' + maxProposals + ' demi-journées';
+        counter.classList.toggle('is-limit', selectedCount >= maxProposals);
+      }
+
+      function enforceProposalLimit(card, changedInput) {
+        if (
+          !changedInput ||
+          !changedInput.matches ||
+          !changedInput.matches('input[data-proposal-slot]') ||
+          !changedInput.checked
+        ) {
+          return false;
+        }
+
+        var maxProposals = getCardMaxProposals(card);
+        var selected = Array.from(card.querySelectorAll('input[data-proposal-slot]:checked'));
+        if (selected.length <= maxProposals) {
+          return false;
+        }
+
+        changedInput.checked = false;
+        setStatus(card, getProposalLimitMessage(maxProposals), 'error');
+        return true;
+      }
+
+      function getProposalInputsForDay(card, dayKey) {
+        return Array.from(card.querySelectorAll('input[data-proposal-slot]'))
+          .filter(function (input) { return (input.dataset.dayKey || '') === dayKey; });
+      }
+
+      function getSelectedProposalCountOutsideDay(card, dayKey) {
+        return Array.from(card.querySelectorAll('input[data-proposal-slot]:checked'))
+          .filter(function (input) { return (input.dataset.dayKey || '') !== dayKey; })
+          .length;
+      }
+
+      function getDesiredDayPeriodKeys(dayInputs, periodKey) {
+        if (periodKey === 'FULL') {
+          return dayInputs.map(function (input) { return input.dataset.periodKey || ''; }).filter(Boolean);
+        }
+
+        return dayInputs.some(function (input) { return (input.dataset.periodKey || '') === periodKey; })
+          ? [periodKey]
+          : [];
+      }
+
+      function hasExactDaySelection(dayInputs, desiredPeriodKeys) {
+        var desired = desiredPeriodKeys.slice().sort().join('|');
+        var current = dayInputs
+          .filter(function (input) { return input.checked; })
+          .map(function (input) { return input.dataset.periodKey || ''; })
+          .filter(Boolean)
+          .sort()
+          .join('|');
+        return desired === current;
+      }
+
+      function handleProposalDayToggle(card, button) {
+        if (!button || button.disabled) {
+          return '';
+        }
+
+        var dayKey = button.dataset.dayKey || '';
+        var periodKey = button.dataset.dayToggle || '';
+        var dayInputs = getProposalInputsForDay(card, dayKey);
+        var desiredPeriodKeys = getDesiredDayPeriodKeys(dayInputs, periodKey);
+
+        if (desiredPeriodKeys.length === 0) {
+          return '';
+        }
+
+        if (hasExactDaySelection(dayInputs, desiredPeriodKeys)) {
+          desiredPeriodKeys = [];
+        }
+
+        var maxProposals = getCardMaxProposals(card);
+        var nextCount = getSelectedProposalCountOutsideDay(card, dayKey) + desiredPeriodKeys.length;
+        if (nextCount > maxProposals) {
+          setStatus(card, getProposalLimitMessage(maxProposals), 'error');
+          return 'blocked';
+        }
+
+        dayInputs.forEach(function (input) {
+          input.checked = desiredPeriodKeys.indexOf(input.dataset.periodKey || '') !== -1;
+        });
+
+        if (desiredPeriodKeys.length === 0) {
+          Array.from(card.querySelectorAll('input[data-only-availability]'))
+            .filter(function (input) { return (input.dataset.dayKey || '') === dayKey; })
+            .forEach(function (input) { input.checked = false; });
+        }
+
+        return 'changed';
       }
 
       function getCardState(card) {
@@ -2394,7 +2670,6 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         Array.from(card.querySelectorAll('input[data-proposal-slot]'))
           .forEach(function (input) {
             var disabledByExclusive = Boolean(activeOnlyDayKey) && (input.dataset.dayKey || '') !== activeOnlyDayKey;
-            input.disabled = specialEnabled || disabledByExclusive;
             if (specialEnabled || disabledByExclusive) {
               input.checked = false;
             }
@@ -2416,17 +2691,43 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           activeOnlyDayKey = '';
         }
 
+        var selectedProposalCount = card.querySelectorAll('input[data-proposal-slot]:checked').length;
+        var maxProposals = getCardMaxProposals(card);
         Array.from(card.querySelectorAll('input[data-proposal-slot]'))
           .forEach(function (input) {
             var disabledByExclusive = Boolean(activeOnlyDayKey) && (input.dataset.dayKey || '') !== activeOnlyDayKey;
-            input.disabled = specialEnabled || disabledByExclusive;
+            var disabledByLimit = selectedProposalCount >= maxProposals && !input.checked;
+            input.disabled = specialEnabled || disabledByExclusive || disabledByLimit;
           });
 
-        Array.from(card.querySelectorAll('.vote-choice, .vote-proposal, .vote-special-toggle, .vote-only-availability'))
+        Array.from(card.querySelectorAll('[data-day-toggle]'))
+          .forEach(function (button) {
+            var dayKey = button.dataset.dayKey || '';
+            var periodKey = button.dataset.dayToggle || '';
+            var dayInputs = getProposalInputsForDay(card, dayKey);
+            var desiredPeriodKeys = getDesiredDayPeriodKeys(dayInputs, periodKey);
+            var isMissing = periodKey === 'FULL' ? dayInputs.length < 2 : desiredPeriodKeys.length === 0;
+            var isSelected = !isMissing && hasExactDaySelection(dayInputs, desiredPeriodKeys);
+            var disabledByExclusive = Boolean(activeOnlyDayKey) && dayKey !== activeOnlyDayKey;
+            var disabledByLimit = !isSelected &&
+              getSelectedProposalCountOutsideDay(card, dayKey) + desiredPeriodKeys.length > maxProposals;
+
+            button.disabled = specialEnabled || disabledByExclusive || isMissing || disabledByLimit;
+            button.classList.toggle('is-selected', isSelected);
+          });
+
+        Array.from(card.querySelectorAll('.vote-choice, .vote-special-toggle, .vote-only-availability'))
           .forEach(function (label) {
             var input = label.querySelector('input');
             label.classList.toggle('is-selected', Boolean(input && input.checked));
             label.classList.toggle('is-disabled', !input || Boolean(input.disabled));
+          });
+
+        Array.from(card.querySelectorAll('.vote-proposal-day'))
+          .forEach(function (dayNode) {
+            dayNode.classList.toggle('has-selection', Boolean(
+              dayNode.querySelector('input[data-proposal-slot]:checked, input[data-only-availability]:checked')
+            ));
           });
 
         if (specialFields) {
@@ -2501,9 +2802,9 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           return;
         }
 
-        var maxProposals = Number.parseInt(card.dataset.maxProposals || String(DEFAULT_MAX_PROPOSALS), 10);
+        var maxProposals = getCardMaxProposals(card);
         if (state.mode === 'proposal' && state.proposedSlotIds.length > maxProposals) {
-          setStatus(card, 'Maximum ' + maxProposals + ' demi-journée' + (maxProposals > 1 ? 's' : '') + ' par réponse.', 'error');
+          setStatus(card, getProposalLimitMessage(maxProposals), 'error');
           return;
         }
 
@@ -2582,40 +2883,126 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         return label;
       }
 
-      function createProposalPeriodOption(option, dayKey) {
-        var loadInfo = getProposalLoadInfo(option);
-        var queueLabel = getProposalQueueLabel(option);
-        var label = document.createElement('label');
-        label.className = 'vote-proposal' + (loadInfo.label ? ' vote-load-' + loadInfo.tone : '');
-        label.title = [getProposalPeriodLabel(option), loadInfo.title].filter(Boolean).join('\\n');
+      function createSvgElement(tagName, attrs) {
+        var node = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+        Object.keys(attrs || {}).forEach(function (key) {
+          node.setAttribute(key, attrs[key]);
+        });
+        return node;
+      }
+
+      function createPeriodIcon(kind) {
+        var svg = createSvgElement('svg', {
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          'stroke-width': '2',
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          'aria-hidden': 'true',
+          focusable: 'false'
+        });
+
+        if (kind === 'PM') {
+          svg.append(
+            createSvgElement('path', { d: 'M4 18h16' }),
+            createSvgElement('path', { d: 'M6 16a6 6 0 0 1 12 0' }),
+            createSvgElement('path', { d: 'M12 10V6' }),
+            createSvgElement('path', { d: 'M8.5 11.5 6 9' }),
+            createSvgElement('path', { d: 'm15.5 11.5 2.5-2.5' })
+          );
+        } else if (kind === 'FULL') {
+          svg.append(
+            createSvgElement('circle', { cx: '8', cy: '8', r: '3' }),
+            createSvgElement('path', { d: 'M8 1v2' }),
+            createSvgElement('path', { d: 'M8 13v2' }),
+            createSvgElement('path', { d: 'M1 8h2' }),
+            createSvgElement('path', { d: 'M13 8h2' }),
+            createSvgElement('path', { d: 'M14 18h7' }),
+            createSvgElement('path', { d: 'M15 16a3 3 0 0 1 5 0' })
+          );
+        } else {
+          svg.append(
+            createSvgElement('circle', { cx: '12', cy: '12', r: '4' }),
+            createSvgElement('path', { d: 'M12 2v2' }),
+            createSvgElement('path', { d: 'M12 20v2' }),
+            createSvgElement('path', { d: 'M4.93 4.93 6.34 6.34' }),
+            createSvgElement('path', { d: 'm17.66 17.66 1.41 1.41' }),
+            createSvgElement('path', { d: 'M2 12h2' }),
+            createSvgElement('path', { d: 'M20 12h2' }),
+            createSvgElement('path', { d: 'm6.34 17.66-1.41 1.41' }),
+            createSvgElement('path', { d: 'm19.07 4.93-1.41 1.41' })
+          );
+        }
+
+        var wrap = document.createElement('span');
+        wrap.className = 'vote-period-icon';
+        wrap.append(svg);
+        return wrap;
+      }
+
+      function createProposalPeriodInput(option, dayKey, periodKey) {
         var input = document.createElement('input');
         input.type = 'checkbox';
+        input.className = 'vote-proposal-input';
         input.dataset.proposalSlot = 'true';
         input.dataset.dayKey = dayKey;
+        input.dataset.periodKey = periodKey;
         input.value = escapeText(option && option.slotId ? option.slotId : '');
-        var copy = document.createElement('span');
-        copy.append(createTextElement('strong', '', getProposalPeriodShortLabel(option)));
+        input.tabIndex = -1;
+        input.setAttribute('aria-hidden', 'true');
+        return input;
+      }
+
+      function createProposalPeriodMeta(option) {
+        var loadInfo = getProposalLoadInfo(option);
+        var queueLabel = getProposalQueueLabel(option);
+        var meta = document.createElement('span');
+        meta.className = 'vote-proposal-meta';
         if (loadInfo.label || queueLabel) {
-          var meta = document.createElement('span');
-          meta.className = 'vote-proposal-meta';
           if (loadInfo.label) {
             meta.append(createTextElement('span', 'vote-load-chip vote-load-' + loadInfo.tone, loadInfo.label));
           }
           if (queueLabel) {
-            meta.append(createTextElement('span', '', queueLabel));
+            meta.append(createTextElement('span', 'vote-queue-chip', queueLabel));
           }
-          copy.append(meta);
         }
-        label.append(input, copy);
-        return label;
+
+        return meta.children.length ? meta : null;
       }
 
-      function createMissingProposalPeriod(label) {
-        var node = document.createElement('span');
-        node.className = 'vote-proposal is-disabled';
-        node.title = label + ' non publié';
-        node.append(createTextElement('strong', '', '—'));
-        return node;
+      function createProposalPeriodButton(dayGroup, periodKey) {
+        var option = periodKey === 'FULL' ? null : dayGroup.options[periodKey];
+        var hasBothPeriods = Boolean(dayGroup.options.AM && dayGroup.options.PM);
+        var disabled = periodKey === 'FULL' ? !hasBothPeriods : !option;
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vote-period-button' + (option ? ' vote-load-' + getProposalLoadInfo(option).tone : '');
+        button.dataset.dayToggle = periodKey;
+        button.dataset.dayKey = dayGroup.dayKey;
+        if (disabled) {
+          button.disabled = true;
+        }
+        button.title = periodKey === 'FULL'
+          ? hasBothPeriods
+            ? 'Sélectionner matin et après-midi.'
+            : 'Journée complète non disponible.'
+          : option
+            ? [getProposalPeriodLabel(option), getProposalLoadInfo(option).title].filter(Boolean).join('\\n')
+            : (periodKey === 'PM' ? 'Après-midi non publié.' : 'Matin non publié.');
+
+        var copy = document.createElement('span');
+        copy.append(createPeriodIcon(periodKey));
+        copy.append(createTextElement('strong', '', periodKey === 'FULL' ? 'Journée' : getProposalPeriodShortLabel(option || { display: { windowPeriod: periodKey } })));
+
+        if (option) {
+          var meta = createProposalPeriodMeta(option);
+          if (meta) {
+            copy.append(meta);
+          }
+        }
+
+        button.append(copy);
+        return button;
       }
 
       function createProposalDayOptionGroup(dayGroup) {
@@ -2623,29 +3010,36 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         row.className = 'vote-proposal-day';
         var title = document.createElement('h4');
         title.textContent = dayGroup.label || 'Date possible';
-        var periods = document.createElement('div');
-        periods.className = 'vote-proposal-periods';
+        var controls = document.createElement('div');
+        controls.className = 'vote-day-controls';
+        var hiddenInputs = document.createElement('div');
+        hiddenInputs.className = 'vote-day-hidden-options';
+        var segments = document.createElement('div');
+        segments.className = 'vote-day-segments';
 
         ['AM', 'PM'].forEach(function (periodKey) {
           if (dayGroup.options[periodKey]) {
-            periods.append(createProposalPeriodOption(dayGroup.options[periodKey], dayGroup.dayKey));
-          } else {
-            periods.append(createMissingProposalPeriod(periodKey === 'PM' ? 'Après-midi' : 'Matin'));
+            hiddenInputs.append(createProposalPeriodInput(dayGroup.options[periodKey], dayGroup.dayKey, periodKey));
           }
         });
+        segments.append(
+          createProposalPeriodButton(dayGroup, 'AM'),
+          createProposalPeriodButton(dayGroup, 'PM'),
+          createProposalPeriodButton(dayGroup, 'FULL')
+        );
 
         var onlyLabel = document.createElement('label');
-        onlyLabel.className = 'vote-only-availability';
+        onlyLabel.className = 'vote-only-availability vote-unique-toggle';
         onlyLabel.title = 'À cocher si les périodes choisies ce jour sont vos seules disponibilités.';
         var onlyInput = document.createElement('input');
         onlyInput.type = 'checkbox';
         onlyInput.dataset.onlyAvailability = 'true';
         onlyInput.dataset.dayKey = dayGroup.dayKey;
         var onlyCopy = document.createElement('span');
-        onlyCopy.append(createTextElement('strong', '', 'Seule dispo'));
+        onlyCopy.append(createTextElement('strong', '', 'Unique'));
         onlyLabel.append(onlyInput, onlyCopy);
-        periods.append(onlyLabel);
-        row.append(title, periods);
+        controls.append(hiddenInputs, segments, onlyLabel);
+        row.append(title, controls);
         return row;
       }
 
@@ -2709,15 +3103,15 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         proposalSection.className = 'vote-section vote-details';
         proposalSection.dataset.proposalArea = 'true';
         proposalSection.hidden = true;
+        var proposalHead = document.createElement('div');
+        proposalHead.className = 'vote-proposal-head';
         var proposalTitle = document.createElement('h3');
-        proposalTitle.textContent = 'Autres demi-journées';
-        var proposalContext = document.createElement('p');
-        proposalContext.className = 'vote-proposal-context';
-        proposalContext.textContent = formatProposalContext(group);
-        proposalContext.title = 'Demi-journées ouvertes pour ce TPI.';
+        proposalTitle.className = 'vote-proposal-title';
+        proposalTitle.textContent = 'Créneaux alternatifs';
         var proposalCount = document.createElement('span');
         proposalCount.className = 'vote-proposal-count';
         proposalCount.dataset.proposalCount = 'true';
+        proposalHead.append(proposalTitle, proposalCount);
         var proposalList = document.createElement('div');
         proposalList.className = 'vote-proposals';
         buildProposalDayGroups(group.proposalOptions || []).forEach(function (dayGroup) {
@@ -2730,7 +3124,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           emptyProposal.title = 'Utilisez une demande hors liste si nécessaire.';
           proposalList.append(emptyProposal);
         }
-        proposalSection.append(proposalTitle, proposalContext, proposalCount, proposalList);
+        proposalSection.append(proposalHead, proposalList);
 
         var special = document.createElement('section');
         special.className = 'vote-section vote-special vote-details';
@@ -2755,13 +3149,14 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         specialDate.setAttribute('aria-label', 'Date souhaitée');
         var specialReason = document.createElement('textarea');
         specialReason.dataset.specialReason = 'true';
+        specialReason.rows = 1;
         specialReason.placeholder = 'Contrainte ou raison';
         specialReason.setAttribute('aria-label', 'Contrainte ou raison');
         specialFields.append(specialDate, specialReason);
         special.append(specialLabel, specialFields);
 
-        var remark = document.createElement('div');
-        remark.className = 'vote-remark';
+        var remark = document.createElement('section');
+        remark.className = 'vote-section vote-remark';
         var remarkLabel = createTextElement('label', '', 'Remarque');
         remarkLabel.title = 'Message général optionnel pour l’administration.';
         var remarkId = card.dataset.groupName + '-remark';
@@ -2769,6 +3164,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var remarkField = document.createElement('textarea');
         remarkField.id = remarkId;
         remarkField.dataset.voteRemark = 'true';
+        remarkField.rows = 2;
         remarkField.placeholder = 'Optionnel';
         remarkField.setAttribute('aria-label', 'Remarque générale optionnelle');
         remark.append(remarkLabel, remarkField);
@@ -2795,21 +3191,45 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         side.className = 'vote-card-side';
         side.setAttribute('aria-label', 'Créneau proposé');
         side.append(fixedSection);
+        var asideRemark = document.createElement('div');
+        asideRemark.className = 'vote-card-aside-remark';
+        asideRemark.append(remark);
 
         if (isSpecialRequestAllowed(group)) {
-          content.append(decisionSection, proposalSection, special, remark);
+          content.append(decisionSection, proposalSection, special);
         } else {
-          content.append(decisionSection, proposalSection, remark);
+          content.append(decisionSection, proposalSection);
         }
-        mainGrid.append(content, side);
+        mainGrid.append(side, content, asideRemark);
         card.append(header, mainGrid, actions);
-        card.addEventListener('change', function () {
+        card.addEventListener('click', function (event) {
+          var toggle = event.target && event.target.closest
+            ? event.target.closest('[data-day-toggle]')
+            : null;
+          if (!toggle || !card.contains(toggle) || card.classList.contains('is-submitted')) {
+            return;
+          }
+
+          event.preventDefault();
+          var toggleResult = handleProposalDayToggle(card, toggle);
+          if (!toggleResult) {
+            return;
+          }
+
+          syncModeState(card);
+          updateChoiceClasses(card);
+          if (card.querySelector('[data-status].is-error') && toggleResult !== 'blocked') {
+            setStatus(card, '', '');
+          }
+        });
+        card.addEventListener('change', function (event) {
           if (card.classList.contains('is-submitted')) {
             return;
           }
+          var limitReached = enforceProposalLimit(card, event.target);
           syncModeState(card);
           updateChoiceClasses(card);
-          if (card.querySelector('[data-status].is-error')) {
+          if (card.querySelector('[data-status].is-error') && !limitReached) {
             setStatus(card, '', '');
           }
         });
@@ -2872,7 +3292,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         if (!groups.length) {
           var empty = document.createElement('div');
           empty.className = 'vote-empty';
-          empty.textContent = 'Aucun vote ouvert pour ce lien.';
+          empty.textContent = 'Les demandes de modification d’horaires ne sont plus possibles.';
           root.append(empty);
           return;
         }
@@ -4072,6 +4492,15 @@ function buildImportKey(record) {
   return `${STATIC_VOTE_IMPORT_PREFIX}:${record.year}:${record.id}`
 }
 
+function hasRecordedVoteResponse(vote) {
+  const decision = compactText(vote?.decision)
+  return Boolean(
+    (decision && decision !== 'pending') ||
+    vote?.votedAt ||
+    compactText(vote?.magicLinkUsed)
+  )
+}
+
 async function importStaticVoteRecord(rawRecord, expectedYear) {
   let record
 
@@ -4153,6 +4582,15 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
       imported: false,
       skipped: false,
       reason: 'votes_not_found',
+      importKey
+    }
+  }
+
+  if (existingVotes.some(hasRecordedVoteResponse)) {
+    return {
+      imported: false,
+      skipped: true,
+      reason: 'already_answered',
       importKey
     }
   }

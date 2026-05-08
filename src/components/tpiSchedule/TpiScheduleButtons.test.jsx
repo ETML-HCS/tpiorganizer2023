@@ -661,6 +661,7 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.getByText(/Publication FTP vote: en attente/i)).toBeInTheDocument()
     expect(screen.getByText(/Secret sync local configuré/i)).toBeInTheDocument()
     expect(screen.getByText(/Secret sync inclus dans le site généré/i)).toBeInTheDocument()
+    expect(screen.getByText(/conserve le dossier distant data\//i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Générer vote web/i }))
     fireEvent.click(screen.getByRole('button', { name: /Liens vote/i }))

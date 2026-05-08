@@ -236,3 +236,55 @@ test('listAccessLogs borne la limite et normalise la sortie', async () => {
     restore()
   }
 })
+
+test('resetMagicLinkEmailDeliveries efface les statuts d envoi SMTP ciblés', async () => {
+  const calls = []
+  const restore = replaceProperty(MagicLink, 'updateMany', async (query, update) => {
+    calls.push({ query, update })
+    return { matchedCount: 2, modifiedCount: 2 }
+  })
+
+  try {
+    const result = await accessLinkTokenService.resetMagicLinkEmailDeliveries({
+      year: '2026',
+      type: 'soutenance',
+      ids: ['507f1f77bcf86cd799439011', 'bad-id']
+    })
+
+    assert.equal(result.matchedCount, 2)
+    assert.equal(result.modifiedCount, 2)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0].query, {
+      year: 2026,
+      type: 'soutenance',
+      emailDeliveryStatus: { $in: ['sent', 'failed', 'skipped', 'pending'] },
+      _id: { $in: ['507f1f77bcf86cd799439011'] }
+    })
+    assert.deepEqual(calls[0].update.$set.emailDeliveryStatus, '')
+    assert.equal(calls[0].update.$set.emailSentAt, null)
+    assert.equal(calls[0].update.$set.emailDeliveryError, '')
+    assert.equal(calls[0].update.$set.emailMessageId, '')
+    assert.ok(calls[0].update.$set.updatedAt instanceof Date)
+  } finally {
+    restore()
+  }
+})
+
+test('resetMagicLinkEmailDeliveries ne reset pas toute l annee si les ids fournis sont invalides', async () => {
+  const restore = replaceProperty(MagicLink, 'updateMany', async () => {
+    throw new Error('Aucun reset global attendu pour des ids invalides.')
+  })
+
+  try {
+    const result = await accessLinkTokenService.resetMagicLinkEmailDeliveries({
+      year: 2026,
+      type: 'soutenance',
+      ids: ['bad-id']
+    })
+
+    assert.equal(result.matchedCount, 0)
+    assert.equal(result.modifiedCount, 0)
+  } finally {
+    restore()
+  }
+})

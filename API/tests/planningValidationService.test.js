@@ -193,6 +193,26 @@ test('buildValidationIssues respecte les pauses meme si les slots arrivent desor
   assert.equal(result.issueCount, 0)
 })
 
+test('buildValidationIssues respecte une pause dont le creneau est absent des slots', () => {
+  const person = buildPerson('person-2d', 'Mathias', 'Giroud')
+  const slots = [1, 2, 3, 5, 6, 7].map((period) => ({
+    date: '2026-06-10',
+    period,
+    status: 'confirmed',
+    room: { site: 'ETML', name: `A10${period}` },
+    assignedTpi: {
+      reference: `TPI-40${period}`
+    },
+    assignments: {
+      expert1: person
+    }
+  }))
+
+  const result = buildValidationIssues([], slots)
+
+  assert.equal(result.issueCount, 0)
+})
+
 test('buildValidationIssues returns no issue when planification is valid', () => {
   const person = buildPerson('person-3', 'Linus', 'Torvalds')
 

@@ -84,6 +84,7 @@ Ces chemins UI restent uniquement comme redirections vers les routes canoniques.
 ## Script de migration
 
 Le script `scripts/refactor-global-migration.js` est non destructif par defaut.
+Le script `scripts/reset-year.js` est egalement non destructif par defaut depuis la passe du 2026-05-07; il affiche les compteurs et exige `--apply` avant suppression.
 
 Commandes:
 
@@ -91,6 +92,8 @@ Commandes:
 node scripts/refactor-global-migration.js --year=2026
 node scripts/refactor-global-migration.js --year=2026 --apply
 node scripts/refactor-global-migration.js --year=2026 --include-legacy-catalog
+node scripts/reset-year.js --year=2026
+node scripts/reset-year.js --year=2026 --apply
 ```
 
 Actions:

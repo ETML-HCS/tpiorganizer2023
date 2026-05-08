@@ -515,8 +515,8 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
     restoreService,
     patchMethod(Date, 'now', () => fixedNow),
     patchMethod(TpiPlanning, 'find', () => query),
-    patchMethod(Vote, 'findOneAndUpdate', async (filter) => {
-      voteUpdates.push(filter)
+    patchMethod(Vote, 'findOneAndUpdate', async (filter, update) => {
+      voteUpdates.push({ filter, update })
       return {
         _id: `vote-${voteUpdates.length}`
       }
@@ -550,6 +550,18 @@ test('startVotesCampaign opens voting without sending emails when skipEmails is 
     assert.equal(Boolean(savedTpis[0].votingSession?.startedAt), true)
     assert.equal(savedTpis[0].votingSession.deadline.toISOString(), '2026-04-11T00:00:00.000Z')
     assert.equal(voteUpdates.length, 3)
+    const expertVoteUpdate = voteUpdates.find((entry) => entry.filter.voter === 'expert-1')
+    assert.deepEqual(expertVoteUpdate.filter, {
+      tpiPlanning: 'planning-1',
+      slot: 'slot-1',
+      voter: 'expert-1'
+    })
+    assert.equal(expertVoteUpdate.update.$set.voterRole, 'expert1')
+    assert.equal(expertVoteUpdate.update.$setOnInsert.decision, 'pending')
+    assert.equal(Object.prototype.hasOwnProperty.call(expertVoteUpdate.update.$set, 'decision'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(expertVoteUpdate.update.$set, 'comment'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(expertVoteUpdate.update.$set, 'votedAt'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(expertVoteUpdate.update, '$unset'), false)
     assert.equal(sentVoteRequests.length, 0)
     assert.equal(createdVoteLinks.length, 0)
   } finally {

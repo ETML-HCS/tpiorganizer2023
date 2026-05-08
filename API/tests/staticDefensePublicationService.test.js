@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const vm = require('node:vm')
 
 const {
   buildStaticAccessDeniedHtml,
@@ -64,6 +65,125 @@ async function withPublicationEnv(values, run) {
       }
     }
   }
+}
+
+function extractStaticPayload(html) {
+  const match = html.match(/<script id="defense-data" type="application\/json">([\s\S]*?)<\/script>/)
+  assert.ok(match, 'static defense payload script should exist')
+  return match[1]
+}
+
+function extractStaticRuntimeScript(html) {
+  const scripts = Array.from(html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))
+  const runtimeScript = scripts.find(([, content]) => content.includes('function getFilteredRooms'))
+  assert.ok(runtimeScript, 'static defense runtime script should exist')
+  return runtimeScript[1]
+}
+
+function createFakeStaticElement(id) {
+  const classes = new Set()
+
+  return {
+    id,
+    textContent: '',
+    innerHTML: '',
+    className: '',
+    disabled: false,
+    href: '',
+    value: '',
+    style: {
+      setProperty() {}
+    },
+    classList: {
+      add(className) {
+        classes.add(className)
+      },
+      remove(className) {
+        classes.delete(className)
+      },
+      toggle(className, force) {
+        const shouldAdd = force === undefined ? !classes.has(className) : Boolean(force)
+        if (shouldAdd) {
+          classes.add(className)
+        } else {
+          classes.delete(className)
+        }
+        return shouldAdd
+      },
+      contains(className) {
+        return classes.has(className)
+      }
+    },
+    addEventListener() {},
+    setAttribute(name, value) {
+      this[name] = String(value)
+    }
+  }
+}
+
+function runStaticDefenseRuntime(html, viewer) {
+  const elements = new Map()
+  const getElement = (id) => {
+    if (!elements.has(id)) {
+      elements.set(id, createFakeStaticElement(id))
+    }
+
+    return elements.get(id)
+  }
+
+  getElement('defense-data').textContent = extractStaticPayload(html)
+
+  const windowObject = {
+    location: {
+      href: 'https://tpi26.test/soutenances-2026/?ml=test-token',
+      search: '?ml=test-token'
+    },
+    history: {
+      replaceState() {}
+    },
+    innerWidth: 1280,
+    __STATIC_MAGIC_LINK_VALIDATED__: true,
+    __STATIC_MAGIC_LINK_VIEWER__: viewer,
+    addEventListener() {},
+    focus() {},
+    setTimeout() {}
+  }
+
+  const context = {
+    window: windowObject,
+    document: {
+      getElementById: getElement,
+      createElement: (tagName) => ({
+        ...createFakeStaticElement(tagName),
+        click() {}
+      }),
+      body: {
+        appendChild() {},
+        removeChild() {}
+      }
+    },
+    URL,
+    URLSearchParams,
+    Blob: function Blob() {},
+    console,
+    encodeURIComponent,
+    Intl,
+    Promise,
+    Set,
+    Map,
+    Array,
+    Object,
+    String,
+    Number,
+    Math,
+    Date,
+    JSON,
+    RegExp
+  }
+  context.globalThis = context
+
+  vm.runInNewContext(extractStaticRuntimeScript(html), context)
+  return elements
 }
 
 test('flattenPublishedRooms prepares defense rows with schedule data', () => {
@@ -195,6 +315,11 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /id="static-admin-filter-class-type"/)
   assert.match(html, /Filtrer la vue admin par date/)
   assert.match(html, /Filtrer la vue admin par type de classe/)
+  assert.match(html, /align-items: stretch/)
+  assert.match(html, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+  assert.match(html, /static-admin-filters \.soutenance-toolbar-filters/)
+  assert.match(html, /soutenance-person-vote-button/)
+  assert.match(html, /@media \(max-width: 430px\)/)
   assert.match(html, /syncAdminFilters/)
   assert.match(html, /Vue générale admin/)
   assert.match(html, /isAdminViewer/)
@@ -203,6 +328,124 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /getMagicLinkViewerRooms/)
   assert.match(html, /STATIC_MAGIC_LINK_BOOTSTRAP/)
   assert.match(html, /__STATIC_MAGIC_LINK_VALIDATED__/)
+})
+
+test('buildStaticDefenseHtml trie la vue personnelle statique par date puis horaire visible', () => {
+  const html = buildStaticDefenseHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    rooms: [
+      {
+        idRoom: 1,
+        date: '2026-06-12',
+        site: 'ETML',
+        name: 'A101',
+        configSite: {
+          numSlots: 3,
+          firstTpiStart: 8,
+          tpiTime: 1,
+          breakline: 0.25
+        },
+        tpiDatas: [
+          {
+            id: 'room-late-date_0',
+            period: 1,
+            refTpi: '2165',
+            candidat: 'Late Date Candidate',
+            expert1: { name: 'Alex Expert', personId: 'person-1' },
+            expert2: { name: 'Expert Two' },
+            boss: { name: 'Boss One' }
+          }
+        ]
+      },
+      {
+        idRoom: 2,
+        date: '2026-06-10',
+        site: 'ETML',
+        name: 'A102',
+        configSite: {
+          numSlots: 3,
+          firstTpiStart: 8,
+          tpiTime: 1,
+          breakline: 0.25
+        },
+        tpiDatas: [
+          {
+            id: 'room-late-slot_2',
+            period: 3,
+            refTpi: '2164',
+            candidat: 'Late Slot Candidate',
+            expert1: { name: 'Alex Expert', personId: 'person-1' },
+            expert2: { name: 'Expert Two' },
+            boss: { name: 'Boss One' }
+          }
+        ]
+      },
+      {
+        idRoom: 3,
+        date: '2026-06-10',
+        site: 'ETML',
+        name: 'A103',
+        configSite: {
+          numSlots: 3,
+          firstTpiStart: 8,
+          tpiTime: 1,
+          breakline: 0.25
+        },
+        tpiDatas: [
+          {
+            id: 'room-early-slot_0',
+            period: 1,
+            refTpi: '2163',
+            candidat: 'Early Slot Candidate',
+            expert1: { name: 'Alex Expert', personId: 'person-1' },
+            expert2: { name: 'Expert Two' },
+            boss: { name: 'Boss One' }
+          }
+        ]
+      },
+      {
+        idRoom: 4,
+        date: '2026-06-09',
+        site: 'ETML',
+        name: 'A104',
+        configSite: {
+          numSlots: 1,
+          firstTpiStart: 8,
+          tpiTime: 1,
+          breakline: 0
+        },
+        tpiDatas: [
+          {
+            id: 'room-other-person_0',
+            period: 1,
+            refTpi: '2162',
+            candidat: 'Other Person Candidate',
+            expert1: { name: 'Other Expert', personId: 'person-2' },
+            expert2: { name: 'Expert Two' },
+            boss: { name: 'Boss One' }
+          }
+        ]
+      }
+    ]
+  })
+
+  const elements = runStaticDefenseRuntime(html, {
+    personId: 'person-1',
+    name: 'Alex Expert'
+  })
+  const renderedRooms = elements.get('rooms').innerHTML
+
+  const earlySlotPosition = renderedRooms.indexOf('Early Slot Candidate')
+  const lateSlotPosition = renderedRooms.indexOf('Late Slot Candidate')
+  const lateDatePosition = renderedRooms.indexOf('Late Date Candidate')
+
+  assert.ok(earlySlotPosition >= 0)
+  assert.ok(lateSlotPosition >= 0)
+  assert.ok(lateDatePosition >= 0)
+  assert.ok(earlySlotPosition < lateSlotPosition)
+  assert.ok(lateSlotPosition < lateDatePosition)
+  assert.doesNotMatch(renderedRooms, /Other Person Candidate/)
 })
 
 test('buildStaticDefenseHtml applique le tronquage statique des noms de défense à 24 caractères', () => {

@@ -351,6 +351,77 @@ test('POST /api/coordination/votes/:id/preferred-soutenance-choice précise une 
   }
 })
 
+test('POST /api/coordination/votes/:id/preferred-soutenance-choice accepte une proposition bloquante', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret)
+  const voteId = new mongoose.Types.ObjectId()
+  const slotId = new mongoose.Types.ObjectId()
+  const voterId = new mongoose.Types.ObjectId()
+  const voter = {
+    _id: voterId,
+    firstName: 'Diane',
+    lastName: 'Boss',
+    email: 'diane@example.test',
+    preferredSoutenanceChoices: [],
+    preferredSoutenanceDates: [],
+    save: async function save() {
+      return this
+    }
+  }
+  const vote = {
+    _id: voteId,
+    decision: 'preferred',
+    hardConstraint: true,
+    comment: 'Seule disponibilité signalée.',
+    slot: {
+      _id: slotId,
+      date: new Date('2026-06-11T13:00:00.000Z'),
+      period: 6,
+      startTime: '13:50',
+      endTime: '14:50',
+      room: { name: 'B202' }
+    },
+    voter
+  }
+  const restore = patchMethod(Vote, 'findById', () => makeQueryResult(vote))
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: 'development'
+  })
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/${voteId}/preferred-soutenance-choice`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+
+    assert.equal(body.success, true)
+    assert.equal(body.added, true)
+    assert.deepEqual(body.preferredSoutenanceChoices, [
+      { date: '2026-06-11', period: 6 }
+    ])
+    assert.deepEqual(
+      voter.preferredSoutenanceChoices.map((choice) => ({
+        date: choice.date.toISOString().slice(0, 10),
+        period: choice.period
+      })),
+      [{ date: '2026-06-11', period: 6 }]
+    )
+  } finally {
+    restore()
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 // ============================================
 // Tests: Security / Auth Bypass
 // ============================================

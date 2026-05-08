@@ -32,6 +32,7 @@ test('refactor migration parses dry-run/apply options safely', () => {
     includeLegacyCatalog: false
   })
   assert.throws(() => parseYear('1999'), /Annee invalide/)
+  assert.throws(() => parseYear('2026abc'), /Annee invalide/)
 })
 
 test('refactor migration builds scoped status filters and audit updates', () => {

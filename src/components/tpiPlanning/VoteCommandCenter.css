@@ -207,6 +207,15 @@
   text-transform: uppercase;
 }
 
+.vote-command-action-warning {
+  flex: 0 0 100%;
+  margin: -2px 0 2px;
+  color: #b45309;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .vote-command-alert {
   display: grid;
   gap: 10px;

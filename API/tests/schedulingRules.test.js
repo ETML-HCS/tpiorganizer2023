@@ -77,6 +77,53 @@ test('checkConsecutiveRule autorise une reprise après une pause d’un créneau
   }
 })
 
+test('checkConsecutiveRule autorise une reprise quand le creneau de pause est absent', async () => {
+  const personId = createObjectId()
+  const date = new Date('2026-06-10T00:00:00.000Z')
+  const timelineSlots = [1, 2, 3, 5, 6, 7].map((period) => ({
+    _id: createObjectId(),
+    date,
+    period,
+    room: { name: 'A101', site: 'ETML' },
+    status: period === 7 ? 'available' : 'confirmed',
+    assignments: period === 7
+      ? {}
+      : {
+          expert1: personId
+        }
+  }))
+
+  const restore = [
+    patchMethod(Slot, 'find', (query) => {
+      if (query?.year === 2026) {
+        return {
+          select: () => ({
+            sort: () => timelineSlots
+          })
+        }
+      }
+
+      throw new Error(`Unexpected Slot.find query: ${JSON.stringify(query)}`)
+    }),
+    patchMethod(Person, 'findById', async () => ({ fullName: 'Expert Test' }))
+  ]
+
+  try {
+    const result = await schedulingService.checkConsecutiveRule(
+      [personId],
+      date,
+      7
+    )
+
+    assert.equal(result.valid, true)
+    assert.equal(result.reason, '')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
 test('checkConsecutiveRule bloque un 5e TPI consécutif', async () => {
   const personId = createObjectId()
   const timelineSlots = buildTimelineSlots(personId, { candidatePeriod: 5 })

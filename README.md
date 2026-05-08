@@ -1,4 +1,4 @@
-# TPIorganizer 2023 - Version stable VS.260504
+# TPIorganizer 2023 - version 26.5.6
 
 TPIorganizer 2023 est une application React + Node/Express pour organiser les défenses TPI : configuration annuelle, gestion des parties prenantes, planification, coordination des votes, liens d'accès et publication publique.
 
@@ -47,12 +47,16 @@ Scripts utiles :
 - `npm test` : tests frontend Jest.
 - `npm run test:api` : tests API Node.
 - `npm run check-env-prod` : contrôle des variables sensibles avant production.
+- `node scripts/refactor-global-migration.js --year=<annee>` : audit de migration non destructif par défaut.
+- `node scripts/reset-year.js --year=<annee>` : rapport de reset non destructif par défaut; ajouter `--apply` pour supprimer les données de l'année.
 
 ## Configuration importante
 
 - `DB_URI` configure MongoDB.
 - `JWT_SECRET` est requis pour les sessions et magic links.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` et `SMTP_FROM` pilotent l'envoi automatique.
+- `SMTP_ALLOWED_FROM_DOMAINS`, `SMTP_ENVELOPE_FROM`, `SMTP_MESSAGE_ID_DOMAIN`, `SMTP_LIST_UNSUBSCRIBE_*` et `SMTP_DKIM_*` renforcent les en-têtes et la délivrabilité email.
+- Délivrabilité email: `SMTP_FROM` doit être une adresse validée chez le fournisseur SMTP. Le service force les expéditeurs configurés dans l'interface à rester sur les domaines autorisés (`SMTP_ALLOWED_FROM_DOMAINS`, sinon domaines déduits de `SMTP_FROM`, `SMTP_ENVELOPE_FROM` et `SMTP_DKIM_DOMAIN`) et conserve un expéditeur refusé en `Reply-To`. Il ajoute aussi `List-Unsubscribe` via `SMTP_LIST_UNSUBSCRIBE_EMAIL`/`SMTP_LIST_UNSUBSCRIBE_URL` ou l'adresse de réponse. Configurer SPF, DKIM et DMARC dans le DNS du domaine expéditeur; `SMTP_DKIM_*` ne sert qu'en fallback si le fournisseur SMTP ne signe pas déjà en DKIM.
 - `STATIC_PUBLIC_BASE_URL`, `FTP_HOST`, `FTP_PORT`, `FTP_USER`, `FTP_PASSWORD` et `FTP_REMOTE_DIR` forment la base commune de publication.
 - Les chemins publiés sont configurables par site: `STATIC_DEFENSE_PUBLIC_PATH` / `FTP_STATIC_DEFENSE_REMOTE_DIR` pour les défenses, `STATIC_VOTE_PUBLIC_PATH` / `FTP_STATIC_VOTE_REMOTE_DIR` pour les votes. Les anciens `STATIC_PUBLIC_PATH`, `STATIC_PUBLICATION_PUBLIC_PATH`, `FTP_STATIC_PUBLIC_PATH` et `FTP_STATIC_REMOTE_DIR` restent acceptés comme fallback des défenses.
 - La configuration de publication peut aussi être enregistrée depuis l'interface. Le mot de passe est stocké chiffré côté MongoDB via `PublicationDeploymentConfig`.
@@ -69,7 +73,7 @@ La configuration publique et FTP est centralisée dans l'écran de configuration
 
 ## Orientation desktop
 
-La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : cette version `VS.260504` fige le socle web 2026 avant une refonte plus large vers une application portable centrée sur la génération, la publication et la synchronisation des sites statiques.
+La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : cette version `26.5.6` fige le socle web 2026 avant une refonte plus large vers une application portable centrée sur la génération, la publication et la synchronisation des sites statiques.
 
 ## Maintenance récente
 
@@ -81,4 +85,4 @@ La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AU
 
 ## Licence
 
-Sous licence MIT, détails dans le fichier `LICENSE`.
+Projet privé (`private: true` dans `package.json`). Aucun fichier `LICENSE` n'est fourni dans ce dépôt.

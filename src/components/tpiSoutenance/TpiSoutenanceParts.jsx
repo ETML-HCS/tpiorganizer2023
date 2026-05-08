@@ -613,12 +613,15 @@ const SoutenanceDesktopHeader = ({
   onShowPersonalView,
   canUseAdminGeneralView = false,
   adminGeneralView = false,
-  onToggleAdminGeneralView
+  onToggleAdminGeneralView,
+  viewModeStatus = null
 }) => {
   const userGreeting = hasToken
     ? `Bonjour ${expertOrBoss?.name || "Collaborateur"}`
     : ""
   const showGeneralFilters = !adminGeneralView
+  const viewModeLabel = String(viewModeStatus?.label || "").trim()
+  const viewModeDescription = String(viewModeStatus?.description || viewModeLabel).trim()
   const [isFullscreen, setIsFullscreen] = useState(Boolean(getFullscreenElement()))
 
   useEffect(() => {
@@ -670,6 +673,15 @@ const SoutenanceDesktopHeader = ({
           {isDemo ? <span className='soutenance-hero-status'>Version démo active</span> : null}
           {userGreeting ? (
             <p className='soutenance-toolbar-greeting'>{userGreeting}</p>
+          ) : null}
+          {viewModeLabel ? (
+            <span
+              className='soutenance-view-status'
+              title={viewModeDescription}
+              aria-label={viewModeDescription}
+            >
+              {viewModeLabel}
+            </span>
           ) : null}
         </div>
 

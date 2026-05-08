@@ -528,19 +528,20 @@ async function ensureVotesForTpi(tpi) {
     }
 
     for (const voter of voters) {
+      const voteIdentity = {
+        tpiPlanning: tpi._id,
+        slot: slot._id,
+        voter: voter.person._id
+      }
       const vote = await Vote.findOneAndUpdate(
+        voteIdentity,
         {
-          tpiPlanning: tpi._id,
-          slot: slot._id,
-          voter: voter.person._id,
-          voterRole: voter.role
-        },
-        {
+          // Keep existing responses intact when a campaign is reopened.
           $set: {
-            tpiPlanning: tpi._id,
-            slot: slot._id,
-            voter: voter.person._id,
-            voterRole: voter.role,
+            ...voteIdentity,
+            voterRole: voter.role
+          },
+          $setOnInsert: {
             decision: 'pending',
             comment: '',
             availabilityException: false,
@@ -548,12 +549,7 @@ async function ensureVotesForTpi(tpi) {
             specialRequestReason: '',
             specialRequestDate: null,
             votedAt: null,
-            magicLinkUsed: null
-          },
-          $unset: {
-            priority: ''
-          },
-          $setOnInsert: {
+            magicLinkUsed: null,
             createdAt: new Date()
           }
         },

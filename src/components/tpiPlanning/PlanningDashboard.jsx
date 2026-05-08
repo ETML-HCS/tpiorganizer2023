@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { authCoordinationService, coordinationCatalogService, coordinationConfigService, resolutionProposalService, tpiCoordinationService, slotService, voteService, workflowCoordinationService } from '../../services/coordinationService'
-import { IS_DEBUG, ROUTES } from '../../config/appConfig'
+import { IS_DEBUG, ROUTES, STORAGE_KEYS, YEARS_CONFIG } from '../../config/appConfig'
 import { getTpiModels } from '../tpiControllers/TpiController.jsx'
 import TpiPlanningList from './TpiPlanningList'
 import VotingPanel from './VotingPanel'
@@ -34,13 +34,14 @@ import {
   normalizeCoordinationStatus,
   COORDINATION_STATUS
 } from '../../constants/coordinationStatus'
+import { STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE } from '../../constants/staticVotePublication'
 import {
   VOTING_STAKEHOLDER_ROLES,
   getTpiRelationRoleLabel
 } from '../../utils/stakeholderRules'
 import { getPlanningPerimeterState } from '../../utils/coordinationScopeUtils'
 import { buildValidationToast, extractValidationResultFromError } from '../../utils/workflowFeedback'
-import { YEARS_CONFIG } from '../../config/appConfig'
+import { writeJSONValue } from '../../utils/storage'
 import './PlanningDashboard.css'
 
 const WORKFLOW_LABELS = {
@@ -2228,7 +2229,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       )
 
       if (result?.success) {
-        const message = `${reference}: déplacement confirmé.`
+        const message = `${reference}: déplacement confirmé. Lance Sync + gel pour mettre à jour Planification et Défenses.`
         toast.success(message)
         setSuccessMessage(message)
         setProposalMoveReview(null)
@@ -2556,6 +2557,35 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [year, executeWorkflowAction])
 
+  const handleSyncPlanificationFromCoordination = useCallback(async () => {
+    const result = await executeWorkflowAction({
+      actionKey: 'syncPlanification',
+      confirmMessage: `Synchroniser la Planification ${year} depuis Coordination et geler un nouveau snapshot ?`,
+      run: () => workflowCoordinationService.syncPlanificationFromCoordination(year),
+      successBuilder: (result) => {
+        const summary = result?.summary || {}
+        const snapshotVersion = result?.snapshot?.version || '?'
+        const tpiCount = Number(summary.tpiCount || 0)
+        const roomCount = Number(summary.roomCount || 0)
+
+        return `Planification synchronisée depuis Coordination: ${tpiCount} TPI, ${roomCount} salle(s). Snapshot v${snapshotVersion} gelé.`
+      },
+      errorFallback: 'Erreur lors de la synchronisation Planification depuis Coordination.',
+      reloadAfterSuccess: true
+    })
+
+    if (Array.isArray(result?.legacyRooms)) {
+      writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, result.legacyRooms)
+    }
+
+    if (result?.snapshot?.version) {
+      setActiveSnapshot({
+        ...result.snapshot,
+        isActive: true
+      })
+    }
+  }, [year, executeWorkflowAction])
+
   const handleStartVotesCampaign = useCallback(async () => {
     const result = await executeWorkflowAction({
       actionKey: 'startVotes',
@@ -2690,6 +2720,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handleGenerateStaticVotePublication = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'staticVoteGenerate',
+      confirmMessage: STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE,
       run: () => workflowCoordinationService.generateStaticVotePublication(year),
       successBuilder: (result) =>
         `Mini-site vote genere: ${result?.groupCount || 0} vote(s), ${result?.accessLinkCount || 0} lien(s).`,
@@ -3371,6 +3402,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             onAutomatePlanification={handleAutomatePlanification}
             onValidatePlanification={handleValidatePlanification}
             onFreezePlanification={handleFreezePlanification}
+            onSyncPlanificationFromCoordination={handleSyncPlanificationFromCoordination}
             onStartVotesCampaign={handleStartVotesCampaign}
             onStartVotesCampaignWithoutEmails={handleStartVotesCampaignWithoutEmails}
             onRemindVotes={handleRemindVotes}

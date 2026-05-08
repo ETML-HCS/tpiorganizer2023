@@ -14,6 +14,7 @@ import {
   WrenchIcon
 } from '../shared/InlineIcons'
 import { normalizeCoordinationStatus, COORDINATION_STATUS } from '../../constants/coordinationStatus'
+import { STATIC_VOTE_REGENERATION_NOTICE } from '../../constants/staticVotePublication'
 import {
   VOTING_STAKEHOLDER_ROLES,
   getTpiRelationRoleLabel
@@ -674,6 +675,7 @@ const VoteCommandCenter = ({
   onAutomatePlanification,
   onValidatePlanification,
   onFreezePlanification,
+  onSyncPlanificationFromCoordination,
   onStartVotesCampaign,
   onStartVotesCampaignWithoutEmails,
   onRemindVotes,
@@ -1071,6 +1073,19 @@ const VoteCommandCenter = ({
               Geler snapshot
             </WorkflowActionButton>
             <WorkflowActionButton
+              actionKey="syncPlanification"
+              primaryActionKey={primaryAction.key}
+              className="neutral"
+              onClick={onSyncPlanificationFromCoordination}
+              disabled={workflowActionLoading || !onSyncPlanificationFromCoordination}
+              isActionRunning={isActionRunning}
+              icon={<RefreshIcon className="button-icon" />}
+              runningLabel="Sync..."
+              title="Reconstruire Planification depuis Coordination et geler un nouveau snapshot."
+            >
+              Sync + gel
+            </WorkflowActionButton>
+            <WorkflowActionButton
               actionKey="startVotes"
               primaryActionKey={primaryAction.key}
               className="primary"
@@ -1140,6 +1155,9 @@ const VoteCommandCenter = ({
 
         <div className="vote-command-action-group">
             <span className="vote-command-action-group-title">Vote web</span>
+            <p className="vote-command-action-warning">
+              {STATIC_VOTE_REGENERATION_NOTICE}
+            </p>
             {IS_DEBUG ? (
               <WorkflowActionButton
                 actionKey="voteAccessPreview"
@@ -1581,6 +1599,7 @@ const VoteCommandCenter = ({
                       {selectedRoleSlotDecisions.map(({ slot, decision, proposalSlot, tone, isRiskSlot }) => {
                         const isOnlyAvailabilityNote = isOnlyAvailabilityVoteComment(decision.comment)
                         const isBlockingDecision = Boolean(decision.hardConstraint || isOnlyAvailabilityNote)
+                        const isConfirmedCase = normalizeCoordinationStatus(selectedRow.tpi?.status) === COORDINATION_STATUS.CONFIRMED
                         const shouldHideOnlyAvailabilityNote = Boolean(
                           slot.isFixed &&
                           selectedRoleHasOnlyAvailabilityHardSlot &&
@@ -1595,6 +1614,8 @@ const VoteCommandCenter = ({
                         const isMoveLoading = proposalMoveLoadingKey === `${selectedRow.id}:${slot.slotId}` ||
                           proposalMoveLoadingKey === `${compactText(selectedRow.tpi?._id)}:${slot.slotId}`
                         const isPreferenceLoading = preferenceActionLoadingKey === preferenceKey
+                        const canSaveProposalPreference = Boolean(proposalSlot?.voteId)
+                        const canShowSlotActions = Boolean(!isConfirmedCase || canSaveProposalPreference)
 
                         return (
                           <article
@@ -1621,19 +1642,21 @@ const VoteCommandCenter = ({
                               <span>{slot.positiveCount}/3 accord</span>
                               <span>{slot.rejectedCount} refus</span>
                             </div>
-                            {normalizeCoordinationStatus(selectedRow.tpi?.status) !== COORDINATION_STATUS.CONFIRMED ? (
+                            {canShowSlotActions ? (
                               <div className="vote-command-role-slot-actions">
-                                <button
-                                  type="button"
-                                  className={`vote-command-slot-action ${slot.positiveCount >= 3 ? 'is-consensus' : ''}`}
-                                  onClick={() => onForceVoteSlot(selectedRow.tpi, slot)}
-                                  disabled={workflowActionLoading}
-                                  title={`${getAdminSlotActionLabel(slot)} ${slot.label}.`}
-                                  aria-label={`${getAdminSlotActionLabel(slot)} ${slot.label} pour ${selectedRow.reference}.`}
-                                >
-                                  {getAdminSlotActionLabel(slot)}
-                                </button>
-                                {proposalSlot && !isBlockingDecision ? (
+                                {!isConfirmedCase ? (
+                                  <button
+                                    type="button"
+                                    className={`vote-command-slot-action ${slot.positiveCount >= 3 ? 'is-consensus' : ''}`}
+                                    onClick={() => onForceVoteSlot(selectedRow.tpi, slot)}
+                                    disabled={workflowActionLoading}
+                                    title={`${getAdminSlotActionLabel(slot)} ${slot.label}.`}
+                                    aria-label={`${getAdminSlotActionLabel(slot)} ${slot.label} pour ${selectedRow.reference}.`}
+                                  >
+                                    {getAdminSlotActionLabel(slot)}
+                                  </button>
+                                ) : null}
+                                {!isConfirmedCase && proposalSlot && !isBlockingDecision ? (
                                   <button
                                     type="button"
                                     className="vote-command-mini-button"
@@ -1647,7 +1670,7 @@ const VoteCommandCenter = ({
                                     {isMoveLoading ? '...' : 'Tester'}
                                   </button>
                                 ) : null}
-                                {proposalSlot?.voteId && !isBlockingDecision ? (
+                                {canSaveProposalPreference ? (
                                   <button
                                     type="button"
                                     className="vote-command-mini-button is-preference"

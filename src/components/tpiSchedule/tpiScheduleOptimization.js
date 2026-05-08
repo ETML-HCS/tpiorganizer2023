@@ -107,6 +107,28 @@ const compareTimelineKeys = (left, right) => {
   return String(left || "").localeCompare(String(right || ""))
 }
 
+const parseTimelineKey = (key) => {
+  const [dateKey, periodText] = String(key || "").split("|")
+  const period = Number.parseInt(periodText, 10)
+
+  if (!dateKey || !Number.isInteger(period)) {
+    return null
+  }
+
+  return { dateKey, period }
+}
+
+const getTimelinePeriodGap = (leftKey, rightKey) => {
+  const left = parseTimelineKey(leftKey)
+  const right = parseTimelineKey(rightKey)
+
+  if (!left || !right || left.dateKey !== right.dateKey) {
+    return null
+  }
+
+  return right.period - left.period
+}
+
 const buildTimeline = (roomEntries) => {
   const timeSteps = []
   const seenKeys = new Set()
@@ -396,18 +418,16 @@ const buildPersonAnalytics = (slotContexts) => {
     for (let index = 1; index < slotGroups.length; index += 1) {
       const previous = slotGroups[index - 1]
       const current = slotGroups[index]
-      const previousIndex = Number.isInteger(previous.timelineIndex) ? previous.timelineIndex : Number.MAX_SAFE_INTEGER
-      const currentIndex = Number.isInteger(current.timelineIndex) ? current.timelineIndex : Number.MAX_SAFE_INTEGER
-      const gap = currentIndex - previousIndex
+      const periodGap = getTimelinePeriodGap(previous.slotKey, current.slotKey)
 
-      if (gap === 1) {
+      if (periodGap === 1) {
         if (previous.roomKey !== current.roomKey) {
           movementPenalty += previous.roomSite === current.roomSite ? 2 : 4
         }
         continue
       }
 
-      if (gap === 2 && previous.roomKey !== current.roomKey) {
+      if (periodGap === 2 && previous.roomKey !== current.roomKey) {
         movementPenalty += previous.roomSite === current.roomSite ? 1 : 2
       }
 

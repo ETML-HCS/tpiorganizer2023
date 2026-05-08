@@ -1843,6 +1843,19 @@ const TpiSoutenance = () => {
     ? magicLinkViewerName
     : aggregatedICalPersonLabel
   const canUseAdminGeneralView = Boolean(hasMagicLinkPersonalView && isAdminMagicLinkViewer)
+  const viewModeStatus = hasMagicLinkPersonalView
+    ? adminGeneralView
+      ? {
+          label: "Vue générale admin",
+          description: "Toutes les défenses publiées sont affichées. Seuls les filtres date et type de classe restent appliqués."
+        }
+      : {
+          label: "Vue personnelle",
+          description: magicLinkViewerName
+            ? `Défenses liées à ${magicLinkViewerName}.`
+            : "Défenses liées à votre lien magique."
+        }
+    : null
   const effectiveIsFilterApplied = adminGeneralView
     ? Boolean(filters.date || filters.classType)
     : isFilterApplied
@@ -2223,16 +2236,8 @@ const TpiSoutenance = () => {
             canUseAdminGeneralView={canUseAdminGeneralView}
             adminGeneralView={adminGeneralView}
             onToggleAdminGeneralView={toggleAdminGeneralView}
+            viewModeStatus={viewModeStatus}
           />
-
-          {adminGeneralView ? (
-            <section className='soutenance-focus-banner is-ready'>
-              <div>
-                <strong>Vue générale admin</strong>
-                <p>Toutes les défenses publiées sont affichées. Seuls date et type de classe restent appliqués.</p>
-              </div>
-            </section>
-          ) : null}
 
           {focusReference && (
             <section className={`soutenance-focus-banner ${hasFocusedResults ? "is-ready" : "is-missing"}`}>

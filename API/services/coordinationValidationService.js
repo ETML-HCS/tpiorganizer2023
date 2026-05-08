@@ -8,6 +8,7 @@ const TpiModelsYear = require('../models/tpiModels')
 const { getPlanningConfig } = require('./coordinationConfigService')
 const { filterPlanifiableTpis } = require('./coordinationTpiVisibility')
 const {
+  areConsecutiveTimeSteps,
   buildOccupiedStepKeys,
   buildTimelineIndex,
   getMaxConsecutiveTpiLimit,
@@ -579,7 +580,10 @@ function detectSequenceViolations(slots, options = {}) {
 
     for (let index = 1; index < occupiedIndices.length; index += 1) {
       const currentIndex = occupiedIndices[index]
-      if (currentIndex === runEnd + 1) {
+      if (
+        currentIndex === runEnd + 1 &&
+        areConsecutiveTimeSteps(timeline.timeSteps[runEnd], timeline.timeSteps[currentIndex])
+      ) {
         runEnd = currentIndex
         continue
       }

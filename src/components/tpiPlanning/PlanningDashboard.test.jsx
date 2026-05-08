@@ -6,7 +6,7 @@ import { toast } from 'react-toastify'
 import PlanningDashboard from './PlanningDashboard'
 import * as coordinationServices from '../../services/coordinationService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
-import { ROUTES } from '../../config/appConfig'
+import { ROUTES, STORAGE_KEYS } from '../../config/appConfig'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
 jest.mock('../../config/appConfig', () => {
@@ -278,6 +278,29 @@ describe('PlanningDashboard', () => {
       emailsSkipped: true,
       details: []
     })
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'syncPlanificationFromCoordination').mockResolvedValue({
+      success: true,
+      summary: {
+        tpiCount: 1,
+        roomCount: 1,
+        slotCount: 6
+      },
+      legacyRooms: [
+        {
+          idRoom: 1001,
+          site: 'ETML',
+          name: 'A101',
+          date: '2026-06-11T08:00:00.000Z',
+          tpiDatas: [
+            { refTpi: '27', period: 6 }
+          ]
+        }
+      ],
+      snapshot: {
+        version: 3,
+        isActive: true
+      }
+    })
     jest.spyOn(coordinationServices.workflowCoordinationService, 'automatePlanification').mockResolvedValue({
       success: true,
       summary: {
@@ -298,6 +321,7 @@ describe('PlanningDashboard', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
+    localStorage.clear()
   })
 
   test('ouvre une sidebar allégée quand un TPI est sélectionné', async () => {
@@ -442,6 +466,23 @@ describe('PlanningDashboard', () => {
     confirmSpy.mockRestore()
   })
 
+  test('synchronise la planification depuis coordination et met a jour le cache local', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', { name: /sync \+ gel/i }))
+
+    await waitFor(() => {
+      expect(coordinationServices.workflowCoordinationService.syncPlanificationFromCoordination).toHaveBeenCalledWith('2026')
+    })
+
+    expect(localStorage.getItem(STORAGE_KEYS.ORGANIZER_DATA)).toContain('A101')
+    expect(await screen.findByText(/Planification synchronisée depuis Coordination: 1 TPI, 1 salle/i)).toBeInTheDocument()
+
+    confirmSpy.mockRestore()
+  })
+
   test('ouvre l aperçu des liens vote depuis le cockpit votes debug', async () => {
     coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
     const targetYear = '2026'
@@ -459,6 +500,20 @@ describe('PlanningDashboard', () => {
         `${ROUTES.GEN_TOKENS}?year=${targetYear}&type=vote&auto=1`
       )
     })
+  })
+
+  test('avertit avant de préparer à nouveau le mini-site vote', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false)
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', { name: /préparer vote web/i }))
+
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Régénérer le mini-site vote'))
+    expect(coordinationServices.workflowCoordinationService.generateStaticVotePublication).not.toHaveBeenCalled()
+
+    confirmSpy.mockRestore()
   })
 
   test('affiche le cockpit admin de campagne avec la file des votes a relancer', async () => {
@@ -821,9 +876,12 @@ describe('PlanningDashboard', () => {
     expect(screen.queryByRole('button', {
       name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026/i
     })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', {
+    fireEvent.click(screen.getByRole('button', {
       name: /enregistrer 11\.06\.2026 .* comme date idéale de diane boss/i
-    })).not.toBeInTheDocument()
+    }))
+    await waitFor(() => {
+      expect(coordinationServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-chef')
+    })
   })
 
   test('vérifie aussi les contraintes dures portées par le statut du rôle', async () => {
@@ -1049,6 +1107,37 @@ describe('PlanningDashboard', () => {
       expect(toast.success).toHaveBeenCalledWith('Carla Expert: préférence déjà présente dans ses dates idéales.')
     })
     expect(await screen.findByText(/Carla Expert: préférence déjà présente dans ses dates idéales/i)).toBeInTheDocument()
+  })
+
+  test('garde le bouton préférence disponible pour une proposition déjà confirmée', async () => {
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([
+      buildVoteProposalTpi({
+        status: 'confirmed',
+        confirmedSlot: {
+          _id: 'slot-fixed',
+          date: '2026-06-10T08:00:00.000Z',
+          startTime: '08:00',
+          endTime: '12:00',
+          room: { name: 'A101' }
+        }
+      })
+    ])
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    expect(await screen.findByText('TPI-2026-042')).toBeInTheDocument()
+    expect(screen.queryByRole('button', {
+      name: /tester le déplacement de tpi-2026-042 vers 11\.06\.2026/i
+    })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', {
+      name: /enregistrer 11\.06\.2026 .* comme date idéale de carla expert/i
+    }))
+
+    await waitFor(() => {
+      expect(coordinationServices.voteService.addProposalToPreferences).toHaveBeenCalledWith('vote-alt-expert2')
+    })
   })
 
   test('ouvre la résolution depuis une ligne de vote à traiter', async () => {

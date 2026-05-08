@@ -22,6 +22,10 @@ import {
 import { STORAGE_KEYS, YEARS_CONFIG } from '../../config/appConfig'
 import accessLinkPolicy from '../../../shared/accessLinkPolicy.json'
 import {
+  STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE,
+  STATIC_VOTE_REGENERATION_NOTICE
+} from '../../constants/staticVotePublication'
+import {
   coordinationConfigService,
   workflowCoordinationService
 } from '../../services/coordinationService'
@@ -44,6 +48,11 @@ const DEFAULT_ACCESS_LINK_SETTINGS = Object.freeze({
 })
 const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
 const ACCESS_EMAIL_DELIVERY_STORAGE_KEY = STORAGE_KEYS.ACCESS_LINK_EMAIL_DELIVERIES || 'accessLinkEmailDeliveries'
+const ACCESS_EMAIL_DELIVERY_MODE_STORAGE_KEY = 'accessLinkSoutenanceEmailDeliveryMode'
+const ACCESS_EMAIL_DELIVERY_MODES = Object.freeze({
+  SMTP: 'smtp',
+  OUTLOOK: 'outlook'
+})
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -94,6 +103,15 @@ function hashAccessEmailKey(value) {
 
 function getStoredShowCandidatesPreference() {
   return readStorageValue(STORAGE_KEYS.ACCESS_LINK_SHOW_CANDIDATES, 'true') !== 'false'
+}
+
+function getStoredSoutenanceEmailDeliveryMode() {
+  return readStorageValue(
+    ACCESS_EMAIL_DELIVERY_MODE_STORAGE_KEY,
+    ACCESS_EMAIL_DELIVERY_MODES.SMTP
+  ) === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
+    ? ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
+    : ACCESS_EMAIL_DELIVERY_MODES.SMTP
 }
 
 function getStoredAccessYear() {
@@ -661,6 +679,13 @@ function isLocalOutlookPreparedDelivery(delivery) {
     isEmailDeliveryPrepared(delivery)
 }
 
+function isSystemEmailDeliveryResettable(delivery) {
+  const status = compactText(delivery?.status).toLowerCase()
+  const source = compactText(delivery?.source).toLowerCase()
+
+  return source === 'system' && ['sent', 'failed', 'skipped'].includes(status)
+}
+
 function getPublicationVersionSortValue(link) {
   const version = Number.parseInt(String(link?.publicationVersion || 0), 10)
   return Number.isInteger(version) ? version : 0
@@ -722,21 +747,42 @@ function isSoutenanceEmailTargetSmtpSendable(target) {
   )
 }
 
+function isSoutenanceEmailTargetOutlookSendable(target) {
+  return Boolean(
+    target?.deliveryKey &&
+    canPrepareAccessEmail(target?.person, target?.link) &&
+    !isEmailDeliverySent(target?.delivery) &&
+    !isEmailDeliveryPrepared(target?.delivery)
+  )
+}
+
 function buildSoutenanceEmailAutomationGroup(targets = []) {
   const normalizedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
   const pendingTargets = normalizedTargets.filter(isSoutenanceEmailTargetSmtpSendable)
+  const outlookPendingTargets = normalizedTargets.filter(isSoutenanceEmailTargetOutlookSendable)
   const sentCount = normalizedTargets.filter((target) => isEmailDeliverySent(target.delivery)).length
+  const preparedCount = normalizedTargets.filter((target) => isEmailDeliveryPrepared(target.delivery)).length
+  const resettableTargets = normalizedTargets.filter((target) => isSystemEmailDeliveryResettable(target.delivery))
 
   return {
     targets: normalizedTargets,
     pendingTargets,
+    outlookPendingTargets,
+    resettableTargets,
     totalCount: normalizedTargets.length,
     pendingCount: pendingTargets.length,
-    sentCount
+    outlookPendingCount: outlookPendingTargets.length,
+    sentCount,
+    preparedCount,
+    resettableCount: resettableTargets.length
   }
 }
 
 function getSoutenanceEmailAudience(person) {
+  if (isCandidateAccessEntry({ person })) {
+    return 'candidate'
+  }
+
   if (isProjectLeadAccessPerson(person)) {
     return 'cdp'
   }
@@ -755,6 +801,10 @@ function getSoutenanceEmailAudienceLabel(audience) {
 
   if (audience === 'expert') {
     return getTpiRelationRoleLabel('expert')
+  }
+
+  if (audience === 'candidate') {
+    return CANDIDATE_ROLE_LABEL
   }
 
   return 'Autre'
@@ -1140,15 +1190,15 @@ function buildAccessEmailDraft({ year, person, link, phase, label, subtitle }) {
         '',
         'Vous pouvez consulter votre vue personnelle avec le lien ci-dessous.',
         '',
-        '**Lien personnel**',
+        'Lien personnel',
         url,
         '',
-        '**Important**',
+        'Important',
         'Ce lien donne aussi accès au téléchargement iCal et, si nécessaire, au formulaire de demande de modification.',
         '',
         ...(soutenanceResponseDeadlineCopy
           ? [
-              '**Retour attendu**',
+              'Retour attendu',
               soutenanceResponseDeadlineCopy,
               ''
             ]
@@ -1159,7 +1209,7 @@ function buildAccessEmailDraft({ year, person, link, phase, label, subtitle }) {
         '',
         'Les possibilités de déplacement sont très limitées. Toute demande sera examinée, mais aucune modification ne peut être garantie.',
         '',
-        '**Validité du lien**',
+        'Validité du lien',
         `${expiryValue}.`,
         '',
         'Ce lien est personnel.',
@@ -1200,17 +1250,32 @@ function openMailtoDraft(mailtoUrl) {
   }
 
   try {
-    const openedWindow = typeof window.open === 'function'
-      ? window.open(mailtoUrl, '_blank', 'noopener,noreferrer')
-      : null
-
-    if (!openedWindow && window.location) {
-      window.location.href = mailtoUrl
+    if (typeof window.open === 'function') {
+      window.open(mailtoUrl, '_blank', 'noopener,noreferrer')
+      return
     }
   } catch (error) {
     if (window.location) {
       window.location.href = mailtoUrl
     }
+    return
+  }
+
+  if (window.location) {
+    window.location.href = mailtoUrl
+  }
+}
+
+function buildOutlookPreparedDeliveryEntry({ target, preparedAt, recipientEmail = '' }) {
+  return {
+    status: 'prepared',
+    source: 'outlook',
+    preparedAt,
+    recipientEmail: compactText(recipientEmail || target?.person?.email),
+    linkType: target?.phase || 'soutenance',
+    linkLabel: target?.label,
+    linkUrl: getAccessLinkUrl(target?.link),
+    coversChangeRequests: target?.phase === 'soutenance'
   }
 }
 
@@ -1321,6 +1386,8 @@ const LinkRow = ({
   url,
   expiresAt,
   revokedAt,
+  usageCount = 0,
+  lastUsedAt = null,
   generated = false,
   recoverable = true,
   availabilityStatus = '',
@@ -1372,6 +1439,13 @@ const LinkRow = ({
   })
   const emailMeta = getEmailDeliveryDisplayMeta(emailDelivery, canPrepareEmail)
   const EmailButtonIcon = emailMeta.buttonIcon || MailIcon
+  const normalizedUsageCount = Number.parseInt(String(usageCount || 0), 10)
+  const hasBeenOpened = Number.isInteger(normalizedUsageCount) && normalizedUsageCount > 0
+  const openedLabel = lastUsedAt
+    ? `Ouvert le ${formatDateTime(lastUsedAt)}`
+    : hasBeenOpened
+      ? `Ouvert ${normalizedUsageCount > 1 ? `${normalizedUsageCount} fois` : ''}`.trim()
+      : ''
   const [isCopied, setIsCopied] = useState(false)
   const copyResetTimerRef = useRef(null)
 
@@ -1417,6 +1491,9 @@ const LinkRow = ({
             ) : null}
             {emailMeta.variant === 'prepared' ? (
               <span className='token-access-email-chip is-prepared'>Préparé</span>
+            ) : null}
+            {hasBeenOpened ? (
+              <span className='token-access-open-chip' title={openedLabel}>Ouvert</span>
             ) : null}
           </div>
         </div>
@@ -1469,6 +1546,12 @@ const LinkRow = ({
         {emailMeta.detail ? (
           <span className={`token-access-link-email-state is-${emailMeta.variant}`.trim()}>
             {emailMeta.detail}
+          </span>
+        ) : null}
+
+        {openedLabel ? (
+          <span className='token-access-link-open-state'>
+            {openedLabel}
           </span>
         ) : null}
       </div>
@@ -1638,6 +1721,8 @@ const PersonCard = ({
                         url={link.url}
                         expiresAt={link.expiresAt}
                         revokedAt={link.revokedAt}
+                        usageCount={link.usageCount}
+                        lastUsedAt={link.lastUsedAt}
                         generated={link.generated === true}
                         recoverable={link.recoverable !== false}
                         availabilityStatus={link.availabilityStatus}
@@ -1695,6 +1780,8 @@ const PersonCard = ({
                         details={buildArbitrageLinkDetails(link)}
                         url={link.url}
                         expiresAt={link.expiresAt}
+                        usageCount={link.usageCount}
+                        lastUsedAt={link.lastUsedAt}
                         generated={link.generated === true}
                         recoverable={link.recoverable !== false}
                         availabilityStatus={link.availabilityStatus}
@@ -1752,6 +1839,8 @@ const PersonCard = ({
                         url={link.url}
                         expiresAt={link.expiresAt}
                         revokedAt={link.revokedAt}
+                        usageCount={link.usageCount}
+                        lastUsedAt={link.lastUsedAt}
                         generated={link.generated === true}
                         recoverable={link.recoverable !== false}
                         availabilityStatus={link.availabilityStatus}
@@ -1789,26 +1878,58 @@ const SoutenanceEmailAutomationPanel = ({
   selectedKeys = {},
   selectedCount = 0,
   pendingCount = 0,
+  resettableCount = 0,
+  sentCount = 0,
+  preparedCount = 0,
+  deliveryMode = ACCESS_EMAIL_DELIVERY_MODES.SMTP,
   projectLeadGroup = {},
   expertGroup = {},
   preview = null,
   testEmailAddress = '',
   isPreviewLoading = false,
   isSending = false,
+  outlookQueueCount = 0,
   onPreview,
   onSendTest,
+  onSendAll,
   onSendSelection,
   onSendProjectLeads,
   onSendExperts,
+  onResetDeliveries,
+  onResetOutlookPrepared,
+  onDeliveryModeChange,
   onTestEmailChange,
   onToggleTarget,
   onSelectPending,
   onClearSelection,
+  onOpenNextOutlookDraft,
+  onClearOutlookQueue,
   onCollapse
 }) => {
   const hasTargets = targets.length > 0
   const previewSubject = compactText(preview?.subject)
   const canSendTest = hasTargets && testEmailAddress.trim() && !isSending
+  const targetCount = targets.length
+  const selectedLabel = selectedCount === 1 ? 'sélectionné' : 'sélectionnés'
+  const contactLabel = targetCount === 1 ? 'contact' : 'contacts'
+  const isOutlookMode = deliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
+  const effectivePendingCount = isOutlookMode
+    ? targets.filter(isSoutenanceEmailTargetOutlookSendable).length
+    : pendingCount
+  const projectLeadPendingCount = isOutlookMode
+    ? (projectLeadGroup.outlookPendingCount || 0)
+    : (projectLeadGroup.pendingCount || 0)
+  const expertPendingCount = isOutlookMode
+    ? (expertGroup.outlookPendingCount || 0)
+    : (expertGroup.pendingCount || 0)
+  const handledCount = isOutlookMode ? preparedCount : sentCount
+  const handledLabel = isOutlookMode ? 'préparés' : 'transmis'
+  const pendingLabel = isOutlookMode ? 'à préparer' : 'à envoyer'
+  const transportLabel = isOutlookMode ? 'à préparer dans Outlook' : 'à transmettre par SMTP'
+  const resetActionCount = isOutlookMode ? preparedCount : resettableCount
+  const resetActionLabel = isOutlookMode ? 'Reset Outlook' : 'Reset envois'
+  const resetActionHandler = isOutlookMode ? onResetOutlookPrepared : onResetDeliveries
+  const hasOutlookQueue = isOutlookMode && outlookQueueCount > 0
 
   return (
     <section id='token-access-email-automation-panel' className='token-access-email-automation' aria-label='Envoi automatique des emails défense'>
@@ -1816,10 +1937,43 @@ const SoutenanceEmailAutomationPanel = ({
         <span className='token-access-email-automation-icon' aria-hidden='true'>
           <SendIcon />
         </span>
-        <div>
-          <h2>Email HTML Défenses</h2>
-          <p>{pendingCount}/{targets.length} à transmettre par SMTP</p>
+        <div className='token-access-email-automation-title'>
+          <h2>Email HTML défenses</h2>
+          <p>{effectivePendingCount}/{targetCount} {transportLabel}</p>
         </div>
+        <div className='token-access-email-automation-summary' aria-label='Résumé email défense'>
+          <span className='is-pending'>
+            <strong>{effectivePendingCount}</strong>
+            {pendingLabel}
+          </span>
+          <span>
+            <strong>{selectedCount}</strong>
+            {selectedLabel}
+          </span>
+          <span className='is-sent'>
+            <strong>{handledCount}</strong>
+            {handledLabel}
+          </span>
+          <span>
+            <strong>{resettableCount}</strong>
+            reset
+          </span>
+        </div>
+        <label className={`token-access-email-mode-toggle${isOutlookMode ? ' is-active' : ''}`.trim()}>
+          <input
+            type='checkbox'
+            checked={isOutlookMode}
+            aria-label='Utiliser Outlook pour transmettre les emails HTML défense'
+            onChange={(event) => onDeliveryModeChange?.(
+              event.target.checked ? ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK : ACCESS_EMAIL_DELIVERY_MODES.SMTP
+            )}
+          />
+          <span>
+            <strong>{isOutlookMode ? 'Outlook' : 'SMTP'}</strong>
+            <small>{isOutlookMode ? 'manuel' : 'serveur'}</small>
+          </span>
+          <i aria-hidden='true' />
+        </label>
         <button
           type='button'
           className='token-access-icon-btn secondary token-access-email-automation-close'
@@ -1832,6 +1986,33 @@ const SoutenanceEmailAutomationPanel = ({
         </button>
       </div>
 
+      {hasOutlookQueue ? (
+        <div className='token-access-email-outlook-queue' role='status'>
+          <span>
+            <strong>{outlookQueueCount}</strong>
+            brouillon{outlookQueueCount > 1 ? 's' : ''} Outlook en attente
+          </span>
+          <button
+            type='button'
+            className='token-access-email-pill-button is-primary'
+            onClick={onOpenNextOutlookDraft}
+            disabled={isSending}
+          >
+            <MailIcon aria-hidden='true' />
+            <span>Ouvrir brouillon suivant</span>
+          </button>
+          <button
+            type='button'
+            className='token-access-email-pill-button is-muted'
+            onClick={onClearOutlookQueue}
+            disabled={isSending}
+          >
+            <RefreshIcon aria-hidden='true' />
+            <span>Annuler file</span>
+          </button>
+        </div>
+      ) : null}
+
       <div className='token-access-email-control-grid'>
         <section className='token-access-email-control-group is-preparation' aria-label='Préparation email HTML'>
           <div className='token-access-email-control-title'>
@@ -1843,7 +2024,7 @@ const SoutenanceEmailAutomationPanel = ({
           </div>
           <div className='token-access-email-control-row is-preparation-row'>
             <label className='token-access-email-test-control' htmlFor='soutenance-email-test'>
-              <span>Email test</span>
+              <span className='sr-only'>Email test</span>
               <input
                 id='soutenance-email-test'
                 type='email'
@@ -1878,29 +2059,39 @@ const SoutenanceEmailAutomationPanel = ({
             <SendIcon aria-hidden='true' />
             <span>
               <strong>Lots</strong>
-              <small>CDP puis experts</small>
+              <small>Tous, CDP ou experts</small>
             </span>
           </div>
-          <div className='token-access-email-control-row is-two-columns'>
+          <div className='token-access-email-control-row is-three-columns'>
+            <button
+              type='button'
+              className='token-access-email-pill-button is-primary'
+              onClick={onSendAll}
+              disabled={effectivePendingCount === 0 || isSending || hasOutlookQueue}
+            >
+              <SendIcon aria-hidden='true' />
+              <span>tous</span>
+              <strong>{effectivePendingCount}/{targetCount}</strong>
+            </button>
             <button
               type='button'
               className='token-access-email-pill-button is-primary'
               onClick={onSendProjectLeads}
-              disabled={(projectLeadGroup.pendingCount || 0) === 0 || isSending}
+              disabled={projectLeadPendingCount === 0 || isSending || hasOutlookQueue}
             >
               <SendIcon aria-hidden='true' />
-              <span>Envoyer CDP</span>
-              <strong>{projectLeadGroup.pendingCount || 0}/{projectLeadGroup.totalCount || 0}</strong>
+              <span>cdp</span>
+              <strong>{projectLeadPendingCount}/{projectLeadGroup.totalCount || 0}</strong>
             </button>
             <button
               type='button'
               className='token-access-email-pill-button is-primary'
               onClick={onSendExperts}
-              disabled={(expertGroup.pendingCount || 0) === 0 || isSending}
+              disabled={expertPendingCount === 0 || isSending || hasOutlookQueue}
             >
               <SendIcon aria-hidden='true' />
-              <span>Envoyer experts</span>
-              <strong>{expertGroup.pendingCount || 0}/{expertGroup.totalCount || 0}</strong>
+              <span>experts</span>
+              <strong>{expertPendingCount}/{expertGroup.totalCount || 0}</strong>
             </button>
           </div>
         </section>
@@ -1918,10 +2109,10 @@ const SoutenanceEmailAutomationPanel = ({
               type='button'
               className='token-access-email-pill-button is-muted'
               onClick={onSelectPending}
-              disabled={pendingCount === 0 || isSending}
+              disabled={effectivePendingCount === 0 || isSending}
             >
               <CheckIcon aria-hidden='true' />
-              <span>À envoyer</span>
+              <span>{isOutlookMode ? 'À préparer' : 'À envoyer'}</span>
             </button>
             <button
               type='button'
@@ -1934,9 +2125,19 @@ const SoutenanceEmailAutomationPanel = ({
             </button>
             <button
               type='button'
+              className='token-access-email-pill-button is-muted'
+              onClick={resetActionHandler}
+              disabled={resetActionCount === 0 || isSending}
+            >
+              <RefreshIcon aria-hidden='true' />
+              <span>{resetActionLabel}</span>
+              <strong>{resetActionCount}</strong>
+            </button>
+            <button
+              type='button'
               className='token-access-email-pill-button is-primary'
               onClick={onSendSelection}
-              disabled={selectedCount === 0 || isSending}
+              disabled={selectedCount === 0 || isSending || hasOutlookQueue}
             >
               <SendIcon aria-hidden='true' />
               <span>Envoyer sélection</span>
@@ -1947,42 +2148,53 @@ const SoutenanceEmailAutomationPanel = ({
       </div>
 
       <div className='token-access-email-automation-grid'>
-        <div className='token-access-email-book' role='list' aria-label='Carnet d’adresses défense'>
-          {targets.length === 0 ? (
-            <p className='token-access-email-book-empty'>
-              Aucun lien de défense disponible.
-            </p>
-          ) : targets.map((target) => {
-            const deliveryMeta = getEmailDeliveryDisplayMeta(target.delivery, true)
-            const isChecked = selectedKeys[target.deliveryKey] === true
-            const isSendable = isSoutenanceEmailTargetSmtpSendable(target)
+        <section className='token-access-email-book-panel' aria-label='Destinataires email défense'>
+          <div className='token-access-email-panel-head'>
+            <span>
+              <strong>Destinataires</strong>
+              <small>{targetCount} {contactLabel}</small>
+            </span>
+            <em>{effectivePendingCount} {pendingLabel}</em>
+          </div>
+          <div className='token-access-email-book' role='list' aria-label='Carnet d’adresses défense'>
+            {targets.length === 0 ? (
+              <p className='token-access-email-book-empty'>
+                Aucun lien de défense disponible.
+              </p>
+            ) : targets.map((target) => {
+              const deliveryMeta = getEmailDeliveryDisplayMeta(target.delivery, true)
+              const isChecked = selectedKeys[target.deliveryKey] === true
+              const isSendable = isOutlookMode
+                ? isSoutenanceEmailTargetOutlookSendable(target)
+                : isSoutenanceEmailTargetSmtpSendable(target)
 
-            return (
-              <label
-                key={target.deliveryKey}
-                className={`token-access-email-book-row is-${deliveryMeta.variant}${isChecked ? ' is-selected' : ''}`.trim()}
-                role='listitem'
-              >
-                <input
-                  type='checkbox'
-                  checked={isChecked}
-                  disabled={!isSendable || isSending}
-                  onChange={(event) => onToggleTarget?.(target.deliveryKey, event.target.checked)}
-                />
-                <span className='token-access-email-book-person'>
-                  <strong>{target.person?.name || target.person?.email}</strong>
-                  <small>{target.person?.email || 'Email manquant'}</small>
-                </span>
-                <span className={`token-access-email-book-audience is-${target.audience}`.trim()}>
-                  {target.audienceLabel}
-                </span>
-                <span className={`token-access-email-book-state is-${deliveryMeta.variant}`.trim()}>
-                  {isSendable ? 'À envoyer' : deliveryMeta.label}
-                </span>
-              </label>
-            )
-          })}
-        </div>
+              return (
+                <label
+                  key={target.deliveryKey}
+                  className={`token-access-email-book-row is-${deliveryMeta.variant}${isChecked ? ' is-selected' : ''}`.trim()}
+                  role='listitem'
+                >
+                  <input
+                    type='checkbox'
+                    checked={isChecked}
+                    disabled={!isSendable || isSending}
+                    onChange={(event) => onToggleTarget?.(target.deliveryKey, event.target.checked)}
+                  />
+                  <span className='token-access-email-book-person'>
+                    <strong>{target.person?.name || target.person?.email}</strong>
+                    <small>{target.person?.email || 'Email manquant'}</small>
+                  </span>
+                  <span className={`token-access-email-book-audience is-${target.audience}`.trim()}>
+                    {target.audienceLabel}
+                  </span>
+                  <span className={`token-access-email-book-state is-${deliveryMeta.variant}`.trim()}>
+                    {isSendable ? pendingLabel.charAt(0).toUpperCase() + pendingLabel.slice(1) : deliveryMeta.label}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </section>
 
         <div className='token-access-email-preview'>
           <div className='token-access-email-preview-head'>
@@ -2038,6 +2250,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   ))
   const [selectedSoutenanceEmailKeys, setSelectedSoutenanceEmailKeys] = useState({})
   const [soutenanceEmailPreview, setSoutenanceEmailPreview] = useState(null)
+  const [soutenanceEmailDeliveryMode, setSoutenanceEmailDeliveryMode] = useState(getStoredSoutenanceEmailDeliveryMode)
+  const [soutenanceOutlookDraftQueue, setSoutenanceOutlookDraftQueue] = useState([])
   const [testEmailAddress, setTestEmailAddress] = useState('')
   const [isEmailPreviewLoading, setIsEmailPreviewLoading] = useState(false)
   const [isAutomaticEmailSending, setIsAutomaticEmailSending] = useState(false)
@@ -2065,12 +2279,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       setStaticPublicationInfo(status)
       setStaticVotePublicationInfo(voteStatus)
       setAccessLinkSettings(normalizedLinkSettings)
-      const hasSiteTarget = Boolean(
-        (typeof status?.publicUrl === 'string' && status.publicUrl.trim()) ||
-        (typeof voteStatus?.publicUrl === 'string' && voteStatus.publicUrl.trim())
-      )
-      setUsePublicationSiteLinks(hasSiteTarget)
-      setUseVotePublicationSiteLinks(hasSiteTarget)
+      setUsePublicationSiteLinks(normalizedLinkSettings.defaultSoutenanceLinkTarget === 'publication')
+      setUseVotePublicationSiteLinks(normalizedLinkSettings.defaultVoteLinkTarget === 'static')
     }
 
     loadYearLinkDefaults()
@@ -2091,6 +2301,13 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     writeStorageValue(STORAGE_KEYS.ACCESS_LINK_SHOW_CANDIDATES, showCandidateBlocks ? 'true' : 'false')
   }, [showCandidateBlocks])
+
+  useEffect(() => {
+    writeStorageValue(ACCESS_EMAIL_DELIVERY_MODE_STORAGE_KEY, soutenanceEmailDeliveryMode)
+    if (soutenanceEmailDeliveryMode !== ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      setSoutenanceOutlookDraftQueue([])
+    }
+  }, [soutenanceEmailDeliveryMode])
 
   useEffect(() => {
     if (ACCESS_PHASE_FILTER_VALUES.has(requestedLinkType)) {
@@ -2194,41 +2411,21 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const votePublicationTargetLabel = formatUrlHost(staticVotePublicationPublicUrl)
   const canUsePublicationSiteLinks = Boolean(staticPublicationPublicUrl)
   const canUseVotePublicationSiteLinks = Boolean(staticVotePublicationPublicUrl)
-  const canUseSiteLinks = canUsePublicationSiteLinks || canUseVotePublicationSiteLinks
-  const useSiteLinks = usePublicationSiteLinks || useVotePublicationSiteLinks
-  const accessLinkTargetOptions = useMemo(() => {
-    if (!useSiteLinks) {
-      return {}
-    }
-
-    return {
-      soutenanceLinkTarget: 'publication',
-      ...(staticPublicationPublicUrl ? { soutenancePublicUrl: staticPublicationPublicUrl } : {}),
-      voteLinkTarget: 'static',
-      ...(staticVotePublicationPublicUrl ? { votePublicUrl: staticVotePublicationPublicUrl } : {})
-    }
-  }, [
+  const hasConfiguredPublicationSiteLinks = accessLinkSettings.defaultSoutenanceLinkTarget === 'publication'
+  const hasConfiguredVotePublicationSiteLinks = accessLinkSettings.defaultVoteLinkTarget === 'static'
+  const canSelectPublicationSiteLinks = canUsePublicationSiteLinks || hasConfiguredPublicationSiteLinks
+  const canSelectVotePublicationSiteLinks = canUseVotePublicationSiteLinks || hasConfiguredVotePublicationSiteLinks
+  const accessLinkTargetOptions = useMemo(() => ({
+    soutenanceLinkTarget: usePublicationSiteLinks ? 'publication' : 'app',
+    ...(usePublicationSiteLinks && staticPublicationPublicUrl ? { soutenancePublicUrl: staticPublicationPublicUrl } : {}),
+    voteLinkTarget: useVotePublicationSiteLinks ? 'static' : 'app',
+    ...(useVotePublicationSiteLinks && staticVotePublicationPublicUrl ? { votePublicUrl: staticVotePublicationPublicUrl } : {})
+  }), [
     staticPublicationPublicUrl,
     staticVotePublicationPublicUrl,
-    useSiteLinks
+    usePublicationSiteLinks,
+    useVotePublicationSiteLinks
   ])
-
-  useEffect(() => {
-    if (useSiteLinks && !canUseSiteLinks) {
-      setUsePublicationSiteLinks(false)
-      setUseVotePublicationSiteLinks(false)
-    }
-  }, [canUseSiteLinks, useSiteLinks])
-  const setAccessDestinationMode = useCallback((mode) => {
-    if (mode === 'site') {
-      setUsePublicationSiteLinks(canUseSiteLinks)
-      setUseVotePublicationSiteLinks(canUseSiteLinks)
-      return
-    }
-
-    setUsePublicationSiteLinks(false)
-    setUseVotePublicationSiteLinks(false)
-  }, [canUseSiteLinks])
 
   const loadAccessLinksPreview = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++accessLinkRequestIdRef.current
@@ -2272,6 +2469,14 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   }, [selectedYear, accessLinkTargetOptions])
 
   const handleGenerateLinks = useCallback(async () => {
+    if (
+      useVotePublicationSiteLinks &&
+      typeof window !== 'undefined' &&
+      !window.confirm(STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE)
+    ) {
+      return
+    }
+
     const requestId = ++accessLinkRequestIdRef.current
     setIsGenerating(true)
     setErrorMessage('')
@@ -2327,7 +2532,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     }
   }, [
     accessLinkTargetOptions,
-    selectedYear
+    selectedYear,
+    useVotePublicationSiteLinks
   ])
   useEffect(() => {
     loadAccessLinksPreview({ silent: true })
@@ -2376,16 +2582,15 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     setEmailDeliveryLedger((current) => {
       const next = {
         ...current,
-        [deliveryKey]: {
-          status: 'prepared',
-          source: 'outlook',
-          preparedAt: sentAt,
-          recipientEmail: compactText(person?.email),
-          linkType: phase,
-          linkLabel: label,
-          linkUrl: getAccessLinkUrl(link),
-          coversChangeRequests: phase === 'soutenance'
-        }
+        [deliveryKey]: buildOutlookPreparedDeliveryEntry({
+          target: {
+            person,
+            link,
+            phase,
+            label
+          },
+          preparedAt: sentAt
+        })
       }
       writeAccessEmailDeliveryLedger(selectedYear, next)
       return next
@@ -2488,11 +2693,19 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
   const handleSelectPendingSoutenanceEmails = useCallback(() => {
     const next = {}
-    for (const target of soutenanceEmailAutomationGroups.all.pendingTargets || []) {
+    const pendingTargets = soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
+      ? soutenanceEmailAutomationGroups.all.outlookPendingTargets
+      : soutenanceEmailAutomationGroups.all.pendingTargets
+
+    for (const target of pendingTargets || []) {
       next[target.deliveryKey] = true
     }
     setSelectedSoutenanceEmailKeys(next)
-  }, [soutenanceEmailAutomationGroups.all.pendingTargets])
+  }, [
+    soutenanceEmailAutomationGroups.all.outlookPendingTargets,
+    soutenanceEmailAutomationGroups.all.pendingTargets,
+    soutenanceEmailDeliveryMode
+  ])
 
   const handleClearSoutenanceEmailSelection = useCallback(() => {
     setSelectedSoutenanceEmailKeys({})
@@ -2500,13 +2713,19 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
   const getDefaultSoutenanceEmailTarget = useCallback(() => (
     selectedSoutenanceEmailTargets[0] ||
-    soutenanceEmailAutomationGroups.all.pendingTargets?.[0] ||
+    (
+      soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
+        ? soutenanceEmailAutomationGroups.all.outlookPendingTargets?.[0]
+        : soutenanceEmailAutomationGroups.all.pendingTargets?.[0]
+    ) ||
     soutenanceEmailAutomationTargets[0] ||
     null
   ), [
     selectedSoutenanceEmailTargets,
+    soutenanceEmailAutomationGroups.all.outlookPendingTargets,
     soutenanceEmailAutomationGroups.all.pendingTargets,
-    soutenanceEmailAutomationTargets
+    soutenanceEmailAutomationTargets,
+    soutenanceEmailDeliveryMode
   ])
 
   const handlePreviewSoutenanceEmailTemplate = useCallback(async () => {
@@ -2674,30 +2893,329 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     }
   }, [applySoutenanceEmailSendResults, loadAccessLinksPreview, selectedYear])
 
+  const recordSoutenanceOutlookPreparedTargets = useCallback((items) => {
+    const preparedItems = (Array.isArray(items) ? items : [])
+      .filter((item) => item && !item.testEmail && item.target?.deliveryKey)
+
+    if (preparedItems.length === 0) {
+      return
+    }
+
+    const preparedAt = new Date().toISOString()
+    const ledgerEntries = {}
+    const preparedKeys = new Set()
+
+    for (const item of preparedItems) {
+      preparedKeys.add(item.target.deliveryKey)
+      ledgerEntries[item.target.deliveryKey] = buildOutlookPreparedDeliveryEntry({
+        target: item.target,
+        preparedAt,
+        recipientEmail: item.recipientEmail
+      })
+    }
+
+    setEmailDeliveryLedger((current) => {
+      const next = {
+        ...(isPlainObject(current) ? current : {}),
+        ...ledgerEntries
+      }
+      writeAccessEmailDeliveryLedger(selectedYear, next)
+      return next
+    })
+
+    setSelectedSoutenanceEmailKeys((current) => {
+      const next = { ...(isPlainObject(current) ? current : {}) }
+      for (const key of preparedKeys) {
+        delete next[key]
+      }
+      return next
+    })
+  }, [selectedYear])
+
+  const handlePrepareSoutenanceEmailTargets = useCallback((targets, batchLabel, options = {}) => {
+    const selectedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
+    const testEmail = compactText(options.testEmail)
+    const preparedTargets = testEmail
+      ? selectedTargets.filter((target) => canPrepareAccessEmail(target?.person, target?.link))
+      : selectedTargets.filter(isSoutenanceEmailTargetOutlookSendable)
+
+    if (preparedTargets.length === 0) {
+      setErrorMessage(testEmail
+        ? 'Aucun lien défense disponible pour préparer un test Outlook.'
+        : 'Aucun destinataire sélectionné ne peut être préparé dans Outlook.')
+      return
+    }
+
+    const draftItems = preparedTargets.map((target, index) => {
+      const draft = buildAccessEmailDraft({
+        year: selectedYear,
+        person: target.person,
+        link: target.link,
+        phase: target.phase,
+        label: target.label,
+        subtitle: target.subtitle
+      })
+      const recipientEmail = testEmail || compactText(target.person?.email)
+
+      return {
+        target,
+        recipientEmail,
+        batchLabel,
+        batchTotal: preparedTargets.length,
+        batchIndex: index,
+        testEmail: Boolean(testEmail),
+        mailtoUrl: buildMailtoUrl({
+          ...draft,
+          to: recipientEmail
+        })
+      }
+    })
+
+    const [firstDraft, ...queuedDrafts] = draftItems
+    if (!firstDraft) {
+      return
+    }
+
+    openMailtoDraft(firstDraft.mailtoUrl)
+    recordSoutenanceOutlookPreparedTargets([firstDraft])
+    setSoutenanceOutlookDraftQueue(queuedDrafts)
+
+    setErrorMessage('')
+    if (testEmail) {
+      setSuccessMessage(queuedDrafts.length > 0
+        ? `Premier brouillon Outlook de test préparé pour ${testEmail}. ${queuedDrafts.length} restant(s) à ouvrir.`
+        : `Brouillon Outlook de test préparé pour ${testEmail}.`)
+      return
+    }
+
+    setSuccessMessage(queuedDrafts.length > 0
+      ? `1/${preparedTargets.length} brouillon(s) Outlook ouvert(s) pour ${batchLabel}. Cliquez sur “Ouvrir brouillon suivant” pour continuer.`
+      : `${preparedTargets.length} brouillon(s) Outlook préparé(s) pour ${batchLabel}.`)
+  }, [recordSoutenanceOutlookPreparedTargets, selectedYear])
+
+  const handleOpenNextSoutenanceOutlookDraft = useCallback(() => {
+    const [nextDraft, ...remainingDrafts] = soutenanceOutlookDraftQueue
+    if (!nextDraft) {
+      return
+    }
+
+    openMailtoDraft(nextDraft.mailtoUrl)
+    recordSoutenanceOutlookPreparedTargets([nextDraft])
+    setSoutenanceOutlookDraftQueue(remainingDrafts)
+    setErrorMessage('')
+
+    const openedCount = Math.max(1, Number(nextDraft.batchTotal || 0) - remainingDrafts.length)
+    setSuccessMessage(remainingDrafts.length > 0
+      ? `${openedCount}/${nextDraft.batchTotal} brouillon(s) Outlook ouvert(s) pour ${nextDraft.batchLabel}.`
+      : `${nextDraft.batchTotal} brouillon(s) Outlook préparé(s) pour ${nextDraft.batchLabel}.`)
+  }, [
+    recordSoutenanceOutlookPreparedTargets,
+    soutenanceOutlookDraftQueue
+  ])
+
+  const handleClearSoutenanceOutlookDraftQueue = useCallback(() => {
+    setSoutenanceOutlookDraftQueue([])
+    setErrorMessage('')
+    setSuccessMessage('File Outlook annulée.')
+  }, [])
+
   const handleSendSelectedSoutenanceEmails = useCallback(() => {
+    if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      handlePrepareSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection')
+      return
+    }
+
     handleSendSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection')
-  }, [handleSendSoutenanceEmailTargets, selectedSoutenanceEmailTargets])
+  }, [
+    handlePrepareSoutenanceEmailTargets,
+    handleSendSoutenanceEmailTargets,
+    selectedSoutenanceEmailTargets,
+    soutenanceEmailDeliveryMode
+  ])
+
+  const handleSendAllSoutenanceEmails = useCallback(() => {
+    if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      handlePrepareSoutenanceEmailTargets(
+        soutenanceEmailAutomationGroups.all.outlookPendingTargets,
+        'tous les destinataires'
+      )
+      return
+    }
+
+    handleSendSoutenanceEmailTargets(
+      soutenanceEmailAutomationGroups.all.pendingTargets,
+      'tous les destinataires'
+    )
+  }, [
+    handlePrepareSoutenanceEmailTargets,
+    handleSendSoutenanceEmailTargets,
+    soutenanceEmailAutomationGroups.all.outlookPendingTargets,
+    soutenanceEmailAutomationGroups.all.pendingTargets,
+    soutenanceEmailDeliveryMode
+  ])
 
   const handleSendProjectLeadSoutenanceEmails = useCallback(() => {
+    if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      handlePrepareSoutenanceEmailTargets(
+        soutenanceEmailAutomationGroups.projectLeads.outlookPendingTargets,
+        'les chefs de projet'
+      )
+      return
+    }
+
     handleSendSoutenanceEmailTargets(
       soutenanceEmailAutomationGroups.projectLeads.pendingTargets,
       'les chefs de projet'
     )
-  }, [handleSendSoutenanceEmailTargets, soutenanceEmailAutomationGroups.projectLeads.pendingTargets])
+  }, [
+    handlePrepareSoutenanceEmailTargets,
+    handleSendSoutenanceEmailTargets,
+    soutenanceEmailAutomationGroups.projectLeads.outlookPendingTargets,
+    soutenanceEmailAutomationGroups.projectLeads.pendingTargets,
+    soutenanceEmailDeliveryMode
+  ])
 
   const handleSendStandaloneExpertSoutenanceEmails = useCallback(() => {
+    if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      handlePrepareSoutenanceEmailTargets(
+        soutenanceEmailAutomationGroups.standaloneExperts.outlookPendingTargets,
+        'les experts'
+      )
+      return
+    }
+
     handleSendSoutenanceEmailTargets(
       soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets,
       'les experts'
     )
-  }, [handleSendSoutenanceEmailTargets, soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets])
+  }, [
+    handlePrepareSoutenanceEmailTargets,
+    handleSendSoutenanceEmailTargets,
+    soutenanceEmailAutomationGroups.standaloneExperts.outlookPendingTargets,
+    soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets,
+    soutenanceEmailDeliveryMode
+  ])
 
   const handleSendSoutenanceEmailTest = useCallback(() => {
     const target = getDefaultSoutenanceEmailTarget()
+    if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      handlePrepareSoutenanceEmailTargets(target ? [target] : [], 'test', {
+        testEmail: testEmailAddress
+      })
+      return
+    }
+
     handleSendSoutenanceEmailTargets(target ? [target] : [], 'test', {
       testEmail: testEmailAddress
     })
-  }, [getDefaultSoutenanceEmailTarget, handleSendSoutenanceEmailTargets, testEmailAddress])
+  }, [
+    getDefaultSoutenanceEmailTarget,
+    handlePrepareSoutenanceEmailTargets,
+    handleSendSoutenanceEmailTargets,
+    soutenanceEmailDeliveryMode,
+    testEmailAddress
+  ])
+
+  const handleResetSoutenanceEmailDeliveries = useCallback(async () => {
+    const resettableTargets = soutenanceEmailAutomationGroups.all.resettableTargets || []
+    const linkIds = Array.from(new Set(
+      resettableTargets
+        .map((target) => compactText(target?.link?.id))
+        .filter(Boolean)
+    ))
+    const resetKeys = new Set(resettableTargets.map((target) => target.deliveryKey).filter(Boolean))
+
+    if (linkIds.length === 0 && resetKeys.size === 0) {
+      return
+    }
+
+    setIsAutomaticEmailSending(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const response = await workflowCoordinationService.resetAccessLinkEmailDeliveries(selectedYear, {
+        type: 'soutenance',
+        linkIds
+      })
+      const modifiedCount = Number(response?.modifiedCount ?? response?.matchedCount ?? linkIds.length)
+
+      setEmailDeliveryLedger((current) => {
+        const source = isPlainObject(current) ? current : {}
+        const next = {}
+
+        for (const [key, delivery] of Object.entries(source)) {
+          if (!resetKeys.has(key)) {
+            next[key] = delivery
+          }
+        }
+
+        writeAccessEmailDeliveryLedger(selectedYear, next)
+        return next
+      })
+      setSelectedSoutenanceEmailKeys((current) => {
+        const source = isPlainObject(current) ? current : {}
+        const next = {}
+
+        for (const [key, isSelected] of Object.entries(source)) {
+          if (!resetKeys.has(key)) {
+            next[key] = isSelected
+          }
+        }
+
+        return next
+      })
+      loadAccessLinksPreview({ silent: true })
+      setSuccessMessage(`${modifiedCount} envoi(s) défense réinitialisé(s).`)
+    } catch (error) {
+      setErrorMessage(
+        error?.data?.error || error?.message || 'Erreur lors du reset des envois.'
+      )
+    } finally {
+      setIsAutomaticEmailSending(false)
+    }
+  }, [loadAccessLinksPreview, selectedYear, soutenanceEmailAutomationGroups.all.resettableTargets])
+
+  const handleResetSoutenanceOutlookPrepared = useCallback(() => {
+    const preparedKeys = new Set(
+      (soutenanceEmailAutomationGroups.all.targets || [])
+        .filter((target) => isLocalOutlookPreparedDelivery(target?.delivery))
+        .map((target) => target.deliveryKey)
+        .filter(Boolean)
+    )
+
+    if (preparedKeys.size === 0) {
+      return
+    }
+
+    setEmailDeliveryLedger((current) => {
+      const source = isPlainObject(current) ? current : {}
+      const next = {}
+
+      for (const [key, delivery] of Object.entries(source)) {
+        if (!preparedKeys.has(key)) {
+          next[key] = delivery
+        }
+      }
+
+      writeAccessEmailDeliveryLedger(selectedYear, next)
+      return next
+    })
+    setSelectedSoutenanceEmailKeys((current) => {
+      const source = isPlainObject(current) ? current : {}
+      const next = {}
+
+      for (const [key, isSelected] of Object.entries(source)) {
+        if (!preparedKeys.has(key)) {
+          next[key] = isSelected
+        }
+      }
+
+      return next
+    })
+    setErrorMessage('')
+    setSuccessMessage(`${preparedKeys.size} brouillon(s) Outlook défense réinitialisé(s).`)
+  }, [selectedYear, soutenanceEmailAutomationGroups.all.targets])
 
   const outlookPreparedCount = useMemo(() => (
     Object.values(isPlainObject(emailDeliveryLedger) ? emailDeliveryLedger : {})
@@ -2825,7 +3343,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       id: 'targets',
       label: 'Cibles',
       value: accessDestinationLabel,
-      detail: 'Défenses / votes',
+      detail: 'Défenses / votes + arbitrage',
       icon: ArrowRightIcon,
       variant: usePublicationSiteLinks || useVotePublicationSiteLinks ? 'ok' : 'neutral'
     }
@@ -2975,16 +3493,37 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
             </div>
 
             <label
-              className={`token-access-checkbox-control${!useSiteLinks ? ' is-active' : ''}`.trim()}
-              title={canUseSiteLinks ? 'Basculer entre URLs locales et site public.' : 'Aucune URL publique disponible.'}
+              className={`token-access-checkbox-control${usePublicationSiteLinks ? ' is-active' : ''}${!canSelectPublicationSiteLinks ? ' is-disabled' : ''}`.trim()}
+              title={canSelectPublicationSiteLinks ? `Défenses: ${usePublicationSiteLinks ? publicationTargetLabel || 'site public' : localTargetLabel}.` : 'Aucune URL publique de défense disponible.'}
             >
               <input
                 type='checkbox'
-                checked={!useSiteLinks}
-                onChange={(event) => setAccessDestinationMode(event.target.checked ? 'local' : 'site')}
+                checked={usePublicationSiteLinks}
+                disabled={!canSelectPublicationSiteLinks}
+                aria-label='Utiliser le site pour les liens de défense'
+                onChange={(event) => setUsePublicationSiteLinks(event.target.checked)}
               />
               <span className='token-access-checkbox-copy'>
-                <strong>Local</strong>
+                <strong>Défenses</strong>
+                <small>{usePublicationSiteLinks ? 'Site' : 'Local'}</small>
+              </span>
+              <span className='token-access-checkbox-mark' aria-hidden='true' />
+            </label>
+
+            <label
+              className={`token-access-checkbox-control${useVotePublicationSiteLinks ? ' is-active' : ''}${!canSelectVotePublicationSiteLinks ? ' is-disabled' : ''}`.trim()}
+              title={canSelectVotePublicationSiteLinks ? `Votes: ${useVotePublicationSiteLinks ? votePublicationTargetLabel || 'mini-site' : localTargetLabel}.` : 'Aucune URL publique de vote disponible.'}
+            >
+              <input
+                type='checkbox'
+                checked={useVotePublicationSiteLinks}
+                disabled={!canSelectVotePublicationSiteLinks}
+                aria-label='Utiliser le site pour les liens de vote et d’arbitrage'
+                onChange={(event) => setUseVotePublicationSiteLinks(event.target.checked)}
+              />
+              <span className='token-access-checkbox-copy'>
+                <strong>Votes + arbitrage</strong>
+                <small>{useVotePublicationSiteLinks ? 'Site' : 'Local'}</small>
               </span>
               <span className='token-access-checkbox-mark' aria-hidden='true' />
             </label>
@@ -2993,10 +3532,12 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
               <input
                 type='checkbox'
                 checked={showCandidateBlocks}
+                aria-label='Afficher les candidats dans les liens et les emails'
                 onChange={(event) => setShowCandidateBlocks(event.target.checked)}
               />
               <span className='token-access-checkbox-copy'>
                 <strong>{CANDIDATE_ROLE_LABEL}s</strong>
+                <small>Liens + emails</small>
               </span>
               <span className='token-access-checkbox-mark' aria-hidden='true' />
             </label>
@@ -3016,6 +3557,12 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
           {successMessage ? (
             <AccessNotice tone='success'>
               {successMessage}
+            </AccessNotice>
+          ) : null}
+
+          {useVotePublicationSiteLinks ? (
+            <AccessNotice tone='warning'>
+              {STATIC_VOTE_REGENERATION_NOTICE}
             </AccessNotice>
           ) : null}
 
@@ -3117,21 +3664,32 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                   selectedKeys={selectedSoutenanceEmailKeys}
                   selectedCount={selectedSoutenanceEmailTargets.length}
                   pendingCount={soutenanceEmailAutomationGroups.all.pendingCount}
+                  resettableCount={soutenanceEmailAutomationGroups.all.resettableCount}
+                  sentCount={soutenanceEmailAutomationGroups.all.sentCount}
+                  preparedCount={soutenanceEmailAutomationGroups.all.preparedCount}
+                  deliveryMode={soutenanceEmailDeliveryMode}
                   projectLeadGroup={soutenanceEmailAutomationGroups.projectLeads}
                   expertGroup={soutenanceEmailAutomationGroups.standaloneExperts}
                   preview={soutenanceEmailPreview}
                   testEmailAddress={testEmailAddress}
                   isPreviewLoading={isEmailPreviewLoading}
                   isSending={isAutomaticEmailSending}
+                  outlookQueueCount={soutenanceOutlookDraftQueue.length}
                   onPreview={handlePreviewSoutenanceEmailTemplate}
                   onSendTest={handleSendSoutenanceEmailTest}
+                  onSendAll={handleSendAllSoutenanceEmails}
                   onSendSelection={handleSendSelectedSoutenanceEmails}
                   onSendProjectLeads={handleSendProjectLeadSoutenanceEmails}
                   onSendExperts={handleSendStandaloneExpertSoutenanceEmails}
+                  onResetDeliveries={handleResetSoutenanceEmailDeliveries}
+                  onResetOutlookPrepared={handleResetSoutenanceOutlookPrepared}
+                  onDeliveryModeChange={setSoutenanceEmailDeliveryMode}
                   onTestEmailChange={setTestEmailAddress}
                   onToggleTarget={handleToggleSoutenanceEmailSelection}
                   onSelectPending={handleSelectPendingSoutenanceEmails}
                   onClearSelection={handleClearSoutenanceEmailSelection}
+                  onOpenNextOutlookDraft={handleOpenNextSoutenanceOutlookDraft}
+                  onClearOutlookQueue={handleClearSoutenanceOutlookDraftQueue}
                   onCollapse={() => setIsEmailAutomationPanelCollapsed(true)}
                 />
               ) : null}

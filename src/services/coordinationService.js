@@ -446,6 +446,12 @@ export const workflowCoordinationService = {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/planification/freeze`, body)
   },
 
+  syncPlanificationFromCoordination: async (year, allowHardConflicts = false) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/planification/sync-from-coordination`, {
+      allowHardConflicts
+    })
+  },
+
   startVotes: async (year, legacyRooms = null, options = {}) => {
     return await apiService.post(
       `${WORKFLOW_BASE_URL}/${year}/votes/start`,
@@ -547,7 +553,11 @@ export const workflowCoordinationService = {
       body.votePublicUrl = options.votePublicUrl
     }
 
-    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/generate`, body)
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/access-links/generate`,
+      body,
+      STATIC_PUBLICATION_TIMEOUT
+    )
   },
 
   previewSoutenanceAccessEmail: async (year, target = {}) => {
@@ -564,6 +574,13 @@ export const workflowCoordinationService = {
       forceResend: options.forceResend === true,
       baseUrl: options.baseUrl || null
     }, TIMEOUTS.EMAIL_SEND)
+  },
+
+  resetAccessLinkEmailDeliveries: async (year, options = {}) => {
+    return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/email-deliveries/reset`, {
+      type: options.type || 'soutenance',
+      linkIds: Array.isArray(options.linkIds) ? options.linkIds : []
+    })
   },
 
   getAccessLinkLogs: async (year, options = {}) => {

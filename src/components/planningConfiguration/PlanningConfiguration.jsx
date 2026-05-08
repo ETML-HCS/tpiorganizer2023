@@ -2135,7 +2135,7 @@ const AccessLinkSettingsCard = ({ settings, onChange, disabled = false }) => {
             </div>
             <div className='configuration-card-grid configuration-card-grid--access-link-group'>
               <label className='page-tools-field'>
-                <span className='page-tools-field-label' title='Cible utilisée par défaut pour les liens de vote générés dans le module Accès et les emails de campagne.'>
+                <span className='page-tools-field-label' title='Cible utilisée par défaut pour les liens de vote, les liens d’arbitrage et les emails de campagne.'>
                   Cible vote
                 </span>
                 <select

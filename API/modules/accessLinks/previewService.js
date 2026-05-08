@@ -353,7 +353,8 @@ function copyLinkStatusFields(link = {}) {
     availabilityStatus: getLinkAvailabilityStatus(link),
     revokedAt: link.revokedAt || null,
     maxUses: Number.isFinite(Number(link.maxUses)) ? Number(link.maxUses) : null,
-    usageCount: Number.isFinite(Number(link.usageCount)) ? Number(link.usageCount) : null
+    usageCount: Number.isFinite(Number(link.usageCount)) ? Number(link.usageCount) : null,
+    lastUsedAt: link.lastUsedAt || null
   }
 }
 

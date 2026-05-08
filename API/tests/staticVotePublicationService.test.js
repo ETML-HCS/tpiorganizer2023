@@ -398,11 +398,22 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   assert.match(html, /vote-period-group/)
   assert.match(html, /buildVotePeriodGroups/)
   assert.match(html, /vote-card-main-grid/)
+  assert.match(html, /grid-template-areas:\s*\n\s*"content side"\s*\n\s*"content remark"/)
+  assert.match(html, /grid-template-rows: auto minmax\(0, 1fr\)/)
+  assert.match(html, /vote-card-aside-remark/)
+  assert.match(html, /mainGrid\.append\(side, content, asideRemark\)/)
   assert.match(html, /dataset\.proposalArea/)
   assert.match(html, /updateSummary/)
   assert.match(html, /Transmettre/)
-  assert.match(html, /Autres demi-journées/)
+  assert.match(html, /Créneaux alternatifs/)
+  assert.match(html, /vote-proposal-head/)
+  assert.match(html, /vote-proposal-title/)
+  assert.doesNotMatch(html, /vote-proposal-context/)
+  assert.doesNotMatch(html, /formatProposalContext/)
   assert.match(html, /Remarque/)
+  assert.match(html, /specialReason\.rows = 1/)
+  assert.match(html, /remarkField\.rows = 2/)
+  assert.match(html, /height: 100%/)
   assert.match(html, /Hors liste/)
   assert.match(html, /vote-sent/)
   assert.match(html, /is-just-sent/)
@@ -412,12 +423,42 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   assert.match(html, /Il n’est plus possible de les modifier/)
   assert.doesNotMatch(html, /Aucune date proposée ne convient/)
   assert.doesNotMatch(html, /data-hard-constraint/)
-  assert.match(html, /Seule dispo/)
+  assert.match(html, /Unique/)
+  assert.match(html, /vote-period-button/)
+  assert.match(html, /vote-day-segments/)
+  assert.match(html, /vote-unique-toggle/)
+  assert.match(html, /createPeriodIcon/)
+  assert.match(html, /data-day-toggle/)
+  assert.match(html, /Journée/)
   assert.match(html, /vote-load-chip/)
-  assert.match(html, /À coordonner/)
+  assert.match(html, /Peu demandé/)
+  assert.match(html, /Déjà demandé/)
+  assert.match(html, /Très demandé/)
+  assert.match(html, /vote-queue-chip/)
+  assert.match(html, /has-selection/)
   assert.match(html, /onlyAvailabilitySlotIds/)
   assert.match(html, /voteSettings/)
+  assert.match(html, /getCardMaxProposals/)
+  assert.match(html, /enforceProposalLimit/)
+  assert.match(html, /getProposalLimitMessage/)
+  assert.match(html, /vote-proposal-count\.is-limit/)
+  assert.match(html, /String\(label\)\.split\(' \| '\)\[0\]/)
+  assert.match(html, /@media \(max-width: 520px\)/)
+  assert.match(html, /\.vote-card,\s*\n    \.vote-card \*/)
+  assert.match(html, /overflow-wrap: anywhere/)
+  assert.match(html, /white-space: normal;\s*\n      text-align: center/)
   assert.doesNotMatch(html, /mode\.innerHTML/)
+})
+
+test('buildStaticVoteHtml annonce la fermeture quand aucun vote n est ouvert', () => {
+  const html = buildStaticVoteHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    campaignId: 'vote-2026-closed',
+    groups: []
+  })
+
+  assert.match(html, /Les demandes de modification d’horaires ne sont plus possibles\./)
 })
 
 test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote folder', async (t) => {
@@ -720,6 +761,71 @@ test('importStaticVoteRecord applies a static proposal response idempotently', a
     assert.equal(validationInput.decision, 'rejected')
     assert.equal(validationInput.voteId, String(fixedVoteId))
     assert.match(savedVotes[0].magicLinkUsed, /^static-vote:2026:submission-1$/)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteRecord conserve une réponse déjà enregistrée', async () => {
+  const year = 2026
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  let validationCalled = false
+  const fixedVote = {
+    _id: fixedVoteId,
+    slot: fixedSlotId,
+    voterRole: 'expert1',
+    decision: 'accepted',
+    comment: 'Réponse admin déjà validée.',
+    votedAt: new Date('2026-05-09T08:00:00.000Z'),
+    async save() {
+      throw new Error('Une réponse existante ne doit pas être écrasée.')
+    }
+  }
+  const tpi = {
+    _id: tpiId,
+    year,
+    status: 'voting',
+    expert1: personId,
+    expert2: new mongoose.Types.ObjectId(),
+    chefProjet: new mongoose.Types.ObjectId(),
+    proposedSlots: [
+      { slot: { _id: fixedSlotId } }
+    ]
+  }
+  const restore = [
+    replaceProperty(Vote, 'exists', async () => null),
+    replaceProperty(TpiPlanning, 'findOne', () => makeQueryResult(tpi)),
+    replaceProperty(Vote, 'find', () => makeQueryResult([fixedVote])),
+    replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async () => {
+      validationCalled = true
+      return { success: true }
+    })
+  ]
+
+  try {
+    const result = await importStaticVoteRecord({
+      id: 'submission-after-admin-answer',
+      year,
+      personId: String(personId),
+      tpiId: String(tpiId),
+      fixedVoteId: String(fixedVoteId),
+      mode: 'proposal',
+      hardConstraint: true,
+      submittedAt: '2026-05-10T08:00:00.000Z',
+      tokenHash: 'd'.repeat(64)
+    }, year)
+
+    assert.equal(result.imported, false)
+    assert.equal(result.skipped, true)
+    assert.equal(result.reason, 'already_answered')
+    assert.equal(validationCalled, false)
+    assert.equal(fixedVote.decision, 'accepted')
+    assert.equal(fixedVote.comment, 'Réponse admin déjà validée.')
   } finally {
     while (restore.length > 0) {
       restore.pop()()

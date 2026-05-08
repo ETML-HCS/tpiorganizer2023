@@ -169,9 +169,18 @@ function compactText(value) {
 async function getConfiguredSoutenancePublicUrl(year) {
   try {
     const status = await staticDefensePublicationService.getStaticPublicationStatus(year)
-    return compactText(status?.publicUrl)
+    const statusPublicUrl = compactText(status?.publicUrl)
+    if (statusPublicUrl) {
+      return statusPublicUrl
+    }
   } catch (error) {
     console.warn(`URL publique défense ${year} indisponible:`, error?.message || error)
+  }
+
+  try {
+    return compactText(await staticDefensePublicationService.getPublicUrl(year))
+  } catch (error) {
+    console.warn(`Fallback URL publique défense ${year} indisponible:`, error?.message || error)
     return ''
   }
 }
@@ -841,6 +850,95 @@ router.post(
 
       console.error('Erreur freeze planification:', error)
       return res.status(500).json({ error: 'Erreur lors du freeze de planification.' })
+    }
+  }
+)
+
+router.post(
+  '/:year/planification/sync-from-coordination',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+    const allowHardConflicts = parseBoolean(req.body?.allowHardConflicts, false)
+
+    try {
+      await workflowService.getWorkflowYearState(year)
+
+      const validationPreview = await coordinationValidationService.validatePlanningForYear(year)
+      if (validationPreview.summary.hasHardConflicts && !allowHardConflicts) {
+        throw new coordinationValidationService.PlanningFreezeError(
+          'Conflits hard detectes. Synchronisation et freeze refuses.',
+          {
+            summary: validationPreview.summary,
+            hardConflicts: validationPreview.hardConflicts
+          }
+        )
+      }
+
+      const syncResult = await coordinationAutomationService.syncLegacyRoomsFromCurrentPlanning(year)
+      const result = await coordinationValidationService.freezePlanningSnapshot({
+        year,
+        user: req.user,
+        allowHardConflicts
+      })
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.planification.sync-from-coordination',
+        user: req.user,
+        payload: {
+          roomCount: syncResult.roomCount,
+          slotCount: syncResult.slotCount,
+          tpiCount: syncResult.tpiCount,
+          version: result.snapshot.version,
+          hash: result.snapshot.hash,
+          allowHardConflicts
+        },
+        success: true
+      })
+
+      return res.status(201).json({
+        success: true,
+        summary: {
+          year: syncResult.year,
+          roomCount: syncResult.roomCount,
+          slotCount: syncResult.slotCount,
+          tpiCount: syncResult.tpiCount
+        },
+        legacyRooms: syncResult.legacyRooms,
+        snapshot: {
+          year: result.snapshot.year,
+          version: result.snapshot.version,
+          frozenAt: result.snapshot.frozenAt,
+          hash: result.snapshot.hash,
+          source: result.snapshot.source,
+          validationSummary: result.snapshot.validationSummary
+        },
+        hardConflicts: result.snapshot.hardConflicts
+      })
+    } catch (error) {
+      if (error instanceof coordinationValidationService.PlanningFreezeError) {
+        await workflowService.logWorkflowAuditEvent({
+          year,
+          action: 'workflow.planification.sync-from-coordination',
+          user: req.user,
+          payload: {
+            allowHardConflicts
+          },
+          success: false,
+          error: error.message
+        })
+
+        return res.status(error.statusCode || 409).json({
+          error: error.message,
+          details: error.details
+        })
+      }
+
+      console.error('Erreur synchronisation planification depuis coordination:', error)
+      return res.status(500).json({ error: 'Erreur lors de la synchronisation depuis la coordination.' })
     }
   }
 )
@@ -1733,6 +1831,63 @@ async function handleSendSoutenanceAccessEmails(req, res) {
   })
 }
 
+async function handleResetAccessEmailDeliveries(req, res) {
+  const year = req.validatedParams.year
+  const type = compactText(req.body?.type || 'soutenance') || 'soutenance'
+  const linkIds = Array.isArray(req.body?.linkIds)
+    ? req.body.linkIds.map(compactText).filter(Boolean)
+    : []
+
+  try {
+    const resetResult = await accessLinkTokenService.resetMagicLinkEmailDeliveries({
+      year,
+      type,
+      ids: linkIds
+    })
+
+    await safeLogAccessLinksAudit({
+      year,
+      action: 'workflow.access-links.email-reset',
+      user: req.user,
+      payload: {
+        type,
+        requestedLinkCount: linkIds.length,
+        matchedCount: resetResult.matchedCount,
+        modifiedCount: resetResult.modifiedCount
+      },
+      success: true
+    })
+
+    return res.status(200).json({
+      success: true,
+      year,
+      type,
+      requestedLinkCount: linkIds.length,
+      ...resetResult
+    })
+  } catch (error) {
+    await safeLogAccessLinksAudit({
+      year,
+      action: 'workflow.access-links.email-reset',
+      user: req.user,
+      payload: {
+        type,
+        requestedLinkCount: linkIds.length
+      },
+      success: false,
+      error: error?.message || 'Erreur inconnue'
+    })
+
+    console.error('Erreur reset envois liens acces:', error)
+    const statusCode = error?.message === 'Type de magic link invalide.' ? 400 : 500
+    return res.status(statusCode).json({
+      error: statusCode === 400
+        ? error.message
+        : 'Erreur lors du reset des envois de liens d acces.'
+    })
+  }
+}
+
 router.post(
   '/:year/access-links/preview',
   requireYearParam('year'),
@@ -2151,6 +2306,14 @@ router.post(
   authMiddleware,
   requireRole('admin'),
   async (req, res) => handleSendSoutenanceAccessEmails(req, res)
+)
+
+router.post(
+  '/:year/access-links/email-deliveries/reset',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => handleResetAccessEmailDeliveries(req, res)
 )
 
 router.post(

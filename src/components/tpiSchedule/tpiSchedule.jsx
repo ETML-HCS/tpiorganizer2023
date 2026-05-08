@@ -56,6 +56,7 @@ import {
 } from "./tpiScheduleImportability"
 import { API_URL, IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../../config/appConfig"
 import { coordinationCatalogService, coordinationConfigService } from "../../services/coordinationService"
+import { STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE } from "../../constants/staticVotePublication"
 import {
   readJSONListValue,
   readStorageValue,
@@ -2066,6 +2067,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const handleGenerateStaticVotePublication = async () => {
     await executeWorkflowAction({
       actionKey: "staticVoteGenerate",
+      confirmMessage: STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE,
       run: () => workflowCoordinationService.generateStaticVotePublication(selectedYear),
       successMessage: (result) =>
         `Mini-site vote généré: ${result?.groupCount || 0} vote(s), ${result?.accessLinkCount || 0} lien(s).`,

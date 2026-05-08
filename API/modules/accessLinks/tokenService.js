@@ -213,6 +213,7 @@ function buildStoredMagicLinkResponse(link, baseUrl) {
     revokedAt: link?.revokedAt || null,
     maxUses: Number(link?.maxUses || 0),
     usageCount: Number(link?.usageCount || 0),
+    lastUsedAt: link?.lastUsedAt || null,
     type: link?.type,
     generated: true,
     recoverable: Boolean(rawToken),
@@ -599,7 +600,7 @@ async function findReusableMagicLink({
   applyScopeFilters(query, scope)
 
   const links = await MagicLink.find(query)
-    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
+    .select('+rawToken type year redirectPath expiresAt maxUses usageCount lastUsedAt scope createdAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
     .sort({ createdAt: -1 })
     .lean()
 
@@ -654,7 +655,7 @@ async function findLatestMagicLinkStatus({
   applyScopeFilters(query, scope)
 
   const latestLink = await MagicLink.findOne(query)
-    .select('+rawToken type year redirectPath expiresAt maxUses usageCount scope createdAt revokedAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
+    .select('+rawToken type year redirectPath expiresAt maxUses usageCount lastUsedAt scope createdAt revokedAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
     .sort({ createdAt: -1 })
     .lean()
 
@@ -689,7 +690,7 @@ async function findMagicLinkForEmailDelivery({
     year: normalizedYear,
     type
   })
-    .select('+rawToken type year recipientEmail personId personName redirectPath expiresAt maxUses usageCount scope createdAt revokedAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
+    .select('+rawToken type year recipientEmail personId personName redirectPath expiresAt maxUses usageCount lastUsedAt scope createdAt revokedAt emailDeliveryStatus emailSentAt emailDeliveryError emailMessageId')
     .lean()
 
   if (!link) {
@@ -732,6 +733,62 @@ async function markMagicLinkEmailDelivery({
 
   await MagicLink.updateOne({ _id: id }, { $set: update })
   return update
+}
+
+async function resetMagicLinkEmailDeliveries({
+  year,
+  type,
+  ids = []
+} = {}) {
+  if (!isAccessLinkType(type)) {
+    throw new Error('Type de magic link invalide.')
+  }
+
+  const normalizedYear = Number.parseInt(year, 10)
+  if (!Number.isInteger(normalizedYear)) {
+    throw new Error('Annee invalide pour reset envois magic link.')
+  }
+
+  const rawIds = (Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+  const normalizedIds = rawIds
+    .filter((id) => mongoose.isObjectIdOrHexString(id))
+  const updatedAt = new Date()
+
+  if (rawIds.length > 0 && normalizedIds.length === 0) {
+    return {
+      matchedCount: 0,
+      modifiedCount: 0,
+      resetAt: updatedAt.toISOString()
+    }
+  }
+
+  const query = {
+    year: normalizedYear,
+    type,
+    emailDeliveryStatus: { $in: ['sent', 'failed', 'skipped', 'pending'] }
+  }
+
+  if (normalizedIds.length > 0) {
+    query._id = { $in: normalizedIds }
+  }
+
+  const result = await MagicLink.updateMany(query, {
+    $set: {
+      emailDeliveryStatus: '',
+      emailSentAt: null,
+      emailDeliveryError: '',
+      emailMessageId: '',
+      updatedAt
+    }
+  })
+
+  return {
+    matchedCount: Number(result.matchedCount ?? result.n ?? 0),
+    modifiedCount: getModifiedCount(result),
+    resetAt: updatedAt.toISOString()
+  }
 }
 
 async function listSoutenancePublicationAccessLinkStats({
@@ -1006,6 +1063,7 @@ module.exports = {
   findLatestMagicLinkStatus,
   findMagicLinkForEmailDelivery,
   markMagicLinkEmailDelivery,
+  resetMagicLinkEmailDeliveries,
   listSoutenancePublicationAccessLinkStats,
   listAccessLogs,
   logAccessLinkAttempt,

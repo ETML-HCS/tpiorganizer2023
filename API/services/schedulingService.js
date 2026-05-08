@@ -14,6 +14,7 @@ const {
   normalizeWorkflowSettings
 } = require('./coordinationConfigService')
 const {
+  areConsecutiveTimeSteps,
   buildOccupiedStepKeys,
   buildTimelineIndex,
   getMaxConsecutiveTpiLimit,
@@ -308,12 +309,22 @@ async function checkConsecutiveRule(personIds, date, period, options = {}) {
     occupiedStepKeys.add(candidateKey)
 
     let leftIndex = candidateIndex
-    while (leftIndex > 0 && occupiedStepKeys.has(timeline.timeSteps[leftIndex - 1])) {
+    while (leftIndex > 0) {
+      const currentKey = timeline.timeSteps[leftIndex]
+      const previousKey = timeline.timeSteps[leftIndex - 1]
+      if (!areConsecutiveTimeSteps(previousKey, currentKey) || !occupiedStepKeys.has(previousKey)) {
+        break
+      }
       leftIndex -= 1
     }
 
     let rightIndex = candidateIndex
-    while (rightIndex < timeline.timeSteps.length - 1 && occupiedStepKeys.has(timeline.timeSteps[rightIndex + 1])) {
+    while (rightIndex < timeline.timeSteps.length - 1) {
+      const currentKey = timeline.timeSteps[rightIndex]
+      const nextKey = timeline.timeSteps[rightIndex + 1]
+      if (!areConsecutiveTimeSteps(currentKey, nextKey) || !occupiedStepKeys.has(nextKey)) {
+        break
+      }
       rightIndex += 1
     }
 

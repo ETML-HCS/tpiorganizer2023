@@ -5,6 +5,7 @@ const Person = require('../models/personModel')
 const {
   buildAutomaticSlotDocuments,
   buildLegacyRoomsFromAutomaticSlots,
+  buildLegacyRoomsFromCurrentPlanningState,
   computeAutomaticAssignments,
   resolveTaskAllowedDateKeys
 } = require('../services/coordinationAutomationService')
@@ -739,4 +740,96 @@ test('buildLegacyRoomsFromAutomaticSlots propage les avertissements de contraint
     type: 'availability_override',
     message: 'Disponibilité ignorée: Expert indisponible.'
   }])
+})
+
+test('buildLegacyRoomsFromCurrentPlanningState synchronise les deplacements confirmes avec les creneaux vides de la salle', () => {
+  const makePerson = (id, firstName, lastName) => ({
+    _id: id,
+    firstName,
+    lastName
+  })
+  const tpis = [
+    {
+      _id: 'tpi-27',
+      year: 2026,
+      reference: 'TPI-2026-27',
+      status: 'confirmed',
+      site: 'ETML',
+      classe: 'DEV4',
+      candidat: makePerson('candidate-27', 'Candidate', 'Twentyseven'),
+      expert1: makePerson('expert1-27', 'Expert', 'One'),
+      expert2: makePerson('expert2-27', 'Expert', 'Two'),
+      chefProjet: makePerson('boss-27', 'Boss', 'Twentyseven')
+    },
+    {
+      _id: 'tpi-cancelled',
+      year: 2026,
+      reference: 'TPI-2026-99',
+      status: 'cancelled',
+      site: 'ETML',
+      candidat: makePerson('candidate-99', 'Candidate', 'Cancelled'),
+      expert1: makePerson('expert1-99', 'Expert', 'Cancelled'),
+      expert2: makePerson('expert2-99', 'Expert', 'Cancelled'),
+      chefProjet: makePerson('boss-99', 'Boss', 'Cancelled')
+    }
+  ]
+  const makeSlot = (period, overrides = {}) => ({
+    _id: `slot-a101-${period}`,
+    year: 2026,
+    date: new Date('2026-06-11T08:00:00.000Z'),
+    period,
+    startTime: `${String(7 + period).padStart(2, '0')}:00`,
+    endTime: `${String(8 + period).padStart(2, '0')}:00`,
+    room: {
+      name: 'A101',
+      site: 'ETML',
+      capacity: 1
+    },
+    status: 'available',
+    assignedTpi: null,
+    config: {
+      duration: 60,
+      breakAfter: 10,
+      numSlots: 6,
+      maxConsecutiveTpi: 4,
+      minTpiPerRoom: 3
+    },
+    ...overrides
+  })
+  const slots = [
+    makeSlot(1),
+    makeSlot(2),
+    makeSlot(3),
+    makeSlot(4),
+    makeSlot(5),
+    makeSlot(6, {
+      assignedTpi: 'tpi-27',
+      status: 'confirmed'
+    }),
+    {
+      ...makeSlot(1, {
+        _id: 'slot-b201-1',
+        assignedTpi: 'tpi-cancelled',
+        status: 'cancelled'
+      }),
+      room: {
+        name: 'B201',
+        site: 'ETML',
+        capacity: 1
+      }
+    }
+  ]
+
+  const result = buildLegacyRoomsFromCurrentPlanningState(2026, slots, tpis)
+
+  assert.equal(result.tpiCount, 1)
+  assert.equal(result.roomCount, 1)
+  assert.equal(result.slotCount, 6)
+  assert.equal(result.legacyRooms[0].name, 'A101')
+  assert.equal(result.legacyRooms[0].date.toISOString().slice(0, 10), '2026-06-11')
+  assert.equal(result.legacyRooms[0].tpiDatas.length, 6)
+  assert.equal(result.legacyRooms[0].tpiDatas[4].refTpi, null)
+  assert.equal(result.legacyRooms[0].tpiDatas[5].refTpi, '27')
+  assert.equal(result.legacyRooms[0].tpiDatas[5].period, 6)
+  assert.equal(result.legacyRooms[0].tpiDatas[5].candidat, 'Candidate Twentyseven')
 })

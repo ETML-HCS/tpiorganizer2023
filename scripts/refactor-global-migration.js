@@ -56,6 +56,10 @@ function parseArgs(argv = process.argv.slice(2)) {
 }
 
 function parseYear(value) {
+  if (!/^\d{4}$/.test(String(value))) {
+    throw new Error(`Annee invalide: ${value}`)
+  }
+
   const year = Number.parseInt(String(value), 10)
   if (!Number.isInteger(year) || year < 2000 || year > 2100) {
     throw new Error(`Annee invalide: ${value}`)

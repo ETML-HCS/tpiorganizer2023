@@ -3,6 +3,7 @@
  * Gère les notifications par email (magic links, rappels de vote, confirmations)
  */
 
+const crypto = require('crypto')
 const nodemailer = require('nodemailer')
 const { normalizeEmailSettings } = require('./coordinationCatalogService')
 const {
@@ -19,10 +20,41 @@ function normalizePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
-function getSmtpTransportConfig(env = process.env) {
-  const port = normalizeSmtpPort(env.SMTP_PORT || (env.NODE_ENV === 'production' ? 465 : 587))
+function normalizeDomain(value) {
+  const domain = sanitizeHeaderText(value)
+    .replace(/^@+/, '')
+    .replace(/\.+$/, '')
+    .toLowerCase()
+
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : ''
+}
+
+function normalizeDkimPrivateKey(value) {
+  const privateKey = String(value || '').replace(/\\n/g, '\n').trim()
+  return privateKey || ''
+}
+
+function getDkimConfig(env = process.env) {
+  const domainName = normalizeDomain(env.SMTP_DKIM_DOMAIN || getEmailDomain(env.SMTP_FROM))
+  const keySelector = sanitizeHeaderText(env.SMTP_DKIM_SELECTOR)
+  const privateKey = normalizeDkimPrivateKey(env.SMTP_DKIM_PRIVATE_KEY)
+
+  if (!domainName || !keySelector || !privateKey) {
+    return null
+  }
 
   return {
+    domainName,
+    keySelector,
+    privateKey
+  }
+}
+
+function getSmtpTransportConfig(env = process.env) {
+  const port = normalizeSmtpPort(env.SMTP_PORT || (env.NODE_ENV === 'production' ? 465 : 587))
+  const dkim = getDkimConfig(env)
+
+  const config = {
     host: sanitizeHeaderText(env.SMTP_HOST),
     port,
     secure: port === 465,
@@ -32,6 +64,12 @@ function getSmtpTransportConfig(env = process.env) {
     greetingTimeout: normalizePositiveInteger(env.SMTP_GREETING_TIMEOUT_MS, 10000),
     socketTimeout: normalizePositiveInteger(env.SMTP_SOCKET_TIMEOUT_MS, 30000)
   }
+
+  if (dkim) {
+    config.dkim = dkim
+  }
+
+  return config
 }
 
 // Configuration du transporteur (à adapter selon l'environnement)
@@ -49,7 +87,7 @@ const createTransporter = () => {
     throw error
   }
 
-  return nodemailer.createTransport({
+  const transportOptions = {
     host: config.host,
     port: config.port,
     secure: config.secure,
@@ -60,7 +98,13 @@ const createTransporter = () => {
       user: config.user,
       pass: config.pass
     }
-  })
+  }
+
+  if (config.dkim) {
+    transportOptions.dkim = config.dkim
+  }
+
+  return nodemailer.createTransport(transportOptions)
 }
 
 function sanitizeHeaderText(value) {
@@ -86,51 +130,277 @@ function quoteDisplayName(value) {
   return `"${displayName.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
-function buildConfiguredSender(emailSettings = {}) {
-  const settings = normalizeEmailSettings(emailSettings)
-  const senderEmail = sanitizeEmailAddress(settings.senderEmail)
+function unquoteDisplayName(value) {
+  const displayName = sanitizeHeaderText(value)
+  const quotedMatch = displayName.match(/^"(.+)"$/)
+  return quotedMatch ? quotedMatch[1] : displayName
+}
+
+function buildSenderHeader(displayName, email) {
+  const senderEmail = sanitizeEmailAddress(email)
 
   if (!senderEmail) {
-    return process.env.SMTP_FROM || '"TPI Organizer" <noreply@tpi-organizer.ch>'
+    return ''
   }
 
-  return `${quoteDisplayName(settings.senderName)} <${senderEmail}>`
+  return `${quoteDisplayName(displayName)} <${senderEmail}>`
 }
 
-function buildArbitrageSender(emailSettings = {}) {
+function parseSenderHeader(value) {
+  const header = sanitizeHeaderText(value)
+
+  if (!header) {
+    return null
+  }
+
+  const formattedMatch = header.match(/^(.*?)<([^<>]+)>$/)
+  const rawDisplayName = formattedMatch ? formattedMatch[1] : ''
+  const rawEmail = formattedMatch ? formattedMatch[2] : header
+  const email = sanitizeEmailAddress(rawEmail)
+
+  if (!email) {
+    return null
+  }
+
+  const displayName = unquoteDisplayName(rawDisplayName) || 'TPI Organizer'
+
+  return {
+    displayName,
+    email,
+    header: buildSenderHeader(displayName, email)
+  }
+}
+
+function extractEmailAddress(value) {
+  const parsed = parseSenderHeader(value)
+  return parsed?.email || sanitizeEmailAddress(value)
+}
+
+function getEmailDomain(value) {
+  const email = extractEmailAddress(value)
+  const atIndex = email.lastIndexOf('@')
+
+  return atIndex > 0 ? normalizeDomain(email.slice(atIndex + 1)) : ''
+}
+
+function getAllowedSenderDomains(env = process.env) {
+  const domains = new Set()
+  const explicitDomains = [
+    env.SMTP_ALLOWED_FROM_DOMAINS,
+    env.SMTP_FROM_ALLOWED_DOMAINS
+  ]
+    .filter(Boolean)
+    .join(',')
+    .split(/[,\s;]+/)
+    .map(normalizeDomain)
+    .filter(Boolean)
+
+  for (const domain of explicitDomains) {
+    domains.add(domain)
+  }
+
+  const fromDomain = getEmailDomain(env.SMTP_FROM)
+  const smtpUserDomain = getEmailDomain(env.SMTP_USER)
+
+  if (fromDomain) {
+    domains.add(fromDomain)
+  } else if (smtpUserDomain) {
+    domains.add(smtpUserDomain)
+  }
+
+  for (const source of [env.SMTP_ENVELOPE_FROM, env.SMTP_DKIM_DOMAIN]) {
+    const domain = getEmailDomain(source) || normalizeDomain(source)
+    if (domain) {
+      domains.add(domain)
+    }
+  }
+
+  return domains
+}
+
+function isSenderDomainAllowed(email, env = process.env) {
+  const senderDomain = getEmailDomain(email)
+  const allowedDomains = getAllowedSenderDomains(env)
+
+  return Boolean(senderDomain) && (allowedDomains.size === 0 || allowedDomains.has(senderDomain))
+}
+
+function getDefaultSender(env = process.env, fallbackName = 'TPI Organizer') {
+  const fromSender = parseSenderHeader(env.SMTP_FROM)
+
+  if (fromSender) {
+    return fromSender
+  }
+
+  const smtpUserEmail = sanitizeEmailAddress(env.SMTP_USER)
+
+  if (smtpUserEmail) {
+    return {
+      displayName: fallbackName,
+      email: smtpUserEmail,
+      header: buildSenderHeader(fallbackName, smtpUserEmail)
+    }
+  }
+
+  return {
+    displayName: fallbackName,
+    email: 'noreply@tpi-organizer.ch',
+    header: buildSenderHeader(fallbackName, 'noreply@tpi-organizer.ch')
+  }
+}
+
+function resolveMailSender(emailSettings = {}, options = {}) {
   const settings = normalizeEmailSettings(emailSettings)
-  const arbitrageEmail = sanitizeEmailAddress(
-    process.env.SMTP_FROM_ARBITRAGE ||
-    settings.senderArbitrageEmail
-  )
-  const arbitrageName = sanitizeHeaderText(
-    process.env.SMTP_FROM_NAME_ARBITRAGE ||
-    settings.senderArbitrageName ||
-    settings.senderName
-  ) || 'TPI Organizer'
+  const env = options.env || process.env
+  const fromArbitrage = options.fromArbitrage === true
+  const requestedEmail = fromArbitrage
+    ? sanitizeEmailAddress(env.SMTP_FROM_ARBITRAGE || settings.senderArbitrageEmail)
+    : sanitizeEmailAddress(settings.senderEmail)
+  const requestedName = fromArbitrage
+    ? sanitizeHeaderText(
+        env.SMTP_FROM_NAME_ARBITRAGE ||
+        settings.senderArbitrageName ||
+        settings.senderName
+      ) || 'TPI Organizer'
+    : sanitizeHeaderText(settings.senderName) || 'TPI Organizer'
 
-  if (!arbitrageEmail) {
-    return buildConfiguredSender(settings)
+  if (requestedEmail && isSenderDomainAllowed(requestedEmail, env)) {
+    return {
+      displayName: requestedName,
+      email: requestedEmail,
+      header: buildSenderHeader(requestedName, requestedEmail),
+      requestedEmail,
+      fallbackUsed: false
+    }
   }
 
-  return `${quoteDisplayName(arbitrageName)} <${arbitrageEmail}>`
+  const defaultSender = getDefaultSender(env, requestedName)
+
+  return {
+    ...defaultSender,
+    requestedEmail,
+    fallbackUsed: Boolean(requestedEmail && requestedEmail !== defaultSender.email)
+  }
 }
 
-function buildMailOptions({ to, emailContent, emailSettings = {}, fromArbitrage = false }) {
+function buildConfiguredSender(emailSettings = {}, env = process.env) {
+  return resolveMailSender(emailSettings, { env }).header
+}
+
+function buildArbitrageSender(emailSettings = {}, env = process.env) {
+  return resolveMailSender(emailSettings, { env, fromArbitrage: true }).header
+}
+
+function buildMessageId(senderEmail, env = process.env) {
+  const messageIdDomain = normalizeDomain(env.SMTP_MESSAGE_ID_DOMAIN) || getEmailDomain(senderEmail)
+
+  if (!messageIdDomain) {
+    return ''
+  }
+
+  return `<tpi-${Date.now()}-${crypto.randomUUID()}@${messageIdDomain}>`
+}
+
+function buildEnvelope(fromEmail, to, env = process.env) {
+  const envelopeFrom = sanitizeEmailAddress(env.SMTP_ENVELOPE_FROM) || sanitizeEmailAddress(fromEmail)
+
+  if (!envelopeFrom) {
+    return null
+  }
+
+  return {
+    from: envelopeFrom,
+    to
+  }
+}
+
+function normalizeListUnsubscribeUrl(value) {
+  const rawUrl = sanitizeHeaderText(value)
+
+  if (!rawUrl) {
+    return ''
+  }
+
+  try {
+    const url = new URL(rawUrl)
+    return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? url.toString() : ''
+  } catch (error) {
+    return ''
+  }
+}
+
+function buildListUnsubscribeHeader({ env = process.env, replyToEmail = '', senderEmail = '' } = {}) {
+  const entries = []
+  const unsubscribeUrl = normalizeListUnsubscribeUrl(env.SMTP_LIST_UNSUBSCRIBE_URL)
+  const unsubscribeEmail = sanitizeEmailAddress(env.SMTP_LIST_UNSUBSCRIBE_EMAIL) ||
+    sanitizeEmailAddress(replyToEmail) ||
+    sanitizeEmailAddress(senderEmail)
+
+  if (unsubscribeUrl) {
+    entries.push(`<${unsubscribeUrl}>`)
+  }
+
+  if (unsubscribeEmail) {
+    entries.push(`<mailto:${unsubscribeEmail}?subject=unsubscribe>`)
+  }
+
+  return entries.join(', ')
+}
+
+function buildDeliverabilityHeaders(messageType = '', options = {}) {
+  const headers = {
+    'Auto-Submitted': 'auto-generated',
+    'X-Auto-Response-Suppress': 'All'
+  }
+
+  const normalizedType = sanitizeHeaderText(messageType)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  if (normalizedType) {
+    headers['X-TPI-Organizer-Template'] = normalizedType
+  }
+
+  const listUnsubscribe = buildListUnsubscribeHeader(options)
+  if (listUnsubscribe) {
+    headers['List-Unsubscribe'] = listUnsubscribe
+  }
+
+  return headers
+}
+
+function buildMailOptions({ to, emailContent, emailSettings = {}, fromArbitrage = false, env = process.env, messageType = '' }) {
   const settings = normalizeEmailSettings(emailSettings)
   const replyToEmail = sanitizeEmailAddress(settings.replyToEmail)
+  const sender = resolveMailSender(settings, { env, fromArbitrage })
+  const fallbackReplyTo = sender.fallbackUsed ? sanitizeEmailAddress(sender.requestedEmail) : ''
+  const effectiveReplyTo = replyToEmail || fallbackReplyTo
+  const envelope = buildEnvelope(sender.email, to, env)
+  const messageId = buildMessageId(sender.email, env)
   const mailOptions = {
-    from: fromArbitrage
-      ? buildArbitrageSender(settings)
-      : buildConfiguredSender(settings),
+    from: sender.header,
     to,
     subject: emailContent.subject,
     text: emailContent.text,
-    html: emailContent.html
+    html: emailContent.html,
+    headers: buildDeliverabilityHeaders(messageType, {
+      env,
+      replyToEmail: effectiveReplyTo,
+      senderEmail: sender.email
+    })
   }
 
-  if (replyToEmail) {
-    mailOptions.replyTo = replyToEmail
+  if (effectiveReplyTo) {
+    mailOptions.replyTo = effectiveReplyTo
+  }
+
+  if (envelope) {
+    mailOptions.envelope = envelope
+  }
+
+  if (messageId) {
+    mailOptions.messageId = messageId
   }
 
   return mailOptions
@@ -369,7 +639,7 @@ const emailTemplates = {
    * Email avec magic link pour voter
    */
   voteRequest: (data) => ({
-    subject: `[${data.brandName || 'TPI Organizer'}] Votez pour les créneaux de défense - ${data.candidateName}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Créneaux de défense TPI - ${data.candidateName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -377,43 +647,43 @@ const emailTemplates = {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #007bff; color: white; padding: 20px; text-align: center; }
+          .header { background: #1f4f8f; color: white; padding: 20px; text-align: center; }
           .content { padding: 20px; background: #f9f9f9; }
-          .button { display: inline-block; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
-          .slots { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #007bff; }
+          .button { display: inline-block; padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+          .slots { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #1f4f8f; }
           .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-          .deadline { color: #dc3545; font-weight: bold; }
+          .deadline { color: #1f2937; font-weight: bold; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎓 ${data.brandName || 'TPI Organizer'}</h1>
+            <h1>${data.brandName || 'TPI Organizer'}</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
             
             <p>Vous êtes invité(e) à voter pour les créneaux de défense du TPI de <strong>${data.candidateName}</strong>.</p>
             
-            <h3>📋 Informations du TPI</h3>
+            <h3>Informations du TPI</h3>
             <ul>
               <li><strong>Référence :</strong> ${data.tpiReference}</li>
               <li><strong>Sujet :</strong> ${data.tpiSubject || 'Non défini'}</li>
               <li><strong>Votre rôle :</strong> ${data.role}</li>
             </ul>
             
-            <h3>📅 Créneaux proposés</h3>
+            <h3>Créneaux proposés</h3>
             <div class="slots">
-              ${data.slots.map(slot => `
+              ${(data.slots || []).map(slot => `
                 <p>• <strong>${slot.date}</strong> - Période ${slot.period} (${slot.startTime} - ${slot.endTime})<br>
                    <em>Salle: ${slot.room}</em></p>
               `).join('')}
             </div>
             
-            <p class="deadline">⏰ Date limite pour voter : ${data.deadline}</p>
+            <p class="deadline">Réponse souhaitée d’ici le ${data.deadline}</p>
             
             <p style="text-align: center;">
-              <a href="${data.magicLinkUrl}" class="button">Voter maintenant</a>
+              <a href="${data.magicLinkUrl}" class="button">Ouvrir le formulaire de vote</a>
             </p>
             
             <p><small>Ce lien est valide pendant ${data.linkValidityLabel || '24 heures'}. Si vous ne pouvez pas voter avant la date limite, contactez l'administration.</small></p>
@@ -437,9 +707,9 @@ const emailTemplates = {
       Sujet: ${data.tpiSubject || 'Non défini'}
       Votre rôle: ${data.role}
       
-      Date limite: ${data.deadline}
+      Réponse souhaitée d’ici le ${data.deadline}
       
-      Cliquez sur ce lien pour voter: ${data.magicLinkUrl}
+      Formulaire de vote: ${data.magicLinkUrl}
       
       Ce lien est valide pendant ${data.linkValidityLabel || '24 heures'}.
     `
@@ -462,18 +732,19 @@ const emailTemplates = {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 640px; margin: 0 auto; padding: 20px; }
-          .header { background: #007bff; color: white; padding: 20px; text-align: center; }
+          .header { background: #1f4f8f; color: white; padding: 20px; text-align: center; }
           .content { padding: 20px; background: #f9f9f9; }
-          .button { display: inline-block; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
-          .tpi { background: white; padding: 14px; margin: 12px 0; border-left: 4px solid #007bff; }
+          .button { display: inline-block; padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+          .tpi { background: white; padding: 14px; margin: 12px 0; border-left: 4px solid #1f4f8f; }
           .slots { margin: 8px 0 0 0; padding-left: 18px; }
-          .deadline { color: #dc3545; font-weight: bold; }
+          .deadline { color: #1f2937; font-weight: bold; }
+          .footer { padding: 16px 20px 0; text-align: center; font-size: 12px; color: #666; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎓 ${data.brandName || 'TPI Organizer'}</h1>
+            <h1>${data.brandName || 'TPI Organizer'}</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
@@ -492,11 +763,15 @@ const emailTemplates = {
               </div>
             `).join('')}
 
-            <p class="deadline">⏰ Date limite pour voter : ${data.deadline}</p>
+            <p class="deadline">Réponse souhaitée d’ici le ${data.deadline}</p>
             <p style="text-align: center;">
               <a href="${data.magicLinkUrl}" class="button">Ouvrir mes votes</a>
             </p>
             <p><small>Ce lien est personnel. Il ouvre uniquement les TPI où votre réponse est attendue.</small></p>
+          </div>
+          <div class="footer">
+            <p>${data.emailFooterSignature || 'ETML / CFPV - TPI Organizer'}</p>
+            <p>${data.autoReplyNotice || 'Ce message est automatique, merci de ne pas y répondre.'}</p>
           </div>
         </div>
       </body>
@@ -514,7 +789,7 @@ const emailTemplates = {
         Sujet: ${tpi.subject || 'Non défini'}
       `).join('')}
 
-      Date limite: ${data.deadline}
+      Réponse souhaitée d’ici le ${data.deadline}
 
       Ouvrir mes votes: ${data.magicLinkUrl}
     `
@@ -536,7 +811,7 @@ const emailTemplates = {
           .content { padding: 20px; background: #f9f9f9; }
           .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
           .box { background: white; padding: 14px; margin: 12px 0; border-left: 4px solid #2563eb; }
-          .deadline { color: #dc2626; font-weight: bold; }
+          .deadline { color: #1f2937; font-weight: bold; }
         </style>
       </head>
       <body>
@@ -588,7 +863,7 @@ const emailTemplates = {
    * Email de rappel de vote
    */
   voteReminder: (data) => ({
-    subject: `[${data.brandName || 'TPI Organizer'}] Rappel vote - ${data.candidateName}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Vote de défense en attente - ${data.candidateName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -596,27 +871,32 @@ const emailTemplates = {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #ffc107; color: #333; padding: 20px; text-align: center; }
+          .header { background: #1f4f8f; color: white; padding: 20px; text-align: center; }
           .content { padding: 20px; background: #f9f9f9; }
-          .button { display: inline-block; padding: 12px 24px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px; }
-          .urgent { color: #dc3545; font-size: 18px; }
+          .button { display: inline-block; padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
+          .notice { color: #1f2937; font-size: 16px; }
+          .footer { padding: 16px 20px 0; text-align: center; font-size: 12px; color: #666; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h1>⚠️ ${data.brandName || 'TPI Organizer'} - Vote en attente</h1>
+            <h1>${data.brandName || 'TPI Organizer'} - Vote en attente</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
             
-            <p class="urgent">Votre vote est toujours attendu pour le TPI de <strong>${data.candidateName}</strong>.</p>
+            <p class="notice">Votre vote est toujours attendu pour le TPI de <strong>${data.candidateName}</strong>.</p>
             
-            <p><strong>Date limite :</strong> ${data.deadline}</p>
+            <p><strong>Réponse souhaitée d’ici le :</strong> ${data.deadline}</p>
             
             <p style="text-align: center;">
-              <a href="${data.magicLinkUrl}" class="button">Voter maintenant</a>
+              <a href="${data.magicLinkUrl}" class="button">Ouvrir le formulaire de vote</a>
             </p>
+          </div>
+          <div class="footer">
+            <p>${data.emailFooterSignature || 'ETML / CFPV - TPI Organizer'}</p>
+            <p>${data.autoReplyNotice || 'Ce message est automatique, merci de ne pas y répondre.'}</p>
           </div>
         </div>
       </body>
@@ -628,9 +908,9 @@ const emailTemplates = {
       Bonjour ${data.recipientName},
       
       Votre vote est toujours attendu pour le TPI de ${data.candidateName}.
-      Date limite: ${data.deadline}
+      Réponse souhaitée d’ici le ${data.deadline}
       
-      Lien pour voter: ${data.magicLinkUrl}
+      Formulaire de vote: ${data.magicLinkUrl}
     `
   }),
 
@@ -646,31 +926,36 @@ const emailTemplates = {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 640px; margin: 0 auto; padding: 20px; }
-          .header { background: #ffc107; color: #333; padding: 20px; text-align: center; }
+          .header { background: #1f4f8f; color: white; padding: 20px; text-align: center; }
           .content { padding: 20px; background: #f9f9f9; }
-          .button { display: inline-block; padding: 12px 24px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px; }
-          .urgent { color: #dc3545; font-size: 18px; }
-          .tpi { background: white; padding: 12px; margin: 10px 0; border-left: 4px solid #ffc107; }
+          .button { display: inline-block; padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
+          .notice { color: #1f2937; font-size: 16px; }
+          .tpi { background: white; padding: 12px; margin: 10px 0; border-left: 4px solid #1f4f8f; }
+          .footer { padding: 16px 20px 0; text-align: center; font-size: 12px; color: #666; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h1>⚠️ ${data.brandName || 'TPI Organizer'} - Votes en attente</h1>
+            <h1>${data.brandName || 'TPI Organizer'} - Votes en attente</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
-            <p class="urgent">Votre réponse est toujours attendue pour <strong>${data.tpiCount}</strong> TPI.</p>
+            <p class="notice">Votre réponse est toujours attendue pour <strong>${data.tpiCount}</strong> TPI.</p>
             ${(data.tpis || []).map(tpi => `
               <div class="tpi">
                 <strong>${tpi.reference}</strong> - ${tpi.candidateName || 'Candidat non renseigné'}<br>
                 <em>${tpi.roleLabel || 'Rôle non défini'}</em>
               </div>
             `).join('')}
-            <p><strong>Date limite :</strong> ${data.deadline}</p>
+            <p><strong>Réponse souhaitée d’ici le :</strong> ${data.deadline}</p>
             <p style="text-align: center;">
               <a href="${data.magicLinkUrl}" class="button">Ouvrir mes votes</a>
             </p>
+          </div>
+          <div class="footer">
+            <p>${data.emailFooterSignature || 'ETML / CFPV - TPI Organizer'}</p>
+            <p>${data.autoReplyNotice || 'Ce message est automatique, merci de ne pas y répondre.'}</p>
           </div>
         </div>
       </body>
@@ -682,7 +967,7 @@ const emailTemplates = {
       Bonjour ${data.recipientName},
 
       Votre réponse est toujours attendue pour ${data.tpiCount} TPI.
-      Date limite: ${data.deadline}
+      Réponse souhaitée d’ici le ${data.deadline}
 
       Ouvrir mes votes: ${data.magicLinkUrl}
     `
@@ -692,7 +977,7 @@ const emailTemplates = {
    * Email de confirmation de défense
    */
   soutenanceConfirmation: (data) => ({
-    subject: `[CONFIRMÉ] Défense TPI - ${data.candidateName} - ${data.date}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Défense TPI confirmée - ${data.candidateName} - ${data.date}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -709,7 +994,7 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>✅ Défense Confirmée</h1>
+            <h1>Défense TPI confirmée</h1>
           </div>
           <div class="content">
             <p>Bonjour ${data.recipientName},</p>
@@ -717,7 +1002,7 @@ const emailTemplates = {
             <p>La défense du TPI a été <strong>confirmée</strong> avec succès.</p>
             
             <div class="details">
-              <h3>📋 Détails de la défense</h3>
+              <h3>Détails de la défense</h3>
               <p><strong>Candidat :</strong> ${data.candidateName}</p>
               <p><strong>Référence :</strong> ${data.tpiReference}</p>
               <p><strong>Date :</strong> ${data.date}</p>
@@ -725,7 +1010,7 @@ const emailTemplates = {
               <p><strong>Salle :</strong> ${data.room}</p>
               <p><strong>Site :</strong> ${data.site}</p>
               
-              <h4>👥 Participants</h4>
+              <h4>Participants</h4>
               <ul>
                 <li>${formatTpiStakeholderRoleLabel('expert1')}: ${data.expert1}</li>
                 <li>${formatTpiStakeholderRoleLabel('expert2')}: ${data.expert2}</li>
@@ -734,7 +1019,7 @@ const emailTemplates = {
             </div>
             
             <p style="text-align: center;">
-              <a href="${data.calendarUrl}" class="calendar-btn">📅 Ajouter au calendrier</a>
+              <a href="${data.calendarUrl}" class="calendar-btn">Ajouter au calendrier</a>
             </p>
           </div>
         </div>
@@ -742,7 +1027,7 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      Défense Confirmée
+      Défense TPI confirmée
       
       Bonjour ${data.recipientName},
       
@@ -765,7 +1050,7 @@ const emailTemplates = {
    * Email demandant une intervention manuelle
    */
   manualInterventionRequired: (data) => ({
-    subject: `[ACTION REQUISE] Conflit de planification - ${data.candidateName}`,
+    subject: `[${data.brandName || 'TPI Organizer'}] Conflit de planification - ${data.candidateName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -773,7 +1058,7 @@ const emailTemplates = {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #dc3545; color: white; padding: 20px; text-align: center; }
+          .header { background: #334155; color: white; padding: 20px; text-align: center; }
           .content { padding: 20px; background: #f9f9f9; }
           .conflict { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
         </style>
@@ -781,7 +1066,7 @@ const emailTemplates = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🚨 Intervention Manuelle Requise</h1>
+            <h1>Intervention de planification</h1>
           </div>
           <div class="content">
             <p>Bonjour,</p>
@@ -806,7 +1091,7 @@ const emailTemplates = {
       </html>
     `,
     text: `
-      Intervention Manuelle Requise
+      Intervention de planification
       
       Le système n'a pas pu trouver de créneau commun pour le TPI de ${data.candidateName}.
       
@@ -827,7 +1112,8 @@ async function sendEmail(to, template, data, options = {}) {
     to,
     emailContent,
     emailSettings: options.emailSettings || templateData?.emailSettings,
-    fromArbitrage: options.fromArbitrage === true
+    fromArbitrage: options.fromArbitrage === true,
+    messageType: template
   })
   
   let transporter
@@ -933,10 +1219,21 @@ async function sendSoutenanceConfirmations(tpi, slot, recipients, options = {}) 
 }
 
 module.exports = {
+  buildArbitrageSender,
   buildConfiguredSender,
+  buildDeliverabilityHeaders,
+  buildEnvelope,
+  buildListUnsubscribeHeader,
+  buildMessageId,
   buildTemplateData,
+  extractEmailAddress,
+  getAllowedSenderDomains,
+  getDkimConfig,
+  getEmailDomain,
   getSmtpTransportConfig,
+  isSenderDomainAllowed,
   formatLinkValidityLabel,
+  resolveMailSender,
   buildMailOptions,
   sendEmail,
   sendVoteDigestRequests,
