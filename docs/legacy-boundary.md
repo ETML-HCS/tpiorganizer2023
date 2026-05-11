@@ -6,8 +6,9 @@ Ce document fixe les restes legacy assumes apres les refontes `gestion-tpi`,
 ## Maintenu temporairement
 
 - `API/routes/legacyAuthRoutes.js`
-  - conserve `POST /api/auth/login`;
-  - le nom du fichier est legacy, mais l'endpoint reste le point d'entree admin actuel.
+  - expose `GET /api/auth/session` pour la session applicative automatique;
+  - conserve `POST /api/auth/login` seulement pour compatibilite legacy et tests API;
+  - le nom du fichier est legacy, et l'ancien formulaire UI n'est plus monte.
 - `API/routes/legacyAdminRoutes.js`
   - conserve les routes de salles historiques;
   - endpoint principal encore appele: `POST /api/save-tpi-rooms/:year`;

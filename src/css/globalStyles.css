@@ -147,7 +147,6 @@ body.planning-focus-mode .app-header-brand {
 }
 
 body.planning-focus-mode .app-header-brand-mark,
-body.planning-focus-mode .app-header-session-pill,
 body.planning-focus-mode .app-header-tools-toggle {
   box-shadow: none;
 }
@@ -156,8 +155,7 @@ body.planning-focus-mode .app-header-brand-mark {
   font-size: 0.66rem;
 }
 
-body.planning-focus-mode .app-header-module-name,
-body.planning-focus-mode .app-header-session-logout-name {
+body.planning-focus-mode .app-header-module-name {
   font-size: 0.66rem;
 }
 
@@ -181,16 +179,6 @@ body.planning-focus-mode .app-header-planification-focus-state {
 
 body.planning-focus-mode .app-header-planification-year select {
   min-width: 56px;
-  font-size: 0.66rem;
-}
-
-body.planning-focus-mode .app-header-session-pill {
-  padding: 2px 3px 2px 8px;
-}
-
-body.planning-focus-mode .logout-btn {
-  height: 20px;
-  padding: 0 8px;
   font-size: 0.66rem;
 }
 
@@ -740,60 +728,6 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   opacity: 0.45;
   cursor: not-allowed;
   transform: none;
-}
-
-.app-header-session-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.logout-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(255, 255, 255, 0.52);
-  color: #334155;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: none;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-}
-
-.logout-btn:hover {
-  background: rgba(255, 255, 255, 0.78);
-  border-color: rgba(100, 116, 139, 0.34);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
-  transform: translateY(-1px);
-}
-
-.app-header-session-logout-icon {
-  font-size: 0.82rem;
-  line-height: 1;
-}
-
-.app-header-session-logout-name {
-  min-width: 0;
-  max-width: clamp(10ch, 24vw, 28ch);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1;
 }
 
 #tools {
@@ -3058,21 +2992,6 @@ label.icon-button:not(.icon-button--with-badge) {
   }
 
   .app-header-tools-toggle-label {
-    display: none;
-  }
-
-  .app-header-session-pill {
-    padding: 0;
-  }
-
-  .logout-btn {
-    width: 30px;
-    height: 28px;
-    padding: 0;
-    font-size: 0.68rem;
-  }
-
-  .app-header-session-logout-name {
     display: none;
   }
 

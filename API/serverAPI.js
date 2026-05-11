@@ -72,7 +72,7 @@ app.use('/api', (req, res, next) => {
 
   return globalApiLimiter(req, res, next)
 })
-app.use('/api/auth', authLimiter)
+app.use('/api/auth/login', authLimiter)
 
 // Legacy auth & admin routes
 app.use('/api/auth', legacyAuthRoutes)

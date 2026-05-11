@@ -1,0 +1,162 @@
+.loading-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(16, 185, 129, 0.1)),
+    #f4f6f8;
+  color: #111827;
+}
+
+.loading-panel {
+  width: min(460px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  padding: 28px 24px;
+  text-align: center;
+  animation: loading-panel-enter 0.55s ease-out both;
+}
+
+.loading-panel h1 {
+  margin: 0;
+  display: inline-flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: clamp(2.35rem, 9vw, 4.35rem);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: #111827;
+}
+
+.loading-title-letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(18px) scale(0.96);
+  animation: loading-title-rise 0.72s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: calc(var(--letter-index) * 45ms);
+}
+
+.loading-mark {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  display: grid;
+  place-items: center;
+  animation: loading-mark-float 1.7s ease-in-out infinite;
+}
+
+.loading-mark-ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(37, 99, 235, 0.18);
+  border-top-color: #2563eb;
+  border-right-color: #10b981;
+  border-radius: 50%;
+  animation: loading-page-spin 1s linear infinite;
+}
+
+.loading-mark-core {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
+}
+
+.loading-progress {
+  width: min(260px, 72vw);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.loading-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #10b981);
+  transform-origin: left;
+  animation: loading-progress-fill 2.5s ease-in-out both;
+}
+
+@keyframes loading-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes loading-title-rise {
+  60% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.01);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loading-mark-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes loading-progress-fill {
+  from {
+    transform: scaleX(0.05);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes loading-page-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-panel,
+  .loading-title-letter,
+  .loading-mark,
+  .loading-mark-ring,
+  .loading-progress span {
+    animation: none;
+  }
+
+  .loading-title-letter {
+    opacity: 1;
+    transform: none;
+  }
+
+  .loading-progress span {
+    transform: scaleX(1);
+  }
+}

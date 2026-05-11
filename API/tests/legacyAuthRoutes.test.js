@@ -16,6 +16,28 @@ async function startServer(app) {
   })
 }
 
+test('GET /api/auth/session returns an application session without credentials', async () => {
+  const { app, restoreEnv } = loadTestApp({
+    AUTH_SESSION_SECRET: 'test-auth-secret',
+    JWT_SECRET: 'test-jwt-secret'
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/auth/session`)
+    const payload = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(payload.success, true)
+    assert.equal(typeof payload.token, 'string')
+    assert.ok(payload.token.length > 20)
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
 test('POST /api/auth/login returns a token for valid admin credentials', async () => {
   const { app, restoreEnv } = loadTestApp({
     AUTH_USER_PLAIN: '',

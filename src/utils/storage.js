@@ -66,6 +66,7 @@ export const getAuthScopeForEndpoint = (endpoint = "") => {
 
   if (
     path === "/api/auth/login" ||
+    path === "/api/auth/session" ||
     path.startsWith("/api/coordination/auth/") ||
     path.startsWith("/api/coordination/resolution-proposals/public/") ||
     path.startsWith("/api/planning/auth/") ||

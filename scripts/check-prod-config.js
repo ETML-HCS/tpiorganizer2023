@@ -32,10 +32,6 @@ function validateProductionConfig(env = process.env, services = {}) {
     pushError('AUTH_USER_PLAIN/AUTH_PASS_PLAIN ne doivent pas être utilisés en production')
   }
 
-  if (!env.AUTH_USER_HASH || !env.AUTH_PASS_HASH) {
-    pushError('AUTH_USER_HASH et AUTH_PASS_HASH sont requis en production')
-  }
-
   if (!requiredSecrets.some(key => Boolean(env[key]))) {
     pushError('AUTH_SESSION_SECRET ou JWT_SECRET est requis en production')
   }

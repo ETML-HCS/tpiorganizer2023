@@ -1,12 +1,28 @@
 const express = require('express')
 
-const { authenticateAdmin } = require('../middleware/appAuth')
+const { authenticateAdmin, createAppSessionToken } = require('../middleware/appAuth')
 const {
   requireNonEmptyBody,
   requireStringBodyFields
 } = require('../middleware/requestValidation')
 
 const router = express.Router()
+
+router.get('/session', (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      message: 'Session application active',
+      token: createAppSessionToken('admin')
+    })
+  } catch (error) {
+    console.error('Erreur lors du demarrage de la session:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur'
+    })
+  }
+})
 
 router.post(
   '/login',

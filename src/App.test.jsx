@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 
 import App from './App'
 import { STORAGE_KEYS } from './config/appConfig'
+import { authService } from './services/apiService'
 
 jest.mock('react-toastify', () => ({
   toast: {
@@ -17,8 +18,8 @@ jest.mock('./components/footer/Footer', () => function MockFooter() {
   return <footer data-testid='footer' />
 })
 
-jest.mock('./components/LoginPage', () => function MockLoginPage() {
-  return <div data-testid='login-page'>Login</div>
+jest.mock('./components/LoadingPage', () => function MockLoadingPage() {
+  return <div data-testid='loading-page'>TPI Organizer</div>
 })
 
 jest.mock('./components/tpiSchedule/TpiSchedule', () => function MockTpiSchedule({ isArrowUp }) {
@@ -39,6 +40,7 @@ jest.mock('./components/tpiEval/TpiEval', () => function MockTpiEval() {
 
 jest.mock('./services/apiService', () => ({
   authService: {
+    startSession: jest.fn(),
     login: jest.fn()
   }
 }))
@@ -68,15 +70,20 @@ const createSessionToken = (payload = {}) => {
 describe('App routing access', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    authService.startSession.mockReset()
+    authService.startSession.mockResolvedValue({
+      success: true,
+      token: createSessionToken()
+    })
   })
 
-  test('blocks modules for unauthenticated stakeholders', async () => {
+  test('opens modules without showing a login form', async () => {
     window.history.pushState({}, '', '/TpiEval')
 
     render(<App />)
 
-    expect(await screen.findByTestId('login-page')).toBeInTheDocument()
-    expect(screen.queryByTestId('tpi-eval-page')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('tpi-eval-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('loading-page')).not.toBeInTheDocument()
   })
 
   test('starts the planification tools collapsed by default', async () => {
@@ -109,13 +116,12 @@ describe('App routing access', () => {
     })
   })
 
-  test('blocks défense pages without admin session, code or magic link', async () => {
+  test('opens defense pages without admin login, code or magic link', async () => {
     window.history.pushState({}, '', '/defenses/2026')
 
     render(<App />)
 
-    expect(await screen.findByTestId('login-page')).toBeInTheDocument()
-    expect(screen.queryByTestId('soutenance-page')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('soutenance-page')).toBeInTheDocument()
   })
 
   test('redirects legacy défense URLs to the canonical defenses URL', async () => {

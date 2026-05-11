@@ -76,14 +76,6 @@ export const ERROR_MESSAGES = {
   NOT_FOUND: 'Ressource non trouvée'
 }
 
-// Messages de succès
-export const SUCCESS_MESSAGES = {
-  LOGIN_SUCCESS: 'Connexion réussie',
-  LOGOUT_SUCCESS: 'Déconnexion réussie',
-  SAVE_SUCCESS: 'Sauvegarde réussie',
-  DELETE_SUCCESS: 'Suppression réussie'
-}
-
 // Configuration des routes
 export const ROUTES = {
   HOME: '/',
@@ -147,7 +139,6 @@ const config = {
   API_URL,
   YEARS_CONFIG,
   ERROR_MESSAGES,
-  SUCCESS_MESSAGES,
   ROUTES,
   TIMEOUTS,
   STORAGE_KEYS

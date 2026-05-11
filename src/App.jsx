@@ -19,8 +19,6 @@ import { authService } from "./services/apiService"
 import { authCoordinationService } from "./services/coordinationService"
 import {
   STORAGE_KEYS,
-  SUCCESS_MESSAGES,
-  ERROR_MESSAGES,
   IS_ADMIN_UI_ENABLED,
   YEARS_CONFIG,
   ROUTES
@@ -41,7 +39,7 @@ const TpiManagement = lazy(() => import("./components/tpiManagement/TpiManagemen
 const TpiTracker = lazy(() => import("./components/tpiTracker/TpiTracker"))
 const TpiSoutenance = lazy(() => import("./components/tpiSoutenance/TpiSoutenance"))
 const TokenGenerator = lazy(() => import("./components/genToken/genToken"))
-const LoginPage = lazy(() => import("./components/LoginPage"))
+const LoadingPage = lazy(() => import("./components/LoadingPage"))
 const TpiEval = lazy(() => import("./components/tpiEval/TpiEval"))
 const PartiesPrenantes = lazy(() => import("./components/partiesPrenantes/PartiesPrenantes"))
 const PlanningConfiguration = lazy(() => import("./components/planningConfiguration/PlanningConfiguration"))
@@ -165,7 +163,7 @@ const getAppHeaderModule = (pathname) => {
 
 const getBrowserTitle = (pathname, currentModule) => {
   if (pathname === "/login") {
-    return "Connexion · TPI Organizer"
+    return "Chargement · TPI Organizer"
   }
 
   const moduleLabel = compactText(currentModule?.label)
@@ -175,40 +173,6 @@ const getBrowserTitle = (pathname, currentModule) => {
   }
 
   return `${moduleLabel} · TPI Organizer`
-}
-
-const getConnectedUserName = ({ isAuthenticated, appSessionToken, planningSessionToken }) => {
-  const appSessionPayload = decodeJwtPayload(appSessionToken)
-  const planningSessionPayload = decodeJwtPayload(planningSessionToken)
-  const planningSessionUser = authCoordinationService.getCurrentUser()
-
-  if (planningSessionPayload?.authContext?.type === 'vote_magic_link') {
-    const userName = compactText(
-      planningSessionUser?.name ||
-      planningSessionUser?.email ||
-      planningSessionPayload?.email ||
-      planningSessionPayload?.sub
-    )
-    const roleLabel = compactText(planningSessionPayload?.authContext?.role)
-
-    if (userName) {
-      return roleLabel ? `${userName} (${roleLabel})` : userName
-    }
-
-    return 'mode vote'
-  }
-
-  if (isAuthenticated) {
-    const adminLabel = compactText(
-      appSessionPayload?.sub ||
-      appSessionPayload?.email ||
-      'admin'
-    )
-
-    return adminLabel
-  }
-
-  return ""
 }
 
 const getPreferredCoordinationYear = () => {
@@ -310,6 +274,18 @@ const RouteLoadingFallback = () => (
   </div>
 )
 
+const SPLASH_MIN_DURATION_MS = process.env.NODE_ENV === 'test' ? 0 : 2500
+
+const waitForSplashDuration = async (startedAt) => {
+  const remainingDuration = SPLASH_MIN_DURATION_MS - (Date.now() - startedAt)
+
+  if (remainingDuration <= 0) {
+    return
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, remainingDuration))
+}
+
 const SoutenanceRedirect = ({ preferredYear }) => {
   const { year } = useParams()
   const location = useLocation()
@@ -375,22 +351,12 @@ const SoutenanceRoute = ({ isAuthenticated }) => {
 }
 
 //#region Layout
-const Layout = ({ isAuthenticated, login, logout }) => {
+const Layout = ({ isAuthenticated, isBootstrapping, refreshSession }) => {
   const location = useLocation()
   const navigate = useNavigate()
   const isToolbarRoute = useMemo(() => isToolbarPage(location.pathname), [location.pathname])
   const [isArrowUp, setIsArrowUp] = useState(() =>
     shouldOpenToolbarByDefault(location.pathname)
-  )
-  const appSessionToken = getStoredAuthToken('/api/me')
-  const planningSessionToken = getStoredAuthToken('/api/coordination')
-  const connectedUserName = useMemo(
-    () => getConnectedUserName({
-      isAuthenticated,
-      appSessionToken,
-      planningSessionToken
-    }),
-    [appSessionToken, isAuthenticated, planningSessionToken]
   )
   const preferredPlanningYear = getPreferredCoordinationYear()
   const currentModule = useMemo(
@@ -421,7 +387,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     []
   )
 
-  // Redirection après authentification
+  // Redirection de l'ancien chemin de connexion vers l'accueil
   useEffect(() => {
     if (isAuthenticated && location.pathname === '/login') {
       navigate("/")
@@ -430,13 +396,8 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 
   useEffect(() => {
     const handleSessionExpired = () => {
-      if (!isAuthenticated) {
-        return
-      }
-
-      logout()
-      navigate('/login', { replace: true })
-      toast.warning("Session expirée. Veuillez vous reconnecter.", {
+      refreshSession({ silent: true })
+      toast.warning("Session renouvelee automatiquement.", {
         toastId: 'app-session-expired'
       })
     }
@@ -446,7 +407,7 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     return () => {
       window.removeEventListener('tpi:auth-expired', handleSessionExpired)
     }
-  }, [isAuthenticated, logout, navigate])
+  }, [refreshSession])
 
   useEffect(() => {
     setIsArrowUp(shouldOpenToolbarByDefault(location.pathname))
@@ -569,12 +530,13 @@ const Layout = ({ isAuthenticated, login, logout }) => {
     })
   }, [getToolbarElement])
 
-  // Handler de déconnexion
-  const handleLogout = useCallback(() => {
-    logout()
-    navigate('/login')
-    toast.info("Déconnexion réussie")
-  }, [logout, navigate])
+  if (isBootstrapping) {
+    return (
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <LoadingPage />
+      </Suspense>
+    )
+  }
 
   return (
     <Fragment>
@@ -641,23 +603,6 @@ const Layout = ({ isAuthenticated, login, logout }) => {
                 </button>
               ) : null}
 
-              {isAuthenticated ? (
-                <div className='app-header-session-pill'>
-                  <button
-                    onClick={handleLogout}
-                    className='app-header-session-logout logout-btn'
-                    title='Se déconnecter'
-                    aria-label='Se déconnecter'
-                  >
-                    <span className='app-header-session-logout-name'>
-                      {connectedUserName || 'Session'}
-                    </span>
-                    <span className='app-header-session-logout-icon' aria-hidden='true'>
-                      ⎋
-                    </span>
-                  </button>
-                </div>
-              ) : null}
             </div>
           </div>
         </div>
@@ -666,13 +611,13 @@ const Layout = ({ isAuthenticated, login, logout }) => {
       {/* Configuration des Routes */}
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
-          {/* Redirection par défaut vers la page de connexion si non authentifié */}
+          {/* Redirection par défaut vers l'ancien chemin de chargement si la session auto échoue */}
           {!isAuthenticated && (
             <Route path='*' element={<Navigate to='/login' replace />} />
           )}
 
-          {/* Route pour la page de connexion */}
-          <Route path='/login' element={<LoginPage login={login} />} />
+          {/* Ancienne route de connexion: ecran de chargement seulement */}
+          <Route path='/login' element={<LoadingPage />} />
 
           {/* Routes protégées => authentifié */}
           {isAuthenticated && (
@@ -858,54 +803,61 @@ const Layout = ({ isAuthenticated, login, logout }) => {
 
 //#region APP
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const legacyAuthFlag = readStorageValue(STORAGE_KEYS.IS_AUTHENTICATED, "") === "true"
-    const sessionToken = getStoredAuthToken('/api')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
 
-    if (legacyAuthFlag && !sessionToken) {
-      removeStorageValue(STORAGE_KEYS.IS_AUTHENTICATED)
-      return false
+  const refreshSession = useCallback(async ({ silent = false } = {}) => {
+    const splashStartedAt = Date.now()
+
+    if (!silent) {
+      setIsBootstrapping(true)
     }
 
-    return Boolean(sessionToken)
-  })
-  const [isLoading, setIsLoading] = useState(false)
-
-  const loginSecur = useCallback(async (username, password) => {
-    if (isLoading) return
-    
-    setIsLoading(true)
     try {
-      const data = await authService.login(username, password)
+      const existingSessionToken = getStoredAuthToken('/api')
+
+      if (existingSessionToken && !silent) {
+        writeStorageValue(STORAGE_KEYS.IS_AUTHENTICATED, "true")
+        setIsAuthenticated(true)
+        return
+      }
+
+      const data = await authService.startSession()
 
       if (data.success && data.token) {
-        setIsAuthenticated(true)
         writeStorageValue(STORAGE_KEYS.IS_AUTHENTICATED, "true")
         writeStorageValue(STORAGE_KEYS.APP_SESSION_TOKEN, data.token)
-        toast.success(SUCCESS_MESSAGES.LOGIN_SUCCESS)
-        return data
+        setIsAuthenticated(true)
+        return
       }
-      throw new Error(data.message || ERROR_MESSAGES.AUTH_FAILED)
-    } catch (error) {
-      console.error('Erreur de connexion:', error)
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }, [isLoading])
 
-  const logout = useCallback(() => {
-    setIsAuthenticated(false)
-    removeStorageValue(STORAGE_KEYS.IS_AUTHENTICATED)
-    removeStorageValue(STORAGE_KEYS.APP_SESSION_TOKEN)
+      throw new Error(data.message || "Impossible de demarrer la session")
+    } catch (error) {
+      console.error("Erreur au demarrage de la session:", error)
+      removeStorageValue(STORAGE_KEYS.IS_AUTHENTICATED)
+      removeStorageValue(STORAGE_KEYS.APP_SESSION_TOKEN)
+      setIsAuthenticated(false)
+      toast.error("Impossible de demarrer la session de l'application.", {
+        toastId: 'app-session-start-failed'
+      })
+    } finally {
+      if (!silent) {
+        await waitForSplashDuration(splashStartedAt)
+        setIsBootstrapping(false)
+      }
+    }
   }, [])
+
+  useEffect(() => {
+    refreshSession()
+  }, [refreshSession])
 
   return (
     <Router>
       <Layout
         isAuthenticated={isAuthenticated}
-        login={loginSecur}
-        logout={logout}
+        isBootstrapping={isBootstrapping}
+        refreshSession={refreshSession}
       />
     </Router>
   )

@@ -11,8 +11,6 @@ function buildValidProductionEnv(overrides = {}) {
     NODE_ENV: 'production',
     REACT_APP_DEBUG: 'false',
     SKIP_APP_AUTH: 'false',
-    AUTH_USER_HASH: '$2a$10$userhash',
-    AUTH_PASS_HASH: '$2a$10$passhash',
     JWT_SECRET: 'x'.repeat(64),
     DB_URI: 'mongodb://localhost:27017/tpi',
     SMTP_HOST: 'smtp.example.ch',

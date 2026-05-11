@@ -4,7 +4,6 @@ TPIorganizer 2023 est une application React + Node/Express pour organiser les d�
 
 ## Screenshots
 
-![Connexion](/captures/login.png)
 ![Accueil](/captures/accueil.png)
 ![Planification](/captures/planification.png)
 ![Coordination et votes](/captures/coordination-votes.png)
@@ -34,7 +33,7 @@ TPIorganizer 2023 est une application React + Node/Express pour organiser les d�
 ## Démarrage rapide
 
 1. Installer Node.js et les dépendances avec `npm install`.
-2. Copier `.env.example` vers `.env`, puis renseigner au minimum l'authentification, `JWT_SECRET` et `DB_URI`.
+2. Copier `.env.example` vers `.env`, puis renseigner au minimum `JWT_SECRET` et `DB_URI`.
 3. Lancer frontend + API avec `npm run dev`.
 4. Ouvrir le frontend sur `http://localhost:3000`.
 
@@ -53,7 +52,8 @@ Scripts utiles :
 ## Configuration importante
 
 - `DB_URI` configure MongoDB.
-- `JWT_SECRET` est requis pour les sessions et magic links.
+- `JWT_SECRET` est requis pour la session automatique de l'application et les magic links.
+- `AUTH_SESSION_SECRET` peut être défini pour séparer le secret de session applicative de `JWT_SECRET`.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` et `SMTP_FROM` pilotent l'envoi automatique.
 - `SMTP_ALLOWED_FROM_DOMAINS`, `SMTP_ENVELOPE_FROM`, `SMTP_MESSAGE_ID_DOMAIN`, `SMTP_LIST_UNSUBSCRIBE_*` et `SMTP_DKIM_*` renforcent les en-têtes et la délivrabilité email.
 - Délivrabilité email: `SMTP_FROM` doit être une adresse validée chez le fournisseur SMTP. Le service force les expéditeurs configurés dans l'interface à rester sur les domaines autorisés (`SMTP_ALLOWED_FROM_DOMAINS`, sinon domaines déduits de `SMTP_FROM`, `SMTP_ENVELOPE_FROM` et `SMTP_DKIM_DOMAIN`) et conserve un expéditeur refusé en `Reply-To`. Il ajoute aussi `List-Unsubscribe` via `SMTP_LIST_UNSUBSCRIBE_EMAIL`/`SMTP_LIST_UNSUBSCRIBE_URL` ou l'adresse de réponse. Configurer SPF, DKIM et DMARC dans le DNS du domaine expéditeur; `SMTP_DKIM_*` ne sert qu'en fallback si le fournisseur SMTP ne signe pas déjà en DKIM.

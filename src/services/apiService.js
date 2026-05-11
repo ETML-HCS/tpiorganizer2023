@@ -214,6 +214,9 @@ const apiService = {
  * Service d'authentification
  */
 export const authService = {
+  startSession: () =>
+    apiService.get('/api/auth/session'),
+
   login: (username, password) => 
     apiService.post('/api/auth/login', { username, password }),
   
