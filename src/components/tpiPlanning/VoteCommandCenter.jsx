@@ -668,6 +668,7 @@ const VoteCommandCenter = ({
   checkedConstraintByTpiId,
   constraintCheckResult,
   staticVotePublicationInfo,
+  defenseChangeNotificationInfo,
   preferenceActionLoadingKey,
   proposalMoveLoadingKey,
   proposalMoveApplying,
@@ -687,6 +688,7 @@ const VoteCommandCenter = ({
   onCheckVoteConstraints,
   onPublishDefinitive,
   onSendPublicationLinks,
+  onSendDefenseChangeNotifications,
   onOpenPublishedView,
   onOpenManualResolver,
   onSelectTpi,
@@ -729,6 +731,28 @@ const VoteCommandCenter = ({
   ), [constraintConflicts])
   const hiddenConstraintCount = Math.max(constraintConflicts.length - constraintPreviewConflicts.length, 0)
   const constraintCheckedAtLabel = formatConstraintCheckedAt(constraintCheckResult?.checkedAt)
+  const defenseChangeSummary = defenseChangeNotificationInfo?.summary || {}
+  const pendingDefenseChangeNotifications = Number(defenseChangeSummary.pendingRecipientCount || 0)
+  const sentDefenseChangeNotifications = Number(defenseChangeSummary.sentRecipientCount || 0)
+  const changedDefenseCount = Number(defenseChangeSummary.changedDefenseCount || 0)
+  const hasDefenseChangePublication = defenseChangeNotificationInfo?.hasCurrentPublication === true
+  const hasDefenseChangeBaseline = defenseChangeNotificationInfo?.hasPreviousPublication === true
+  const defenseChangeButtonLabel = pendingDefenseChangeNotifications > 0
+    ? `Notifier changements (${pendingDefenseChangeNotifications})`
+    : sentDefenseChangeNotifications > 0 && changedDefenseCount > 0
+      ? 'Changements notifiés'
+      : changedDefenseCount > 0
+        ? 'Aucun email à envoyer'
+        : 'Aucun changement'
+  const defenseChangeButtonTitle = pendingDefenseChangeNotifications > 0
+    ? `${changedDefenseCount} défense(s) modifiée(s), ${pendingDefenseChangeNotifications} notification(s) à transmettre.`
+    : !hasDefenseChangePublication
+      ? 'Aucune publication de défenses active.'
+      : !hasDefenseChangeBaseline
+        ? 'Première publication: utiliser l’envoi normal des liens, pas une notification de changement.'
+        : sentDefenseChangeNotifications > 0 && changedDefenseCount > 0
+          ? 'Les parties prenantes concernées par les changements ont déjà été notifiées.'
+          : 'Aucune modification entre les deux dernières publications des défenses.'
 
   const [selectedCaseId, setSelectedCaseId] = useState('')
   const detailPanelRef = useRef(null)
@@ -1289,6 +1313,25 @@ const VoteCommandCenter = ({
               ariaLabel="Envoyer liens défense."
             >
               Envoyer liens
+            </WorkflowActionButton>
+            {pendingDefenseChangeNotifications > 0 ? (
+              <span className="vote-command-action-warning">
+                {changedDefenseCount} défense{changedDefenseCount > 1 ? 's' : ''} modifiée{changedDefenseCount > 1 ? 's' : ''}, notification ciblée à transmettre.
+              </span>
+            ) : null}
+            <WorkflowActionButton
+              actionKey="notifyDefenseChanges"
+              primaryActionKey={primaryAction.key}
+              className={pendingDefenseChangeNotifications > 0 ? 'warning' : 'neutral'}
+              onClick={onSendDefenseChangeNotifications}
+              disabled={workflowActionLoading || !onSendDefenseChangeNotifications || pendingDefenseChangeNotifications <= 0}
+              isActionRunning={isActionRunning}
+              icon={<MailIcon className="button-icon" />}
+              runningLabel="Notification..."
+              title={defenseChangeButtonTitle}
+              ariaLabel="Notifier les changements des défenses."
+            >
+              {defenseChangeButtonLabel}
             </WorkflowActionButton>
             <WorkflowActionButton
               actionKey="published"

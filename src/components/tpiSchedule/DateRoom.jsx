@@ -267,7 +267,9 @@ const DateRoom = ({
   soutenanceDates = [],
   roomCatalogBySite = {},
   allRooms = [],
-  validationMarkersBySlotKey = {}
+  validationMarkersBySlotKey = {},
+  tpiSyncEntriesBySlotKey = {},
+  onSyncTpiFromGestion = null
 }) => {
   // Fonction pour générer l'ID TPI en fonction de la position (site, room et slots)
   const generateUniqueID = (siteIndex, roomIndex, slotIndex) => {
@@ -708,6 +710,7 @@ const DateRoom = ({
               roomName: safeRoomData.name
             })
             const slotValidationMarker = validationMarkersBySlotKey?.[slotValidationKey] || null
+            const tpiSyncEntry = tpiSyncEntriesBySlotKey?.[`${roomIndex}:${iSlot}`] || null
 
             return (
               <React.Fragment key={iSlot}>
@@ -731,6 +734,12 @@ const DateRoom = ({
                   stakeholderShortIdHints={stakeholderShortIdHints}
                   soutenanceDates={soutenanceDates}
                   validationMarker={slotValidationMarker}
+                  tpiSyncEntry={tpiSyncEntry}
+                  onSyncTpiFromGestion={
+                    typeof onSyncTpiFromGestion === 'function'
+                      ? () => onSyncTpiFromGestion(roomIndex, iSlot)
+                      : null
+                  }
                 />
                 {iSlot !== numSlots - 1 && (
                   <BreakLine duration={breakDurationMinutes} detailLevel={tpiCardDetailLevel} />

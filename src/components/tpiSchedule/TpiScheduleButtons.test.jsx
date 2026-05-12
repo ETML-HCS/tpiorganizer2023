@@ -91,6 +91,10 @@ const baseProps = {
   roomsCount: 4,
   usedTpiCount: 3,
   totalTpiCount: 10,
+  tpiSyncCount: 0,
+  isTpiSyncRefreshing: false,
+  onRefreshTpiSyncStatus: jest.fn(),
+  onSyncAllTpisFromGestion: jest.fn(),
   tpiCardDetailLevel: 2,
   onTpiCardDetailLevelChange: jest.fn(),
   roomFilters: { site: '', date: '', room: '' },
@@ -208,6 +212,66 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(screen.getByRole('button', { name: /Envoyer BDD/i }))
 
     expect(baseProps.onSendBD).toHaveBeenCalledTimes(1)
+  })
+
+  test('affiche le compteur de sync GestionTPI sans modifier les données', () => {
+    const onRefreshTpiSyncStatus = jest.fn()
+    renderButtons({
+      tpiSyncCount: 5,
+      onRefreshTpiSyncStatus
+    })
+
+    const syncButton = screen.getByRole('button', { name: /Sync \(5\)/i })
+    expect(syncButton).toHaveTextContent('Sync (5)')
+
+    fireEvent.click(syncButton)
+
+    expect(onRefreshTpiSyncStatus).toHaveBeenCalledTimes(1)
+  })
+
+  test('propose la synchronisation globale quand des écarts sont détectés', () => {
+    const onSyncAllTpisFromGestion = jest.fn()
+    renderButtons({
+      tpiSyncCount: 5,
+      onSyncAllTpisFromGestion
+    })
+
+    const syncAllButton = screen.getByRole('button', { name: /Sync tout \(5\)/i })
+    expect(syncAllButton).toHaveTextContent('Sync tout (5)')
+
+    fireEvent.click(syncAllButton)
+
+    expect(onSyncAllTpisFromGestion).toHaveBeenCalledTimes(1)
+  })
+
+  test('désactive les actions sync pendant le recalcul du compteur', () => {
+    const onRefreshTpiSyncStatus = jest.fn()
+    const onSyncAllTpisFromGestion = jest.fn()
+
+    renderButtons({
+      tpiSyncCount: 2,
+      isTpiSyncRefreshing: true,
+      onRefreshTpiSyncStatus,
+      onSyncAllTpisFromGestion
+    })
+
+    const syncButton = screen.getByRole('button', { name: /Sync \(\.\.\.\)/i })
+    const syncAllButton = screen.getByRole('button', { name: /Sync tout \(2\)/i })
+
+    expect(syncButton).toBeDisabled()
+    expect(syncAllButton).toBeDisabled()
+
+    fireEvent.click(syncButton)
+    fireEvent.click(syncAllButton)
+
+    expect(onRefreshTpiSyncStatus).not.toHaveBeenCalled()
+    expect(onSyncAllTpisFromGestion).not.toHaveBeenCalled()
+  })
+
+  test('masque la synchronisation globale quand aucun écart n est détecté', () => {
+    renderButtons({ tpiSyncCount: 0 })
+
+    expect(screen.queryByRole('button', { name: /Sync tout/i })).not.toBeInTheDocument()
   })
 
   test('déclenche la vérification de planification depuis l onglet Workflow', () => {

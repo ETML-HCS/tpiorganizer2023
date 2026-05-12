@@ -1438,6 +1438,138 @@ test('POST /api/workflow/:year/publication/send-links requires authentication', 
   }
 })
 
+test('GET /api/workflow/:year/publication/defense-changes/preview returns targeted notification preview', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const publicationChangeNotificationService = require('../services/publicationChangeNotificationService')
+  let receivedPayload = null
+  const restore = [
+    patchMethod(publicationChangeNotificationService, 'previewDefenseChangeNotifications', async (payload) => {
+      receivedPayload = payload
+      return {
+        year: payload.year,
+        currentVersion: payload.publicationVersion,
+        previousVersion: 2,
+        hasCurrentPublication: true,
+        hasPreviousPublication: true,
+        shouldNotify: true,
+        summary: {
+          changedDefenseCount: 1,
+          pendingRecipientCount: 2
+        },
+        changes: [],
+        recipients: []
+      }
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/defense-changes/preview?publicationVersion=3`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.deepEqual(receivedPayload, {
+      year: 2026,
+      publicationVersion: 3
+    })
+    assert.equal(body.shouldNotify, true)
+    assert.equal(body.summary.pendingRecipientCount, 2)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/publication/defense-changes/send sends targeted notifications through app links', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const publicationChangeNotificationService = require('../services/publicationChangeNotificationService')
+  let receivedPayload = null
+  let auditPayload = null
+  const restore = [
+    patchMethod(publicationChangeNotificationService, 'sendDefenseChangeNotifications', async (payload) => {
+      receivedPayload = payload
+      return {
+        success: true,
+        year: payload.year,
+        preview: {
+          currentVersion: payload.publicationVersion,
+          previousVersion: 2,
+          summary: {
+            pendingRecipientCount: 0,
+            sentRecipientCount: 2
+          }
+        },
+        summary: {
+          requestedCount: 2,
+          sentCount: 2,
+          skippedCount: 0,
+          failedCount: 0
+        },
+        results: []
+      }
+    }),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async (payload) => {
+      auditPayload = payload
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/defense-changes/send`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        publicationVersion: 3,
+        forceResend: true
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(receivedPayload.year, 2026)
+    assert.equal(receivedPayload.publicationVersion, 3)
+    assert.equal(receivedPayload.forceResend, true)
+    assert.equal(receivedPayload.linkTarget, 'app')
+    assert.equal(receivedPayload.redirectPath, '/defenses/2026')
+    assert.equal(receivedPayload.baseUrl, baseUrl)
+    assert.equal(auditPayload.action, 'workflow.publication.defense-changes.send')
+    assert.equal(auditPayload.success, true)
+    assert.equal(auditPayload.payload.linkTarget, 'app')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/reset validates confirmation phrase', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])

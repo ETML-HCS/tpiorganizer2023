@@ -54,6 +54,12 @@ import {
 import {
   getNonImportableTpiRefs
 } from "./tpiScheduleImportability"
+import {
+  buildGestionTpiSyncModelMap,
+  buildPlanningTpiFromGestionModel,
+  buildPlanningTpiSyncSummary,
+  normalizeTpiSyncRefKey
+} from "./tpiScheduleSync"
 import { API_URL, IS_DEBUG, STORAGE_KEYS, YEARS_CONFIG } from "../../config/appConfig"
 import { coordinationCatalogService, coordinationConfigService } from "../../services/coordinationService"
 import { STATIC_VOTE_REGENERATION_CONFIRM_MESSAGE } from "../../constants/staticVotePublication"
@@ -698,6 +704,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [soutenanceDates, setSoutenanceDates] = useState(defaultSoutenanceDates)
   const [roomCatalogBySite, setRoomCatalogBySite] = useState(defaultRoomCatalogBySite)
   const [availableTpiModels, setAvailableTpiModels] = useState(null)
+  const [isRefreshingTpiSyncStatus, setIsRefreshingTpiSyncStatus] = useState(false)
   const [peopleRegistry, setPeopleRegistry] = useState(null)
   const roomEntries = useMemo(() => (Array.isArray(newRooms) ? newRooms : []), [newRooms])
   const stakeholderShortIdHints = useMemo(() => {
@@ -762,6 +769,28 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }, [assignedTpiRefs, planifiableTpiModels])
 
+  const tpiSyncSummary = useMemo(
+    () => buildPlanningTpiSyncSummary(roomEntries, availableTpiModels),
+    [availableTpiModels, roomEntries]
+  )
+
+  const tpiSyncEntriesBySlotKey = useMemo(() => {
+    return (Array.isArray(tpiSyncSummary.entries) ? tpiSyncSummary.entries : []).reduce(
+      (acc, entry) => {
+        if (entry?.slotKey) {
+          acc[entry.slotKey] = entry
+        }
+
+        return acc
+      },
+      {}
+    )
+  }, [tpiSyncSummary.entries])
+
+  const tpiSyncCount = Number.isInteger(tpiSyncSummary.count)
+    ? tpiSyncSummary.count
+    : null
+
   // TPI placés dans les salles mais qui ne peuvent pas être importés lors du gel.
   const nonImportableTpiRefs = useMemo(() => getNonImportableTpiRefs(roomEntries), [roomEntries])
 
@@ -776,6 +805,36 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const notify = useCallback((message, type = "info", duration = 3000) => {
     showNotification(message, type, duration)
   }, [])
+
+  const handleRefreshTpiSyncStatus = useCallback(async () => {
+    const year = Number.parseInt(selectedYear, 10)
+
+    if (!Number.isInteger(year)) {
+      notify("Année de planification invalide pour la synchronisation.", "error")
+      return
+    }
+
+    setIsRefreshingTpiSyncStatus(true)
+
+    try {
+      const tpiModels = await getTpiModels(year)
+      const nextTpiModels = Array.isArray(tpiModels) ? tpiModels : []
+      const nextSummary = buildPlanningTpiSyncSummary(roomEntries, nextTpiModels)
+
+      setAvailableTpiModels(nextTpiModels)
+
+      if (Number(nextSummary.count) > 0) {
+        notify(`${nextSummary.count} TPI à synchroniser depuis GestionTPI.`, "info")
+      } else {
+        notify("Aucun TPI à synchroniser depuis GestionTPI.", "success")
+      }
+    } catch (error) {
+      console.error("Erreur lors du calcul de synchronisation GestionTPI :", error)
+      notify("Impossible de calculer les TPI à synchroniser.", "error")
+    } finally {
+      setIsRefreshingTpiSyncStatus(false)
+    }
+  }, [notify, roomEntries, selectedYear])
 
   useEffect(() => {
     if (!effectiveConfigData) {
@@ -2384,6 +2443,117 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }
 
+  const handleSyncTpiFromGestion = async (roomIndex, tpiIndex) => {
+    try {
+      const currentTpi = newRooms?.[roomIndex]?.tpiDatas?.[tpiIndex]
+      const refKey = normalizeTpiSyncRefKey(currentTpi?.refTpi)
+
+      if (!refKey) {
+        notify("Impossible de synchroniser un slot sans référence TPI.", "error")
+        return
+      }
+
+      const sourceModelsByRef = buildGestionTpiSyncModelMap(availableTpiModels)
+      const sourceModel = sourceModelsByRef.get(refKey)
+
+      if (!sourceModel) {
+        notify("TPI introuvable dans GestionTPI pour ce slot.", "error")
+        return
+      }
+
+      const updatedTpi = buildPlanningTpiFromGestionModel(currentTpi, sourceModel)
+      await handleUpdateTpi(roomIndex, tpiIndex, updatedTpi)
+
+      notify(`TPI ${updatedTpi.refTpi || currentTpi.refTpi} synchronisé depuis GestionTPI.`, "success")
+    } catch (error) {
+      console.error("Erreur lors de la synchronisation du TPI :", error)
+      notify("Erreur lors de la synchronisation du TPI.", "error")
+    }
+  }
+
+  const handleSyncAllTpisFromGestion = async () => {
+    try {
+      const syncEntries = Array.isArray(tpiSyncSummary.entries)
+        ? tpiSyncSummary.entries
+        : []
+      const syncRefs = Array.from(
+        new Set(syncEntries.map((entry) => normalizeTpiSyncRefKey(entry?.refTpi)).filter(Boolean))
+      )
+
+      if (syncEntries.length === 0 || syncRefs.length === 0) {
+        notify("Aucun TPI à synchroniser depuis GestionTPI.", "info")
+        return
+      }
+
+      const confirmed = typeof window === "undefined"
+        ? true
+        : window.confirm(
+            `Synchroniser ${syncRefs.length} TPI depuis GestionTPI dans la planification ?`
+          )
+
+      if (!confirmed) {
+        return
+      }
+
+      const syncSlotKeys = new Set(syncEntries.map((entry) => entry?.slotKey).filter(Boolean))
+      const sourceModelsByRef = buildGestionTpiSyncModelMap(availableTpiModels)
+      let updatedSlotCount = 0
+      const updatedAt = Date.now()
+
+      const updatedRooms = newRooms.map((room, roomIndex) => {
+        const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+        let nextTpiDatas = null
+
+        tpiDatas.forEach((tpi, tpiIndex) => {
+          const slotKey = `${roomIndex}:${tpiIndex}`
+
+          if (!syncSlotKeys.has(slotKey)) {
+            return
+          }
+
+          const sourceModel = sourceModelsByRef.get(normalizeTpiSyncRefKey(tpi?.refTpi))
+          if (!sourceModel) {
+            return
+          }
+
+          if (!nextTpiDatas) {
+            nextTpiDatas = [...tpiDatas]
+          }
+
+          nextTpiDatas[tpiIndex] = buildPlanningTpiFromGestionModel(tpi, sourceModel)
+          updatedSlotCount += 1
+        })
+
+        if (!nextTpiDatas) {
+          return room
+        }
+
+        return {
+          ...room,
+          lastUpdate: updatedAt,
+          tpiDatas: nextTpiDatas
+        }
+      })
+
+      if (updatedSlotCount === 0) {
+        notify("Aucun slot synchronisable trouvé dans la planification.", "error")
+        return
+      }
+
+      clearValidationState()
+      setNewRooms(updatedRooms)
+      await saveDataToLocalStorage(updatedRooms)
+
+      notify(
+        `${syncRefs.length} TPI synchronisé(s) depuis GestionTPI dans ${updatedSlotCount} slot(s).`,
+        "success"
+      )
+    } catch (error) {
+      console.error("Erreur lors de la synchronisation globale GestionTPI :", error)
+      notify("Erreur lors de la synchronisation globale des TPI.", "error")
+    }
+  }
+
   const toggleEditing = () => {
     setIsEditing((prevIsEditing) => !prevIsEditing)
   }
@@ -2843,6 +3013,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           totalRoomsCount={roomEntries.length}
           usedTpiCount={tpiUsageSummary.usedTpiCount}
           totalTpiCount={tpiUsageSummary.totalTpiCount}
+          tpiSyncCount={tpiSyncCount}
+          isTpiSyncRefreshing={isRefreshingTpiSyncStatus}
+          onRefreshTpiSyncStatus={handleRefreshTpiSyncStatus}
+          onSyncAllTpisFromGestion={handleSyncAllTpisFromGestion}
           nonImportableTpiCount={nonImportableTpiRefs.length}
           localConflictCount={localConflictSummary.conflictCount}
           tpiCardDetailLevel={tpiCardDetailLevel}
@@ -3172,6 +3346,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                   soutenanceDates={soutenanceDates}
                   roomCatalogBySite={roomCatalogBySite}
                   allRooms={roomEntries}
+                  tpiSyncEntriesBySlotKey={tpiSyncEntriesBySlotKey}
+                  onSyncTpiFromGestion={handleSyncTpiFromGestion}
                   onUpdateTpi={(tpiIndex, updatedTpi) =>
                     handleUpdateTpi(originalIndex >= 0 ? originalIndex : 0, tpiIndex, updatedTpi)
                   }

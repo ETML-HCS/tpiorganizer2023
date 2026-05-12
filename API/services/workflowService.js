@@ -9,6 +9,7 @@ const Vote = require('../models/voteModel')
 const PublicationVersion = require('../models/publicationVersionModel')
 const { MagicLink } = require('../models/magicLinkModel')
 const { AccessLinkLog } = require('../models/accessLinkLogModel')
+const { PublicationChangeNotification } = require('../models/publicationChangeNotificationModel')
 
 const LEGACY_STATE_PHASES = Object.freeze({
   planning: 'planning',
@@ -375,6 +376,7 @@ async function resetWorkflowYear({ year, user }) {
   const snapshotsResult = await PlanningSnapshot.deleteMany({ year })
   const publicationVersionsResult = await PublicationVersion.deleteMany({ year })
   const magicLinksResult = await MagicLink.deleteMany({ year })
+  const publicationChangeNotificationsResult = await PublicationChangeNotification.deleteMany({ year })
   const accessLinkLogsResult = await AccessLinkLog.deleteMany({ year })
   const workflowYearsResult = await WorkflowYear.deleteMany({ year })
   const legacyCollections = await Promise.all([
@@ -389,6 +391,7 @@ async function resetWorkflowYear({ year, user }) {
     planningSnapshots: snapshotsResult.deletedCount || 0,
     publicationVersions: publicationVersionsResult.deletedCount || 0,
     magicLinks: magicLinksResult.deletedCount || 0,
+    publicationChangeNotifications: publicationChangeNotificationsResult.deletedCount || 0,
     accessLinkLogs: accessLinkLogsResult.deletedCount || 0,
     workflowYears: workflowYearsResult.deletedCount || 0,
     legacyCollections

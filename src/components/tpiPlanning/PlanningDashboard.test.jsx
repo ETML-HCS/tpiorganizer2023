@@ -250,6 +250,32 @@ describe('PlanningDashboard', () => {
       publicUrl: 'https://tpi26.ch/votes-2026/',
       syncSecretConfigured: false
     })
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'getDefenseChangeNotificationPreview').mockResolvedValue({
+      hasCurrentPublication: false,
+      hasPreviousPublication: false,
+      summary: {
+        changedDefenseCount: 0,
+        pendingRecipientCount: 0,
+        sentRecipientCount: 0
+      }
+    })
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'sendDefenseChangeNotifications').mockResolvedValue({
+      success: true,
+      summary: {
+        sentCount: 0,
+        skippedCount: 0,
+        failedCount: 0
+      },
+      preview: {
+        hasCurrentPublication: true,
+        hasPreviousPublication: true,
+        summary: {
+          changedDefenseCount: 0,
+          pendingRecipientCount: 0,
+          sentRecipientCount: 0
+        }
+      }
+    })
     jest.spyOn(coordinationServices.workflowCoordinationService, 'generateStaticVotePublication').mockResolvedValue({
       success: true,
       available: true,
@@ -462,6 +488,51 @@ describe('PlanningDashboard', () => {
     await waitFor(() => {
       expect(coordinationServices.workflowCoordinationService.startVotesWithoutEmails).toHaveBeenCalledWith('2026')
     })
+
+    confirmSpy.mockRestore()
+  })
+
+  test('transmet les notifications ciblées après changement de publication des défenses', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
+    coordinationServices.workflowCoordinationService.getDefenseChangeNotificationPreview.mockResolvedValueOnce({
+      hasCurrentPublication: true,
+      hasPreviousPublication: true,
+      summary: {
+        changedDefenseCount: 1,
+        pendingRecipientCount: 2,
+        sentRecipientCount: 0
+      }
+    })
+    coordinationServices.workflowCoordinationService.sendDefenseChangeNotifications.mockResolvedValueOnce({
+      success: true,
+      summary: {
+        sentCount: 2,
+        skippedCount: 0,
+        failedCount: 0
+      },
+      preview: {
+        hasCurrentPublication: true,
+        hasPreviousPublication: true,
+        summary: {
+          changedDefenseCount: 1,
+          pendingRecipientCount: 0,
+          sentRecipientCount: 2
+        }
+      }
+    })
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    expect(await screen.findByText(/Notifier changements \(2\)/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /notifier les changements des défenses/i }))
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('2 partie(s) prenante(s)'))
+      expect(coordinationServices.workflowCoordinationService.sendDefenseChangeNotifications).toHaveBeenCalledWith('2026', {})
+    })
+    expect(await screen.findByText(/Notifications changements défenses: 2 envoyée\(s\), 0 ignorée\(s\), 0 échec\(s\)\./i)).toBeInTheDocument()
+    expect(screen.getByText(/Changements notifiés/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /notifier les changements des défenses/i })).toBeDisabled()
 
     confirmSpy.mockRestore()
   })

@@ -10,9 +10,18 @@ jest.mock('react-dnd-html5-backend', () => ({
   HTML5Backend: {}
 }))
 
-jest.mock('./TpiSlot', () => ({ timeValues, roomPeriod }) => (
-  <div data-testid="tpi-slot" data-room-period={roomPeriod}>
+jest.mock('./TpiSlot', () => ({ timeValues, roomPeriod, tpiSyncEntry, onSyncTpiFromGestion }) => (
+  <div
+    data-testid="tpi-slot"
+    data-room-period={roomPeriod}
+    data-sync-ref={tpiSyncEntry?.refTpi || ''}
+  >
     {Array.isArray(timeValues) ? timeValues.join(' - ') : ''}
+    {tpiSyncEntry && typeof onSyncTpiFromGestion === 'function' ? (
+      <button type="button" onClick={onSyncTpiFromGestion}>
+        sync-slot
+      </button>
+    ) : null}
   </div>
 ))
 jest.mock('./BreakLine', () => ({ duration }) => (
@@ -154,6 +163,48 @@ describe('DateRoom', () => {
     expect(screen.getAllByTestId('tpi-slot')[1]).toHaveTextContent('09:10 - 10:10')
     expect(screen.getAllByTestId('tpi-slot')[0]).toHaveAttribute('data-room-period', '1')
     expect(screen.getAllByTestId('tpi-slot')[1]).toHaveAttribute('data-room-period', '2')
+  })
+
+  test('propage l entrée de sync GestionTPI au slot correspondant', () => {
+    const onSyncTpiFromGestion = jest.fn()
+
+    render(
+      <DateRoom
+        roomData={{
+          site: 'ETML',
+          name: 'A101',
+          date: '2026-06-10',
+          configSite: {
+            numSlots: 2,
+            breaklineMinutes: 10,
+            tpiTimeMinutes: 60,
+            firstTpiStartTime: '08:00'
+          },
+          tpiDatas: [{ refTpi: 'TPI-001' }, { refTpi: 'TPI-002' }]
+        }}
+        roomIndex={3}
+        onDelete={jest.fn()}
+        onUpdateRoom={jest.fn()}
+        isEditOfRoom={false}
+        onUpdateTpi={jest.fn()}
+        onSwapTpiCards={jest.fn()}
+        tpiSyncEntriesBySlotKey={{
+          '3:1': {
+            refTpi: 'TPI-002',
+            changedLabels: ['candidat']
+          }
+        }}
+        onSyncTpiFromGestion={onSyncTpiFromGestion}
+      />
+    )
+
+    const slots = screen.getAllByTestId('tpi-slot')
+    expect(slots[0]).toHaveAttribute('data-sync-ref', '')
+    expect(slots[1]).toHaveAttribute('data-sync-ref', 'TPI-002')
+
+    fireEvent.click(screen.getByRole('button', { name: 'sync-slot' }))
+
+    expect(onSyncTpiFromGestion).toHaveBeenCalledWith(3, 1)
   })
 
   test('applique la couleur de planification configurée pour un site non legacy', () => {

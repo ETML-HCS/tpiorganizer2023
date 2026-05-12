@@ -4,6 +4,7 @@ import { useDrop } from 'react-dnd'
 import TpiCard from './TpiCard'
 import { ItemTypes } from './Constants'
 import { createEmptyTpi } from './tpiScheduleData'
+import { RefreshIcon } from '../shared/InlineIcons'
 
 const TpiSlot = ({
   tpiData,
@@ -20,9 +21,19 @@ const TpiSlot = ({
   peopleRegistry = [],
   stakeholderShortIdHints = {},
   soutenanceDates = [],
-  validationMarker = null
+  validationMarker = null,
+  tpiSyncEntry = null,
+  onSyncTpiFromGestion = null
 }) => {
   const safeTpiData = tpiData || createEmptyTpi()
+  const hasTpiSyncDifference = Boolean(tpiSyncEntry)
+  const syncTitle = hasTpiSyncDifference
+    ? `Synchroniser ${tpiSyncEntry.refTpi || safeTpiData.refTpi || 'ce TPI'} depuis GestionTPI${
+        Array.isArray(tpiSyncEntry.changedLabels) && tpiSyncEntry.changedLabels.length > 0
+          ? `: ${tpiSyncEntry.changedLabels.join(', ')}`
+          : ''
+      }`
+    : ''
 
   const handleUpdateTpiCard = updatedTpi => {
     // Mettre à jour l'état local si nécessaire
@@ -57,12 +68,26 @@ const TpiSlot = ({
   return (
     <div
       ref={dropRef}
-      className={`tpiSlot detail-level-${detailLevel} ${isOver ? 'dragOver' : ''}`}
+      className={`tpiSlot detail-level-${detailLevel} ${isOver ? 'dragOver' : ''} ${
+        hasTpiSyncDifference ? 'has-sync-diff' : ''
+      }`.trim()}
       id={`green-${tpiIsValidatedForAll}`}
     >
       <div className={`timeSlot`}>
         <p className='top'>{timeValues[0]}</p>
         <p className='bottom'>{timeValues[1]}</p>
+        {isEditTPICard && hasTpiSyncDifference ? (
+          <button
+            type='button'
+            className='tpi-slot-sync-button'
+            onClick={onSyncTpiFromGestion}
+            aria-label={syncTitle}
+            title={syncTitle}
+            disabled={typeof onSyncTpiFromGestion !== 'function'}
+          >
+            <RefreshIcon />
+          </button>
+        ) : null}
       </div>
       <TpiCard
         tpi={safeTpiData}

@@ -614,6 +614,116 @@ function buildSoutenanceAccessEmail(data) {
   }
 }
 
+function buildDefenseChangeNotificationEmail(data) {
+  const brandName = escapeHtml(data.brandName || 'TPI Organizer')
+  const recipientName = escapeHtml(data.recipientName || '')
+  const year = escapeHtml(data.year)
+  const publicationVersion = escapeHtml(data.publicationVersion || '')
+  const previousPublicationVersion = escapeHtml(data.previousPublicationVersion || '')
+  const deadline = escapeHtml(data.deadline)
+  const magicLinkUrl = escapeHtml(data.magicLinkUrl)
+  const changes = Array.isArray(data.changes) ? data.changes : []
+  const changeRowsHtml = changes.map((change) => {
+    const reasons = Array.isArray(change.reasonLabels) && change.reasonLabels.length > 0
+      ? change.reasonLabels.join(', ')
+      : 'mise à jour'
+    const previousLocation = escapeHtml(change.previousLocationLabel || 'Non publié')
+    const currentLocation = escapeHtml(change.currentLocationLabel || 'Non publié')
+
+    return `
+      <tr>
+        <td style="padding:12px 0; border-top:1px solid #e2e8f0;">
+          <strong style="display:block; color:#0f172a; font-size:15px; line-height:22px;">${escapeHtml(change.reference || 'TPI')}</strong>
+          <span style="display:block; color:#334155; font-size:14px; line-height:21px;">${escapeHtml(change.candidateName || 'Candidat non renseigné')}</span>
+          <span style="display:block; margin-top:6px; color:#0f766e; font-size:13px; line-height:19px; font-weight:700;">${escapeHtml(reasons)}</span>
+          <span style="display:block; margin-top:6px; color:#64748b; font-size:13px; line-height:19px;">Avant: ${previousLocation}</span>
+          <span style="display:block; color:#172033; font-size:13px; line-height:19px;">Maintenant: ${currentLocation}</span>
+        </td>
+      </tr>
+    `
+  }).join('')
+  const changesText = changes.map((change) => {
+    const reasons = Array.isArray(change.reasonLabels) && change.reasonLabels.length > 0
+      ? change.reasonLabels.join(', ')
+      : 'mise à jour'
+
+    return [
+      `- ${change.reference || 'TPI'} - ${change.candidateName || 'Candidat non renseigné'}`,
+      `  Changement: ${reasons}`,
+      change.previousLocationLabel ? `  Avant: ${change.previousLocationLabel}` : '',
+      change.currentLocationLabel ? `  Maintenant: ${change.currentLocationLabel}` : ''
+    ].filter(Boolean).join('\n')
+  }).join('\n\n')
+
+  return {
+    subject: `[${data.brandName || 'TPI Organizer'}] Mise à jour des défenses TPI ${data.year}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Mise à jour des défenses TPI ${year}</title>
+      </head>
+      <body style="margin:0; padding:0; background:#f3f6f8; color:#172033; font-family:Arial, Helvetica, sans-serif;">
+        <div style="display:none; max-height:0; overflow:hidden; color:#f3f6f8; opacity:0;">Une mise à jour concerne une ou plusieurs défenses TPI ${year} auxquelles vous êtes lié(e).</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#f3f6f8;">
+          <tr>
+            <td align="center" style="padding:32px 16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; max-width:640px; border-collapse:separate; border-spacing:0; background:#ffffff; border:1px solid #dbe5ec; border-radius:14px; overflow:hidden; box-shadow:0 12px 30px rgba(15, 23, 42, 0.08);">
+                <tr>
+                  <td style="height:6px; line-height:6px; background:#0f766e; font-size:1px;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="padding:26px 30px 12px;">
+                    <div style="display:inline-block; margin:0 0 12px; padding:5px 10px; border-radius:999px; background:#ecfdf5; color:#0f766e; font-size:12px; line-height:16px; font-weight:700; text-transform:uppercase;">${brandName}</div>
+                    <h1 style="margin:0; color:#0f172a; font-size:25px; line-height:32px; font-weight:700;">Mise à jour des défenses TPI ${year}</h1>
+                    <p style="margin:10px 0 0; color:#64748b; font-size:13px; line-height:20px;">Publication v${publicationVersion}${previousPublicationVersion ? `, comparaison avec v${previousPublicationVersion}` : ''}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 30px 30px;">
+                    <p style="margin:0 0 16px; color:#172033; font-size:16px; line-height:25px;">Bonjour ${recipientName},</p>
+                    <p style="margin:0 0 18px; color:#334155; font-size:16px; line-height:26px;">Une nouvelle publication des défenses contient une modification qui vous concerne.</p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin:0 0 24px;">
+                      ${changeRowsHtml}
+                    </table>
+                    <table role="presentation" align="center" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin:0 auto 24px;">
+                      <tr>
+                        <td style="border-radius:10px; background:#0f766e;">
+                          <a href="${magicLinkUrl}" style="display:inline-block; background:#0f766e; color:#ffffff; text-decoration:none; font-weight:700; font-size:16px; line-height:20px; padding:14px 22px; border-radius:10px;">Voir mes défenses</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 8px; color:#526072; font-size:14px; line-height:21px;"><strong style="color:#172033;">Validité du lien:</strong> ${deadline}</p>
+                    <p style="margin:0; color:#64748b; font-size:13px; line-height:20px;">Ce lien est personnel et ne doit pas être partagé.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `,
+    text: `
+      Mise à jour des défenses TPI ${data.year}
+
+      Bonjour ${data.recipientName},
+
+      Une nouvelle publication des défenses contient une modification qui vous concerne.
+
+      ${changesText}
+
+      Voir mes défenses:
+      ${data.magicLinkUrl}
+
+      Validité du lien: ${data.deadline}
+      Ce lien est personnel.
+    `
+  }
+}
+
 function buildTemplateData(data = {}, options = {}) {
   const emailSettings = options.emailSettings || data?.emailSettings || {}
   const brandName = sanitizeHeaderText(data?.brandName) || getConfiguredBrandName(emailSettings)
@@ -719,6 +829,11 @@ const emailTemplates = {
    * Email d'acces a la vue finale des défenses
    */
   soutenanceAccess: buildSoutenanceAccessEmail,
+
+  /**
+   * Email ciblé après changement dans une nouvelle publication des défenses.
+   */
+  defenseChangeNotification: buildDefenseChangeNotificationEmail,
 
   /**
    * Email avec un magic link unique pour tous les votes d'une partie prenante.

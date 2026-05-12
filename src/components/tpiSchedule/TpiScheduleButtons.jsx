@@ -96,6 +96,10 @@ const TpiScheduleButtons = ({
   totalRoomsCount = roomsCount,
   usedTpiCount = null,
   totalTpiCount = null,
+  tpiSyncCount = null,
+  isTpiSyncRefreshing = false,
+  onRefreshTpiSyncStatus = null,
+  onSyncAllTpisFromGestion = null,
   localConflictCount = 0,
   tpiCardDetailLevel = 2,
   onTpiCardDetailLevelChange = null,
@@ -346,6 +350,14 @@ const TpiScheduleButtons = ({
   const totalTpiBadge = Number.isInteger(Number(totalTpiCount)) && Number(totalTpiCount) > 0
     ? String(totalTpiCount)
     : ""
+  const hasTpiSyncCount = Number.isInteger(Number(tpiSyncCount))
+  const normalizedTpiSyncCount = hasTpiSyncCount ? Number(tpiSyncCount) : null
+  const syncTpiLabel = isTpiSyncRefreshing
+    ? "Sync (...)"
+    : `Sync (${normalizedTpiSyncCount ?? "..."})`
+  const syncAllTpiLabel = normalizedTpiSyncCount > 0
+    ? `Sync tout (${normalizedTpiSyncCount})`
+    : "Sync tout"
 
   const workflowTabs = useMemo(() => ([
     {
@@ -974,6 +986,46 @@ const TpiScheduleButtons = ({
                 <IconButtonContent
                   label="Supprimer tout"
                   icon={TrashIcon}
+                  iconClassName="planning-button-icon"
+                />
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              className={`planning-data-btn sync icon-button icon-button--with-badge ${
+                normalizedTpiSyncCount > 0 ? "has-sync" : ""
+              }`.trim()}
+              onClick={onRefreshTpiSyncStatus}
+              aria-label={syncTpiLabel}
+              title={
+                normalizedTpiSyncCount > 0
+                  ? `${normalizedTpiSyncCount} TPI planifié(s) diffèrent de GestionTPI. Ce bouton recalcule uniquement le compteur.`
+                  : "Recalculer les différences entre GestionTPI et la planification sans modifier les slots."
+              }
+              disabled={isTpiSyncRefreshing || typeof onRefreshTpiSyncStatus !== "function"}
+            >
+              <IconButtonContent
+                label={syncTpiLabel}
+                icon={RefreshIcon}
+                showLabel
+                iconClassName="planning-button-icon"
+              />
+            </button>
+
+            {normalizedTpiSyncCount > 0 ? (
+              <button
+                type="button"
+                className="planning-data-btn sync-all icon-button icon-button--with-badge"
+                onClick={onSyncAllTpisFromGestion}
+                aria-label={syncAllTpiLabel}
+                title={`Mettre à jour les ${normalizedTpiSyncCount} TPI détectés dans la planification.`}
+                disabled={isTpiSyncRefreshing || typeof onSyncAllTpisFromGestion !== "function"}
+              >
+                <IconButtonContent
+                  label={syncAllTpiLabel}
+                  icon={CheckIcon}
+                  showLabel
                   iconClassName="planning-button-icon"
                 />
               </button>

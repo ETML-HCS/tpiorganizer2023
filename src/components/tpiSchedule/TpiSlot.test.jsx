@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import TpiSlot from './TpiSlot'
 
 jest.mock('react-dnd', () => ({
@@ -51,5 +51,46 @@ describe('TpiSlot', () => {
     )
 
     expect(screen.getByTestId('tpi-card')).toHaveAttribute('data-room-period', '3')
+  })
+
+  it('affiche le bouton de sync sous l heure uniquement en mode édition', () => {
+    const onSyncTpiFromGestion = jest.fn()
+    const syncEntry = {
+      refTpi: 'TPI-001',
+      changedLabels: ['candidat', 'expert 1']
+    }
+
+    const { rerender } = render(
+      <TpiSlot
+        tpiData={makeTpi(2)}
+        isEditTPICard={false}
+        timeValues={['13:00', '14:00']}
+        onUpdateTpi={jest.fn()}
+        onSwapTpiCardsProp={jest.fn()}
+        tpiSyncEntry={syncEntry}
+        onSyncTpiFromGestion={onSyncTpiFromGestion}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Synchroniser TPI-001/i })).not.toBeInTheDocument()
+
+    rerender(
+      <TpiSlot
+        tpiData={makeTpi(2)}
+        isEditTPICard
+        timeValues={['13:00', '14:00']}
+        onUpdateTpi={jest.fn()}
+        onSwapTpiCardsProp={jest.fn()}
+        tpiSyncEntry={syncEntry}
+        onSyncTpiFromGestion={onSyncTpiFromGestion}
+      />
+    )
+
+    const syncButton = screen.getByRole('button', { name: /Synchroniser TPI-001/i })
+    expect(syncButton.querySelector('svg')).not.toBeNull()
+
+    fireEvent.click(syncButton)
+
+    expect(onSyncTpiFromGestion).toHaveBeenCalledTimes(1)
   })
 })

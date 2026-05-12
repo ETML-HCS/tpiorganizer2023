@@ -598,6 +598,13 @@
   justify-self: center;
 }
 
+.tpiSlot.has-sync-diff {
+  border-color: rgba(37, 99, 235, 0.32);
+  box-shadow:
+    0 5px 12px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
 .tpiSlot.detail-level-0 .timeSlot {
   padding-top: 2px;
   padding-bottom: 2px;
@@ -660,6 +667,57 @@
   margin: 0;
   font-weight: 700;
   letter-spacing: 0.01em;
+}
+
+.tpi-slot-sync-button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 4px;
+  padding: 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.12);
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.tpi-slot-sync-button svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke-width: 2.1;
+}
+
+.tpi-slot-sync-button:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.tpi-slot-sync-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.tpiSlot.detail-level-0 .tpi-slot-sync-button,
+.tpiSlot.detail-level-1 .tpi-slot-sync-button {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  border-radius: 7px;
+}
+
+.tpiSlot.detail-level-0 .tpi-slot-sync-button svg,
+.tpiSlot.detail-level-1 .tpi-slot-sync-button svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Styles pour les champs éditables */

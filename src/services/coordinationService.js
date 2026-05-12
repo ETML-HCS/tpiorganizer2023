@@ -644,6 +644,36 @@ export const workflowCoordinationService = {
     )
   },
 
+  getDefenseChangeNotificationPreview: async (year, options = {}) => {
+    const params = new URLSearchParams()
+    if (options.publicationVersion) {
+      params.set('publicationVersion', String(options.publicationVersion))
+    }
+
+    const query = params.toString()
+    return await apiService.get(
+      `${WORKFLOW_BASE_URL}/${year}/publication/defense-changes/preview${query ? `?${query}` : ''}`
+    )
+  },
+
+  sendDefenseChangeNotifications: async (year, options = {}) => {
+    const body = appendSoutenanceLinkOptions({}, options)
+
+    if (options.publicationVersion) {
+      body.publicationVersion = options.publicationVersion
+    }
+
+    if (options.forceResend === true) {
+      body.forceResend = true
+    }
+
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/publication/defense-changes/send`,
+      body,
+      TIMEOUTS.EMAIL_SEND
+    )
+  },
+
   getStaticPublicationStatus: async (year) => {
     return await apiService.get(`${WORKFLOW_BASE_URL}/${year}/static-publication/status`)
   },

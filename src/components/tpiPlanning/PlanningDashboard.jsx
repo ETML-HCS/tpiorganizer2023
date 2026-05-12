@@ -1170,6 +1170,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [activeSnapshot, setActiveSnapshot] = useState(null)
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
+  const [defenseChangeNotificationInfo, setDefenseChangeNotificationInfo] = useState(null)
   const [magicLinkViewer, setMagicLinkViewer] = useState(null)
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
   const [planningClassTypes, setPlanningClassTypes] = useState([])
@@ -1226,6 +1227,21 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     } catch (err) {
       if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
         console.warn('Statut publication defenses statique indisponible:', err)
+      }
+      return null
+    }
+  }, [year, isAdmin])
+
+  const fetchDefenseChangeNotificationPreview = useCallback(async () => {
+    if (!isAdmin || typeof workflowCoordinationService.getDefenseChangeNotificationPreview !== 'function') {
+      return null
+    }
+
+    try {
+      return await workflowCoordinationService.getDefenseChangeNotificationPreview(year)
+    } catch (err) {
+      if (err?.status !== 404 && process.env.NODE_ENV !== 'test') {
+        console.warn('Aperçu notifications changements défenses indisponible:', err)
       }
       return null
     }
@@ -1311,6 +1327,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ? fetchStaticPublicationStatus()
         : Promise.resolve(null)
 
+      const defenseChangeNotificationRequest = isAdmin
+        ? fetchDefenseChangeNotificationPreview()
+        : Promise.resolve(null)
+
       const planningConfigRequest = Promise.resolve(coordinationConfigService.getByYear(year)).catch(err => {
         if (err?.status === 404) {
           return null
@@ -1347,7 +1367,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         snapshotResponse,
         legacyTpisResponse,
         staticPublicationResponse,
-        staticVotePublicationResponse
+        staticVotePublicationResponse,
+        defenseChangeNotificationResponse
       ] = await Promise.all([
         planningConfigRequest,
         planningCatalogRequest,
@@ -1358,7 +1379,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         snapshotRequest,
         legacyTpisRequest,
         staticPublicationRequest,
-        staticVotePublicationRequest
+        staticVotePublicationRequest,
+        defenseChangeNotificationRequest
       ])
 
       const safeTpisResponse = normalizeListResponse(tpisResponse)
@@ -1378,6 +1400,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       setActiveSnapshot(snapshotResponse)
       setStaticPublicationInfo(staticPublicationResponse)
       setStaticVotePublicationInfo(staticVotePublicationResponse)
+      setDefenseChangeNotificationInfo(defenseChangeNotificationResponse)
       
       // Identifier les conflits
       const tpisWithConflicts = safeTpisResponse.filter(tpi =>
@@ -1392,7 +1415,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     } finally {
       setIsLoading(false)
     }
-  }, [year, isAdmin, fetchStaticPublicationStatus, fetchStaticVotePublicationStatus, tryAutoSyncStaticVotes])
+  }, [year, isAdmin, fetchStaticPublicationStatus, fetchStaticVotePublicationStatus, fetchDefenseChangeNotificationPreview, tryAutoSyncStaticVotes])
 
   useEffect(() => {
     let isCancelled = false
@@ -2717,6 +2740,28 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     })
   }, [year, executeWorkflowAction, soutenanceSiteLinkOptions])
 
+  const handleSendDefenseChangeNotifications = useCallback(async () => {
+    const pendingCount = Number(defenseChangeNotificationInfo?.summary?.pendingRecipientCount || 0)
+    const changedDefenseCount = Number(defenseChangeNotificationInfo?.summary?.changedDefenseCount || 0)
+    const confirmMessage = pendingCount > 0
+      ? `Transmettre la notification de changement à ${pendingCount} partie(s) prenante(s) pour ${changedDefenseCount} défense(s) modifiée(s) ?`
+      : ''
+
+    await executeWorkflowAction({
+      actionKey: 'notifyDefenseChanges',
+      confirmMessage,
+      run: () => workflowCoordinationService.sendDefenseChangeNotifications(year, soutenanceSiteLinkOptions),
+      successBuilder: (result) => {
+        const summary = result?.summary || {}
+        return `Notifications changements défenses: ${summary.sentCount || 0} envoyée(s), ${summary.skippedCount || 0} ignorée(s), ${summary.failedCount || 0} échec(s).`
+      },
+      errorFallback: 'Erreur lors de l’envoi des notifications de changements des défenses.',
+      onSuccess: (result) => {
+        setDefenseChangeNotificationInfo(result?.preview || null)
+      }
+    })
+  }, [year, executeWorkflowAction, soutenanceSiteLinkOptions, defenseChangeNotificationInfo])
+
   const handleGenerateStaticVotePublication = useCallback(async () => {
     await executeWorkflowAction({
       actionKey: 'staticVoteGenerate',
@@ -3395,6 +3440,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             checkedConstraintByTpiId={checkedConstraintByTpiId}
             constraintCheckResult={constraintCheckResult}
             staticVotePublicationInfo={staticVotePublicationInfo}
+            defenseChangeNotificationInfo={defenseChangeNotificationInfo}
             preferenceActionLoadingKey={preferenceActionLoadingKey}
             proposalMoveLoadingKey={proposalMoveLoadingKey}
             proposalMoveApplying={proposalMoveApplying}
@@ -3414,6 +3460,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             onCheckVoteConstraints={handleCheckVoteConstraints}
             onPublishDefinitive={handlePublishDefinitive}
             onSendPublicationLinks={handleSendPublicationLinks}
+            onSendDefenseChangeNotifications={handleSendDefenseChangeNotifications}
             onOpenPublishedView={handleOpenPublishedView}
             onOpenManualResolver={openManualResolver}
             onSelectTpi={setSelectedTpi}

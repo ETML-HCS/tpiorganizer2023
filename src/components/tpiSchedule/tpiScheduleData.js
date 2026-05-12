@@ -391,8 +391,17 @@ export const createEmptyOffer = () => ({
 export const createEmptyTpi = () => ({
   refTpi: null,
   id: "",
+  period: null,
   candidat: "",
   candidatPersonId: "",
+  classe: "",
+  lieu: {
+    entreprise: "",
+    site: ""
+  },
+  site: "",
+  sujet: "",
+  description: "",
   expert1: { name: "", personId: "", offres: createEmptyOffer() },
   expert2: { name: "", personId: "", offres: createEmptyOffer() },
   boss: { name: "", personId: "", offres: createEmptyOffer() },
@@ -412,6 +421,17 @@ const normalizePersonIdValue = (value) => {
   }
 
   return String(value).trim()
+}
+
+const firstCompactText = (...values) => {
+  for (const value of values) {
+    const normalizedValue = compactText(value)
+    if (normalizedValue) {
+      return normalizedValue
+    }
+  }
+
+  return ""
 }
 
 const normalizeStakeholder = (entry, fallbackName = "", fallbackPersonId = "") => {
@@ -441,8 +461,17 @@ export const normalizeTpi = (tpi = {}) => {
     ...createEmptyTpi(),
     refTpi: tpi.refTpi ?? null,
     id: tpi.id ?? "",
+    period: tpi.period ?? null,
     candidat: tpi.candidat ?? "",
     candidatPersonId: normalizePersonIdValue(tpi.candidatPersonId),
+    classe: compactText(tpi.classe),
+    lieu: {
+      entreprise: firstCompactText(tpi.lieu?.entreprise, tpi.entreprise),
+      site: firstCompactText(tpi.lieu?.site, tpi.site)
+    },
+    site: firstCompactText(tpi.site, tpi.lieu?.site),
+    sujet: compactText(tpi.sujet),
+    description: compactText(tpi.description ?? tpi.domaine),
     expert1: normalizeStakeholder(
       tpi.expert1,
       tpi.experts?.["1"] ?? tpi.experts?.[1] ?? "",

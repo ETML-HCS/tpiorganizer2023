@@ -1813,6 +1813,35 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   border-color: #fcd34d;
 }
 
+#tools.planning-tools .planning-data-btn.sync {
+  background: #eef2ff;
+  color: #3730a3;
+  border-color: #c7d2fe;
+}
+
+#tools.planning-tools .planning-data-btn.sync:hover:not(:disabled) {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+#tools.planning-tools .planning-data-btn.sync.has-sync {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+#tools.planning-tools .planning-data-btn.sync-all {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+#tools.planning-tools .planning-data-btn.sync-all:hover:not(:disabled) {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+
 #tools.planning-tools .planning-data-btn.transmit {
   background: #faf5ff;
   color: #6b21a8;

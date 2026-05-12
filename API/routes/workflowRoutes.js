@@ -7,6 +7,7 @@ const { authMiddleware, requireRole } = require('../services/magicLinkService')
 const accessLinkTokenService = require('../modules/accessLinks/tokenService')
 const emailService = require('../services/emailService')
 const publishedSoutenanceService = require('../services/publishedSoutenanceService')
+const publicationChangeNotificationService = require('../services/publicationChangeNotificationService')
 const coordinationAutomationService = require('../services/coordinationAutomationService')
 const coordinationValidationService = require('../services/coordinationValidationService')
 const schedulingService = require('../services/schedulingService')
@@ -218,6 +219,39 @@ async function applySoutenanceSendLinkOptions(year, body = {}, sendLinkOptions =
   }
 
   return sendLinkOptions
+}
+
+async function resolveDefenseChangeNotificationLinkTarget(year, req) {
+  const baseUrl = `${req.protocol}://${req.get('host')}`
+  const sendLinkOptions = {}
+  await applySoutenanceSendLinkOptions(year, req.body, sendLinkOptions)
+
+  const requestedTarget = normalizeSoutenanceLinkTarget(sendLinkOptions.soutenanceLinkTarget)
+
+  if (requestedTarget !== 'publication') {
+    return {
+      baseUrl,
+      redirectPath: buildDefensePublicPath(year),
+      linkTarget: 'app'
+    }
+  }
+
+  const publicationTarget = await resolveSoutenancePublicationLinkTarget(
+    year,
+    sendLinkOptions.soutenancePublicUrl || req.body?.defensePublicUrl
+  )
+
+  if (!publicationTarget) {
+    const error = new Error('URL publique de publication des défenses invalide ou absente.')
+    error.statusCode = 400
+    throw error
+  }
+
+  return {
+    baseUrl: publicationTarget.baseUrl,
+    redirectPath: publicationTarget.redirectPath,
+    linkTarget: 'publication'
+  }
 }
 
 function normalizeReference(value) {
@@ -2288,6 +2322,83 @@ router.post(
     } catch (error) {
       console.error('Erreur envoi liens défenses:', error)
       return res.status(500).json({ error: 'Erreur lors de l\'envoi des liens défenses.' })
+    }
+  }
+)
+
+router.get(
+  '/:year/publication/defense-changes/preview',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const preview = await publicationChangeNotificationService.previewDefenseChangeNotifications({
+        year,
+        publicationVersion: parseOptionalPositiveInteger(req.query?.publicationVersion)
+      })
+
+      return res.status(200).json(preview)
+    } catch (error) {
+      console.error('Erreur aperçu notifications changements défenses:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la préparation des notifications de changements des défenses.'
+      })
+    }
+  }
+)
+
+router.post(
+  '/:year/publication/defense-changes/send',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const linkTarget = await resolveDefenseChangeNotificationLinkTarget(year, req)
+      const result = await publicationChangeNotificationService.sendDefenseChangeNotifications({
+        year,
+        publicationVersion: parseOptionalPositiveInteger(req.body?.publicationVersion),
+        baseUrl: linkTarget.baseUrl,
+        redirectPath: linkTarget.redirectPath,
+        linkTarget: linkTarget.linkTarget,
+        forceResend: parseBoolean(req.body?.forceResend, false)
+      })
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.defense-changes.send',
+        user: req.user,
+        payload: {
+          currentVersion: result?.preview?.currentVersion || null,
+          previousVersion: result?.preview?.previousVersion || null,
+          summary: result?.summary || {},
+          notificationSummary: result?.preview?.summary || {},
+          linkTarget: linkTarget.linkTarget
+        },
+        success: result?.success !== false,
+        error: result?.success === false ? `${result?.summary?.failedCount || 0} échec(s) notification.` : undefined
+      })
+
+      return res.status(result?.success === false ? 207 : 200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.defense-changes.send',
+        user: req.user,
+        payload: {},
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+
+      console.error('Erreur envoi notifications changements défenses:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de l’envoi des notifications de changements des défenses.'
+      })
     }
   }
 )

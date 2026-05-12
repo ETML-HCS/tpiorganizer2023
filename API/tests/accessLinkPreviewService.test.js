@@ -267,7 +267,7 @@ test('buildAccessLinkPreview expose les liens arbitrage deja generes', async () 
     ],
     createdAt: new Date('2026-05-02T10:00:00Z'),
     sentAt: new Date('2026-05-02T10:00:00Z'),
-    expiresAt: new Date('2026-05-09T10:00:00Z')
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   }
 
   const preview = await buildAccessLinkPreview({

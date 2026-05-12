@@ -5,6 +5,7 @@ import { useDrag } from "react-dnd";
 import { ItemTypes } from "./Constants";
 import { getTpiModels } from "../tpiControllers/TpiController";
 import { normalizeTpi } from "./tpiScheduleData";
+import { buildPlanningTpiFromGestionModel } from "./tpiScheduleSync";
 import {
   inferRoomClassMode,
   matchesClassFilterForRoom
@@ -486,23 +487,8 @@ const TpiCard = ({
 
       // Si un TPI correspondant est trouvé
       if (selectedTpi) {
-        const updatedTpi = normalizeTpi({
-          ...editedTpi,
-          refTpi: selectedTpi.refTpi, // Met à jour la référence du TPI
-          candidat: selectedTpi.candidat, // Met à jour le candidat associé
-          candidatPersonId: selectedTpi.candidatPersonId || "",
-          expert1: {
-            name: selectedTpi.experts?.[1] || "",
-            personId: selectedTpi.expert1PersonId || ""
-          }, // Met à jour le premier expert
-          expert2: {
-            name: selectedTpi.experts?.[2] || "",
-            personId: selectedTpi.expert2PersonId || ""
-          }, // Met à jour le deuxième expert
-          boss: {
-            name: selectedTpi.boss || "",
-            personId: selectedTpi.bossPersonId || ""
-          }, // Met à jour l'encadrant
+        const updatedTpi = buildPlanningTpiFromGestionModel(editedTpi, selectedTpi, {
+          preserveOffers: false
         });
 
         // Met à jour l'état du TPI édité avec les informations du TPI sélectionné
@@ -643,8 +629,14 @@ const TpiCard = ({
 
     return allTpiList.find((item) => compactText(item?.refTpi) === displayRef) || null
   }, [allTpiList, displayRef]);
-  const displaySite = compactText(tpi?.site || tpi?.lieu?.entreprise);
-  const displayClass = compactText(tpi?.classe);
+  const displaySite = compactText(
+    safeTpi.site ||
+    safeTpi.lieu?.site ||
+    safeTpi.lieu?.entreprise ||
+    sourceTpiModel?.lieu?.site ||
+    sourceTpiModel?.site
+  );
+  const displayClass = compactText(safeTpi.classe || sourceTpiModel?.classe);
   const candidateName = compactText(safeTpi.candidat || sourceTpiModel?.candidat);
   const storedCandidatePersonId = compactText(
     safeTpi.candidatPersonId || sourceTpiModel?.candidatPersonId
