@@ -1,4 +1,5 @@
 import { applySoutenanceDateYear, normalizeSoutenanceDateEntries } from "./soutenanceDateUtils"
+import { normalizeRoomClassModeValue } from "./tpiScheduleFilters"
 
 const DEFAULT_OFFER = {
   isValidated: false,
@@ -32,6 +33,36 @@ function compactText(value) {
 
   return String(value).trim()
 }
+
+export function normalizeBooleanFlag(value) {
+  if (typeof value === "boolean") {
+    return value
+  }
+
+  if (typeof value === "number") {
+    return value === 1
+  }
+
+  const normalizedValue = compactText(value).toLowerCase()
+  if (!normalizedValue) {
+    return false
+  }
+
+  if (["true", "1", "yes", "y", "on", "oui"].includes(normalizedValue)) {
+    return true
+  }
+
+  if (["false", "0", "no", "n", "off", "non"].includes(normalizedValue)) {
+    return false
+  }
+
+  return Boolean(value)
+}
+
+export const isTpiPlanningSealed = (tpi = {}) =>
+  normalizeBooleanFlag(tpi?.isPlanningSealed) ||
+  normalizeBooleanFlag(tpi?.planningSealed) ||
+  normalizeBooleanFlag(tpi?.isSealed)
 
 function normalizePlanningColor(value) {
   const hex = compactText(value).replace(/^#/, '')
@@ -405,6 +436,7 @@ export const createEmptyTpi = () => ({
   expert1: { name: "", personId: "", offres: createEmptyOffer() },
   expert2: { name: "", personId: "", offres: createEmptyOffer() },
   boss: { name: "", personId: "", offres: createEmptyOffer() },
+  isPlanningSealed: false,
   isConstraintOverride: false,
   planningOverrideReason: "",
   constraintWarnings: []
@@ -487,6 +519,7 @@ export const normalizeTpi = (tpi = {}) => {
       typeof tpi.boss === "string" ? tpi.boss : "",
       tpi.bossPersonId
     ),
+    isPlanningSealed: isTpiPlanningSealed(tpi),
     isConstraintOverride: Boolean(tpi.isConstraintOverride || constraintWarnings.length > 0),
     planningOverrideReason: compactText(tpi.planningOverrideReason),
     constraintWarnings
@@ -566,6 +599,7 @@ export const buildPlanningConfigForYear = (sourceConfig = combinedScheduleConfig
 export const normalizeRoom = (room = {}, index = 0, sourceConfig = combinedScheduleConfig) => {
   const siteKey = String(room.site ?? "").trim().toUpperCase()
   const siteConfig = getSiteConfig(siteKey, sourceConfig)
+  const roomClassMode = normalizeRoomClassModeValue(room.roomClassMode ?? room.classMode)
   const numSlots =
     Number.isInteger(siteConfig?.numSlots) && siteConfig.numSlots > 0
       ? siteConfig.numSlots
@@ -573,7 +607,10 @@ export const normalizeRoom = (room = {}, index = 0, sourceConfig = combinedSched
 
   const tpiSources = Array.isArray(room.tpiDatas) ? room.tpiDatas : []
   const tpiDatas = Array.from({ length: numSlots }, (_, slotIndex) =>
-    normalizeTpi(tpiSources[slotIndex] || createEmptyTpi())
+    ({
+      ...normalizeTpi(tpiSources[slotIndex] || createEmptyTpi()),
+      period: slotIndex + 1
+    })
   )
 
   return {
@@ -582,6 +619,7 @@ export const normalizeRoom = (room = {}, index = 0, sourceConfig = combinedSched
     site: room.site || siteConfig.siteCode || siteKey || "ETML",
     date: room.date || new Date().toISOString().slice(0, 10),
     name: room.name || room.nameRoom || `Salle ${index + 1}`,
+    roomClassMode,
     configSite: {
       ...siteConfig,
       numSlots

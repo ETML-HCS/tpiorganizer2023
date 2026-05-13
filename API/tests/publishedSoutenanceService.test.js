@@ -6,6 +6,7 @@ const {
   enrichPublishedRoomsAppearance,
   enrichPublishedRoomsScheduleConfig,
   filterPublishedRooms,
+  hydratePublishedRoomParticipantNames,
   inferPublishedRoomClassModeFromEntries,
   syncPublishedSoutenancesToTpiCatalog
 } = require('../services/publishedSoutenanceService')
@@ -112,6 +113,43 @@ test('filterPublishedRooms applies viewer role when a person has several stakeho
   assert.equal(filtered.length, 1)
   assert.equal(filtered[0].tpiDatas.length, 1)
   assert.equal(filtered[0].tpiDatas[0].id, 'room-c_1')
+})
+
+test('hydratePublishedRoomParticipantNames restaure les noms depuis les personId', () => {
+  const rooms = [
+    {
+      idRoom: 4,
+      name: 'D401',
+      tpiDatas: [
+        {
+          id: 'room-d_0',
+          candidat: 'Premat Luca Andr�',
+          candidatPersonId: '69e50ad49c07587649d6ac52',
+          expert1: { name: 'Ancien Expert', personId: '69dbb567d9434724eaa11279' },
+          expert2: { name: 'Expert inchangé', personId: 'missing-person' },
+          boss: { name: 'Chef inchangé', offres: { isValidated: true, submit: [] } }
+        }
+      ]
+    }
+  ]
+  const hydrated = hydratePublishedRoomParticipantNames(rooms, [
+    {
+      _id: '69e50ad49c07587649d6ac52',
+      firstName: 'Premat Luca',
+      lastName: 'André'
+    },
+    {
+      _id: '69dbb567d9434724eaa11279',
+      firstName: 'Nicolas',
+      lastName: 'Borboën'
+    }
+  ])
+
+  assert.equal(hydrated[0].tpiDatas[0].candidat, 'Premat Luca André')
+  assert.equal(hydrated[0].tpiDatas[0].expert1.name, 'Nicolas Borboën')
+  assert.equal(hydrated[0].tpiDatas[0].expert2.name, 'Expert inchangé')
+  assert.equal(hydrated[0].tpiDatas[0].boss.name, 'Chef inchangé')
+  assert.equal(rooms[0].tpiDatas[0].candidat, 'Premat Luca Andr�')
 })
 
 test('enrichPublishedRoomsAppearance applique la couleur et les SVG configurés', () => {

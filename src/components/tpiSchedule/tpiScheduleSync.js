@@ -154,11 +154,11 @@ export const getTpiSyncChangedFields = (planningTpi = {}, sourceModel = {}) => {
     }
 
     if (INTERNAL_PERSON_ID_FIELDS.has(fieldName)) {
-      return Boolean(planningValue && sourceValue)
+      return Boolean(planningValue || sourceValue)
     }
 
     if (OPTIONAL_PLANNING_METADATA_FIELDS.has(fieldName)) {
-      return Boolean(planningValue)
+      return Boolean(planningValue || sourceValue)
     }
 
     return true
@@ -283,4 +283,73 @@ export const buildPlanningTpiFromGestionModel = (
       offres: resolveOffer("boss")
     }
   })
+}
+
+export const buildRoomsWithGestionTpiSync = (
+  rooms = [],
+  syncEntries = [],
+  sourceModels = [],
+  options = {}
+) => {
+  const entries = Array.isArray(syncEntries) ? syncEntries : []
+  const syncSlotKeys = new Set(entries.map((entry) => entry?.slotKey).filter(Boolean))
+  const sourceModelsByRef = buildGestionTpiSyncModelMap(sourceModels)
+  const updatedAt = Number.isFinite(Number(options.updatedAt))
+    ? Number(options.updatedAt)
+    : Date.now()
+  const syncedRefs = new Set()
+  let updatedSlotCount = 0
+
+  if (syncSlotKeys.size === 0 || sourceModelsByRef.size === 0) {
+    return {
+      rooms: Array.isArray(rooms) ? rooms : [],
+      refs: [],
+      refCount: 0,
+      updatedSlotCount: 0
+    }
+  }
+
+  const updatedRooms = (Array.isArray(rooms) ? rooms : []).map((room, roomIndex) => {
+    const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+    let nextTpiDatas = null
+
+    tpiDatas.forEach((tpi, tpiIndex) => {
+      const slotKey = `${roomIndex}:${tpiIndex}`
+
+      if (!syncSlotKeys.has(slotKey)) {
+        return
+      }
+
+      const refKey = normalizeTpiSyncRefKey(tpi?.refTpi)
+      const sourceModel = sourceModelsByRef.get(refKey)
+      if (!sourceModel) {
+        return
+      }
+
+      if (!nextTpiDatas) {
+        nextTpiDatas = [...tpiDatas]
+      }
+
+      nextTpiDatas[tpiIndex] = buildPlanningTpiFromGestionModel(tpi, sourceModel)
+      syncedRefs.add(refKey)
+      updatedSlotCount += 1
+    })
+
+    if (!nextTpiDatas) {
+      return room
+    }
+
+    return {
+      ...room,
+      lastUpdate: updatedAt,
+      tpiDatas: nextTpiDatas
+    }
+  })
+
+  return {
+    rooms: updatedRooms,
+    refs: Array.from(syncedRefs),
+    refCount: syncedRefs.size,
+    updatedSlotCount
+  }
 }

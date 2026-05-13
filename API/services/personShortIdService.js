@@ -64,7 +64,7 @@ async function reserveNextPersonShortId() {
   const counter = await AppCounter.findOneAndUpdate(
     { _id: PERSON_SHORT_ID_COUNTER_KEY },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
   )
 
   const nextShortId = normalizeShortId(counter?.seq)
@@ -109,7 +109,7 @@ async function ensurePersonShortId(person, options = {}) {
     const updatedPerson = await Person.findByIdAndUpdate(
       person._id,
       { shortId: nextShortId },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     )
 
     if (updatedPerson) {

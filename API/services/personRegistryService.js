@@ -741,7 +741,7 @@ async function updatePerson(personId, input) {
     personId,
     payload,
     {
-      new: true,
+      returnDocument: 'after',
       runValidators: true
     }
   )

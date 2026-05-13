@@ -24,6 +24,14 @@ const tpiDataSchema = new mongoose.Schema({
   period: { type: Number },
   startTime: { type: String },
   endTime: { type: String },
+  classe: { type: String },
+  lieu: {
+    entreprise: { type: String },
+    site: { type: String }
+  },
+  site: { type: String },
+  sujet: { type: String },
+  description: { type: String },
   candidat: 
   { 
     type:String 
@@ -42,6 +50,10 @@ const tpiDataSchema = new mongoose.Schema({
     name: String,
     personId: String,
     offres: offreDataSchema 
+  },
+  isPlanningSealed: {
+    type: Boolean,
+    default: false
   },
   isConstraintOverride: {
     type: Boolean,

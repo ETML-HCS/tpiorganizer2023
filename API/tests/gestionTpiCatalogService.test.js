@@ -174,6 +174,69 @@ test('saveGestionTpi persists journal, report and lifecycle fields', async () =>
   })
 })
 
+test('saveGestionTpi synchronizes the matching planning TPI after upsert', async () => {
+  await withStubSandbox(async (sandbox) => {
+    const tpiModel = TpiModelsYear(2026)
+    let capturedPlanningQuery = null
+    let capturedPlanningUpdate = null
+
+    stubPeople(sandbox, [
+      { _id: '507f1f77bcf86cd799439011', firstName: 'Alice', lastName: 'Candidate', roles: ['candidat'], candidateYears: [2026], isActive: true },
+      { _id: '507f1f77bcf86cd799439012', firstName: 'Expert', lastName: 'One', roles: ['expert'], isActive: true },
+      { _id: '507f1f77bcf86cd799439013', firstName: 'Expert', lastName: 'Two', roles: ['expert'], isActive: true },
+      { _id: '507f1f77bcf86cd799439014', firstName: 'Chef', lastName: 'Projet', roles: ['chef_projet'], isActive: true }
+    ])
+    sandbox.replace(tpiModel, 'findOneAndUpdate', async (filter, update) => ({
+      _id: '507f1f77bcf86cd799439021',
+      ...update
+    }))
+    sandbox.replace(TpiPlanning, 'findOne', (query) => {
+      capturedPlanningQuery = query
+      return makeQueryResult({
+        _id: '507f1f77bcf86cd799439099',
+        reference: 'TPI-2026-2163'
+      })
+    })
+    sandbox.replace(TpiPlanning, 'updateOne', async (filter, update) => {
+      capturedPlanningUpdate = { filter, update }
+      return { matchedCount: 1, modifiedCount: 1 }
+    })
+
+    await saveGestionTpi(2026, {
+      refTpi: '2163',
+      candidat: 'Alice Candidate',
+      experts: {
+        1: 'Expert One',
+        2: 'Expert Two'
+      },
+      boss: 'Chef Projet',
+      classe: 'INF4A',
+      sujet: 'Sujet mis a jour',
+      description: 'Description mise a jour',
+      lieu: {
+        entreprise: 'Entreprise Test',
+        site: 'ETML'
+      },
+      dates: {
+        depart: '2026-03-01',
+        fin: '2026-06-01'
+      }
+    })
+
+    assert.deepEqual(capturedPlanningQuery.reference.$in, ['2163', 'TPI-2026-2163'])
+    assert.equal(String(capturedPlanningUpdate.filter._id), '507f1f77bcf86cd799439099')
+    assert.equal(capturedPlanningUpdate.update.$set.sujet, 'Sujet mis a jour')
+    assert.equal(capturedPlanningUpdate.update.$set.description, 'Description mise a jour')
+    assert.equal(capturedPlanningUpdate.update.$set.classe, 'INF4A')
+    assert.equal(capturedPlanningUpdate.update.$set.site, 'ETML')
+    assert.equal(capturedPlanningUpdate.update.$set['entreprise.nom'], 'Entreprise Test')
+    assert.equal(String(capturedPlanningUpdate.update.$set.candidat), '507f1f77bcf86cd799439011')
+    assert.equal(String(capturedPlanningUpdate.update.$set.expert1), '507f1f77bcf86cd799439012')
+    assert.equal(String(capturedPlanningUpdate.update.$set.expert2), '507f1f77bcf86cd799439013')
+    assert.equal(String(capturedPlanningUpdate.update.$set.chefProjet), '507f1f77bcf86cd799439014')
+  })
+})
+
 test('updateGestionTpi rejects invalid status transitions', async () => {
   await withStubSandbox(async (sandbox) => {
     const tpiModel = TpiModelsYear(2026)

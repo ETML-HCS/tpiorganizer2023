@@ -87,6 +87,271 @@ describe("tpiScheduleValidationUtils", () => {
     ])
   })
 
+  it("ignore un conflit local de personne avec une seule reference", () => {
+    const result = buildLocalValidationIssues({
+      personOverlaps: [
+        {
+          personName: "Ada Lovelace",
+          slotKey: "2026-06-10|1",
+          period: 1,
+          references: ["TPI-001"],
+          roles: ["expert1"]
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(0)
+    expect(result.issues).toHaveLength(0)
+  })
+
+  it("conserve le personId dans les issues locales de personne et de sequence", () => {
+    const result = buildLocalValidationIssues({
+      personOverlaps: [
+        {
+          personId: "person-ada",
+          personName: "Ada Lovelace",
+          slotKey: "2026-06-10|1",
+          period: 1,
+          references: ["TPI-001", "TPI-002"],
+          roles: ["expert1"]
+        }
+      ],
+      sequenceViolations: [
+        {
+          personId: "person-ada",
+          personName: "Ada Lovelace",
+          consecutiveCount: 5,
+          maxConsecutiveTpi: 4,
+          slotKeys: ["2026-06-10|1", "2026-06-10|2", "2026-06-10|3", "2026-06-10|4", "2026-06-10|5"]
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(2)
+    expect(result.issues[0]).toMatchObject({
+      type: "person_overlap",
+      personId: "person-ada"
+    })
+    expect(result.issues[1]).toMatchObject({
+      type: "consecutive_limit",
+      personId: "person-ada"
+    })
+  })
+
+  it("dedoublonne un conflit backend/local par personId meme si le nom affiche differe", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 1,
+        hardConflictCount: 1,
+        personOverlapCount: 1
+      },
+      issues: [
+        {
+          type: "person_overlap",
+          severity: "error",
+          dateKey: "2026-06-10",
+          period: 1,
+          personId: "person-patrick-chenaux",
+          personName: "Patrick Chenaux",
+          references: ["TPI-A23", "TPI-B22"],
+          message: "Patrick Chenaux est affecté à plusieurs TPI sur le même créneau."
+        }
+      ]
+    }, {
+      personOverlaps: [
+        {
+          personId: "person-patrick-chenaux",
+          personName: "P. Chenaux",
+          slotKey: "2026-06-10|1",
+          period: 1,
+          references: ["TPI-A23", "TPI-B22"],
+          roles: ["expert1", "expert2"]
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(1)
+    expect(result.summary.personOverlapCount).toBe(1)
+    expect(result.issues).toHaveLength(1)
+    expect(result.issues[0]).toMatchObject({
+      type: "person_overlap",
+      personId: "person-patrick-chenaux",
+      personName: "Patrick Chenaux"
+    })
+  })
+
+  it("dedoublonne un conflit backend/local meme si les references ont un format different", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 1,
+        hardConflictCount: 1,
+        personOverlapCount: 1
+      },
+      issues: [
+        {
+          type: "person_overlap",
+          severity: "error",
+          dateKey: "2026-06-10",
+          period: 1,
+          personName: "Carlos Perez",
+          references: ["TPI-2026-1", "TPI-2026-3"],
+          message: "Carlos Perez est affecté à plusieurs TPI sur le même créneau."
+        }
+      ]
+    }, {
+      personOverlaps: [
+        {
+          personName: "Carlos Perez",
+          slotKey: "2026-06-10|1",
+          period: 1,
+          references: ["1", "3"],
+          roles: ["expert1", "expert2"]
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(1)
+    expect(result.summary.personOverlapCount).toBe(1)
+    expect(result.issues).toHaveLength(1)
+  })
+
+  it("dedoublonne un room_overlap duplique par formats de references differents", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 2,
+        hardConflictCount: 2,
+        roomOverlapCount: 2
+      },
+      issues: [
+        {
+          type: "room_overlap",
+          severity: "error",
+          dateKey: "2026-06-10",
+          period: 3,
+          site: "VENNES",
+          roomName: "Vennes - B22",
+          references: ["TPI-2026-024", "TPI-2026-040"],
+          message: "La salle VENNES Vennes - B22 est utilisee par plusieurs TPI."
+        },
+        {
+          type: "room_overlap",
+          severity: "error",
+          dateKey: "2026-06-10",
+          period: 3,
+          site: "VENNES",
+          roomName: "Vennes - B22",
+          references: ["24", "40"],
+          message: "La salle VENNES Vennes - B22 est utilisee par plusieurs TPI."
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(1)
+    expect(result.summary.roomOverlapCount).toBe(1)
+    expect(result.issues).toHaveLength(1)
+  })
+
+  it("dedoublonne un room_class_mismatch local/backend par reference normalisee", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 1,
+        hardConflictCount: 1,
+        classMismatchCount: 1
+      },
+      issues: [
+        {
+          type: "room_class_mismatch",
+          severity: "error",
+          reference: "TPI-2026-001",
+          roomName: "Vennes - A23",
+          roomSite: "VENNES",
+          roomClassMode: "matu",
+          tpiClassMode: "nonM",
+          message: "TPI-2026-001 est associé à une salle MATU."
+        }
+      ]
+    }, {
+      classMismatches: [
+        {
+          reference: "1",
+          candidat: "Alice Martin",
+          classe: "DEV4",
+          roomName: "Vennes - A23",
+          roomSite: "VENNES",
+          roomClassMode: "matu",
+          tpiClassMode: "nonM"
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(1)
+    expect(result.summary.classMismatchCount).toBe(1)
+    expect(result.issues).toHaveLength(1)
+  })
+
+  it("ne dedoublonne pas deux conflits de personne sur deux periodes differentes", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 2,
+        hardConflictCount: 2,
+        personOverlapCount: 2
+      },
+      issues: [
+        {
+          type: "person_overlap",
+          severity: "error",
+          dateKey: "2026-06-10",
+          period: 1,
+          personName: "Carlos Perez",
+          references: ["TPI-2026-1", "TPI-2026-3"],
+          message: "Carlos Perez est affecté à plusieurs TPI sur le même créneau."
+        },
+        {
+          type: "person_overlap",
+          severity: "error",
+          dateKey: "2026-06-10",
+          period: 4,
+          personName: "Carlos Perez",
+          references: ["TPI-2026-6", "TPI-2026-8"],
+          message: "Carlos Perez est affecté à plusieurs TPI sur le même créneau."
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(2)
+    expect(result.summary.personOverlapCount).toBe(2)
+    expect(result.issues).toHaveLength(2)
+  })
+
+  it("ne compte pas un avertissement inconnu comme erreur bloquante", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 0,
+        hardConflictCount: 0,
+        warningCount: 1
+      },
+      issues: [
+        {
+          type: "manual_warning",
+          severity: "warning",
+          reference: "TPI-001",
+          message: "Controle manuel requis."
+        }
+      ]
+    })
+
+    expect(result.summary.issueCount).toBe(0)
+    expect(result.summary.warningCount).toBe(1)
+    expect(result.summary.isValid).toBe(true)
+    expect(result.issues).toHaveLength(1)
+  })
+
   it("dedoublonne un avertissement backend d override avec l analyse locale", () => {
     const localAnalysis = {
       sequenceViolations: [

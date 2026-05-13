@@ -496,6 +496,7 @@ function buildSoutenanceAccessEmail(data) {
   const year = escapeHtml(data.year)
   const deadline = escapeHtml(data.deadline)
   const magicLinkUrl = escapeHtml(data.magicLinkUrl)
+  const isScheduleUpdateMessage = sanitizeHeaderText(data.messageType) === 'schedule_update'
   const recipientRoles = Array.isArray(data.recipientRoles)
     ? data.recipientRoles.map((role) => String(role || '').trim().toLowerCase()).filter(Boolean)
     : []
@@ -515,6 +516,110 @@ function buildSoutenanceAccessEmail(data) {
   const adminAccessText = isAdminRecipient
     ? `\n      Accès administrateur: ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.\n      Vue générale admin: ${buildAdminSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl)}\n`
     : ''
+
+  if (isScheduleUpdateMessage) {
+    const updateDeadlineCopy = responseDeadlineCopy
+      ? responseDeadlineCopy.replace(
+          'uniquement si une modification est indispensable',
+          'si la nouvelle planification pose un empêchement réel'
+        )
+      : ''
+    const updateDeadlineHtml = updateDeadlineCopy
+      ? `<p style="margin:0 0 14px; font-size:15px; line-height:23px; color:#0f172a;"><strong style="color:#0f766e;">${escapeHtml(updateDeadlineCopy)}</strong></p>`
+      : ''
+    const updateDeadlineText = updateDeadlineCopy ? `\n      ${updateDeadlineCopy}\n` : ''
+
+    return {
+      subject: `[${data.brandName || 'TPI Organizer'}] Mise à jour de l’horaire des défenses TPI ${data.year}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Mise à jour de l’horaire des défenses TPI ${year}</title>
+        </head>
+        <body style="margin:0; padding:0; background:#f3f6f8; color:#172033; font-family:Arial, Helvetica, sans-serif;">
+          <div style="display:none; max-height:0; overflow:hidden; color:#f3f6f8; opacity:0;">L’horaire des défenses TPI ${year} a été modifié. Merci de contrôler votre vue personnelle.</div>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#f3f6f8;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; max-width:640px; border-collapse:separate; border-spacing:0; background:#ffffff; border:1px solid #dbe5ec; border-radius:14px; overflow:hidden; box-shadow:0 12px 30px rgba(15, 23, 42, 0.08);">
+                  <tr>
+                    <td style="height:6px; line-height:6px; background:#0f766e; font-size:1px;">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:26px 30px 20px; background:#ffffff;">
+                      <div style="display:inline-block; margin:0 0 12px; padding:5px 10px; border-radius:999px; background:#ecfdf5; color:#0f766e; font-size:12px; line-height:16px; font-weight:700; text-transform:uppercase;">${brandName}</div>
+                      <h1 style="margin:0; color:#0f172a; font-size:25px; line-height:32px; font-weight:700;">Mise à jour de l’horaire des défenses TPI ${year}</h1>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 30px 30px;">
+                      <p style="margin:0 0 16px; color:#172033; font-size:16px; line-height:25px;">Bonjour ${recipientName},</p>
+                      <p style="margin:0 0 24px; color:#334155; font-size:16px; line-height:26px;">Nous avons modifié l’horaire des défenses TPI ${year}. Merci de contrôler votre vue personnelle et de vérifier si les modifications vous conviennent.</p>
+
+                      <table role="presentation" align="center" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin:0 auto 26px;">
+                        <tr>
+                          <td style="border-radius:10px; background:#0f766e;">
+                            <a href="${magicLinkUrl}" style="display:inline-block; background:#0f766e; color:#ffffff; text-decoration:none; font-weight:700; font-size:16px; line-height:20px; padding:14px 22px; border-radius:10px;">Contrôler mon horaire</a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate; border-spacing:0; margin:0 0 24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                        <tr>
+                          <td style="padding:18px 20px;">
+                            <p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;">Veuillez vérifier la date, l’heure et la salle de vos défenses, ainsi que l’impact éventuel sur votre calendrier.</p>
+                            ${adminAccessHtml}
+                            ${updateDeadlineHtml}
+                            <p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;">Si tout est en ordre, aucune action n’est nécessaire.</p>
+                            <p style="margin:0; color:#334155; font-size:15px; line-height:24px;">Si cette nouvelle planification pose un empêchement réel et important, utilisez le formulaire accessible depuis votre lien personnel. Les possibilités de déplacement restent limitées et aucune nouvelle adaptation ne peut être garantie.</p>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; border-top:1px solid #e5edf3;">
+                        <tr>
+                          <td style="padding:18px 0 0;">
+                            <p style="margin:0 0 8px; color:#526072; font-size:14px; line-height:21px;"><strong style="color:#172033;">Validité du lien:</strong> ${deadline}</p>
+                            <p style="margin:0 0 20px; color:#64748b; font-size:13px; line-height:20px;">Ce lien est personnel et ne doit pas être partagé.</p>
+                            <p style="margin:0; color:#334155; font-size:15px; line-height:23px;">Meilleures salutations</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `
+        Mise à jour de l’horaire des défenses TPI ${data.year}
+
+        Bonjour ${data.recipientName},
+
+        Nous avons modifié l’horaire des défenses TPI ${data.year}. Merci de contrôler votre vue personnelle et de vérifier si les modifications vous conviennent.
+
+        Contrôler mon horaire:
+        ${data.magicLinkUrl}
+
+        Veuillez vérifier la date, l’heure et la salle de vos défenses, ainsi que l’impact éventuel sur votre calendrier.
+        ${adminAccessText}
+        ${updateDeadlineText}
+
+        Si tout est en ordre, aucune action n’est nécessaire.
+
+        Si cette nouvelle planification pose un empêchement réel et important, utilisez le formulaire accessible depuis votre lien personnel. Les possibilités de déplacement restent limitées et aucune nouvelle adaptation ne peut être garantie.
+
+        Validité du lien: ${data.deadline}
+        Ce lien est personnel.
+      `
+    }
+  }
 
   return {
     subject: `[${data.brandName || 'TPI Organizer'}] Horaire des défenses TPI ${data.year}`,

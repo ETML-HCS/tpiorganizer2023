@@ -61,6 +61,22 @@ const ALLOWED_VOTE_DECISIONS = new Set(['accepted', 'rejected', 'preferred'])
 const ALLOWED_VOTE_RESPONSE_MODES = new Set(['ok', 'proposal'])
 const INDICATIVE_QUEUE_VOTE_DECISIONS = ['accepted', 'preferred']
 const VOTE_REQUIRED_ROLES = VOTING_STAKEHOLDER_ROLES
+const FORCE_OK_ALLOWED_STATUSES = new Set(['pending_slots', 'voting', 'pending_validation', 'manual_required'])
+const FORCE_OK_ROLE_GROUPS = Object.freeze({
+  all: VOTE_REQUIRED_ROLES,
+  tous: VOTE_REQUIRED_ROLES,
+  experts: VOTE_REQUIRED_ROLES.filter(role => role !== 'chef_projet'),
+  expert: VOTE_REQUIRED_ROLES.filter(role => role !== 'chef_projet'),
+  chefs: ['chef_projet'],
+  chef: ['chef_projet'],
+  chef_projet: ['chef_projet'],
+  project_lead: ['chef_projet']
+})
+const VOTE_SUMMARY_FIELD_BY_ROLE = Object.freeze({
+  expert1: 'expert1Voted',
+  expert2: 'expert2Voted',
+  chef_projet: 'chefProjetVoted'
+})
 const AUTOMATIC_EMAIL_SENDS_DISABLED_REASON = 'automatic_email_sends_disabled'
 
 function parseBoolean(rawValue, fallbackValue = false) {
@@ -437,6 +453,56 @@ function getFixedSlotIdFromTpi(tpi) {
     : fixedSlot?.slot
       ? String(fixedSlot.slot)
       : null
+}
+
+function normalizeForceOkRoleToken(value) {
+  return compactText(value)
+    .toLowerCase()
+    .replace(/[ -]+/g, '_')
+}
+
+function normalizeForceOkRoles(value) {
+  const source = Array.isArray(value) ? value : [value]
+  const roleSet = new Set()
+
+  for (const rawRole of source) {
+    const normalizedRole = normalizeForceOkRoleToken(rawRole)
+
+    if (!normalizedRole) {
+      continue
+    }
+
+    if (FORCE_OK_ROLE_GROUPS[normalizedRole]) {
+      FORCE_OK_ROLE_GROUPS[normalizedRole].forEach(role => roleSet.add(role))
+      continue
+    }
+
+    if (VOTE_REQUIRED_ROLES.includes(normalizedRole)) {
+      roleSet.add(normalizedRole)
+    }
+  }
+
+  return VOTE_REQUIRED_ROLES.filter(role => roleSet.has(role))
+}
+
+function hasVoteBeenSubmitted(vote) {
+  return Boolean(vote?.decision && vote.decision !== 'pending')
+}
+
+function ensureVoteSummary(tpi) {
+  if (!tpi.votingSession) {
+    tpi.votingSession = {}
+  }
+
+  if (!tpi.votingSession.voteSummary) {
+    tpi.votingSession.voteSummary = {
+      expert1Voted: false,
+      expert2Voted: false,
+      chefProjetVoted: false
+    }
+  }
+
+  return tpi.votingSession.voteSummary
 }
 
 function isVoteScopeCompatibleWithTpi(req, tpi, year = null) {
@@ -1411,7 +1477,7 @@ router.delete('/persons/:id', authMiddleware, requireRole('admin'), requireObjec
     const person = await Person.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
-      { new: true }
+      { returnDocument: 'after' }
     )
 
     if (!person) {
@@ -1462,7 +1528,7 @@ router.put('/persons/:id/availability', authMiddleware, requireRole('admin'), re
     const person = await Person.findByIdAndUpdate(
       req.params.id,
       { defaultAvailability, unavailableDates },
-      { new: true }
+      { returnDocument: 'after' }
     )
 
     if (!person) {
@@ -2616,6 +2682,192 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
     res.json({ results })
   } catch (error) {
     res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/coordination/votes/force-ok
+ * Force la réponse OK pour des rôles donnés, sur le créneau fixe du TPI.
+ */
+router.post('/votes/force-ok', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const year = toInteger(req.body?.year)
+    const roles = normalizeForceOkRoles(
+      req.body?.roles ?? req.body?.role ?? req.body?.roleGroup ?? req.body?.group
+    )
+    const onlyMissing = req.body?.onlyMissing === true
+    const reason = compactText(req.body?.reason).slice(0, 500)
+    const requestedTpiIds = Array.isArray(req.body?.tpiIds)
+      ? [...new Set(req.body.tpiIds.map(compactText).filter(Boolean))]
+      : []
+
+    if (!year) {
+      return res.status(400).json({ error: 'year requis.' })
+    }
+
+    if (roles.length === 0) {
+      return res.status(400).json({ error: 'roles doit cibler chef_projet, expert1 et/ou expert2.' })
+    }
+
+    if (requestedTpiIds.some(tpiId => !isValidObjectId(tpiId))) {
+      return res.status(400).json({ error: 'tpiIds contient un identifiant invalide.' })
+    }
+
+    const tpiFilter = {
+      year,
+      status: { $in: Array.from(FORCE_OK_ALLOWED_STATUSES) }
+    }
+
+    if (requestedTpiIds.length > 0) {
+      tpiFilter._id = { $in: requestedTpiIds }
+    }
+
+    const [planningConfig, rawTpis] = await Promise.all([
+      getPlanningConfig(year),
+      TpiPlanning.find(tpiFilter).sort({ reference: 1 })
+    ])
+    const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
+    const tpiIds = tpis.map(tpi => tpi._id)
+    const votes = tpiIds.length > 0
+      ? await Vote.find({ tpiPlanning: { $in: tpiIds } })
+          .select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority')
+          .sort({ createdAt: 1 })
+      : []
+    const votesByTpiId = new Map()
+
+    for (const vote of votes) {
+      const tpiId = String(vote.tpiPlanning)
+      if (!votesByTpiId.has(tpiId)) {
+        votesByTpiId.set(tpiId, [])
+      }
+      votesByTpiId.get(tpiId).push(vote)
+    }
+
+    const now = new Date()
+    const results = []
+    const roleCounts = Object.fromEntries(roles.map(role => [role, 0]))
+    let forcedRoleCount = 0
+    let forcedTpiCount = 0
+    let skippedRoleCount = 0
+
+    for (const tpi of tpis) {
+      const tpiId = String(tpi._id)
+      const fixedSlotId = getFixedSlotIdFromTpi(tpi)
+      const tpiVotes = votesByTpiId.get(tpiId) || []
+      const entry = {
+        tpiId,
+        reference: tpi.reference || '',
+        forcedRoles: [],
+        skippedRoles: []
+      }
+
+      if (!fixedSlotId) {
+        entry.skippedReason = 'no_fixed_slot'
+        skippedRoleCount += roles.length
+        results.push(entry)
+        continue
+      }
+
+      if (tpiVotes.length === 0) {
+        entry.skippedReason = 'no_votes'
+        skippedRoleCount += roles.length
+        results.push(entry)
+        continue
+      }
+
+      let firstForcedFixedVote = null
+
+      for (const role of roles) {
+        const roleVotes = tpiVotes.filter(vote => vote.voterRole === role)
+        const fixedVote = roleVotes.find(vote => String(vote.slot) === fixedSlotId)
+
+        if (!fixedVote) {
+          entry.skippedRoles.push({ role, reason: 'fixed_vote_missing' })
+          skippedRoleCount += 1
+          continue
+        }
+
+        if (onlyMissing && roleVotes.some(hasVoteBeenSubmitted)) {
+          entry.skippedRoles.push({ role, reason: 'already_answered' })
+          skippedRoleCount += 1
+          continue
+        }
+
+        for (const vote of roleVotes) {
+          const isFixedSlotVote = String(vote.slot) === fixedSlotId
+
+          vote.decision = isFixedSlotVote ? 'accepted' : 'rejected'
+          vote.comment = ''
+          vote.availabilityException = false
+          vote.hardConstraint = false
+          vote.specialRequestReason = ''
+          vote.specialRequestDate = null
+          vote.priority = undefined
+          vote.votedAt = now
+          vote.magicLinkUsed = 'admin:force-ok'
+
+          await vote.save()
+        }
+
+        const voteSummary = ensureVoteSummary(tpi)
+        const summaryField = VOTE_SUMMARY_FIELD_BY_ROLE[role]
+        if (summaryField) {
+          voteSummary[summaryField] = true
+        }
+
+        firstForcedFixedVote = firstForcedFixedVote || fixedVote
+        entry.forcedRoles.push(role)
+        roleCounts[role] = (roleCounts[role] || 0) + 1
+        forcedRoleCount += 1
+      }
+
+      if (entry.forcedRoles.length > 0) {
+        tpi.history.push({
+          action: 'votes_force_ok',
+          by: toObjectIdOrNull(req.user?.id),
+          at: now,
+          details: {
+            roles: entry.forcedRoles,
+            reason,
+            onlyMissing
+          }
+        })
+        await tpi.save()
+
+        if (firstForcedFixedVote) {
+          const validationResult = await schedulingService.registerVoteAndCheckValidation(
+            firstForcedFixedVote._id,
+            'accepted',
+            ''
+          )
+
+          entry.validation = {
+            success: validationResult?.success === true,
+            message: validationResult?.message || ''
+          }
+        }
+
+        forcedTpiCount += 1
+      }
+
+      results.push(entry)
+    }
+
+    return res.json({
+      success: true,
+      year,
+      roles,
+      onlyMissing,
+      requestedTpiCount: requestedTpiIds.length || null,
+      processedTpiCount: tpis.length,
+      forcedTpiCount,
+      forcedRoleCount,
+      skippedRoleCount,
+      roleCounts,
+      results
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error.message })
   }
 })
 

@@ -4,6 +4,7 @@ const TpiPlanning = require('../models/tpiCoordinationModel')
 const Slot = require('../models/slotModel')
 const TpiModelsYear = require('../models/tpiModels')
 const { MagicLink } = require('../models/magicLinkModel')
+const Person = require('../models/personModel')
 const { getSharedPlanningCatalog } = require('./coordinationCatalogService')
 const { getPlanningConfig } = require('./coordinationConfigService')
 const { inferRoomClassMode, inferTpiClassMode } = require('./roomClassCompatibilityService')
@@ -384,6 +385,104 @@ function getPersonId(person) {
   }
 
   return String(person._id)
+}
+
+function normalizePublishedPersonId(value) {
+  if (!value) {
+    return ''
+  }
+
+  if (value?._id) {
+    return compactText(value._id)
+  }
+
+  return compactText(value)
+}
+
+function isValidObjectIdString(value) {
+  return /^[a-f\d]{24}$/i.test(compactText(value))
+}
+
+function collectPublishedRoomPersonIds(rooms = []) {
+  const personIds = new Set()
+
+  for (const room of Array.isArray(rooms) ? rooms : []) {
+    for (const tpiData of Array.isArray(room?.tpiDatas) ? room.tpiDatas : []) {
+      [
+        tpiData?.candidatPersonId,
+        tpiData?.expert1?.personId,
+        tpiData?.expert2?.personId,
+        tpiData?.boss?.personId
+      ].forEach((personId) => {
+        const normalizedPersonId = normalizePublishedPersonId(personId)
+        if (normalizedPersonId) {
+          personIds.add(normalizedPersonId)
+        }
+      })
+    }
+  }
+
+  return Array.from(personIds)
+}
+
+function buildPersonDisplayNameIndex(people = []) {
+  return new Map(
+    (Array.isArray(people) ? people : [])
+      .map((person) => [
+        normalizePublishedPersonId(person?._id),
+        getPersonDisplayName(person)
+      ])
+      .filter(([personId, displayName]) => personId && displayName)
+  )
+}
+
+function hydratePublishedRoomParticipantNames(rooms = [], people = []) {
+  const nameByPersonId = buildPersonDisplayNameIndex(people)
+
+  if (nameByPersonId.size === 0) {
+    return cloneRooms(rooms)
+  }
+
+  return cloneRooms(rooms).map((room) => ({
+    ...room,
+    tpiDatas: (Array.isArray(room?.tpiDatas) ? room.tpiDatas : []).map((tpiData) => {
+      const nextTpiData = { ...tpiData }
+      const candidateName = nameByPersonId.get(normalizePublishedPersonId(tpiData?.candidatPersonId))
+
+      if (candidateName) {
+        nextTpiData.candidat = candidateName
+      }
+
+      for (const participantKey of ['expert1', 'expert2', 'boss']) {
+        const participant = tpiData?.[participantKey]
+        const participantName = nameByPersonId.get(normalizePublishedPersonId(participant?.personId))
+
+        if (participantName) {
+          nextTpiData[participantKey] = {
+            ...(participant && typeof participant === 'object' ? participant : {}),
+            name: participantName
+          }
+        }
+      }
+
+      return nextTpiData
+    })
+  }))
+}
+
+async function hydratePublishedRoomParticipantNamesFromRegistry(rooms = []) {
+  const personIds = collectPublishedRoomPersonIds(rooms)
+    .filter(isValidObjectIdString)
+
+  if (personIds.length === 0) {
+    return cloneRooms(rooms)
+  }
+
+  const people = await Person.find({ _id: { $in: personIds } })
+    .select('firstName lastName')
+    .lean()
+
+  return hydratePublishedRoomParticipantNames(rooms, people)
 }
 
 function createEmptyOffers() {
@@ -979,7 +1078,8 @@ async function rollbackPublicationVersion(year, version) {
 async function publishRoomsAsSoutenancesVersioned(year, rooms, user = null, source = {}) {
   const normalizedYear = parseInt(year, 10)
   const planningConfig = await loadPlanningConfigSafe(normalizedYear)
-  const publishedRooms = enrichPublishedRoomsClassModes(rooms, planningConfig)
+  const classModeRooms = enrichPublishedRoomsClassModes(rooms, planningConfig)
+  const publishedRooms = await hydratePublishedRoomParticipantNamesFromRegistry(classModeRooms)
   const version = await getNextPublicationVersion(normalizedYear)
   const roomCount = publishedRooms.length
   const tpiCount = countPublishedTpis(publishedRooms)
@@ -1175,7 +1275,8 @@ async function listPublishedSoutenances(year, options = {}) {
   const planningConfig = await loadPlanningConfigSafe(normalizedYear)
 
   if (activeVersion?.rooms) {
-    const classModeRooms = enrichPublishedRoomsClassModes(activeVersion.rooms, planningConfig)
+    const hydratedRooms = await hydratePublishedRoomParticipantNamesFromRegistry(activeVersion.rooms)
+    const classModeRooms = enrichPublishedRoomsClassModes(hydratedRooms, planningConfig)
     const scheduledRooms = enrichPublishedRoomsScheduleConfig(classModeRooms, planningConfig)
     return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledRooms, appearance), {
       personId: options.viewerPersonId || null,
@@ -1187,7 +1288,8 @@ async function listPublishedSoutenances(year, options = {}) {
   const DataRooms = getSoutenanceModel(normalizedYear)
   const legacyRooms = await DataRooms.find().lean()
 
-  const classModeLegacyRooms = enrichPublishedRoomsClassModes(legacyRooms, planningConfig)
+  const hydratedLegacyRooms = await hydratePublishedRoomParticipantNamesFromRegistry(legacyRooms)
+  const classModeLegacyRooms = enrichPublishedRoomsClassModes(hydratedLegacyRooms, planningConfig)
   const scheduledLegacyRooms = enrichPublishedRoomsScheduleConfig(classModeLegacyRooms, planningConfig)
   return filterPublishedRooms(enrichPublishedRoomsAppearance(scheduledLegacyRooms, appearance), {
     personId: options.viewerPersonId || null,
@@ -1205,7 +1307,7 @@ async function publishSoutenanceRoom(year, roomData) {
     { idRoom: publishedRoom.idRoom },
     publishedRoom,
     {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
       upsert: true,
       setDefaultsOnInsert: true
@@ -1302,6 +1404,7 @@ module.exports = {
   enrichPublishedRoomsAppearance,
   enrichPublishedRoomsScheduleConfig,
   filterPublishedRooms,
+  hydratePublishedRoomParticipantNames,
   inferPublishedRoomClassModeFromEntries,
   listPublishedSoutenances,
   publishSoutenanceRoom,

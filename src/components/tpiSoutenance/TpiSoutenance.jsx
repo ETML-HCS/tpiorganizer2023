@@ -151,7 +151,7 @@ const buildExportDocumentTitle = (filters = [], year = "", viewMode = PDF_VIEW_M
     : `${sanitizeFileNamePart(PDF_VIEW_LABELS[normalizedViewMode]).toLowerCase()}_`
 
   if (!filters.length) {
-    return `soutenances_${safeYear}_${viewPrefix}toutes`
+    return `defenses_${safeYear}_${viewPrefix}toutes`
   }
 
   const safeFilters = filters
@@ -159,7 +159,7 @@ const buildExportDocumentTitle = (filters = [], year = "", viewMode = PDF_VIEW_M
     .join("_")
     .toLowerCase()
 
-  return `soutenances_${safeYear}_${viewPrefix}${safeFilters}`
+  return `defenses_${safeYear}_${viewPrefix}${safeFilters}`
 }
 
 const buildPdfSummary = (filters = []) => {

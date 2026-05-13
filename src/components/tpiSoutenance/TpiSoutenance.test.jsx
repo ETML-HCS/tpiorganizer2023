@@ -407,7 +407,7 @@ describe('TpiSoutenance focus UX', () => {
     fireEvent.click(screen.getByRole('button', { name: /générer le pdf/i }))
 
     await waitFor(() => {
-      expect(__mockSave).toHaveBeenCalledWith('soutenances_2026_toutes.pdf')
+      expect(__mockSave).toHaveBeenCalledWith('defenses_2026_toutes.pdf')
     })
   })
 
@@ -489,7 +489,7 @@ describe('TpiSoutenance focus UX', () => {
     fireEvent.click(screen.getByRole('button', { name: /générer le pdf/i }))
 
     await waitFor(() => {
-      expect(__mockSave).toHaveBeenCalledWith('soutenances_2026_vue_salles_toutes.pdf')
+      expect(__mockSave).toHaveBeenCalledWith('defenses_2026_vue_salles_toutes.pdf')
     })
 
     __mockSave.mockClear()
@@ -497,7 +497,7 @@ describe('TpiSoutenance focus UX', () => {
     fireEvent.click(screen.getByRole('button', { name: /générer le pdf/i }))
 
     await waitFor(() => {
-      expect(__mockSave).toHaveBeenCalledWith('soutenances_2026_vue_ecran_salles_toutes.pdf')
+      expect(__mockSave).toHaveBeenCalledWith('defenses_2026_vue_ecran_salles_toutes.pdf')
     })
 
     __mockSave.mockClear()
@@ -505,7 +505,7 @@ describe('TpiSoutenance focus UX', () => {
     fireEvent.click(screen.getByRole('button', { name: /générer le pdf/i }))
 
     await waitFor(() => {
-      expect(__mockSave).toHaveBeenCalledWith('soutenances_2026_vue_experts_cdp_toutes.pdf')
+      expect(__mockSave).toHaveBeenCalledWith('defenses_2026_vue_experts_cdp_toutes.pdf')
     })
   })
 

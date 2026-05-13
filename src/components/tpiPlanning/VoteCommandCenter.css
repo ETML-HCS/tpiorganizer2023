@@ -790,6 +790,11 @@
   min-width: 0;
 }
 
+.vote-command-role-detail-actions {
+  justify-items: end;
+  text-align: right;
+}
+
 .vote-command-role-detail-head strong,
 .vote-command-role-detail-head span {
   min-width: 0;
@@ -942,6 +947,12 @@
   color: #166534;
 }
 
+.vote-command-mini-button.is-force-ok {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: #ecfdf5;
+  color: #166534;
+}
+
 .vote-command-special {
   display: inline-flex;
   align-items: center;
@@ -1007,12 +1018,16 @@
 
   .vote-command-actions .workflow-btn,
   .vote-command-detail-actions,
+  .vote-command-role-detail-actions,
   .vote-command-link-button,
   .vote-command-slot-action {
     width: 100%;
   }
 
-  .vote-command-detail-actions {
+  .vote-command-detail-actions,
+  .vote-command-role-detail-actions {
     justify-content: stretch;
+    justify-items: stretch;
+    text-align: left;
   }
 }

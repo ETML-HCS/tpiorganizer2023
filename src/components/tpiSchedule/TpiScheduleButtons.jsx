@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react"
+import React, { useEffect, useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { Link, useLocation } from "react-router-dom"
 import PageToolbar from "../shared/PageToolbar"
@@ -22,6 +22,7 @@ import {
   LocalSaveIcon,
   MailIcon,
   PencilIcon,
+  QuestionIcon,
   RefreshIcon,
   RoomBatchAddIcon,
   RoomAddIcon,
@@ -36,7 +37,8 @@ import {
 import {
   getSoutenanceDateBadgeLabel,
   getSoutenanceDateBadgeTone,
-  normalizeSoutenanceDateEntries
+  normalizeSoutenanceDateEntries,
+  normalizeSoutenanceDateValue
 } from "./soutenanceDateUtils"
 import { isValidationWarningIssue } from "./tpiScheduleValidationUtils"
 import { STATIC_VOTE_REGENERATION_NOTICE } from "../../constants/staticVotePublication"
@@ -54,6 +56,34 @@ const formatPublicationTargetLabel = (url) => {
   }
 }
 
+const normalizeRoomDateFilterValue = (value) => {
+  const rawValue = String(value || "").trim()
+  return normalizeSoutenanceDateValue(rawValue) || rawValue
+}
+
+const normalizeRoomDateFilterValues = (values) => {
+  const source = Array.isArray(values) ? values : [values]
+
+  return Array.from(
+    new Set(source.map((value) => normalizeRoomDateFilterValue(value)).filter(Boolean))
+  )
+}
+
+const compactRoomDateFilterLabel = (value) => {
+  const text = String(value || "").trim()
+  const swissDateMatch = text.match(/(\d{2}\.\d{2})(?:\.\d{4})?/)
+  if (swissDateMatch) {
+    return swissDateMatch[1]
+  }
+
+  const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoDateMatch) {
+    return `${isoDateMatch[3]}.${isoDateMatch[2]}`
+  }
+
+  return text
+}
+
 const TpiScheduleButtons = ({
   onToggleEditing,
   onDeleteAllRooms = null,
@@ -69,6 +99,10 @@ const TpiScheduleButtons = ({
   workflowActionLoading = false,
   pendingWorkflowAction = "",
   validationResult = null,
+  validationOptimizationProposal = null,
+  validationOptimizationSettings = null,
+  onValidationOptimizationSettingsChange = null,
+  onApplyValidationOptimization = null,
   onAutomatePlanification,
   onValidatePlanification,
   onFreezeSnapshot,
@@ -131,6 +165,8 @@ const TpiScheduleButtons = ({
   const [activeToolTab, setActiveToolTab] = useState("data")
   const [activeWorkflowTab, setActiveWorkflowTab] = useState("preparation")
   const fileInputRef = useRef(null)
+  const roomFilterMenuRef = useRef(null)
+  const roomDateFilterRef = useRef(null)
   const location = useLocation()
 
   const years = useMemo(() => {
@@ -189,6 +225,52 @@ const TpiScheduleButtons = ({
       ? document.getElementById("planning-header-slot")
       : null
 
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined
+    }
+
+    const closeRoomFilterMenus = () => {
+      if (roomDateFilterRef.current) {
+        roomDateFilterRef.current.open = false
+      }
+
+      if (roomFilterMenuRef.current) {
+        roomFilterMenuRef.current.open = false
+      }
+    }
+
+    const handlePointerDown = (event) => {
+      const filterMenu = roomFilterMenuRef.current
+      if (!filterMenu?.open) {
+        return
+      }
+
+      if (event.target instanceof Node && filterMenu.contains(event.target)) {
+        return
+      }
+
+      closeRoomFilterMenus()
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key !== "Escape" || !roomFilterMenuRef.current?.open) {
+        return
+      }
+
+      event.preventDefault()
+      closeRoomFilterMenus()
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true)
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [])
+
   // Le gel est-il déjà fait ET les salles n'ont pas changé ?
   const roomsUnchangedSinceFreeze = roomsHashAtFreeze && currentRoomsHash && roomsHashAtFreeze === currentRoomsHash
   const isAlreadyFrozen = hasSnapshot && roomsUnchangedSinceFreeze
@@ -227,6 +309,16 @@ const TpiScheduleButtons = ({
       : ""
   const hasValidationForCurrentYear =
     Number.isInteger(validationYear) && validationYear === Number(effectiveYear)
+
+  useEffect(() => {
+    if (!hasValidationForCurrentYear || !validationResult) {
+      return
+    }
+
+    setActiveToolTab("workflow")
+    setActiveWorkflowTab("optimization")
+  }, [hasValidationForCurrentYear, validationResult])
+
   const isValidationSuccessful =
     hasValidationForCurrentYear && Boolean(validationResult?.summary) && validationIssueCount === 0
   const hasTpiUsageCount =
@@ -330,6 +422,149 @@ const TpiScheduleButtons = ({
   const validationIssueDetailText = validationIssueDetails.length > 0
     ? ` (${validationIssueDetails.join(', ')})`
     : ''
+  const optimizationIssueTypes = ["person_overlap", "consecutive_limit", "room_class_mismatch"]
+  const optimizationProfileOptions = [
+    {
+      id: "corrections",
+      label: "Corrections",
+      title: "Corriger uniquement les conflits détectés par la vérification.",
+      settings: {
+        profile: "corrections",
+        mode: "strict",
+        maxSwaps: 3,
+        sameSiteOnly: true,
+        preserveValidated: true,
+        reduceWaitingTime: false,
+        issueTypes: optimizationIssueTypes
+      }
+    },
+    {
+      id: "attentes",
+      label: "Attentes",
+      title: "Réduire les attentes des parties prenantes sans ajouter de conflit.",
+      settings: {
+        profile: "attentes",
+        mode: "strict",
+        maxSwaps: 3,
+        sameSiteOnly: true,
+        preserveValidated: true,
+        reduceWaitingTime: true,
+        issueTypes: optimizationIssueTypes
+      }
+    },
+    {
+      id: "equilibre",
+      label: "Équilibré",
+      title: "Combiner correction des conflits et réduction des attentes dans le même site.",
+      settings: {
+        profile: "equilibre",
+        mode: "expanded",
+        maxSwaps: 5,
+        sameSiteOnly: true,
+        preserveValidated: true,
+        reduceWaitingTime: true,
+        issueTypes: optimizationIssueTypes
+      }
+    }
+  ]
+  const optimizationSettings = {
+    profile: typeof validationOptimizationSettings?.profile === "string"
+      ? validationOptimizationSettings.profile
+      : "corrections",
+    mode: validationOptimizationSettings?.mode === "expanded" ? "expanded" : "strict",
+    maxSwaps: Number.isInteger(Number(validationOptimizationSettings?.maxSwaps))
+      ? Number(validationOptimizationSettings.maxSwaps)
+      : 3,
+    sameSiteOnly: validationOptimizationSettings?.sameSiteOnly !== false,
+    preserveValidated: validationOptimizationSettings?.preserveValidated !== false,
+    reduceWaitingTime: validationOptimizationSettings?.reduceWaitingTime === true,
+    issueTypes: Array.isArray(validationOptimizationSettings?.issueTypes)
+      ? validationOptimizationSettings.issueTypes
+      : optimizationIssueTypes
+  }
+  const optimizationIssueTypeOptions = [
+    { id: "person_overlap", label: "Personnes" },
+    { id: "consecutive_limit", label: "Séquences" },
+    { id: "room_class_mismatch", label: "Salles" }
+  ]
+  const optimizationProposal = validationOptimizationProposal || null
+  const optimizationCanApply = Boolean(optimizationProposal?.changed) && typeof onApplyValidationOptimization === "function"
+  const optimizationSwapCount = Number(optimizationProposal?.swapCount || 0)
+  const optimizationApplyButtonLabel = optimizationCanApply
+    ? `Appliquer ${optimizationSwapCount} échange${optimizationSwapCount > 1 ? "s" : ""}`
+    : hasValidationForCurrentYear
+      ? "Aucune proposition"
+      : validationLabel
+  const optimizationTargetCount = Array.isArray(optimizationProposal?.targetReferences)
+    ? optimizationProposal.targetReferences.length
+    : 0
+  const optimizationBefore = optimizationProposal?.before || {}
+  const optimizationAfter = optimizationProposal?.after || {}
+  const optimizationSummaryItems = []
+
+  if (Number(optimizationBefore.personOverlapCount || 0) !== Number(optimizationAfter.personOverlapCount || 0)) {
+    optimizationSummaryItems.push(`${Number(optimizationBefore.personOverlapCount || 0)}→${Number(optimizationAfter.personOverlapCount || 0)} conflits personne`)
+  }
+
+  if (Number(optimizationBefore.sequenceExcessCount || 0) !== Number(optimizationAfter.sequenceExcessCount || 0)) {
+    optimizationSummaryItems.push(`${Number(optimizationBefore.sequenceExcessCount || 0)}→${Number(optimizationAfter.sequenceExcessCount || 0)} surcharge séquence`)
+  }
+
+  if (Number(optimizationBefore.classMismatchCount || 0) !== Number(optimizationAfter.classMismatchCount || 0)) {
+    optimizationSummaryItems.push(`${Number(optimizationBefore.classMismatchCount || 0)}→${Number(optimizationAfter.classMismatchCount || 0)} incompatibilités salle`)
+  }
+
+  if (Number(optimizationBefore.waitingGapCount || 0) !== Number(optimizationAfter.waitingGapCount || 0)) {
+    optimizationSummaryItems.push(`${Number(optimizationBefore.waitingGapCount || 0)}→${Number(optimizationAfter.waitingGapCount || 0)} créneau(x) d'attente`)
+  }
+
+  if (Number(optimizationBefore.offMealBreakCount || 0) !== Number(optimizationAfter.offMealBreakCount || 0)) {
+    optimizationSummaryItems.push(`${Number(optimizationBefore.offMealBreakCount || 0)}→${Number(optimizationAfter.offMealBreakCount || 0)} pause(s) hors repas`)
+  }
+
+  const shouldShowOptimizationPanel = hasValidationForCurrentYear
+
+  const updateOptimizationSettings = (patch) => {
+    if (typeof onValidationOptimizationSettingsChange === "function") {
+      onValidationOptimizationSettingsChange({
+        ...optimizationSettings,
+        profile: Object.prototype.hasOwnProperty.call(patch, "profile")
+          ? patch.profile
+          : "custom",
+        ...patch
+      })
+    }
+  }
+
+  const applyOptimizationProfile = (profile) => {
+    updateOptimizationSettings(profile.settings)
+  }
+
+  const toggleOptimizationIssueType = (issueType) => {
+    const currentTypes = new Set(optimizationSettings.issueTypes)
+
+    if (currentTypes.has(issueType) && currentTypes.size > 1) {
+      currentTypes.delete(issueType)
+    } else {
+      currentTypes.add(issueType)
+    }
+
+    updateOptimizationSettings({ issueTypes: Array.from(currentTypes) })
+  }
+
+  const formatOptimizationSlot = (slot) => {
+    if (slot?.isEmpty) {
+      return [slot?.roomName, slot?.period ? `slot ${slot.period}` : ""]
+        .filter(Boolean)
+        .join(" · ") || "slot vide"
+    }
+
+    return [
+      slot?.reference || "TPI",
+      slot?.roomName,
+      slot?.period ? `slot ${slot.period}` : ""
+    ].filter(Boolean).join(" · ")
+  }
 
   const validationTooltip = isValidationSuccessful
     ? `Vérification ${effectiveYear} déjà effectuée${validationCheckedAtLabel ? ` le ${validationCheckedAtLabel}` : ""}.`
@@ -338,8 +573,8 @@ const TpiScheduleButtons = ({
       : hasValidationForCurrentYear && validationWarningCount > 0
         ? `Vérification ${effectiveYear} terminée: ${validationWarningCount} avertissement(s) de contrainte indiqué(s) sur les cartes.`
       : hasLocalConflictCount
-        ? `${localConflictCount} conflit(s) détecté(s) dans la planification locale. Lance la vérification pour tenter une optimisation automatique et obtenir le détail.`
-        : "Optimiser puis vérifier l'unicité par créneau, la séquence des TPI et les déplacements avant le snapshot."
+        ? `${localConflictCount} conflit(s) détecté(s) dans la planification locale. Lance la vérification pour obtenir le détail et préparer les optimisations proposées.`
+        : "Vérifier l'unicité par créneau, la séquence des TPI et les déplacements avant le snapshot."
   const workflowBadge = validationIssueCount > 0
     ? String(validationIssueCount)
     : validationWarningCount > 0
@@ -364,6 +599,11 @@ const TpiScheduleButtons = ({
       id: "preparation",
       label: "Préparation",
       state: "planning",
+      icon: WrenchIcon
+    },
+    {
+      id: "optimization",
+      label: "Optimisation",
       icon: WrenchIcon
     },
     {
@@ -679,24 +919,46 @@ const TpiScheduleButtons = ({
 
   const normalizedRoomDateOptions = useMemo(() => {
     const options = Array.isArray(roomDateOptions) ? roomDateOptions : []
+    const optionsByValue = new Map()
 
-    return options
-      .map((option) => {
-        if (option && typeof option === "object") {
-          return {
-            value: String(option.value || "").trim(),
-            label: String(option.label || option.value || "").trim()
-          }
-        }
+    options.forEach((option) => {
+      const rawValue = option && typeof option === "object"
+        ? String(option.value || "").trim()
+        : String(option || "").trim()
 
-        const value = String(option || "").trim()
-        return {
-          value,
-          label: value
-        }
+      const value = normalizeSoutenanceDateValue(rawValue) || rawValue
+      if (!value || optionsByValue.has(value)) {
+        return
+      }
+
+      const rawLabel = option && typeof option === "object"
+        ? String(option.label || option.value || "").trim()
+        : rawValue
+
+      optionsByValue.set(value, {
+        value,
+        label: rawLabel || value
       })
-      .filter((option) => Boolean(option.value))
+    })
+
+    return Array.from(optionsByValue.values())
   }, [roomDateOptions])
+
+  const selectedRoomDateFilters = useMemo(() => {
+    return normalizeRoomDateFilterValues([
+      ...(Array.isArray(roomFilters?.date) ? roomFilters.date : [roomFilters?.date]),
+      ...(Array.isArray(roomFilters?.dates) ? roomFilters.dates : [roomFilters?.dates])
+    ])
+  }, [roomFilters?.date, roomFilters?.dates])
+
+  const selectedRoomDateFilterSet = useMemo(() => {
+    return new Set(selectedRoomDateFilters)
+  }, [selectedRoomDateFilters])
+  const selectedRoomDateFilterLabels = useMemo(() => {
+    const labelsByValue = new Map(normalizedRoomDateOptions.map((option) => [option.value, option.label]))
+
+    return selectedRoomDateFilters.map((value) => labelsByValue.get(value) || value)
+  }, [normalizedRoomDateOptions, selectedRoomDateFilters])
 
   const normalizedRoomNameOptions = useMemo(() => {
     const options = Array.isArray(roomNameOptions) ? roomNameOptions : []
@@ -746,12 +1008,48 @@ const TpiScheduleButtons = ({
   const normalizedSoutenanceDates = useMemo(() => {
     return normalizeSoutenanceDateEntries(soutenanceDates)
   }, [soutenanceDates])
-  const hasActiveRoomFilters = Boolean(roomFilters?.site || roomFilters?.date || roomFilters?.room)
+  const hasActiveRoomFilters = Boolean(roomFilters?.site || selectedRoomDateFilters.length > 0 || roomFilters?.room)
   const activeRoomFilterCount = [
     roomFilters?.site,
-    roomFilters?.date,
+    selectedRoomDateFilters.length > 0,
     roomFilters?.room
   ].filter(Boolean).length
+  const roomDateFilterSummaryLabel = selectedRoomDateFilters.length > 0
+    ? [
+        compactRoomDateFilterLabel(selectedRoomDateFilterLabels[0]),
+        selectedRoomDateFilters.length > 1 ? `+${selectedRoomDateFilters.length - 1}` : ""
+      ].filter(Boolean).join(" ")
+    : "Dates"
+  const roomDateFilterTitle = selectedRoomDateFilterLabels.length > 0
+    ? `Dates: ${selectedRoomDateFilterLabels.join(", ")}`
+    : "Filtrer par date"
+
+  const handleRoomDateFilterToggle = (dateValue) => {
+    const value = normalizeRoomDateFilterValue(dateValue)
+    if (!value || typeof onRoomFiltersChange !== "function") {
+      return
+    }
+
+    const nextDateSet = new Set(selectedRoomDateFilters)
+    if (nextDateSet.has(value)) {
+      nextDateSet.delete(value)
+    } else {
+      nextDateSet.add(value)
+    }
+
+    const orderedDates = normalizedRoomDateOptions
+      .map((option) => option.value)
+      .filter((optionValue) => nextDateSet.has(optionValue))
+
+    const remainingDates = Array.from(nextDateSet).filter((optionValue) => !orderedDates.includes(optionValue))
+    onRoomFiltersChange({ date: [...orderedDates, ...remainingDates] })
+  }
+
+  const handleClearRoomDateFilters = () => {
+    if (typeof onRoomFiltersChange === "function") {
+      onRoomFiltersChange({ date: [] })
+    }
+  }
 
   const handleToggleRoomsFocusMode = () => {
     if (!isRoomsFocusMode) {
@@ -773,7 +1071,10 @@ const TpiScheduleButtons = ({
     ? createPortal(
         <div className="app-header-planification-slot">
           {typeof onRoomFiltersChange === "function" ? (
-            <details className={`app-header-planification-filter-menu ${hasActiveRoomFilters ? "is-active" : ""}`.trim()}>
+            <details
+              ref={roomFilterMenuRef}
+              className={`app-header-planification-filter-menu ${hasActiveRoomFilters ? "is-active" : ""}`.trim()}
+            >
               <summary
                 aria-label={
                   hasActiveRoomFilters
@@ -790,58 +1091,103 @@ const TpiScheduleButtons = ({
                 ) : null}
               </summary>
               <div className="app-header-planification-filter-panel">
-                <select
-                  className="app-header-planification-filter-control"
-                  value={roomFilters?.site || ""}
-                  onChange={(event) => onRoomFiltersChange({ site: event.target.value })}
-                  aria-label="Filtrer par site"
-                >
-                  <option value="">Sites</option>
-                  {normalizedRoomSiteOptions.map((site) => (
-                    <option key={site} value={site}>
-                      {site}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="app-header-planification-filter-control"
-                  value={roomFilters?.date || ""}
-                  onChange={(event) => onRoomFiltersChange({ date: event.target.value })}
-                  aria-label="Filtrer par date"
-                >
-                  <option value="">Dates</option>
-                  {normalizedRoomDateOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="app-header-planification-filter-control"
-                  value={roomFilters?.room || ""}
-                  onChange={(event) => onRoomFiltersChange({ room: event.target.value })}
-                  aria-label="Filtrer par salle"
-                >
-                  <option value="">Salles</option>
-                  {normalizedRoomNameOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="app-header-planification-filter-reset"
-                  onClick={() => onClearRoomFilters?.()}
-                  disabled={!hasActiveRoomFilters}
-                  aria-label="Réinitialiser les filtres"
-                  title="Réinitialiser les filtres"
-                >
-                  <RefreshIcon />
-                </button>
-                <span className="app-header-planification-filter-status" role="status">
-                  {roomsCount}/{totalRoomsCount}
-                </span>
+                <div className="app-header-planification-filter-head">
+                  <div className="app-header-planification-filter-head-actions">
+                    <span
+                      className="app-header-planification-filter-status"
+                      role="status"
+                      title={`${roomsCount}/${totalRoomsCount} salles`}
+                    >
+                      {roomsCount}/{totalRoomsCount}
+                    </span>
+                    <button
+                      type="button"
+                      className="app-header-planification-filter-reset"
+                      onClick={() => onClearRoomFilters?.()}
+                      disabled={!hasActiveRoomFilters}
+                      aria-label="Réinitialiser les filtres"
+                      title="Réinitialiser les filtres"
+                    >
+                      <RefreshIcon />
+                    </button>
+                  </div>
+                </div>
+
+                <label className="app-header-planification-filter-field">
+                  <select
+                    className="app-header-planification-filter-control"
+                    value={roomFilters?.site || ""}
+                    onChange={(event) => onRoomFiltersChange({ site: event.target.value })}
+                    aria-label="Filtrer par site"
+                  >
+                    <option value="">Site</option>
+                    {normalizedRoomSiteOptions.map((site) => (
+                      <option key={site} value={site}>
+                        {site}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="app-header-planification-filter-field">
+                  <details ref={roomDateFilterRef} className="app-header-planification-date-filter">
+                    <summary
+                      aria-label="Filtrer par date"
+                      title={roomDateFilterTitle}
+                    >
+                      {roomDateFilterSummaryLabel}
+                    </summary>
+                    <div className="app-header-planification-date-options" role="group" aria-label="Dates">
+                      {selectedRoomDateFilters.length > 0 ? (
+                        <div className="app-header-planification-date-options-head">
+                          <button
+                            type="button"
+                            onClick={handleClearRoomDateFilters}
+                          >
+                            Effacer
+                          </button>
+                        </div>
+                      ) : null}
+                      {normalizedRoomDateOptions.length === 0 ? (
+                        <span className="app-header-planification-date-empty">Aucune</span>
+                      ) : normalizedRoomDateOptions.map((option) => {
+                        const isSelected = selectedRoomDateFilterSet.has(option.value)
+
+                        return (
+                          <label
+                            key={option.value}
+                            className={`app-header-planification-date-option ${isSelected ? "is-selected" : ""}`.trim()}
+                          >
+                            <input
+                              type="checkbox"
+                              value={option.value}
+                              checked={isSelected}
+                              onChange={() => handleRoomDateFilterToggle(option.value)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </details>
+                </div>
+
+                <label className="app-header-planification-filter-field">
+                  <select
+                    className="app-header-planification-filter-control"
+                    value={roomFilters?.room || ""}
+                    onChange={(event) => onRoomFiltersChange({ room: event.target.value })}
+                    aria-label="Filtrer par salle"
+                  >
+                    <option value="">Salle</option>
+                    {normalizedRoomNameOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
               </div>
             </details>
           ) : null}
@@ -866,8 +1212,8 @@ const TpiScheduleButtons = ({
               className={`page-tools-action-btn secondary planning-room-focus-toggle app-header-planification-focus-toggle ${isRoomsFocusMode ? "active" : ""}`.trim()}
               onClick={handleToggleRoomsFocusMode}
               aria-pressed={isRoomsFocusMode}
-              aria-label={isRoomsFocusMode ? "Quitter le mode focus" : "Activer le mode focus"}
-              title={isRoomsFocusMode ? "Quitter le mode focus" : "Afficher uniquement les salles"}
+              aria-label={isRoomsFocusMode ? "Quitter le plein écran focus" : "Activer le plein écran focus"}
+              title={isRoomsFocusMode ? "Quitter le plein écran focus" : "Afficher uniquement les salles en plein écran"}
               data-testid="planning-room-focus-toggle"
             >
               <span className="planning-room-focus-toggle-icon" aria-hidden="true">
@@ -875,6 +1221,36 @@ const TpiScheduleButtons = ({
               </span>
             </button>
           ) : null}
+          <details className="app-header-planification-legend-menu">
+            <summary
+              aria-label="Légende des couleurs de vérification"
+              title="Légende des couleurs de vérification"
+            >
+              <QuestionIcon />
+            </summary>
+            <div className="app-header-planification-legend-panel" role="list">
+              <span className="app-header-planification-legend-item" role="listitem">
+                <i className="validation-color-swatch validation-color-swatch--danger" aria-hidden="true" />
+                <b>Rouge</b>
+                <em>même créneau</em>
+              </span>
+              <span className="app-header-planification-legend-item" role="listitem">
+                <i className="validation-color-swatch validation-color-swatch--sequence" aria-hidden="true" />
+                <b>Orange</b>
+                <em>TPI consécutifs</em>
+              </span>
+              <span className="app-header-planification-legend-item" role="listitem">
+                <i className="validation-color-swatch validation-color-swatch--room" aria-hidden="true" />
+                <b>Bleu</b>
+                <em>salle/type</em>
+              </span>
+              <span className="app-header-planification-legend-item" role="listitem">
+                <i className="validation-color-swatch validation-color-swatch--import" aria-hidden="true" />
+                <b>Gris</b>
+                <em>import/planif.</em>
+              </span>
+            </div>
+          </details>
           <span className="app-header-planification-snapshot">
             Snapshot : {hasSnapshot ? `v${activeSnapshotVersion}` : "—"}
           </span>
@@ -1413,6 +1789,99 @@ const TpiScheduleButtons = ({
                 </section>
               ) : null}
 
+              {activeWorkflowTab === "optimization" ? (
+                <section
+                  className="planning-workflow-section planning-workflow-section-optimization"
+                  id="planning-workflow-panel-optimization"
+                  role="tabpanel"
+                >
+                  <div className="planning-validation-optimization-screen-head">
+                    <div>
+                      <strong>
+                        {hasValidationForCurrentYear
+                          ? "Optimisation"
+                          : "Vérification requise"}
+                      </strong>
+                      <span>
+                        {hasValidationForCurrentYear
+                          ? `Année ${effectiveYear} vérifiée`
+                          : `Aucun résultat de vérification pour ${effectiveYear}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`planning-workflow-btn ${
+                        optimizationCanApply || !hasValidationForCurrentYear
+                          ? "primary"
+                          : "neutral"
+                      } planning-validation-optimization-primary-apply`}
+                      onClick={
+                        hasValidationForCurrentYear
+                          ? onApplyValidationOptimization
+                          : onValidatePlanification
+                      }
+                      disabled={
+                        workflowActionLoading ||
+                        (hasValidationForCurrentYear
+                          ? !optimizationCanApply
+                          : !onValidatePlanification)
+                      }
+                      aria-label={
+                        hasValidationForCurrentYear
+                          ? "Appliquer l'optimisation ciblée"
+                          : validationLabel
+                      }
+                      title={
+                        hasValidationForCurrentYear
+                          ? optimizationCanApply
+                            ? "Appliquer les échanges proposés puis relancer la vérification."
+                            : "Aucun échange sûr n'est disponible avec les options actuelles."
+                          : "Lancer une vérification avant de proposer une optimisation."
+                      }
+                    >
+                      <IconButtonContent
+                        label={optimizationApplyButtonLabel}
+                        icon={hasValidationForCurrentYear ? WrenchIcon : CheckIcon}
+                        showLabel
+                        iconClassName="planning-button-icon"
+                      />
+                    </button>
+                  </div>
+
+                  <div className={`planning-validation-optimization-screen-card ${
+                    optimizationCanApply
+                      ? "is-ready"
+                      : hasValidationForCurrentYear
+                        ? "is-empty"
+                        : "needs-validation"
+                  }`}>
+                    <div className="planning-validation-optimization-screen-copy">
+                      <strong>
+                        {optimizationCanApply
+                          ? "Proposition prête"
+                          : hasValidationForCurrentYear
+                            ? "Rien à appliquer"
+                            : "Vérifie d'abord la planification"}
+                      </strong>
+                      <span>
+                        {optimizationCanApply
+                          ? `${optimizationSwapCount} échange${optimizationSwapCount > 1 ? "s" : ""} prêt${optimizationSwapCount > 1 ? "s" : ""}`
+                          : hasValidationForCurrentYear
+                            ? "Options actuelles sans proposition applicable."
+                            : "Vérification nécessaire avant proposition."}
+                      </span>
+                    </div>
+                    {optimizationCanApply ? (
+                      <span className="planning-validation-optimization-screen-chip">
+                        {optimizationTargetCount > 0
+                          ? `${optimizationTargetCount} TPI`
+                          : "Global"}
+                      </span>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+
               {activeWorkflowTab === "vote" ? (
                 <section
                   className="planning-workflow-section"
@@ -1892,6 +2361,167 @@ const TpiScheduleButtons = ({
                   Aucune contrainte bloquante détectée.
                 </p>
               )}
+
+              {shouldShowOptimizationPanel ? (
+                <details
+                  className="planning-validation-optimization"
+                  open={optimizationCanApply || activeWorkflowTab === "optimization"}
+                >
+                  <summary>
+                    <span>Optimisations ciblées</span>
+                    <span>
+                      {optimizationCanApply
+                        ? `${optimizationSwapCount} échange(s)`
+                        : "Aucune proposition"}
+                    </span>
+                  </summary>
+
+                  <div className="planning-validation-optimization-controls">
+                    <div className="planning-validation-optimization-types planning-validation-optimization-profiles" aria-label="Profils d'optimisation">
+                      {optimizationProfileOptions.map((profile) => (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          className={optimizationSettings.profile === profile.id ? "active" : ""}
+                          onClick={() => applyOptimizationProfile(profile)}
+                          title={profile.title}
+                        >
+                          {profile.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="planning-validation-optimization-segment" aria-label="Périmètre optimisation">
+                      <button
+                        type="button"
+                        className={optimizationSettings.mode === "strict" ? "active" : ""}
+                        onClick={() => updateOptimizationSettings({ mode: "strict" })}
+                      >
+                        Strict
+                      </button>
+                      <button
+                        type="button"
+                        className={optimizationSettings.mode === "expanded" ? "active" : ""}
+                        onClick={() => updateOptimizationSettings({ mode: "expanded" })}
+                      >
+                        Élargi
+                      </button>
+                    </div>
+
+                    <label className="planning-validation-optimization-select">
+                      <span>Échanges</span>
+                      <select
+                        value={optimizationSettings.maxSwaps}
+                        onChange={(event) => updateOptimizationSettings({
+                          maxSwaps: Number(event.target.value)
+                        })}
+                      >
+                        {[1, 2, 3, 5].map((value) => (
+                          <option key={value} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="planning-validation-optimization-check">
+                      <input
+                        type="checkbox"
+                        checked={optimizationSettings.sameSiteOnly}
+                        onChange={(event) => updateOptimizationSettings({
+                          sameSiteOnly: event.target.checked
+                        })}
+                      />
+                      <span>Même site</span>
+                    </label>
+
+                    <label className="planning-validation-optimization-check">
+                      <input
+                        type="checkbox"
+                        checked={optimizationSettings.preserveValidated}
+                        onChange={(event) => updateOptimizationSettings({
+                          preserveValidated: event.target.checked
+                        })}
+                      />
+                      <span>Préserver votés</span>
+                    </label>
+
+                    <label
+                      className="planning-validation-optimization-check"
+                      title="Compacte les passages des personnes sans dépasser la limite de TPI consécutifs; les pauses aux créneaux 4/5 sont favorisées."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={optimizationSettings.reduceWaitingTime}
+                        onChange={(event) => updateOptimizationSettings({
+                          reduceWaitingTime: event.target.checked
+                        })}
+                      />
+                      <span>Réduire attentes</span>
+                    </label>
+                  </div>
+
+                  <div className="planning-validation-optimization-types" aria-label="Types d'erreurs à optimiser">
+                    {optimizationIssueTypeOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={optimizationSettings.issueTypes.includes(option.id) ? "active" : ""}
+                        onClick={() => toggleOptimizationIssueType(option.id)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {optimizationCanApply ? (
+                    <>
+                      <div className="planning-validation-optimization-summary">
+                        <span>
+                          {optimizationTargetCount > 0
+                            ? `${optimizationTargetCount} TPI concerné(s)`
+                            : "Attente globale"}
+                        </span>
+                        {optimizationSummaryItems.length > 0 ? (
+                          optimizationSummaryItems.map((item) => (
+                            <span key={item}>{item}</span>
+                          ))
+                        ) : (
+                          <span>Score {Number(optimizationBefore.score || 0)}→{Number(optimizationAfter.score || 0)}</span>
+                        )}
+                      </div>
+
+                      <ol className="planning-validation-optimization-swaps">
+                        {(Array.isArray(optimizationProposal?.swaps) ? optimizationProposal.swaps : [])
+                          .slice(0, 4)
+                          .map((swap, index) => (
+                            <li key={`${formatOptimizationSlot(swap.left)}-${formatOptimizationSlot(swap.right)}-${index}`}>
+                              {formatOptimizationSlot(swap.left)} ↔ {formatOptimizationSlot(swap.right)}
+                            </li>
+                          ))}
+                      </ol>
+
+                      <button
+                        type="button"
+                        className="planning-workflow-btn primary planning-validation-optimization-apply"
+                        onClick={onApplyValidationOptimization}
+                        disabled={workflowActionLoading}
+                        aria-label="Appliquer cette proposition"
+                        title="Appliquer les échanges proposés puis relancer la vérification."
+                      >
+                        <IconButtonContent
+                          label="Appliquer"
+                          icon={WrenchIcon}
+                          showLabel
+                          iconClassName="planning-button-icon"
+                        />
+                      </button>
+                    </>
+                  ) : (
+                    <p className="planning-validation-optimization-empty">
+                      Aucun échange sûr avec ces options.
+                    </p>
+                  )}
+                </details>
+              ) : null}
             </div>
           ) : null}
         </section>

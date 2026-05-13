@@ -601,7 +601,7 @@ async function markDefenseChangeNotificationDelivery({
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   )

@@ -568,6 +568,213 @@ test('POST /api/workflow/:year/access-links/email-deliveries/reset reset les sta
   }
 })
 
+test('POST /api/workflow/:year/access-links/email-preview transmet le type de message au template', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const emailService = require('../services/emailService')
+  let templateData = null
+  const restore = [
+    patchMethod(emailService.emailTemplates, 'soutenanceAccess', (data) => {
+      templateData = data
+      return {
+        subject: `subject:${data.messageType}`,
+        html: `<p>${data.messageType}</p>`,
+        text: data.messageType
+      }
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/email-preview`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        template: 'soutenanceAccess',
+        messageType: 'schedule_update',
+        target: {
+          recipientName: 'Camille Projet',
+          recipientRoles: ['chef_projet'],
+          magicLinkUrl: 'https://tpi26.ch/soutenances-2026/?ml=preview',
+          expiresAt: '2026-05-14T21:00:00.000Z'
+        }
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.messageType, 'schedule_update')
+    assert.equal(body.subject, 'subject:schedule_update')
+    assert.equal(templateData.messageType, 'schedule_update')
+    assert.equal(templateData.recipientName, 'Camille Projet')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/access-links/email-preview normalise les types inconnus', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const emailService = require('../services/emailService')
+  let templateData = null
+  const restore = [
+    patchMethod(emailService.emailTemplates, 'soutenanceAccess', (data) => {
+      templateData = data
+      return {
+        subject: `subject:${data.messageType}`,
+        html: `<p>${data.messageType}</p>`,
+        text: data.messageType
+      }
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/email-preview`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        template: 'soutenanceAccess',
+        messageType: 'not-supported',
+        target: {
+          recipientName: 'Camille Projet'
+        }
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.messageType, 'standard')
+    assert.equal(templateData.messageType, 'standard')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/access-links/send-soutenance-emails transmet le type de relance à sendEmail', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const accessLinkTokenService = require('../modules/accessLinks/tokenService')
+  const emailService = require('../services/emailService')
+  const linkId = '507f1f77bcf86cd799439011'
+  let sendEmailCall = null
+  let markedDelivery = null
+  let auditPayload = null
+  const restore = [
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async (payload) => {
+      auditPayload = payload
+    }),
+    patchMethod(accessLinkTokenService, 'findMagicLinkForEmailDelivery', async (payload) => {
+      assert.deepEqual(payload, {
+        id: linkId,
+        year: 2026,
+        type: 'soutenance',
+        baseUrl: 'https://tpi26.ch'
+      })
+
+      return {
+        raw: {
+          _id: linkId,
+          recipientEmail: 'camille.projet@example.ch',
+          personName: 'Camille Projet',
+          expiresAt: '2026-05-14T21:00:00.000Z',
+          emailDeliveryStatus: 'sent',
+          emailSentAt: '2026-05-01T08:00:00.000Z',
+          emailMessageId: 'old-message'
+        },
+        public: {
+          url: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp',
+          availabilityStatus: 'available'
+        }
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'markMagicLinkEmailDelivery', async (payload) => {
+      markedDelivery = payload
+      return payload
+    }),
+    patchMethod(emailService, 'sendEmail', async (to, template, data, options) => {
+      sendEmailCall = { to, template, data, options }
+      return {
+        success: true,
+        messageId: 'new-message'
+      }
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/send-soutenance-emails`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        baseUrl: 'https://tpi26.ch',
+        forceResend: true,
+        messageType: 'schedule_update',
+        targets: [
+          {
+            clientKey: 'person-cdp-link',
+            linkId,
+            recipientName: 'Camille Projet',
+            recipientAudience: 'cdp',
+            recipientRoles: ['chef_projet']
+          }
+        ]
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.messageType, 'schedule_update')
+    assert.equal(body.summary.sentCount, 1)
+    assert.equal(sendEmailCall.to, 'camille.projet@example.ch')
+    assert.equal(sendEmailCall.template, 'soutenanceAccess')
+    assert.equal(sendEmailCall.data.messageType, 'schedule_update')
+    assert.equal(sendEmailCall.data.magicLinkUrl, 'https://tpi26.ch/soutenances-2026/?ml=token-cdp')
+    assert.equal(markedDelivery.status, 'sent')
+    assert.equal(markedDelivery.messageId, 'new-message')
+    assert.equal(auditPayload.payload.messageType, 'schedule_update')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/access-links/generate utilise le fallback URL publique défense', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])
@@ -747,6 +954,81 @@ test('POST /api/workflow/:year/access-links/generate orchestre la generation glo
     }
     while (restorePreview.length > 0) {
       restorePreview.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/access-links/reconcile cible les liens defense manquants sans rafraichir les publications', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+  const accessLinkPreviewModule = require('../modules/accessLinks/previewService')
+  const workflowService = require('../services/workflowService')
+  const coordinationConfigService = require('../services/coordinationConfigService')
+  const staticDefensePublicationService = require('../services/staticDefensePublicationService')
+  let previewPayload = null
+  const restore = [
+    patchMethod(workflowService, 'getWorkflowYearState', async () => ({ state: 'published', phases: {} })),
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(coordinationConfigService, 'getPlanningConfigIfAvailable', async () => ({ accessLinkSettings: {} })),
+    patchMethod(staticDefensePublicationService, 'generateStaticDefensesSite', async () => {
+      throw new Error('La reconciliation ne doit pas rafraichir le mini-site defense.')
+    }),
+    patchMethod(staticDefensePublicationService, 'publishStaticDefensesSite', async () => {
+      throw new Error('La reconciliation ne doit pas publier le mini-site defense.')
+    }),
+    patchMethod(accessLinkPreviewModule, 'buildAccessLinkPreview', async (payload) => {
+      previewPayload = payload
+      return {
+        year: payload.year,
+        linksGenerated: true,
+        hasGeneratedLinks: true,
+        summary: {
+          peopleCount: 1,
+          voteLinkCount: 0,
+          voteGeneratedLinkCount: 0,
+          soutenanceLinkCount: 1,
+          soutenanceGeneratedLinkCount: 1,
+          arbitrageLinkCount: 0,
+          generatedLinkCount: 1
+        },
+        contexts: {
+          phases: ['soutenance'],
+          vote: {},
+          soutenance: { publicationVersion: 12 },
+          arbitrage: {}
+        },
+        people: []
+      }
+    })
+  ]
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/access-links/reconcile`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ phases: ['vote', 'arbitrage'] })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(previewPayload.generateLinks, true)
+    assert.equal(previewPayload.generateMissingOnly, true)
+    assert.deepEqual(previewPayload.phases, ['soutenance'])
+    assert.equal(body.publicationRefresh, null)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
     }
     await closeServer(server)
     restoreEnv()

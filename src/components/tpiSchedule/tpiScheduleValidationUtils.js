@@ -17,6 +17,32 @@ const toUniqueSortedValues = (values) => {
   ).sort((left, right) => left.localeCompare(right))
 }
 
+const normalizeReferenceLookupKey = (value) => {
+  const text = compactText(value).toUpperCase()
+
+  if (!text) {
+    return ""
+  }
+
+  const tpiMatch = text.match(/^TPI-(?:\d{4}-)?(.+)$/)
+  const referenceBody = tpiMatch ? tpiMatch[1] : text
+
+  if (/^\d+$/.test(referenceBody)) {
+    return String(Number.parseInt(referenceBody, 10))
+  }
+
+  return referenceBody
+}
+
+const toUniqueSortedReferenceKeys = (values) =>
+  Array.from(
+    new Set(
+      (Array.isArray(values) ? values : [])
+        .map((value) => normalizeReferenceLookupKey(value))
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right))
+
 export const isValidationWarningIssue = (issue = {}) =>
   compactText(issue?.severity).toLowerCase() === "warning" ||
   issue?.isConstraintOverride === true
@@ -27,18 +53,18 @@ export const buildValidationIssueKey = (issue = {}) => {
   const type = compactText(issue.type)
 
   if (type === "person_overlap") {
-    const references = toUniqueSortedValues(issue.references).join(",")
+    const references = toUniqueSortedReferenceKeys(issue.references).join(",")
     return [
       type,
       compactText(issue.dateKey),
       compactText(issue.period),
-      compactText(issue.personName || issue.personId),
+      compactText(issue.personId || issue.personName),
       references
     ].join("|")
   }
 
   if (type === "room_overlap") {
-    const references = toUniqueSortedValues(issue.references).join(",")
+    const references = toUniqueSortedReferenceKeys(issue.references).join(",")
     return [
       type,
       compactText(issue.dateKey),
@@ -53,7 +79,7 @@ export const buildValidationIssueKey = (issue = {}) => {
     const slotLabels = toUniqueSortedValues(issue.slotKeys || issue.slotLabels).join("|")
     return [
       type,
-      compactText(issue.personName || issue.personId),
+      compactText(issue.personId || issue.personName),
       compactText(issue.consecutiveCount),
       slotLabels
     ].join("|")
@@ -62,7 +88,7 @@ export const buildValidationIssueKey = (issue = {}) => {
   if (type === "room_class_mismatch") {
     return [
       type,
-      compactText(issue.reference),
+      normalizeReferenceLookupKey(issue.reference),
       compactText(issue.roomSite),
       compactText(issue.roomName),
       compactText(issue.roomClassMode),
@@ -83,7 +109,8 @@ export const buildLocalValidationIssues = (analysis = {}) => {
     .map((conflict) => {
       const [dateKey, periodText] = String(conflict?.slotKey || "").split("|")
       const references = toUniqueSortedValues(conflict?.references)
-      const personName = compactText(conflict?.personName) || "Personne inconnue"
+      const personId = compactText(conflict?.personId)
+      const personName = compactText(conflict?.personName) || personId || "Personne inconnue"
 
       if (references.length < 2) {
         return null
@@ -94,7 +121,7 @@ export const buildLocalValidationIssues = (analysis = {}) => {
         severity: "error",
         dateKey: compactText(dateKey),
         period: toIntegerOrNull(periodText) ?? toIntegerOrNull(conflict?.period),
-        personId: "",
+        personId,
         personName,
         references,
         roles: toUniqueSortedValues(conflict?.roles),
@@ -105,7 +132,8 @@ export const buildLocalValidationIssues = (analysis = {}) => {
 
   const sequenceIssues = (Array.isArray(analysis.sequenceViolations) ? analysis.sequenceViolations : [])
     .map((issue) => {
-      const personName = compactText(issue?.personName) || "Personne inconnue"
+      const personId = compactText(issue?.personId)
+      const personName = compactText(issue?.personName) || personId || "Personne inconnue"
       const consecutiveCount = toIntegerOrNull(issue?.consecutiveCount) || 0
       const maxConsecutiveTpi = toIntegerOrNull(issue?.maxConsecutiveTpi) || 4
       const slotKeys = toUniqueSortedValues(issue?.slotKeys)
@@ -117,7 +145,7 @@ export const buildLocalValidationIssues = (analysis = {}) => {
       return {
         type: "consecutive_limit",
         severity: "error",
-        personId: "",
+        personId,
         personName,
         consecutiveCount,
         maxConsecutiveTpi,

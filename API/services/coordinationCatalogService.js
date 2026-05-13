@@ -722,7 +722,7 @@ async function getSharedPlanningCatalog() {
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   )
@@ -782,7 +782,7 @@ async function saveSharedPlanningCatalog(payload = {}) {
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   )

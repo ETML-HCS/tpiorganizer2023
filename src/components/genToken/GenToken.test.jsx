@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 import TokenGenerator, { buildAccessPhaseReadiness } from './genToken'
@@ -16,8 +16,11 @@ jest.mock('../../services/coordinationService', () => ({
   workflowCoordinationService: {
     getStaticPublicationStatus: jest.fn(),
     getStaticVotePublicationStatus: jest.fn(),
+    getAudit: jest.fn(),
+    getAccessLinkLogs: jest.fn(),
     previewAccessLinks: jest.fn(),
     generateAccessLinks: jest.fn(),
+    reconcileAccessLinks: jest.fn(),
     previewSoutenanceAccessEmail: jest.fn(),
     sendSoutenanceAccessEmails: jest.fn(),
     resetAccessLinkEmailDeliveries: jest.fn(),
@@ -96,9 +99,25 @@ beforeEach(() => {
   coordinationConfigService.getByYear.mockResolvedValue({ accessLinkSettings: {} })
   workflowCoordinationService.getStaticPublicationStatus.mockResolvedValue({})
   workflowCoordinationService.getStaticVotePublicationStatus.mockResolvedValue({})
+  workflowCoordinationService.getAudit.mockResolvedValue({ events: [] })
+  workflowCoordinationService.getAccessLinkLogs.mockResolvedValue({ logs: [] })
   workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview())
   workflowCoordinationService.generateAccessLinks.mockResolvedValue(createAccessPreview({
     linksGenerated: true
+  }))
+  workflowCoordinationService.reconcileAccessLinks.mockResolvedValue(createAccessPreview({
+    linksGenerated: true,
+    summary: {
+      soutenanceLinkCount: 1,
+      soutenanceGeneratedLinkCount: 1,
+      generatedLinkCount: 1
+    },
+    contexts: {
+      soutenance: {
+        publicationVersion: 2,
+        roomsCount: 1
+      }
+    }
   }))
   workflowCoordinationService.previewSoutenanceAccessEmail.mockResolvedValue({
     success: true,
@@ -272,7 +291,13 @@ describe('GenToken generation command', () => {
       </MemoryRouter>
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /générer tous les accès/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: /utiliser le site pour les liens de défense/i })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /utiliser le site pour les liens de vote/i })).toBeChecked()
+    })
+    const generateButton = await screen.findByRole('button', { name: /générer tous les accès/i })
+    await waitFor(() => expect(generateButton).toBeEnabled())
+    fireEvent.click(generateButton)
 
     await waitFor(() => {
       expect(workflowCoordinationService.generateAccessLinks).toHaveBeenCalledTimes(1)
@@ -577,6 +602,119 @@ describe('GenToken generation command', () => {
     expect(panel.parentElement).toHaveClass('has-collapsed-summary')
     expect(screen.getByRole('button', { name: /ouvrir la synthèse des accès/i })).toHaveClass('token-access-summary-floating')
     expect(within(panel).queryByText('Personnes')).not.toBeInTheDocument()
+  })
+
+  test('affiche l’historique admin des actions liens d’accès dans la synthèse', async () => {
+    workflowCoordinationService.getAudit.mockResolvedValue({
+      events: [
+        {
+          id: 'audit-reconcile',
+          action: 'workflow.access-links.reconcile',
+          success: true,
+          payload: {
+            summary: {
+              soutenanceLinkCount: 98,
+              soutenanceGeneratedLinkCount: 98
+            }
+          },
+          actor: { email: 'admin@example.ch' },
+          createdAt: '2026-05-12T09:30:00.000Z'
+        },
+        {
+          id: 'audit-email',
+          action: 'workflow.access-links.email-send',
+          success: false,
+          payload: {
+            requestedCount: 2,
+            sentCount: 1,
+            failedCount: 1
+          },
+          error: '1 échec(s) email.',
+          createdAt: '2026-05-12T09:45:00.000Z'
+        },
+        {
+          id: 'audit-planification',
+          action: 'workflow.planification.freeze',
+          success: true,
+          payload: {},
+          createdAt: '2026-05-12T08:45:00.000Z'
+        }
+      ]
+    })
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        soutenanceLinkCount: 1,
+        soutenanceGeneratedLinkCount: 1,
+        generatedLinkCount: 1
+      }
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    const panel = await screen.findByLabelText('Synthèse des accès')
+    fireEvent.click(screen.getByRole('button', { name: /ouvrir la synthèse des accès/i }))
+
+    expect(await within(panel).findByRole('heading', { name: /historique/i })).toBeInTheDocument()
+    expect(workflowCoordinationService.getAudit).toHaveBeenCalledWith(2026, 80)
+    expect(within(panel).getByText('Rattrapage défense')).toBeInTheDocument()
+    expect(within(panel).getByText('98/98 défenses disponibles')).toBeInTheDocument()
+    expect(within(panel).getByText('Email HTML')).toBeInTheDocument()
+    expect(within(panel).getByText(/1\/2 envoyé\(s\), 1 échec\(s\)/i)).toBeInTheDocument()
+    expect(within(panel).queryByText('workflow.planification.freeze')).not.toBeInTheDocument()
+  })
+
+  test('affiche les ouvertures récentes des liens d’accès dans la synthèse', async () => {
+    workflowCoordinationService.getAccessLinkLogs.mockResolvedValue({
+      logs: [
+        {
+          id: 'log-success',
+          type: 'soutenance',
+          status: 'success',
+          recipientEmail: 'camille.projet@example.ch',
+          reason: '',
+          createdAt: '2026-05-12T10:00:00.000Z'
+        },
+        {
+          id: 'log-expired',
+          type: 'vote',
+          status: 'expired',
+          recipientEmail: 'eva.expert@example.ch',
+          reason: 'Lien expiré',
+          createdAt: '2026-05-12T09:55:00.000Z'
+        }
+      ]
+    })
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        voteLinkCount: 1,
+        voteGeneratedLinkCount: 1,
+        soutenanceLinkCount: 1,
+        soutenanceGeneratedLinkCount: 1,
+        generatedLinkCount: 2
+      }
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    const panel = await screen.findByLabelText('Synthèse des accès')
+    fireEvent.click(screen.getByRole('button', { name: /ouvrir la synthèse des accès/i }))
+
+    expect(await within(panel).findByRole('heading', { name: /ouvertures/i })).toBeInTheDocument()
+    expect(workflowCoordinationService.getAccessLinkLogs).toHaveBeenCalledWith(2026, { limit: 20 })
+    expect(within(panel).getByText('Défense - Succès')).toBeInTheDocument()
+    expect(within(panel).getByText('camille.projet@example.ch')).toBeInTheDocument()
+    expect(within(panel).getByText('Vote - Expiré')).toBeInTheDocument()
+    expect(within(panel).getByText('eva.expert@example.ch - Lien expiré')).toBeInTheDocument()
   })
 
   test('affiche un lien de vote groupé pour tous les TPI du même votant', async () => {
@@ -1145,6 +1283,73 @@ describe('GenToken generation command', () => {
     expect(screen.queryByRole('button', { name: /emails experts/i })).not.toBeInTheDocument()
   })
 
+  test('explique pourquoi le carnet email HTML est vide quand les liens défense ne sont pas générés', async () => {
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 2,
+        soutenancePeopleCount: 2,
+        soutenanceLinkCount: 2,
+        soutenanceGeneratedLinkCount: 0,
+        generatedLinkCount: 0,
+        pendingLinkCount: 2
+      },
+      contexts: {
+        soutenance: {
+          publicationVersion: 25,
+          roomsCount: 10
+        }
+      },
+      people: [
+        {
+          person: {
+            id: 'person-cdp',
+            name: 'Camille Projet',
+            email: 'camille.projet@example.ch',
+            roles: ['chef_projet'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              type: 'soutenance',
+              publicationVersion: 2,
+              generated: false,
+              availabilityStatus: 'missing'
+            }
+          ],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+
+    const emptyBookMessage = await screen.findByText(/2 lien\(s\) défense sont préparés/i)
+    expect(emptyBookMessage).toBeInTheDocument()
+    expect(emptyBookMessage).toHaveTextContent(/Créez les liens manquants/i)
+
+    const emailPanel = screen.getByLabelText('Envoi automatique des emails défense')
+    fireEvent.click(within(emailPanel).getByRole('button', { name: /créer les liens manquants/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.reconcileAccessLinks).toHaveBeenCalledWith(
+        2026,
+        'http://localhost',
+        expect.objectContaining({
+          phases: ['soutenance'],
+          soutenanceLinkTarget: 'app'
+        })
+      )
+    })
+    expect(await screen.findByText(/Liens défense réconciliés: 1\/1/i)).toBeInTheDocument()
+  })
+
   test('transmet les emails HTML défense par lot CDP via le serveur', async () => {
     workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
       summary: {
@@ -1210,6 +1415,78 @@ describe('GenToken generation command', () => {
     })
 
     expect(await screen.findByText(/1 email\(s\) HTML transmis pour les chefs de projet/i)).toBeInTheDocument()
+  })
+
+  test('prépare une relance individuelle avec le message de modification d’horaire', async () => {
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        soutenanceLinkCount: 1,
+        soutenanceGeneratedLinkCount: 1,
+        generatedLinkCount: 1
+      },
+      people: [
+        {
+          person: {
+            id: 'person-cdp',
+            name: 'Camille Projet',
+            email: 'camille.projet@example.ch',
+            roles: ['chef_projet'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              id: 'link-cdp',
+              type: 'soutenance',
+              publicationVersion: 2,
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              url: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp',
+              generated: true,
+              availabilityStatus: 'available'
+            }
+          ],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser le message de modification d’horaire/i }))
+    fireEvent.click(screen.getByRole('button', { name: /prévisualiser/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.previewSoutenanceAccessEmail).toHaveBeenCalledWith(
+        2026,
+        expect.objectContaining({ linkId: 'link-cdp' }),
+        expect.objectContaining({ messageType: 'schedule_update' })
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /relancer camille projet/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.sendSoutenanceAccessEmails).toHaveBeenCalledWith(
+        2026,
+        [
+          expect.objectContaining({
+            linkId: 'link-cdp',
+            recipientEmail: 'camille.projet@example.ch'
+          })
+        ],
+        expect.objectContaining({
+          baseUrl: 'http://localhost',
+          forceResend: true,
+          messageType: 'schedule_update'
+        })
+      )
+    })
   })
 
   test('prépare les emails HTML défense par lot CDP via Outlook manuel', async () => {
@@ -1284,6 +1561,123 @@ describe('GenToken generation command', () => {
       expect(Object.values(resetStore['2026'] || {})).toHaveLength(0)
     })
     expect(await screen.findByText(/1 brouillon\(s\) Outlook défense réinitialisé\(s\)/i)).toBeInTheDocument()
+    openSpy.mockRestore()
+  })
+
+  test('ouvre un brouillon Outlook avec le texte de modification d’horaire', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => ({}))
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 1,
+        soutenanceLinkCount: 1,
+        soutenanceGeneratedLinkCount: 1,
+        generatedLinkCount: 1
+      },
+      people: [
+        {
+          person: {
+            id: 'person-cdp',
+            name: 'Camille Projet',
+            email: 'camille.projet@example.ch',
+            roles: ['chef_projet'],
+            site: ''
+          },
+          voteLinks: [],
+          soutenanceLinks: [
+            {
+              id: 'link-cdp',
+              type: 'soutenance',
+              publicationVersion: 2,
+              expiresAt: '2026-05-14T21:00:00.000Z',
+              url: 'https://tpi26.ch/soutenances-2026/?ml=token-cdp',
+              generated: true,
+              availabilityStatus: 'available'
+            }
+          ],
+          arbitrageLinks: []
+        }
+      ]
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser outlook pour transmettre/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser le message de modification d’horaire/i }))
+    fireEvent.click(within(screen.getByRole('region', { name: /envoi email html par lot/i })).getByRole('button', { name: /cdp/i }))
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(1)
+    })
+
+    const openedDraft = decodeURIComponent(openSpy.mock.calls[0][0])
+    expect(openedDraft).toContain('Mise à jour de l’horaire des défenses TPI 2026')
+    expect(openedDraft).toContain('Nous avons modifié l’horaire des défenses TPI 2026')
+    expect(openedDraft).toContain('vérifier si les modifications vous conviennent')
+
+    openSpy.mockRestore()
+  })
+
+  test('annule la file Outlook quand le type de message change', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => ({}))
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 2,
+        soutenanceLinkCount: 2,
+        soutenanceGeneratedLinkCount: 2,
+        generatedLinkCount: 2
+      },
+      people: [
+        ['person-cdp-1', 'Camille Projet', 'camille.projet@example.ch', 'token-cdp-1'],
+        ['person-cdp-2', 'Chloe Projet', 'chloe.projet@example.ch', 'token-cdp-2']
+      ].map(([id, name, email, token]) => ({
+        person: {
+          id,
+          name,
+          email,
+          roles: ['chef_projet'],
+          site: ''
+        },
+        voteLinks: [],
+        soutenanceLinks: [
+          {
+            id: `link-${id}`,
+            type: 'soutenance',
+            publicationVersion: 2,
+            expiresAt: '2026-05-14T21:00:00.000Z',
+            url: `https://tpi26.ch/soutenances-2026/?ml=${token}`,
+            generated: true,
+            availabilityStatus: 'available'
+          }
+        ],
+        arbitrageLinks: []
+      }))
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser outlook pour transmettre/i }))
+    fireEvent.click(within(screen.getByRole('region', { name: /envoi email html par lot/i })).getByRole('button', { name: /cdp/i }))
+
+    expect(await screen.findByText(/1\/2 brouillon\(s\) Outlook ouvert\(s\) pour les chefs de projet/i)).toBeInTheDocument()
+    expect(document.querySelector('.token-access-email-outlook-queue')).toHaveTextContent(/1\s*brouillon Outlook en attente/i)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser le message de modification d’horaire/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /ouvrir brouillon suivant/i })).not.toBeInTheDocument()
+    })
+    expect(openSpy).toHaveBeenCalledTimes(1)
+
     openSpy.mockRestore()
   })
 
@@ -1428,6 +1822,68 @@ describe('GenToken generation command', () => {
     })
     expect(openSpy.mock.calls[1][0]).toContain('token-cdp-2')
     expect(openSpy.mock.calls.filter(([url]) => url === firstUrl)).toHaveLength(1)
+
+    openSpy.mockRestore()
+  })
+
+  test('ignore un relancement rapide du lot Outlook manuel deja en file', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => ({}))
+    workflowCoordinationService.previewAccessLinks.mockResolvedValue(createAccessPreview({
+      summary: {
+        peopleCount: 3,
+        soutenanceLinkCount: 3,
+        soutenanceGeneratedLinkCount: 3,
+        generatedLinkCount: 3
+      },
+      people: [
+        ['person-cdp-1', 'Camille Projet', 'camille.projet@example.ch', 'token-cdp-1'],
+        ['person-cdp-2', 'Chloe Projet', 'chloe.projet@example.ch', 'token-cdp-2'],
+        ['person-cdp-3', 'Denis Projet', 'denis.projet@example.ch', 'token-cdp-3']
+      ].map(([id, name, email, token]) => ({
+        person: {
+          id,
+          name,
+          email,
+          roles: ['chef_projet'],
+          site: ''
+        },
+        voteLinks: [],
+        soutenanceLinks: [
+          {
+            id: `link-${id}`,
+            type: 'soutenance',
+            publicationVersion: 2,
+            expiresAt: '2026-05-14T21:00:00.000Z',
+            url: `https://tpi26.ch/soutenances-2026/?ml=${token}`,
+            generated: true,
+            availabilityStatus: 'available'
+          }
+        ],
+        arbitrageLinks: []
+      }))
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/acces-liens?year=2026']}>
+        <TokenGenerator isArrowUp />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /ouvrir le module email html/i }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /utiliser outlook pour transmettre/i }))
+    const batchButton = within(screen.getByRole('region', { name: /envoi email html par lot/i }))
+      .getByRole('button', { name: /cdp/i })
+
+    act(() => {
+      batchButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      batchButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(openSpy.mock.calls[0][0]).toContain('token-cdp-1')
+    expect(document.querySelector('.token-access-email-outlook-queue')).toHaveTextContent(/2\s*brouillons Outlook en attente/i)
 
     openSpy.mockRestore()
   })
@@ -1644,7 +2100,9 @@ describe('GenToken generation command', () => {
     fireEvent.change(await screen.findByLabelText(/email test/i), {
       target: { value: 'test@example.ch' }
     })
-    fireEvent.click(await screen.findByRole('button', { name: /^test$/i }))
+    const testButton = await screen.findByRole('button', { name: /^test$/i })
+    await waitFor(() => expect(testButton).toBeEnabled())
+    fireEvent.click(testButton)
 
     expect(await screen.findByText(/SMTP rejected sender/i)).toBeInTheDocument()
     expect(screen.queryByText(/Email HTML de test envoyé/i)).not.toBeInTheDocument()

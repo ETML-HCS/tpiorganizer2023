@@ -4,8 +4,13 @@ import TpiCard from './TpiCard'
 import { installFetchMock } from '../../test-utils/mockFetch'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
 
+let mockLastDragConfig = null
+
 jest.mock('react-dnd', () => ({
-  useDrag: () => [{ isDragging: false }, jest.fn()]
+  useDrag: (config) => {
+    mockLastDragConfig = config
+    return [{ isDragging: false }, jest.fn()]
+  }
 }))
 
 const baseTpi = {
@@ -41,6 +46,7 @@ describe('TpiCard editing overlay', () => {
   let fetchMock
 
   beforeEach(() => {
+    mockLastDragConfig = null
     fetchMock = installFetchMock(async () => ({
       ok: true,
       status: 200,
@@ -124,6 +130,86 @@ describe('TpiCard editing overlay', () => {
 
     expect(await screen.findByText(/Candidat courant/i)).toBeInTheDocument()
     expect(screen.getByRole('article', { name: /TPI/i })).toHaveClass('has-validation-error')
+  })
+
+  it('applique la couleur du type de probleme de validation', async () => {
+    renderWithRouter(
+      <TpiCard
+        tpi={baseTpi}
+        onUpdateTpi={jest.fn()}
+        hasValidationError
+        validationIssueTypes={['consecutive_limit']}
+        primaryValidationIssueType="consecutive_limit"
+        validationTone="sequence"
+        validationErrorMessages={['Ada Lovelace a 5 TPI consécutifs.']}
+        {...roomProps}
+        isEditingTpiCard={false}
+      />
+    )
+
+    expect(await screen.findByText(/Candidat courant/i)).toBeInTheDocument()
+    const card = screen.getByRole('article', { name: /TPI/i })
+    expect(card).toHaveClass(
+      'has-validation-marker',
+      'has-validation-error',
+      'validation-tone-sequence',
+      'validation-issue-consecutive-limit',
+      'has-validation-issue-consecutive-limit'
+    )
+    expect(card).toHaveAccessibleName(/Limite de TPI consécutifs/i)
+    expect(card).toHaveAttribute('data-validation-tone', 'sequence')
+    expect(card).toHaveAttribute('data-validation-issue-types', 'consecutive_limit')
+    expect(screen.getByRole('img', { name: /Limite de TPI consécutifs/i })).toHaveClass('tpi-card-validation-indicator')
+  })
+
+  it('active la carte au clic et au clavier pour le swap assisté', async () => {
+    const onActivateTpi = jest.fn()
+
+    renderWithRouter(
+      <TpiCard
+        tpi={baseTpi}
+        onUpdateTpi={jest.fn()}
+        onActivateTpi={onActivateTpi}
+        isSwapSelected
+        {...roomProps}
+        isEditingTpiCard={false}
+      />
+    )
+
+    const card = await screen.findByRole('article', { name: /TPI/i })
+    expect(card).toHaveClass('is-swap-selected')
+    expect(card).toHaveAttribute('data-swap-selected', 'true')
+    expect(mockLastDragConfig.canDrag).toBe(true)
+
+    fireEvent.click(card)
+    fireEvent.keyDown(card, { key: 'Enter' })
+
+    expect(onActivateTpi).toHaveBeenCalledTimes(2)
+  })
+
+  it('bloque le drag et l activation swap quand le TPI est scellé', async () => {
+    const onActivateTpi = jest.fn()
+
+    renderWithRouter(
+      <TpiCard
+        tpi={{ ...baseTpi, isPlanningSealed: true }}
+        onUpdateTpi={jest.fn()}
+        onActivateTpi={onActivateTpi}
+        isSwapCandidate
+        {...roomProps}
+        isEditingTpiCard={false}
+      />
+    )
+
+    const card = await screen.findByRole('article', { name: /TPI/i })
+    expect(card).toHaveClass('is-planning-sealed')
+    expect(card).not.toHaveAttribute('tabIndex')
+    expect(mockLastDragConfig.canDrag).toBe(false)
+
+    fireEvent.click(card)
+    fireEvent.keyDown(card, { key: 'Enter' })
+
+    expect(onActivateTpi).not.toHaveBeenCalled()
   })
 
   it('affiche une alerte quand le TPI est placé avec une contrainte ignorée', async () => {

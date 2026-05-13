@@ -120,7 +120,7 @@ router.put(
     }
 
     const updatedRoom = await TpiRooms.findByIdAndUpdate(req.params.id, req.body, {
-      new: true
+      returnDocument: 'after'
     })
 
     return res.json(updatedRoom)

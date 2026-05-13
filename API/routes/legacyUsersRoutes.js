@@ -43,7 +43,7 @@ router.put(
   async (req, res) => {
     try {
       const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true
       })
 

@@ -269,7 +269,12 @@ const DateRoom = ({
   allRooms = [],
   validationMarkersBySlotKey = {},
   tpiSyncEntriesBySlotKey = {},
-  onSyncTpiFromGestion = null
+  onSyncTpiFromGestion = null,
+  swapAssistSource = null,
+  getSwapAssistSlotState = null,
+  onSelectTpiForSwap = null,
+  onAssistedSwapToSlot = null,
+  onDropUnassignedTpi = null
 }) => {
   // Fonction pour générer l'ID TPI en fonction de la position (site, room et slots)
   const generateUniqueID = (siteIndex, roomIndex, slotIndex) => {
@@ -337,9 +342,11 @@ const DateRoom = ({
   )
   const roomClassMode = useMemo(() => inferRoomClassMode({
     roomName: safeRoomData.name,
+    roomClassMode: safeRoomData.roomClassMode,
+    classMode: safeRoomData.classMode,
     roomDateEntry,
     allowedPrefixes: Array.isArray(roomDateEntry?.classes) ? roomDateEntry.classes : []
-  }), [roomDateEntry, safeRoomData.name])
+  }), [roomDateEntry, safeRoomData.classMode, safeRoomData.name, safeRoomData.roomClassMode])
   const roomClassBadgeLabel = useMemo(
     () => (roomClassMode === 'matu' ? 'MATU' : ''),
     [roomClassMode]
@@ -679,6 +686,7 @@ const DateRoom = ({
             
             const slotTpi = safeRoomData.tpiDatas[iSlot] || createEmptyTpi()
             slotTpi.id = tpiID
+            slotTpi.period = iSlot + 1
             safeRoomData.tpiDatas[iSlot] = slotTpi
             const tpi = slotTpi
 
@@ -711,6 +719,14 @@ const DateRoom = ({
             })
             const slotValidationMarker = validationMarkersBySlotKey?.[slotValidationKey] || null
             const tpiSyncEntry = tpiSyncEntriesBySlotKey?.[`${roomIndex}:${iSlot}`] || null
+            const swapAssistState = typeof getSwapAssistSlotState === 'function'
+              ? getSwapAssistSlotState({
+                  roomIndex,
+                  slotIndex: iSlot,
+                  roomData: safeRoomData,
+                  tpi
+                })
+              : ''
 
             return (
               <React.Fragment key={iSlot}>
@@ -720,6 +736,20 @@ const DateRoom = ({
                   onUpdateTpi={updatedTpi => onUpdateTpi(iSlot, updatedTpi)}
                   isEditTPICard={isEditOfRoom}
                   onSwapTpiCardsProp={onSwapTpiCards}
+                  swapAssistState={swapAssistState}
+                  isSwapAssistActive={Boolean(swapAssistSource)}
+                  onSelectTpiForSwap={
+                    typeof onSelectTpiForSwap === 'function'
+                      ? ({ tpi: selectedTpi, slotId }) => onSelectTpiForSwap({
+                          tpi: selectedTpi,
+                          roomIndex,
+                          tpiIndex: iSlot,
+                          slotId
+                        })
+                      : null
+                  }
+                  onAssistedSwapToSlot={onAssistedSwapToSlot}
+                  onDropUnassignedTpi={onDropUnassignedTpi}
                   detailLevel={tpiCardDetailLevel}
                   roomSite={safeRoomData.site}
                   roomName={safeRoomData.name}

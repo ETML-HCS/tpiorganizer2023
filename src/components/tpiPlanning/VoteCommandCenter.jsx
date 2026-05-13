@@ -22,6 +22,8 @@ import {
 import './VoteCommandCenter.css'
 
 const VOTE_ROLE_ORDER = VOTING_STAKEHOLDER_ROLES
+const PROJECT_LEAD_FORCE_OK_ROLES = ['chef_projet']
+const EXPERT_FORCE_OK_ROLES = VOTE_ROLE_ORDER.filter((role) => role !== 'chef_projet')
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -418,6 +420,62 @@ function hasReceivedVoteResponse(row) {
   return Number(row?.respondedCount || 0) > 0
 }
 
+function getRowFixedDecisionSlot(row) {
+  return (Array.isArray(row?.decisionSlots) ? row.decisionSlots : [])
+    .find((slot) => slot?.isFixed && compactText(slot?.slotId)) || null
+}
+
+function canForceOkRole(row, role, onlyMissing = false) {
+  if (!row || !role) {
+    return false
+  }
+
+  if (normalizeCoordinationStatus(row.tpi?.status) === COORDINATION_STATUS.CONFIRMED) {
+    return false
+  }
+
+  if (!getRowFixedDecisionSlot(row)) {
+    return false
+  }
+
+  const roleEntry = (Array.isArray(row.roleEntries) ? row.roleEntries : [])
+    .find((entry) => entry.role === role)
+
+  if (!roleEntry) {
+    return false
+  }
+
+  if (onlyMissing) {
+    return !hasVoteRoleResponded(roleEntry.status)
+  }
+
+  return getVoteRoleTone(roleEntry.status) !== 'ok'
+}
+
+function getForceOkTargets(rows = [], roles = [], onlyMissing = true) {
+  const tpiIds = []
+  let roleCount = 0
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const matchingRoles = roles.filter((role) => canForceOkRole(row, role, onlyMissing))
+
+    if (matchingRoles.length === 0) {
+      continue
+    }
+
+    const tpiId = compactText(row?.id || row?.tpi?._id)
+    if (tpiId) {
+      tpiIds.push(tpiId)
+    }
+    roleCount += matchingRoles.length
+  }
+
+  return {
+    tpiIds: Array.from(new Set(tpiIds)),
+    roleCount
+  }
+}
+
 function getQueueTitle(row) {
   if (row?.bucket === 'pending') {
     return 'À relancer'
@@ -693,6 +751,7 @@ const VoteCommandCenter = ({
   onOpenManualResolver,
   onSelectTpi,
   onForceVoteSlot,
+  onForceVoteOk,
   onReviewVoteProposalMove,
   onOpenResolutionProposal,
   onInsertProposalPreference
@@ -720,6 +779,12 @@ const VoteCommandCenter = ({
 
   const responseAllRowsCount = useMemo(() => (
     (Array.isArray(allRows) ? allRows : []).filter(hasReceivedVoteResponse).length
+  ), [allRows])
+  const projectLeadForceOkTargets = useMemo(() => (
+    getForceOkTargets(allRows, PROJECT_LEAD_FORCE_OK_ROLES, true)
+  ), [allRows])
+  const expertForceOkTargets = useMemo(() => (
+    getForceOkTargets(allRows, EXPERT_FORCE_OK_ROLES, true)
   ), [allRows])
   const constraintConflicts = useMemo(() => (
     Array.isArray(constraintCheckResult?.conflicts)
@@ -972,6 +1037,12 @@ const VoteCommandCenter = ({
     isOnlyAvailabilityVoteComment(item.decision?.comment || selectedRoleProposal?.comment)
   )
   const selectedRoleShouldShowSpecialRequest = selectedRoleHasSpecialRequest && !selectedRoleHasHardSlotDecision
+  const selectedRoleCanForceOk = Boolean(
+    selectedRow &&
+    selectedRoleEntry &&
+    typeof onForceVoteOk === 'function' &&
+    canForceOkRole(selectedRow, selectedRoleEntry.role, false)
+  )
 
   const primaryAction = getPrimaryAction({
     workflowState,
@@ -1161,6 +1232,46 @@ const VoteCommandCenter = ({
               ariaLabel="Relancer sans réponse"
             >
               Relancer
+            </WorkflowActionButton>
+            <WorkflowActionButton
+              actionKey="forceOkProjectLeads"
+              primaryActionKey={primaryAction.key}
+              className="secondary"
+              onClick={() => onForceVoteOk?.({
+                actionKey: 'forceOkProjectLeads',
+                roles: PROJECT_LEAD_FORCE_OK_ROLES,
+                tpiIds: projectLeadForceOkTargets.tpiIds,
+                onlyMissing: true,
+                label: 'les chefs de projet en attente'
+              })}
+              disabled={workflowActionLoading || projectLeadForceOkTargets.roleCount === 0 || typeof onForceVoteOk !== 'function'}
+              isActionRunning={isActionRunning}
+              icon={<CheckIcon className="button-icon" />}
+              runningLabel="Forçage..."
+              title="Forcer OK pour tous les chefs de projet qui n'ont pas encore répondu."
+              ariaLabel="Forcer OK chefs de projet en attente"
+            >
+              OK chefs ({projectLeadForceOkTargets.roleCount})
+            </WorkflowActionButton>
+            <WorkflowActionButton
+              actionKey="forceOkExperts"
+              primaryActionKey={primaryAction.key}
+              className="secondary"
+              onClick={() => onForceVoteOk?.({
+                actionKey: 'forceOkExperts',
+                roles: EXPERT_FORCE_OK_ROLES,
+                tpiIds: expertForceOkTargets.tpiIds,
+                onlyMissing: true,
+                label: 'les experts en attente'
+              })}
+              disabled={workflowActionLoading || expertForceOkTargets.roleCount === 0 || typeof onForceVoteOk !== 'function'}
+              isActionRunning={isActionRunning}
+              icon={<CheckIcon className="button-icon" />}
+              runningLabel="Forçage..."
+              title="Forcer OK pour tous les experts qui n'ont pas encore répondu."
+              ariaLabel="Forcer OK experts en attente"
+            >
+              OK experts ({expertForceOkTargets.roleCount})
             </WorkflowActionButton>
             <WorkflowActionButton
               actionKey="closeVotes"
@@ -1618,11 +1729,31 @@ const VoteCommandCenter = ({
                         <strong>Réponse de {selectedRoleEntry.label}</strong>
                         <span>{selectedRoleVoterName || 'Personne non identifiée'}</span>
                       </div>
-                      <p>
-                        {selectedRoleHasResponded
-                          ? 'Ce rôle a répondu. Les choix ci-dessous sont ceux à traiter.'
-                          : 'Aucune réponse reçue pour ce rôle.'}
-                      </p>
+                      <div className="vote-command-role-detail-actions">
+                        <p>
+                          {selectedRoleHasResponded
+                            ? 'Ce rôle a répondu. Les choix ci-dessous sont ceux à traiter.'
+                            : 'Aucune réponse reçue pour ce rôle.'}
+                        </p>
+                        {selectedRoleCanForceOk ? (
+                          <button
+                            type="button"
+                            className="vote-command-mini-button is-force-ok"
+                            onClick={() => onForceVoteOk?.({
+                              roles: [selectedRoleEntry.role],
+                              tpiIds: [selectedRow.id],
+                              onlyMissing: false,
+                              label: `${selectedRoleEntry.label} de ${selectedRow.reference}`
+                            })}
+                            disabled={workflowActionLoading}
+                            title={`Forcer OK pour ${selectedRoleEntry.label} sur ${selectedRow.reference}.`}
+                            aria-label={`Forcer OK pour ${selectedRoleEntry.label} sur ${selectedRow.reference}.`}
+                          >
+                            <CheckIcon className="button-icon" />
+                            Forcer OK
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
                     {selectedRoleShouldShowSpecialRequest ? (

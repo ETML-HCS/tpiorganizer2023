@@ -335,7 +335,7 @@ async function syncSharedPublicationSettings(publicBaseUrl) {
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   )
@@ -371,7 +371,7 @@ async function savePublicationDeploymentConfig(payload = {}) {
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   ).select('+passwordEncrypted')

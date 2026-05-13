@@ -555,7 +555,7 @@ async function ensureVotesForTpi(tpi) {
         },
         {
           upsert: true,
-          new: true,
+          returnDocument: 'after',
           setDefaultsOnInsert: true
         }
       )
@@ -1147,26 +1147,11 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
   const missingAccessLinks = []
   const skipEmails = options?.skipEmails === true
 
-  if (skipEmails) {
-    return {
-      recipientsCount: recipientsByPersonId.size,
-      publicationVersion: scopedPublicationVersion,
-      emailsSent: 0,
-      emailsSucceeded: 0,
-      emailsFailed: 0,
-      emailsSkipped: true,
-      emailSkipReason: AUTOMATIC_EMAIL_SENDS_DISABLED_REASON,
-      generatedAccessLinkCount,
-      missingAccessLinkCount: 0,
-      missingAccessLinks
-    }
-  }
-
-  const emailSettings = await getSharedEmailSettingsIfAvailable()
   const soutenanceLinkTarget = await resolveSoutenanceMagicLinkTarget(year, baseUrl, {
     ...options,
     accessLinkSettings: planningConfig?.accessLinkSettings
   })
+  const emailSettings = skipEmails ? null : await getSharedEmailSettingsIfAvailable()
 
   for (const { person, roles } of recipientsByPersonId.values()) {
     let link = await findGeneratedSoutenanceAccessLink({
@@ -1199,6 +1184,10 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
       continue
     }
 
+    if (skipEmails) {
+      continue
+    }
+
     const result = await emailService.sendEmail(person.email, 'soutenanceAccess', {
       recipientName: getDisplayName(person),
       recipientRoles: Array.from(roles || []).filter(Boolean),
@@ -1218,7 +1207,9 @@ async function sendSoutenanceLinksForYear(year, baseUrl, publicationVersion = nu
     publicationVersion: scopedPublicationVersion,
     emailsSent,
     emailsSucceeded,
-    emailsFailed: Math.max(recipientsByPersonId.size - emailsSucceeded, 0),
+    emailsFailed: skipEmails ? 0 : Math.max(recipientsByPersonId.size - emailsSucceeded, 0),
+    emailsSkipped: skipEmails,
+    emailSkipReason: skipEmails ? AUTOMATIC_EMAIL_SENDS_DISABLED_REASON : null,
     generatedAccessLinkCount,
     missingAccessLinkCount: missingAccessLinks.length,
     missingAccessLinks

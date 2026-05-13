@@ -444,6 +444,105 @@ test('sendSoutenanceLinksForYear genere les liens defense manquants avant envoi 
   }
 })
 
+test('sendSoutenanceLinksForYear genere les liens defense manquants meme quand les emails sont ignores', async () => {
+  const sentEmails = []
+  const createCalls = []
+  const people = [
+    {
+      _id: 'expert-1',
+      firstName: 'Eva',
+      lastName: 'Expert',
+      email: 'eva@example.com',
+      sendEmails: true
+    }
+  ]
+  const publicationRooms = [
+    {
+      idRoom: 1,
+      tpiDatas: [
+        {
+          expert1: { personId: 'expert-1' }
+        }
+      ]
+    }
+  ]
+
+  const restore = [
+    patchMethod(TpiPlanning, 'find', () => {
+      throw new Error('Les destinataires doivent venir des salles publiees.')
+    }),
+    patchMethod(Person, 'find', (query) => {
+      if (query.roles === 'admin') {
+        return {
+          select() {
+            return this
+          },
+          lean: async () => []
+        }
+      }
+
+      assert.deepEqual([...query._id.$in], ['expert-1'])
+      return {
+        select() {
+          return this
+        },
+        lean: async () => people
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async () => null),
+    patchMethod(accessLinkTokenService, 'createSoutenanceMagicLink', async (params) => {
+      createCalls.push(params)
+      return {
+        url: `https://example.test/defenses/2026?ml=created-${createCalls.length}`,
+        expiresAt: new Date('2026-06-01T10:00:00.000Z'),
+        generated: true
+      }
+    }),
+    patchMethod(emailService, 'sendEmail', async (email) => {
+      sentEmails.push(email)
+      return {
+        success: true
+      }
+    })
+  ]
+
+  try {
+    const result = await votingCampaignService.sendSoutenanceLinksForYear(
+      2026,
+      'https://example.test',
+      12,
+      {
+        publicationRooms,
+        generateMissingAccessLinks: true,
+        skipEmails: true
+      }
+    )
+
+    assert.deepEqual(sentEmails, [])
+    assert.equal(createCalls.length, 1)
+    assert.equal(createCalls[0].year, 2026)
+    assert.equal(createCalls[0].baseUrl, 'https://example.test')
+    assert.equal(createCalls[0].redirectPath, '/defenses/2026')
+    assert.equal(createCalls[0].persistToken, true)
+    assert.deepEqual(createCalls[0].scope, {
+      kind: 'published_soutenances',
+      publicationVersion: 12,
+      source: accessLinkPolicy.sources.adminApp
+    })
+    assert.equal(result.recipientsCount, 1)
+    assert.equal(result.emailsSent, 0)
+    assert.equal(result.emailsSucceeded, 0)
+    assert.equal(result.emailsFailed, 0)
+    assert.equal(result.emailsSkipped, true)
+    assert.equal(result.generatedAccessLinkCount, 1)
+    assert.equal(result.missingAccessLinkCount, 0)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
 test('startVotesCampaign opens voting without sending emails when skipEmails is enabled', async () => {
   const fixedNow = Date.parse('2026-04-01T00:00:00.000Z')
   const savedTpis = []

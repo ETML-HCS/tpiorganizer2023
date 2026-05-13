@@ -405,6 +405,43 @@ test('Email soutenanceAccess template asks project leads to respond within 3 day
   assert.doesNotMatch(email.text, /5 jours maximum/)
 })
 
+test('Email soutenanceAccess template supports schedule update wording', () => {
+  const email = emailService.emailTemplates.soutenanceAccess({
+    brandName: 'Commission TPI',
+    recipientName: 'Jean Expert',
+    recipientRoles: ['expert'],
+    year: 2026,
+    deadline: '12.06.2026',
+    magicLinkUrl: 'https://tpi26.ch/soutenances-2026/?ml=token-update',
+    messageType: 'schedule_update'
+  })
+
+  assert.match(email.subject, /Mise à jour de l’horaire des défenses TPI 2026/)
+  assert.match(email.html, /Nous avons modifié l’horaire/)
+  assert.match(email.html, /Contrôler mon horaire/)
+  assert.match(email.html, /Si tout est en ordre, aucune action n’est nécessaire/)
+  assert.match(email.text, /vérifier si les modifications vous conviennent/)
+  assert.match(email.text, /empêchement réel/)
+  assert.match(email.text, /token-update/)
+})
+
+test('Email soutenanceAccess template falls back to standard wording for unknown message type', () => {
+  const email = emailService.emailTemplates.soutenanceAccess({
+    brandName: 'Commission TPI',
+    recipientName: 'Jean Expert',
+    recipientRoles: ['expert'],
+    year: 2026,
+    deadline: '12.06.2026',
+    magicLinkUrl: 'https://tpi26.ch/soutenances-2026/?ml=token-standard',
+    messageType: 'unexpected'
+  })
+
+  assert.match(email.subject, /Horaire des défenses TPI 2026/)
+  assert.doesNotMatch(email.subject, /Mise à jour/)
+  assert.match(email.html, /Voir mon horaire/)
+  assert.match(email.text, /L’horaire des défenses TPI 2026 est publié/)
+})
+
 test('Email soutenanceAccess template mentions admin general view for administrators', () => {
   const email = emailService.emailTemplates.soutenanceAccess({
     brandName: 'Commission TPI',

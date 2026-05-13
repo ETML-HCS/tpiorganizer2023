@@ -1929,6 +1929,25 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const selectedTpiRespondedVoteCount = useMemo(() => (
     selectedTpiVoteEntries.filter((entry) => hasVoteRoleResponded(entry.status)).length
   ), [selectedTpiVoteEntries])
+  const selectedTpiHasForceOkVoteSlot = useMemo(() => (
+    getVoteDecisionSlots(selectedTpi).some((slot) => slot.isFixed)
+  ), [selectedTpi])
+  const selectedTpiCanForceOkByRole = useMemo(() => {
+    const normalizedStatus = normalizeCoordinationStatus(selectedTpi?.status)
+    const canForceOnTpi = Boolean(
+      isAdmin &&
+      selectedTpi &&
+      selectedTpiHasForceOkVoteSlot &&
+      normalizedStatus !== COORDINATION_STATUS.CONFIRMED
+    )
+
+    return Object.fromEntries(
+      selectedTpiVoteEntries.map((entry) => [
+        entry.role,
+        canForceOnTpi && getVoteRoleTone(entry.status) !== 'ok'
+      ])
+    )
+  }, [isAdmin, selectedTpi, selectedTpiHasForceOkVoteSlot, selectedTpiVoteEntries])
   const selectedTpiManualAction = useMemo(() => {
     return MANUAL_REQUIRED_STATUSES.includes(normalizeCoordinationStatus(selectedTpi?.status))
   }, [selectedTpi])
@@ -2450,6 +2469,66 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       setPendingWorkflowAction('')
     }
   }, [loadData])
+
+  const handleForceVoteOk = useCallback(async ({
+    actionKey = 'forceOkVotes',
+    roles = [],
+    tpiIds = [],
+    onlyMissing = false,
+    label = ''
+  } = {}) => {
+    const normalizedRoles = Array.isArray(roles)
+      ? roles.map(compactText).filter((role) => VOTE_ROLE_ORDER.includes(role))
+      : []
+    const normalizedTpiIds = Array.isArray(tpiIds)
+      ? Array.from(new Set(tpiIds.map(compactText).filter(Boolean)))
+      : []
+
+    if (normalizedRoles.length === 0) {
+      setError('Aucun rôle de vote à forcer.')
+      return null
+    }
+
+    if (normalizedTpiIds.length === 0) {
+      setError('Aucun TPI avec un vote à forcer.')
+      return null
+    }
+
+    const targetLabel = compactText(label) || normalizedRoles.map(getVoterRoleLabel).join(', ')
+    const confirmMessage = onlyMissing
+      ? `Forcer OK pour ${targetLabel} ? Seules les réponses manquantes seront complétées.`
+      : `Forcer OK pour ${targetLabel} ? La réponse existante de ce rôle sera remplacée.`
+
+    return await executeWorkflowAction({
+      actionKey,
+      confirmMessage,
+      run: () => voteService.forceOk({
+        year,
+        roles: normalizedRoles,
+        tpiIds: normalizedTpiIds,
+        onlyMissing,
+        reason: onlyMissing
+          ? `Forcage OK admin des réponses manquantes: ${targetLabel}.`
+          : `Forcage OK admin individuel: ${targetLabel}.`
+      }),
+      successBuilder: (result) => {
+        const forcedRoleCount = Number(result?.forcedRoleCount || 0)
+        const forcedTpiCount = Number(result?.forcedTpiCount || 0)
+        const skippedRoleCount = Number(result?.skippedRoleCount || 0)
+        const skippedSuffix = skippedRoleCount > 0
+          ? ` ${skippedRoleCount} rôle(s) ignoré(s).`
+          : ''
+
+        if (forcedRoleCount === 0) {
+          return `Aucun OK forcé pour ${targetLabel}.${skippedSuffix}`
+        }
+
+        return `OK forcé: ${forcedRoleCount} rôle(s) sur ${forcedTpiCount} TPI.${skippedSuffix}`
+      },
+      errorFallback: 'Erreur lors du forçage OK.',
+      reloadAfterSuccess: true
+    })
+  }, [executeWorkflowAction, year])
 
   const handleValidatePlanification = useCallback(async () => {
     const loadingToastId = toast.loading(`Vérification ${year} en cours...`, {
@@ -3465,6 +3544,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             onOpenManualResolver={openManualResolver}
             onSelectTpi={setSelectedTpi}
             onForceVoteSlot={handleForceVoteSlot}
+            onForceVoteOk={handleForceVoteOk}
             onReviewVoteProposalMove={handleReviewVoteProposalMove}
             onOpenResolutionProposal={handleOpenResolutionProposal}
             onInsertProposalPreference={handleInsertProposalPreference}
@@ -3983,12 +4063,30 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
                   <div className="planning-detail-role-grid">
                     {selectedTpiVoteEntries.map((entry) => {
                       const tone = getVoteRoleTone(entry.status)
+                      const canForceOk = selectedTpiCanForceOkByRole[entry.role] === true
 
                       return (
-                        <span key={entry.role} className={`planning-detail-role is-${tone}`}>
+                        <div key={entry.role} className={`planning-detail-role is-${tone}`}>
                           <strong>{entry.label}</strong>
                           <span>{getVoteRoleStatusLabel(entry.status)}</span>
-                        </span>
+                          {canForceOk ? (
+                            <button
+                              type="button"
+                              className="planning-detail-role-force"
+                              onClick={() => handleForceVoteOk({
+                                roles: [entry.role],
+                                tpiIds: [selectedTpi._id],
+                                onlyMissing: false,
+                                label: `${entry.label} de ${compactText(selectedTpi.reference) || 'ce TPI'}`
+                              })}
+                              disabled={workflowActionLoading}
+                              title={`Forcer OK pour ${entry.label}.`}
+                              aria-label={`Forcer OK pour ${entry.label}.`}
+                            >
+                              OK
+                            </button>
+                          ) : null}
+                        </div>
                       )
                     })}
                   </div>

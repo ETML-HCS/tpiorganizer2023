@@ -2,7 +2,50 @@ const normalizeClassValue = (value) => String(value || "").trim().toUpperCase();
 
 export const isMatuClass = (value) => normalizeClassValue(value).startsWith("M");
 
-export const inferRoomClassMode = ({ roomName, roomDateEntry, allowedPrefixes }) => {
+export const normalizeRoomClassModeValue = (value) => {
+  const normalizedValue = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  if (normalizedValue === "matu" || normalizedValue === "mat" || normalizedValue === "m") {
+    return "matu";
+  }
+
+  if (
+    normalizedValue === "nonm" ||
+    normalizedValue === "nonmatu" ||
+    normalizedValue === "cfc" ||
+    normalizedValue === "autre" ||
+    normalizedValue === "other" ||
+    normalizedValue === "special"
+  ) {
+    return "nonM";
+  }
+
+  return null;
+};
+
+export const inferRoomClassMode = ({
+  roomName,
+  roomDateEntry,
+  allowedPrefixes,
+  roomClassMode,
+  classMode,
+  room
+}) => {
+  const explicitMode = normalizeRoomClassModeValue(
+    roomClassMode ?? classMode ?? room?.roomClassMode ?? room?.classMode
+  );
+
+  if (explicitMode) {
+    return explicitMode;
+  }
+
   if (roomDateEntry && typeof roomDateEntry === "object") {
     if (roomDateEntry.min === true) {
       return "matu";

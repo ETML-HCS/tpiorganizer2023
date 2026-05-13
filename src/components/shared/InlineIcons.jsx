@@ -315,6 +315,14 @@ export const KeyIcon = (props) => (
   </svg>
 )
 
+export const LockIcon = (props) => (
+  <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
+    <rect x='5' y='10' width='14' height='10' rx='2' />
+    <path d='M8 10V7a4 4 0 0 1 8 0v3' />
+    <path d='M12 14v2.5' />
+  </svg>
+)
+
 export const TestTubeIcon = (props) => (
   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false' {...iconProps} {...props}>
     <path d='M9 3h6' />

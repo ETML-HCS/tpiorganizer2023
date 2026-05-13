@@ -49,9 +49,44 @@ const DEFAULT_ACCESS_LINK_SETTINGS = Object.freeze({
 const CANDIDATE_ROLE_LABEL = getTpiRelationRoleLabel('candidat')
 const ACCESS_EMAIL_DELIVERY_STORAGE_KEY = STORAGE_KEYS.ACCESS_LINK_EMAIL_DELIVERIES || 'accessLinkEmailDeliveries'
 const ACCESS_EMAIL_DELIVERY_MODE_STORAGE_KEY = 'accessLinkSoutenanceEmailDeliveryMode'
+const ACCESS_EMAIL_MESSAGE_TYPE_STORAGE_KEY = 'accessLinkSoutenanceEmailMessageType'
 const ACCESS_EMAIL_DELIVERY_MODES = Object.freeze({
   SMTP: 'smtp',
   OUTLOOK: 'outlook'
+})
+const ACCESS_EMAIL_MESSAGE_TYPES = Object.freeze({
+  STANDARD: 'standard',
+  SCHEDULE_UPDATE: 'schedule_update'
+})
+const ACCESS_AUDIT_ACTION_LABELS = Object.freeze({
+  'workflow.access-links.generate': 'Génération accès',
+  'workflow.access-links.reconcile': 'Rattrapage défense',
+  'workflow.access-links.email-send': 'Email HTML',
+  'workflow.access-links.email-test': 'Test email HTML',
+  'workflow.access-links.email-reset': 'Reset emails',
+  'workflow.publication.publish': 'Publication défense',
+  'workflow.publication.send-links': 'Envoi liens défense',
+  'workflow.publication.defense-changes.send': 'Notif. changements',
+  'workflow.staticPublication.generate': 'Site défense',
+  'workflow.staticPublication.publish': 'Publication site défense',
+  'workflow.staticVotes.generate': 'Site votes',
+  'workflow.staticVotes.publish': 'Publication site votes',
+  'workflow.staticVotes.sync': 'Sync site votes'
+})
+const ACCESS_AUDIT_ACTIONS = new Set(Object.keys(ACCESS_AUDIT_ACTION_LABELS))
+const ACCESS_LOG_STATUS_LABELS = Object.freeze({
+  success: 'Succès',
+  invalid: 'Invalide',
+  not_found: 'Introuvable',
+  revoked: 'Révoqué',
+  expired: 'Expiré',
+  exhausted: 'Épuisé',
+  error: 'Erreur'
+})
+const ACCESS_LOG_TYPE_LABELS = Object.freeze({
+  vote: 'Vote',
+  soutenance: 'Défense',
+  arbitrage: 'Arbitrage'
 })
 
 function isPlainObject(value) {
@@ -112,6 +147,15 @@ function getStoredSoutenanceEmailDeliveryMode() {
   ) === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
     ? ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
     : ACCESS_EMAIL_DELIVERY_MODES.SMTP
+}
+
+function getStoredSoutenanceEmailMessageType() {
+  return readStorageValue(
+    ACCESS_EMAIL_MESSAGE_TYPE_STORAGE_KEY,
+    ACCESS_EMAIL_MESSAGE_TYPES.STANDARD
+  ) === ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
+    ? ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
+    : ACCESS_EMAIL_MESSAGE_TYPES.STANDARD
 }
 
 function getStoredAccessYear() {
@@ -313,6 +357,78 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+function isAccessAuditEvent(event) {
+  return ACCESS_AUDIT_ACTIONS.has(compactText(event?.action))
+}
+
+function getAccessAuditActionLabel(action) {
+  const normalizedAction = compactText(action)
+  return ACCESS_AUDIT_ACTION_LABELS[normalizedAction] || normalizedAction || 'Action inconnue'
+}
+
+function getAccessAuditDetail(event = {}) {
+  const action = compactText(event.action)
+  const payload = isPlainObject(event.payload) ? event.payload : {}
+  const summary = isPlainObject(payload.summary) ? payload.summary : {}
+
+  if (action === 'workflow.access-links.generate') {
+    return `${summary.generatedLinkCount || 0} accès disponibles`
+  }
+
+  if (action === 'workflow.access-links.reconcile') {
+    return `${summary.soutenanceGeneratedLinkCount || 0}/${summary.soutenanceLinkCount || 0} défenses disponibles`
+  }
+
+  if (action === 'workflow.access-links.email-send' || action === 'workflow.access-links.email-test') {
+    return `${payload.sentCount || 0}/${payload.requestedCount || 0} envoyé(s)${
+      payload.failedCount ? `, ${payload.failedCount} échec(s)` : ''
+    }`
+  }
+
+  if (action === 'workflow.access-links.email-reset') {
+    return `${payload.modifiedCount || 0} statut(s) reset`
+  }
+
+  if (action === 'workflow.publication.publish') {
+    const publicationVersion = payload.publicationVersion || payload.version || summary.publicationVersion
+    return publicationVersion ? `Publication v${publicationVersion}` : 'Publication défense'
+  }
+
+  if (action === 'workflow.publication.send-links') {
+    return `${payload.emailsSucceeded || payload.emailsSent || 0} email(s) transmis`
+  }
+
+  if (action.startsWith('workflow.static')) {
+    return payload.publicUrl || payload.outputDir || 'Mini-site mis à jour'
+  }
+
+  if (event.error) {
+    return event.error
+  }
+
+  return 'Action enregistrée'
+}
+
+function getAccessLogStatusLabel(status) {
+  const normalizedStatus = compactText(status)
+  return ACCESS_LOG_STATUS_LABELS[normalizedStatus] || normalizedStatus || 'Statut inconnu'
+}
+
+function getAccessLogTypeLabel(type) {
+  const normalizedType = compactText(type)
+  return ACCESS_LOG_TYPE_LABELS[normalizedType] || normalizedType || 'Lien'
+}
+
+function getAccessLogDetail(log = {}) {
+  const identity = compactText(log.recipientEmail) ||
+    compactText(log.role) ||
+    compactText(log.redirectPath) ||
+    'Destinataire inconnu'
+  const reason = compactText(log.reason)
+
+  return reason ? `${identity} - ${reason}` : identity
 }
 
 function isPastDate(value) {
@@ -756,6 +872,14 @@ function isSoutenanceEmailTargetOutlookSendable(target) {
   )
 }
 
+function isSoutenanceEmailTargetRelanceable(target) {
+  return Boolean(
+    target?.deliveryKey &&
+    compactText(target?.link?.id) &&
+    canPrepareAccessEmail(target?.person, target?.link)
+  )
+}
+
 function buildSoutenanceEmailAutomationGroup(targets = []) {
   const normalizedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
   const pendingTargets = normalizedTargets.filter(isSoutenanceEmailTargetSmtpSendable)
@@ -1131,10 +1255,11 @@ function getEmailDeliveryDisplayMeta(delivery, canPrepareEmail) {
   }
 }
 
-function buildAccessEmailDraft({ year, person, link, phase, label, subtitle }) {
+function buildAccessEmailDraft({ year, person, link, phase, label, subtitle, messageType = ACCESS_EMAIL_MESSAGE_TYPES.STANDARD }) {
   const personName = compactText(person?.name)
   const greeting = personName ? `Bonjour ${personName},` : 'Bonjour,'
   const url = getAccessLinkUrl(link)
+  const isScheduleUpdateMessage = messageType === ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
   const reference = compactText(link?.reference || label)
   const expiryValue = link?.expiresAt
     ? formatDateTime(link.expiresAt)
@@ -1178,6 +1303,46 @@ function buildAccessEmailDraft({ year, person, link, phase, label, subtitle }) {
     phase === 'arbitrage' && link?.proposedSlotLabel ? `Créneau proposé: ${link.proposedSlotLabel}` : '',
     phase === 'vote' && tpiLines.length > 0 ? `Dossiers concernés:\n${tpiLines.map((line) => `- ${line}`).join('\n')}` : ''
   ].filter(Boolean)
+
+  if (phase === 'soutenance' && isScheduleUpdateMessage) {
+    return {
+      to: compactText(person?.email),
+      subject: `Mise à jour de l’horaire des défenses TPI ${year}`,
+      body: [
+        greeting,
+        '',
+        `Nous avons modifié l’horaire des défenses TPI ${year}.`,
+        '',
+        'Merci de contrôler votre vue personnelle avec le lien ci-dessous et de vérifier si les modifications vous conviennent.',
+        '',
+        'Lien personnel',
+        url,
+        '',
+        'Ce qu’il faut vérifier',
+        '- la date, l’heure et la salle de vos défenses;',
+        '- les éventuelles adaptations depuis la dernière publication;',
+        '- votre calendrier personnel ou professionnel.',
+        '',
+        ...(soutenanceResponseDeadlineCopy
+          ? [
+              'Retour attendu',
+              soutenanceResponseDeadlineCopy.replace('uniquement si une modification est indispensable', 'si la nouvelle planification pose un empêchement réel'),
+              ''
+            ]
+          : []),
+        'Si tout est en ordre, aucune action n’est nécessaire.',
+        '',
+        'Si une modification vous pose un problème important, utilisez le formulaire accessible depuis votre lien personnel. Les possibilités de déplacement restent limitées et aucune nouvelle adaptation ne peut être garantie.',
+        '',
+        'Validité du lien',
+        `${expiryValue}.`,
+        '',
+        'Ce lien est personnel.',
+        '',
+        'Meilleures salutations'
+      ].join('\n')
+    }
+  }
 
   if (phase === 'soutenance') {
     return {
@@ -1266,10 +1431,16 @@ function openMailtoDraft(mailtoUrl) {
   }
 }
 
-function buildOutlookPreparedDeliveryEntry({ target, preparedAt, recipientEmail = '' }) {
+function buildOutlookPreparedDeliveryEntry({
+  target,
+  preparedAt,
+  recipientEmail = '',
+  messageType = ACCESS_EMAIL_MESSAGE_TYPES.STANDARD
+}) {
   return {
     status: 'prepared',
     source: 'outlook',
+    messageType,
     preparedAt,
     recipientEmail: compactText(recipientEmail || target?.person?.email),
     linkType: target?.phase || 'soutenance',
@@ -1365,6 +1536,180 @@ const AccessOverviewCard = ({ item }) => {
       <strong>{item.value}</strong>
       {item.detail ? <small>{item.detail}</small> : null}
     </article>
+  )
+}
+
+const AccessPublicationDiagnostic = ({ context = {}, summary = {} }) => {
+  const publicationVersion = context?.publicationVersion || null
+  const linkCount = Number(summary?.soutenanceLinkCount || context?.linkCount || 0)
+  const generatedCount = Number(summary?.soutenanceGeneratedLinkCount || context?.generatedLinkCount || 0)
+  const pendingCount = Math.max(linkCount - generatedCount, 0)
+  const versions = Array.isArray(context?.availableVersions) ? context.availableVersions : []
+  const activeVersion = versions.find((version) => version.version === publicationVersion) || null
+  const reusablePreviousVersions = versions
+    .filter((version) => version.version !== publicationVersion)
+    .filter((version) => Number(version.recoverableGeneratedLinkCount || version.generatedLinkCount || 0) > 0)
+    .slice(0, 3)
+
+  return (
+    <div className={`token-access-publication-diagnostic${pendingCount > 0 ? ' has-gap' : ''}`.trim()}>
+      <div className='token-access-publication-diagnostic-head'>
+        <h3>Publication active</h3>
+        <strong>{publicationVersion ? `v${publicationVersion}` : 'Absente'}</strong>
+      </div>
+      <div className='token-access-publication-diagnostic-grid'>
+        <span>
+          <strong>{context?.roomsCount || 0}</strong>
+          salle{Number(context?.roomsCount || 0) > 1 ? 's' : ''}
+        </span>
+        <span>
+          <strong>{generatedCount}/{linkCount}</strong>
+          liens défense
+        </span>
+        <span>
+          <strong>{context?.linkTarget === 'publication' ? 'Site' : 'Local'}</strong>
+          cible
+        </span>
+      </div>
+      {pendingCount > 0 ? (
+        <p>
+          {pendingCount} lien{pendingCount > 1 ? 's' : ''} manquant{pendingCount > 1 ? 's' : ''} pour la publication active.
+        </p>
+      ) : activeVersion ? (
+        <p>La publication active dispose de liens récupérables pour la cible courante.</p>
+      ) : null}
+      {reusablePreviousVersions.length > 0 ? (
+        <small>
+          Anciennes versions avec liens: {reusablePreviousVersions.map((version) => `v${version.version}`).join(', ')}
+        </small>
+      ) : null}
+    </div>
+  )
+}
+
+const AccessAuditPanel = ({
+  events = [],
+  isLoading = false,
+  error = '',
+  onRefresh = null
+}) => {
+  const accessEvents = Array.isArray(events)
+    ? events.filter(isAccessAuditEvent).slice(0, 6)
+    : []
+
+  return (
+    <div className={`token-access-audit-panel${error ? ' has-error' : ''}`.trim()}>
+      <div className='token-access-audit-head'>
+        <span className='token-access-audit-icon' aria-hidden='true'>
+          <WorkflowIcon />
+        </span>
+        <div>
+          <h3>Historique</h3>
+          <p>
+            {isLoading
+              ? 'Chargement...'
+              : `${accessEvents.length} action${accessEvents.length > 1 ? 's' : ''} récente${accessEvents.length > 1 ? 's' : ''}`}
+          </p>
+        </div>
+        <button
+          type='button'
+          className='token-access-icon-btn secondary token-access-audit-refresh'
+          onClick={onRefresh}
+          disabled={isLoading}
+          aria-label='Rafraîchir l’historique des accès'
+          title='Rafraîchir l’historique des accès'
+        >
+          <IconButtonContent label='Rafraîchir l’historique des accès' icon={RefreshIcon} />
+        </button>
+      </div>
+      {error ? (
+        <p className='token-access-audit-empty'>{error}</p>
+      ) : accessEvents.length > 0 ? (
+        <ol className='token-access-audit-list' aria-label='Dernières actions liens d’accès'>
+          {accessEvents.map((event, index) => (
+            <li
+              key={event.id || event._id || `${event.action}-${event.createdAt}-${index}`}
+              className={event.success === false ? 'is-failed' : 'is-success'}
+            >
+              <span className='token-access-audit-status' aria-hidden='true' />
+              <span>
+                <strong>{getAccessAuditActionLabel(event.action)}</strong>
+                <small>{getAccessAuditDetail(event)}</small>
+              </span>
+              <time dateTime={event.createdAt || undefined}>{formatDateTime(event.createdAt)}</time>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className='token-access-audit-empty'>
+          Aucune action récente sur les accès.
+        </p>
+      )}
+    </div>
+  )
+}
+
+const AccessUsagePanel = ({
+  logs = [],
+  isLoading = false,
+  error = '',
+  onRefresh = null
+}) => {
+  const accessLogs = Array.isArray(logs) ? logs.slice(0, 6) : []
+  const successCount = accessLogs.filter((log) => log?.status === 'success').length
+  const issueCount = Math.max(accessLogs.length - successCount, 0)
+
+  return (
+    <div className={`token-access-audit-panel token-access-usage-panel${error ? ' has-error' : ''}`.trim()}>
+      <div className='token-access-audit-head'>
+        <span className='token-access-audit-icon' aria-hidden='true'>
+          <KeyIcon />
+        </span>
+        <div>
+          <h3>Ouvertures</h3>
+          <p>
+            {isLoading
+              ? 'Chargement...'
+              : accessLogs.length > 0
+                ? `${successCount} succès, ${issueCount} incident${issueCount > 1 ? 's' : ''}`
+                : 'Aucune ouverture récente'}
+          </p>
+        </div>
+        <button
+          type='button'
+          className='token-access-icon-btn secondary token-access-audit-refresh'
+          onClick={onRefresh}
+          disabled={isLoading}
+          aria-label='Rafraîchir les ouvertures des liens'
+          title='Rafraîchir les ouvertures des liens'
+        >
+          <IconButtonContent label='Rafraîchir les ouvertures des liens' icon={RefreshIcon} />
+        </button>
+      </div>
+      {error ? (
+        <p className='token-access-audit-empty'>{error}</p>
+      ) : accessLogs.length > 0 ? (
+        <ol className='token-access-audit-list' aria-label='Dernières ouvertures des liens d’accès'>
+          {accessLogs.map((log, index) => (
+            <li
+              key={log.id || `${log.status}-${log.createdAt}-${index}`}
+              className={log.status === 'success' ? 'is-success' : 'is-failed'}
+            >
+              <span className='token-access-audit-status' aria-hidden='true' />
+              <span>
+                <strong>{getAccessLogTypeLabel(log.type)} - {getAccessLogStatusLabel(log.status)}</strong>
+                <small>{getAccessLogDetail(log)}</small>
+              </span>
+              <time dateTime={log.createdAt || undefined}>{formatDateTime(log.createdAt)}</time>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className='token-access-audit-empty'>
+          Aucun lien n’a été ouvert récemment.
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -1875,6 +2220,7 @@ const PersonCard = ({
 
 const SoutenanceEmailAutomationPanel = ({
   targets = [],
+  summary = null,
   selectedKeys = {},
   selectedCount = 0,
   pendingCount = 0,
@@ -1882,6 +2228,7 @@ const SoutenanceEmailAutomationPanel = ({
   sentCount = 0,
   preparedCount = 0,
   deliveryMode = ACCESS_EMAIL_DELIVERY_MODES.SMTP,
+  messageType = ACCESS_EMAIL_MESSAGE_TYPES.STANDARD,
   projectLeadGroup = {},
   expertGroup = {},
   preview = null,
@@ -1898,12 +2245,17 @@ const SoutenanceEmailAutomationPanel = ({
   onResetDeliveries,
   onResetOutlookPrepared,
   onDeliveryModeChange,
+  onMessageTypeChange,
   onTestEmailChange,
   onToggleTarget,
   onSelectPending,
   onClearSelection,
+  onSendTarget,
   onOpenNextOutlookDraft,
   onClearOutlookQueue,
+  canReconcileMissingLinks = false,
+  isReconcilingMissingLinks = false,
+  onReconcileMissingLinks = null,
   onCollapse
 }) => {
   const hasTargets = targets.length > 0
@@ -1913,23 +2265,38 @@ const SoutenanceEmailAutomationPanel = ({
   const selectedLabel = selectedCount === 1 ? 'sélectionné' : 'sélectionnés'
   const contactLabel = targetCount === 1 ? 'contact' : 'contacts'
   const isOutlookMode = deliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
-  const effectivePendingCount = isOutlookMode
+  const isScheduleUpdateMessage = messageType === ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
+  const relanceableCount = targets.filter(isSoutenanceEmailTargetRelanceable).length
+  const effectivePendingCount = isScheduleUpdateMessage
+    ? relanceableCount
+    : isOutlookMode
     ? targets.filter(isSoutenanceEmailTargetOutlookSendable).length
     : pendingCount
-  const projectLeadPendingCount = isOutlookMode
+  const projectLeadPendingCount = isScheduleUpdateMessage
+    ? (projectLeadGroup.targets || []).filter(isSoutenanceEmailTargetRelanceable).length
+    : isOutlookMode
     ? (projectLeadGroup.outlookPendingCount || 0)
     : (projectLeadGroup.pendingCount || 0)
-  const expertPendingCount = isOutlookMode
+  const expertPendingCount = isScheduleUpdateMessage
+    ? (expertGroup.targets || []).filter(isSoutenanceEmailTargetRelanceable).length
+    : isOutlookMode
     ? (expertGroup.outlookPendingCount || 0)
     : (expertGroup.pendingCount || 0)
   const handledCount = isOutlookMode ? preparedCount : sentCount
   const handledLabel = isOutlookMode ? 'préparés' : 'transmis'
-  const pendingLabel = isOutlookMode ? 'à préparer' : 'à envoyer'
-  const transportLabel = isOutlookMode ? 'à préparer dans Outlook' : 'à transmettre par SMTP'
+  const pendingLabel = isScheduleUpdateMessage ? 'à relancer' : isOutlookMode ? 'à préparer' : 'à envoyer'
+  const transportLabel = isScheduleUpdateMessage
+    ? (isOutlookMode ? 'à relancer dans Outlook' : 'à relancer par SMTP')
+    : isOutlookMode ? 'à préparer dans Outlook' : 'à transmettre par SMTP'
   const resetActionCount = isOutlookMode ? preparedCount : resettableCount
   const resetActionLabel = isOutlookMode ? 'Reset Outlook' : 'Reset envois'
   const resetActionHandler = isOutlookMode ? onResetOutlookPrepared : onResetDeliveries
   const hasOutlookQueue = isOutlookMode && outlookQueueCount > 0
+  const expectedSoutenanceLinkCount = Number.parseInt(String(summary?.soutenanceLinkCount || 0), 10) || 0
+  const generatedSoutenanceLinkCount = Number.parseInt(String(summary?.soutenanceGeneratedLinkCount || 0), 10) || 0
+  const missingGeneratedSoutenanceLinks = !hasTargets &&
+    expectedSoutenanceLinkCount > 0 &&
+    generatedSoutenanceLinkCount === 0
 
   return (
     <section id='token-access-email-automation-panel' className='token-access-email-automation' aria-label='Envoi automatique des emails défense'>
@@ -1959,21 +2326,40 @@ const SoutenanceEmailAutomationPanel = ({
             reset
           </span>
         </div>
-        <label className={`token-access-email-mode-toggle${isOutlookMode ? ' is-active' : ''}`.trim()}>
-          <input
-            type='checkbox'
-            checked={isOutlookMode}
-            aria-label='Utiliser Outlook pour transmettre les emails HTML défense'
-            onChange={(event) => onDeliveryModeChange?.(
-              event.target.checked ? ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK : ACCESS_EMAIL_DELIVERY_MODES.SMTP
-            )}
-          />
-          <span>
-            <strong>{isOutlookMode ? 'Outlook' : 'SMTP'}</strong>
-            <small>{isOutlookMode ? 'manuel' : 'serveur'}</small>
-          </span>
-          <i aria-hidden='true' />
-        </label>
+        <div className='token-access-email-mode-controls'>
+          <label className={`token-access-email-mode-toggle${isOutlookMode ? ' is-active' : ''}`.trim()}>
+            <input
+              type='checkbox'
+              checked={isOutlookMode}
+              aria-label='Utiliser Outlook pour transmettre les emails HTML défense'
+              onChange={(event) => onDeliveryModeChange?.(
+                event.target.checked ? ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK : ACCESS_EMAIL_DELIVERY_MODES.SMTP
+              )}
+            />
+            <span>
+              <strong>{isOutlookMode ? 'Outlook' : 'SMTP'}</strong>
+              <small>{isOutlookMode ? 'manuel' : 'serveur'}</small>
+            </span>
+            <i aria-hidden='true' />
+          </label>
+          <label className={`token-access-email-mode-toggle${isScheduleUpdateMessage ? ' is-active' : ''}`.trim()}>
+            <input
+              type='checkbox'
+              checked={isScheduleUpdateMessage}
+              aria-label='Utiliser le message de modification d’horaire'
+              onChange={(event) => onMessageTypeChange?.(
+                event.target.checked
+                  ? ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
+                  : ACCESS_EMAIL_MESSAGE_TYPES.STANDARD
+              )}
+            />
+            <span>
+              <strong>{isScheduleUpdateMessage ? 'Horaire modifié' : 'Horaire publié'}</strong>
+              <small>{isScheduleUpdateMessage ? 'relance' : 'standard'}</small>
+            </span>
+            <i aria-hidden='true' />
+          </label>
+        </div>
         <button
           type='button'
           className='token-access-icon-btn secondary token-access-email-automation-close'
@@ -2158,18 +2544,46 @@ const SoutenanceEmailAutomationPanel = ({
           </div>
           <div className='token-access-email-book' role='list' aria-label='Carnet d’adresses défense'>
             {targets.length === 0 ? (
-              <p className='token-access-email-book-empty'>
-                Aucun lien de défense disponible.
-              </p>
+              <div className='token-access-email-book-empty'>
+                <span>
+                  {missingGeneratedSoutenanceLinks
+                    ? `${expectedSoutenanceLinkCount} lien(s) défense sont préparés, mais aucun accès n’est encore généré. Créez les liens manquants avant d’utiliser les emails HTML.`
+                    : 'Aucun lien de défense disponible.'}
+                </span>
+                {missingGeneratedSoutenanceLinks && canReconcileMissingLinks ? (
+                  <button
+                    type='button'
+                    className='token-access-email-pill-button is-primary'
+                    onClick={onReconcileMissingLinks}
+                    disabled={isReconcilingMissingLinks}
+                  >
+                    <IconButtonContent
+                      label={isReconcilingMissingLinks ? 'Rattrapage...' : 'Créer les liens manquants'}
+                      icon={RefreshIcon}
+                      showLabel
+                    />
+                  </button>
+                ) : null}
+              </div>
             ) : targets.map((target) => {
               const deliveryMeta = getEmailDeliveryDisplayMeta(target.delivery, true)
               const isChecked = selectedKeys[target.deliveryKey] === true
+              const isHandled = isEmailDeliverySent(target.delivery) || isEmailDeliveryPrepared(target.delivery)
               const isSendable = isOutlookMode
                 ? isSoutenanceEmailTargetOutlookSendable(target)
                 : isSoutenanceEmailTargetSmtpSendable(target)
+              const isRelanceable = isSoutenanceEmailTargetRelanceable(target)
+              const isSelectable = isScheduleUpdateMessage ? isRelanceable : isSendable
+              const canTriggerTarget = isRelanceable && !isSending && !hasOutlookQueue && (
+                isScheduleUpdateMessage || isSendable || isHandled
+              )
+              const targetActionLabel = isScheduleUpdateMessage || isHandled
+                ? 'Relancer'
+                : isOutlookMode ? 'Préparer' : 'Envoyer'
+              const targetName = target.person?.name || target.person?.email || 'destinataire'
 
               return (
-                <label
+                <div
                   key={target.deliveryKey}
                   className={`token-access-email-book-row is-${deliveryMeta.variant}${isChecked ? ' is-selected' : ''}`.trim()}
                   role='listitem'
@@ -2177,7 +2591,8 @@ const SoutenanceEmailAutomationPanel = ({
                   <input
                     type='checkbox'
                     checked={isChecked}
-                    disabled={!isSendable || isSending}
+                    disabled={!isSelectable || isSending}
+                    aria-label={`Sélectionner ${targetName}`}
                     onChange={(event) => onToggleTarget?.(target.deliveryKey, event.target.checked)}
                   />
                   <span className='token-access-email-book-person'>
@@ -2188,9 +2603,20 @@ const SoutenanceEmailAutomationPanel = ({
                     {target.audienceLabel}
                   </span>
                   <span className={`token-access-email-book-state is-${deliveryMeta.variant}`.trim()}>
-                    {isSendable ? pendingLabel.charAt(0).toUpperCase() + pendingLabel.slice(1) : deliveryMeta.label}
+                    {isSelectable ? pendingLabel.charAt(0).toUpperCase() + pendingLabel.slice(1) : deliveryMeta.label}
                   </span>
-                </label>
+                  <button
+                    type='button'
+                    className='token-access-email-book-action'
+                    onClick={() => onSendTarget?.(target)}
+                    disabled={!canTriggerTarget}
+                    title={`${targetActionLabel} ${targetName}`}
+                    aria-label={`${targetActionLabel} ${targetName}`}
+                  >
+                    <MailIcon aria-hidden='true' />
+                    <span>{targetActionLabel}</span>
+                  </button>
+                </div>
               )
             })}
           </div>
@@ -2222,7 +2648,12 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const location = useLocation()
   const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const requestedLinkType = queryParams.get('phase') || queryParams.get('type')
+  const isMountedRef = useRef(false)
   const accessLinkRequestIdRef = useRef(0)
+  const accessAuditRequestIdRef = useRef(0)
+  const accessUsageRequestIdRef = useRef(0)
+  const soutenanceOutlookDraftQueueRef = useRef([])
+  const soutenanceOutlookPreparedKeysRef = useRef(new Set())
   const [selectedYear, setSelectedYear] = useState(() => (
     getStoredAccessYear() || YEARS_CONFIG.getCurrentYear()
   ))
@@ -2251,10 +2682,32 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const [selectedSoutenanceEmailKeys, setSelectedSoutenanceEmailKeys] = useState({})
   const [soutenanceEmailPreview, setSoutenanceEmailPreview] = useState(null)
   const [soutenanceEmailDeliveryMode, setSoutenanceEmailDeliveryMode] = useState(getStoredSoutenanceEmailDeliveryMode)
+  const [soutenanceEmailMessageType, setSoutenanceEmailMessageType] = useState(getStoredSoutenanceEmailMessageType)
   const [soutenanceOutlookDraftQueue, setSoutenanceOutlookDraftQueue] = useState([])
   const [testEmailAddress, setTestEmailAddress] = useState('')
   const [isEmailPreviewLoading, setIsEmailPreviewLoading] = useState(false)
   const [isAutomaticEmailSending, setIsAutomaticEmailSending] = useState(false)
+  const [isReconcilingSoutenanceLinks, setIsReconcilingSoutenanceLinks] = useState(false)
+  const [accessAuditEvents, setAccessAuditEvents] = useState([])
+  const [isAccessAuditLoading, setIsAccessAuditLoading] = useState(false)
+  const [accessAuditError, setAccessAuditError] = useState('')
+  const [accessUsageLogs, setAccessUsageLogs] = useState([])
+  const [isAccessUsageLoading, setIsAccessUsageLoading] = useState(false)
+  const [accessUsageError, setAccessUsageError] = useState('')
+
+  const replaceSoutenanceOutlookDraftQueue = useCallback((queue) => {
+    const nextQueue = Array.isArray(queue) ? queue.filter(Boolean) : []
+    soutenanceOutlookDraftQueueRef.current = nextQueue
+    setSoutenanceOutlookDraftQueue(nextQueue)
+  }, [])
+
+  useEffect(() => {
+    isMountedRef.current = true
+
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -2296,7 +2749,21 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
   useEffect(() => {
     setEmailDeliveryLedger(readAccessEmailDeliveryLedger(selectedYear))
-  }, [selectedYear])
+    replaceSoutenanceOutlookDraftQueue([])
+  }, [replaceSoutenanceOutlookDraftQueue, selectedYear])
+
+  useEffect(() => {
+    const preparedKeys = new Set()
+    const ledger = isPlainObject(emailDeliveryLedger) ? emailDeliveryLedger : {}
+
+    for (const [deliveryKey, delivery] of Object.entries(ledger)) {
+      if (isLocalOutlookPreparedDelivery(delivery)) {
+        preparedKeys.add(deliveryKey)
+      }
+    }
+
+    soutenanceOutlookPreparedKeysRef.current = preparedKeys
+  }, [emailDeliveryLedger])
 
   useEffect(() => {
     writeStorageValue(STORAGE_KEYS.ACCESS_LINK_SHOW_CANDIDATES, showCandidateBlocks ? 'true' : 'false')
@@ -2305,9 +2772,15 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   useEffect(() => {
     writeStorageValue(ACCESS_EMAIL_DELIVERY_MODE_STORAGE_KEY, soutenanceEmailDeliveryMode)
     if (soutenanceEmailDeliveryMode !== ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
-      setSoutenanceOutlookDraftQueue([])
+      replaceSoutenanceOutlookDraftQueue([])
     }
-  }, [soutenanceEmailDeliveryMode])
+  }, [replaceSoutenanceOutlookDraftQueue, soutenanceEmailDeliveryMode])
+
+  useEffect(() => {
+    writeStorageValue(ACCESS_EMAIL_MESSAGE_TYPE_STORAGE_KEY, soutenanceEmailMessageType)
+    setSoutenanceEmailPreview(null)
+    replaceSoutenanceOutlookDraftQueue([])
+  }, [replaceSoutenanceOutlookDraftQueue, soutenanceEmailMessageType])
 
   useEffect(() => {
     if (ACCESS_PHASE_FILTER_VALUES.has(requestedLinkType)) {
@@ -2468,6 +2941,68 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     }
   }, [selectedYear, accessLinkTargetOptions])
 
+  const loadAccessAudit = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++accessAuditRequestIdRef.current
+    if (!silent) {
+      setIsAccessAuditLoading(true)
+    }
+    setAccessAuditError('')
+
+    try {
+      const result = await workflowCoordinationService.getAudit(selectedYear, 80)
+
+      if (!isMountedRef.current || requestId !== accessAuditRequestIdRef.current) {
+        return
+      }
+
+      setAccessAuditEvents(Array.isArray(result?.events) ? result.events : [])
+    } catch (error) {
+      if (!isMountedRef.current || requestId !== accessAuditRequestIdRef.current) {
+        return
+      }
+
+      setAccessAuditError(
+        error?.data?.error || error?.message || 'Historique indisponible.'
+      )
+    } finally {
+      if (isMountedRef.current && requestId === accessAuditRequestIdRef.current) {
+        setIsAccessAuditLoading(false)
+      }
+    }
+  }, [selectedYear])
+
+  const loadAccessUsageLogs = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++accessUsageRequestIdRef.current
+    if (!silent) {
+      setIsAccessUsageLoading(true)
+    }
+    setAccessUsageError('')
+
+    try {
+      const result = await workflowCoordinationService.getAccessLinkLogs(selectedYear, {
+        limit: 20
+      })
+
+      if (!isMountedRef.current || requestId !== accessUsageRequestIdRef.current) {
+        return
+      }
+
+      setAccessUsageLogs(Array.isArray(result?.logs) ? result.logs : [])
+    } catch (error) {
+      if (!isMountedRef.current || requestId !== accessUsageRequestIdRef.current) {
+        return
+      }
+
+      setAccessUsageError(
+        error?.data?.error || error?.message || 'Ouvertures indisponibles.'
+      )
+    } finally {
+      if (isMountedRef.current && requestId === accessUsageRequestIdRef.current) {
+        setIsAccessUsageLoading(false)
+      }
+    }
+  }, [selectedYear])
+
   const handleGenerateLinks = useCallback(async () => {
     if (
       useVotePublicationSiteLinks &&
@@ -2504,6 +3039,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       }
 
       setPreviewPayload(result)
+      loadAccessAudit({ silent: true })
       setSearchQuery('')
       setLinkTypeFilters(DEFAULT_ACCESS_PHASE_FILTERS)
       const autoPublishedDefenseVersion = result?.contexts?.soutenance?.autoPublishedPublicationVersion
@@ -2532,12 +3068,79 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     }
   }, [
     accessLinkTargetOptions,
+    loadAccessAudit,
     selectedYear,
     useVotePublicationSiteLinks
+  ])
+
+  const handleReconcileSoutenanceAccessLinks = useCallback(async () => {
+    const requestId = ++accessLinkRequestIdRef.current
+    setIsReconcilingSoutenanceLinks(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const result = await workflowCoordinationService.reconcileAccessLinks(
+        selectedYear,
+        window.location.origin,
+        {
+          phases: ['soutenance'],
+          ...accessLinkTargetOptions
+        }
+      )
+
+      if (requestId !== accessLinkRequestIdRef.current) {
+        return
+      }
+
+      setPreviewPayload(result)
+      loadAccessAudit({ silent: true })
+      setSearchQuery('')
+      setLinkTypeFilters(DEFAULT_ACCESS_PHASE_FILTERS)
+      const generatedCount = result?.summary?.soutenanceGeneratedLinkCount || 0
+      const expectedCount = result?.summary?.soutenanceLinkCount || 0
+      setSuccessMessage(
+        `Liens défense réconciliés: ${generatedCount}/${expectedCount} accès disponibles pour la publication active.`
+      )
+    } catch (error) {
+      if (requestId !== accessLinkRequestIdRef.current) {
+        return
+      }
+
+      setErrorMessage(
+        error?.data?.error || error?.message || 'Impossible de réconcilier les liens défense.'
+      )
+    } finally {
+      setIsReconcilingSoutenanceLinks(false)
+    }
+  }, [
+    accessLinkTargetOptions,
+    loadAccessAudit,
+    selectedYear
   ])
   useEffect(() => {
     loadAccessLinksPreview({ silent: true })
   }, [loadAccessLinksPreview])
+
+  useEffect(() => {
+    setAccessAuditEvents([])
+    setAccessAuditError('')
+    setAccessUsageLogs([])
+    setAccessUsageError('')
+  }, [selectedYear])
+
+  useEffect(() => {
+    if (isSummaryPanelCollapsed) {
+      return
+    }
+
+    loadAccessAudit()
+    loadAccessUsageLogs()
+  }, [
+    isSummaryPanelCollapsed,
+    loadAccessAudit,
+    loadAccessUsageLogs
+  ])
 
   const handleCopy = async (url) => {
     try {
@@ -2655,6 +3258,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const selectedSoutenanceEmailTargets = useMemo(() => (
     soutenanceEmailAutomationTargets.filter((target) => selectedSoutenanceEmailKeys[target.deliveryKey] === true)
   ), [selectedSoutenanceEmailKeys, soutenanceEmailAutomationTargets])
+  const isSoutenanceScheduleUpdateMessage = soutenanceEmailMessageType === ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
 
   useEffect(() => {
     const validKeys = new Set(soutenanceEmailAutomationTargets.map((target) => target.deliveryKey))
@@ -2693,7 +3297,9 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
 
   const handleSelectPendingSoutenanceEmails = useCallback(() => {
     const next = {}
-    const pendingTargets = soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
+    const pendingTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.all.targets.filter(isSoutenanceEmailTargetRelanceable)
+      : soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK
       ? soutenanceEmailAutomationGroups.all.outlookPendingTargets
       : soutenanceEmailAutomationGroups.all.pendingTargets
 
@@ -2702,6 +3308,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     }
     setSelectedSoutenanceEmailKeys(next)
   }, [
+    isSoutenanceScheduleUpdateMessage,
+    soutenanceEmailAutomationGroups.all.targets,
     soutenanceEmailAutomationGroups.all.outlookPendingTargets,
     soutenanceEmailAutomationGroups.all.pendingTargets,
     soutenanceEmailDeliveryMode
@@ -2741,7 +3349,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     try {
       const preview = await workflowCoordinationService.previewSoutenanceAccessEmail(
         selectedYear,
-        buildSoutenanceEmailRequestTarget(target)
+        buildSoutenanceEmailRequestTarget(target),
+        { messageType: soutenanceEmailMessageType }
       )
       setSoutenanceEmailPreview(preview)
     } catch (error) {
@@ -2751,9 +3360,9 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsEmailPreviewLoading(false)
     }
-  }, [getDefaultSoutenanceEmailTarget, selectedYear])
+  }, [getDefaultSoutenanceEmailTarget, selectedYear, soutenanceEmailMessageType])
 
-  const applySoutenanceEmailSendResults = useCallback((targets, response, batchLabel) => {
+  const applySoutenanceEmailSendResults = useCallback((targets, response, batchLabel, messageType = ACCESS_EMAIL_MESSAGE_TYPES.STANDARD) => {
     const targetByKey = new Map((Array.isArray(targets) ? targets : []).map((target) => [target.deliveryKey, target]))
     const ledgerEntries = {}
     const sentKeys = new Set()
@@ -2770,6 +3379,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         ledgerEntries[deliveryKey] = {
           status: 'sent',
           source: 'system',
+          messageType,
           sentAt: result.sentAt || new Date().toISOString(),
           recipientEmail: compactText(result.recipientEmail || target.person?.email),
           linkType: 'soutenance',
@@ -2783,6 +3393,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         ledgerEntries[deliveryKey] = {
           status: 'failed',
           source: 'system',
+          messageType,
           recipientEmail: compactText(result.recipientEmail || target.person?.email),
           linkType: 'soutenance',
           linkLabel: target.label,
@@ -2796,6 +3407,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         ledgerEntries[deliveryKey] = {
           status: 'sent',
           source: 'system',
+          messageType,
           sentAt: result.sentAt,
           recipientEmail: compactText(result.recipientEmail || target.person?.email),
           linkType: 'soutenance',
@@ -2833,9 +3445,11 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const handleSendSoutenanceEmailTargets = useCallback(async (targets, batchLabel, options = {}) => {
     const selectedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
     const testEmail = compactText(options.testEmail)
+    const messageType = options.messageType || soutenanceEmailMessageType
+    const forceResend = options.forceResend === true || messageType === ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
     const sendableTargets = testEmail
       ? selectedTargets.filter((target) => compactText(target?.link?.id) && canPrepareAccessEmail(target.person, target.link))
-      : selectedTargets.filter(isSoutenanceEmailTargetSmtpSendable)
+      : selectedTargets.filter(forceResend ? isSoutenanceEmailTargetRelanceable : isSoutenanceEmailTargetSmtpSendable)
 
     if (sendableTargets.length === 0) {
       setErrorMessage(testEmail
@@ -2854,12 +3468,15 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         sendableTargets.map(buildSoutenanceEmailRequestTarget),
         {
           testEmail,
+          messageType,
+          forceResend,
           baseUrl: typeof window !== 'undefined' ? window.location.origin : null
         }
       )
 
+      loadAccessAudit({ silent: true })
       if (!testEmail) {
-        applySoutenanceEmailSendResults(sendableTargets, response, batchLabel)
+        applySoutenanceEmailSendResults(sendableTargets, response, batchLabel, messageType)
         loadAccessLinksPreview({ silent: true })
       }
 
@@ -2891,7 +3508,13 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsAutomaticEmailSending(false)
     }
-  }, [applySoutenanceEmailSendResults, loadAccessLinksPreview, selectedYear])
+  }, [
+    applySoutenanceEmailSendResults,
+    loadAccessAudit,
+    loadAccessLinksPreview,
+    selectedYear,
+    soutenanceEmailMessageType
+  ])
 
   const recordSoutenanceOutlookPreparedTargets = useCallback((items) => {
     const preparedItems = (Array.isArray(items) ? items : [])
@@ -2910,9 +3533,15 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       ledgerEntries[item.target.deliveryKey] = buildOutlookPreparedDeliveryEntry({
         target: item.target,
         preparedAt,
-        recipientEmail: item.recipientEmail
+        recipientEmail: item.recipientEmail,
+        messageType: item.messageType
       })
     }
+
+    soutenanceOutlookPreparedKeysRef.current = new Set([
+      ...soutenanceOutlookPreparedKeysRef.current,
+      ...preparedKeys
+    ])
 
     setEmailDeliveryLedger((current) => {
       const next = {
@@ -2935,9 +3564,33 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const handlePrepareSoutenanceEmailTargets = useCallback((targets, batchLabel, options = {}) => {
     const selectedTargets = Array.isArray(targets) ? targets.filter(Boolean) : []
     const testEmail = compactText(options.testEmail)
+    const messageType = options.messageType || soutenanceEmailMessageType
+    const forceResend = options.forceResend === true || messageType === ACCESS_EMAIL_MESSAGE_TYPES.SCHEDULE_UPDATE
+    const queuedDeliveryKeys = new Set(
+      soutenanceOutlookDraftQueueRef.current
+        .map((item) => compactText(item?.target?.deliveryKey))
+        .filter(Boolean)
+    )
+
+    if (!testEmail && queuedDeliveryKeys.size > 0) {
+      setErrorMessage('Terminez ou annulez la file Outlook en cours avant de relancer un lot.')
+      return
+    }
+
     const preparedTargets = testEmail
       ? selectedTargets.filter((target) => canPrepareAccessEmail(target?.person, target?.link))
-      : selectedTargets.filter(isSoutenanceEmailTargetOutlookSendable)
+      : selectedTargets.filter((target) => {
+        const deliveryKey = compactText(target?.deliveryKey)
+        if (forceResend) {
+          return isSoutenanceEmailTargetRelanceable(target) && !queuedDeliveryKeys.has(deliveryKey)
+        }
+
+        return (
+          isSoutenanceEmailTargetOutlookSendable(target) &&
+          !queuedDeliveryKeys.has(deliveryKey) &&
+          !soutenanceOutlookPreparedKeysRef.current.has(deliveryKey)
+        )
+      })
 
     if (preparedTargets.length === 0) {
       setErrorMessage(testEmail
@@ -2953,7 +3606,8 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         link: target.link,
         phase: target.phase,
         label: target.label,
-        subtitle: target.subtitle
+        subtitle: target.subtitle,
+        messageType
       })
       const recipientEmail = testEmail || compactText(target.person?.email)
 
@@ -2964,6 +3618,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         batchTotal: preparedTargets.length,
         batchIndex: index,
         testEmail: Boolean(testEmail),
+        messageType,
         mailtoUrl: buildMailtoUrl({
           ...draft,
           to: recipientEmail
@@ -2976,9 +3631,9 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       return
     }
 
+    replaceSoutenanceOutlookDraftQueue(queuedDrafts)
     openMailtoDraft(firstDraft.mailtoUrl)
     recordSoutenanceOutlookPreparedTargets([firstDraft])
-    setSoutenanceOutlookDraftQueue(queuedDrafts)
 
     setErrorMessage('')
     if (testEmail) {
@@ -2991,17 +3646,22 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     setSuccessMessage(queuedDrafts.length > 0
       ? `1/${preparedTargets.length} brouillon(s) Outlook ouvert(s) pour ${batchLabel}. Cliquez sur “Ouvrir brouillon suivant” pour continuer.`
       : `${preparedTargets.length} brouillon(s) Outlook préparé(s) pour ${batchLabel}.`)
-  }, [recordSoutenanceOutlookPreparedTargets, selectedYear])
+  }, [
+    recordSoutenanceOutlookPreparedTargets,
+    replaceSoutenanceOutlookDraftQueue,
+    selectedYear,
+    soutenanceEmailMessageType
+  ])
 
   const handleOpenNextSoutenanceOutlookDraft = useCallback(() => {
-    const [nextDraft, ...remainingDrafts] = soutenanceOutlookDraftQueue
+    const [nextDraft, ...remainingDrafts] = soutenanceOutlookDraftQueueRef.current
     if (!nextDraft) {
       return
     }
 
+    replaceSoutenanceOutlookDraftQueue(remainingDrafts)
     openMailtoDraft(nextDraft.mailtoUrl)
     recordSoutenanceOutlookPreparedTargets([nextDraft])
-    setSoutenanceOutlookDraftQueue(remainingDrafts)
     setErrorMessage('')
 
     const openedCount = Math.max(1, Number(nextDraft.batchTotal || 0) - remainingDrafts.length)
@@ -3010,110 +3670,189 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       : `${nextDraft.batchTotal} brouillon(s) Outlook préparé(s) pour ${nextDraft.batchLabel}.`)
   }, [
     recordSoutenanceOutlookPreparedTargets,
-    soutenanceOutlookDraftQueue
+    replaceSoutenanceOutlookDraftQueue
   ])
 
   const handleClearSoutenanceOutlookDraftQueue = useCallback(() => {
-    setSoutenanceOutlookDraftQueue([])
+    replaceSoutenanceOutlookDraftQueue([])
     setErrorMessage('')
     setSuccessMessage('File Outlook annulée.')
-  }, [])
+  }, [replaceSoutenanceOutlookDraftQueue])
 
   const handleSendSelectedSoutenanceEmails = useCallback(() => {
+    const options = {
+      messageType: soutenanceEmailMessageType,
+      forceResend: isSoutenanceScheduleUpdateMessage
+    }
+
     if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
-      handlePrepareSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection')
+      handlePrepareSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection', options)
       return
     }
 
-    handleSendSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection')
+    handleSendSoutenanceEmailTargets(selectedSoutenanceEmailTargets, 'la sélection', options)
   }, [
     handlePrepareSoutenanceEmailTargets,
     handleSendSoutenanceEmailTargets,
+    isSoutenanceScheduleUpdateMessage,
     selectedSoutenanceEmailTargets,
-    soutenanceEmailDeliveryMode
+    soutenanceEmailDeliveryMode,
+    soutenanceEmailMessageType
   ])
 
   const handleSendAllSoutenanceEmails = useCallback(() => {
+    const options = {
+      messageType: soutenanceEmailMessageType,
+      forceResend: isSoutenanceScheduleUpdateMessage
+    }
+    const allTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.all.targets
+      : soutenanceEmailAutomationGroups.all.pendingTargets
+    const outlookTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.all.targets
+      : soutenanceEmailAutomationGroups.all.outlookPendingTargets
+
     if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
       handlePrepareSoutenanceEmailTargets(
-        soutenanceEmailAutomationGroups.all.outlookPendingTargets,
-        'tous les destinataires'
+        outlookTargets,
+        'tous les destinataires',
+        options
       )
       return
     }
 
     handleSendSoutenanceEmailTargets(
-      soutenanceEmailAutomationGroups.all.pendingTargets,
-      'tous les destinataires'
+      allTargets,
+      'tous les destinataires',
+      options
     )
   }, [
     handlePrepareSoutenanceEmailTargets,
     handleSendSoutenanceEmailTargets,
+    isSoutenanceScheduleUpdateMessage,
+    soutenanceEmailAutomationGroups.all.targets,
     soutenanceEmailAutomationGroups.all.outlookPendingTargets,
     soutenanceEmailAutomationGroups.all.pendingTargets,
-    soutenanceEmailDeliveryMode
+    soutenanceEmailDeliveryMode,
+    soutenanceEmailMessageType
   ])
 
   const handleSendProjectLeadSoutenanceEmails = useCallback(() => {
+    const options = {
+      messageType: soutenanceEmailMessageType,
+      forceResend: isSoutenanceScheduleUpdateMessage
+    }
+    const projectLeadTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.projectLeads.targets
+      : soutenanceEmailAutomationGroups.projectLeads.pendingTargets
+    const outlookProjectLeadTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.projectLeads.targets
+      : soutenanceEmailAutomationGroups.projectLeads.outlookPendingTargets
+
     if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
       handlePrepareSoutenanceEmailTargets(
-        soutenanceEmailAutomationGroups.projectLeads.outlookPendingTargets,
-        'les chefs de projet'
+        outlookProjectLeadTargets,
+        'les chefs de projet',
+        options
       )
       return
     }
 
     handleSendSoutenanceEmailTargets(
-      soutenanceEmailAutomationGroups.projectLeads.pendingTargets,
-      'les chefs de projet'
+      projectLeadTargets,
+      'les chefs de projet',
+      options
     )
   }, [
     handlePrepareSoutenanceEmailTargets,
     handleSendSoutenanceEmailTargets,
+    isSoutenanceScheduleUpdateMessage,
+    soutenanceEmailAutomationGroups.projectLeads.targets,
     soutenanceEmailAutomationGroups.projectLeads.outlookPendingTargets,
     soutenanceEmailAutomationGroups.projectLeads.pendingTargets,
-    soutenanceEmailDeliveryMode
+    soutenanceEmailDeliveryMode,
+    soutenanceEmailMessageType
   ])
 
   const handleSendStandaloneExpertSoutenanceEmails = useCallback(() => {
+    const options = {
+      messageType: soutenanceEmailMessageType,
+      forceResend: isSoutenanceScheduleUpdateMessage
+    }
+    const expertTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.standaloneExperts.targets
+      : soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets
+    const outlookExpertTargets = isSoutenanceScheduleUpdateMessage
+      ? soutenanceEmailAutomationGroups.standaloneExperts.targets
+      : soutenanceEmailAutomationGroups.standaloneExperts.outlookPendingTargets
+
     if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
       handlePrepareSoutenanceEmailTargets(
-        soutenanceEmailAutomationGroups.standaloneExperts.outlookPendingTargets,
-        'les experts'
+        outlookExpertTargets,
+        'les experts',
+        options
       )
       return
     }
 
     handleSendSoutenanceEmailTargets(
-      soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets,
-      'les experts'
+      expertTargets,
+      'les experts',
+      options
     )
   }, [
     handlePrepareSoutenanceEmailTargets,
     handleSendSoutenanceEmailTargets,
+    isSoutenanceScheduleUpdateMessage,
+    soutenanceEmailAutomationGroups.standaloneExperts.targets,
     soutenanceEmailAutomationGroups.standaloneExperts.outlookPendingTargets,
     soutenanceEmailAutomationGroups.standaloneExperts.pendingTargets,
-    soutenanceEmailDeliveryMode
+    soutenanceEmailDeliveryMode,
+    soutenanceEmailMessageType
   ])
 
   const handleSendSoutenanceEmailTest = useCallback(() => {
     const target = getDefaultSoutenanceEmailTarget()
     if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
       handlePrepareSoutenanceEmailTargets(target ? [target] : [], 'test', {
-        testEmail: testEmailAddress
+        testEmail: testEmailAddress,
+        messageType: soutenanceEmailMessageType
       })
       return
     }
 
     handleSendSoutenanceEmailTargets(target ? [target] : [], 'test', {
-      testEmail: testEmailAddress
+      testEmail: testEmailAddress,
+      messageType: soutenanceEmailMessageType
     })
   }, [
     getDefaultSoutenanceEmailTarget,
     handlePrepareSoutenanceEmailTargets,
     handleSendSoutenanceEmailTargets,
     soutenanceEmailDeliveryMode,
+    soutenanceEmailMessageType,
     testEmailAddress
+  ])
+
+  const handleSendSingleSoutenanceEmail = useCallback((target) => {
+    const targetName = target?.person?.name || target?.person?.email || 'ce destinataire'
+    const batchLabel = targetName
+    const options = {
+      messageType: soutenanceEmailMessageType,
+      forceResend: true
+    }
+
+    if (soutenanceEmailDeliveryMode === ACCESS_EMAIL_DELIVERY_MODES.OUTLOOK) {
+      handlePrepareSoutenanceEmailTargets(target ? [target] : [], batchLabel, options)
+      return
+    }
+
+    handleSendSoutenanceEmailTargets(target ? [target] : [], batchLabel, options)
+  }, [
+    handlePrepareSoutenanceEmailTargets,
+    handleSendSoutenanceEmailTargets,
+    soutenanceEmailDeliveryMode,
+    soutenanceEmailMessageType
   ])
 
   const handleResetSoutenanceEmailDeliveries = useCallback(async () => {
@@ -3166,6 +3905,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
         return next
       })
       loadAccessLinksPreview({ silent: true })
+      loadAccessAudit({ silent: true })
       setSuccessMessage(`${modifiedCount} envoi(s) défense réinitialisé(s).`)
     } catch (error) {
       setErrorMessage(
@@ -3174,7 +3914,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     } finally {
       setIsAutomaticEmailSending(false)
     }
-  }, [loadAccessLinksPreview, selectedYear, soutenanceEmailAutomationGroups.all.resettableTargets])
+  }, [loadAccessAudit, loadAccessLinksPreview, selectedYear, soutenanceEmailAutomationGroups.all.resettableTargets])
 
   const handleResetSoutenanceOutlookPrepared = useCallback(() => {
     const preparedKeys = new Set(
@@ -3187,6 +3927,10 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     if (preparedKeys.size === 0) {
       return
     }
+
+    soutenanceOutlookPreparedKeysRef.current = new Set(
+      [...soutenanceOutlookPreparedKeysRef.current].filter((deliveryKey) => !preparedKeys.has(deliveryKey))
+    )
 
     setEmailDeliveryLedger((current) => {
       const source = isPlainObject(current) ? current : {}
@@ -3240,6 +3984,12 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
       return
     }
 
+    soutenanceOutlookPreparedKeysRef.current = new Set(
+      Object.entries(nextLedger)
+        .filter(([, delivery]) => isLocalOutlookPreparedDelivery(delivery))
+        .map(([deliveryKey]) => deliveryKey)
+    )
+
     writeAccessEmailDeliveryLedger(selectedYear, nextLedger)
     setEmailDeliveryLedger(nextLedger)
     setErrorMessage('')
@@ -3267,6 +4017,14 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
     searchQuery.trim() ||
     !areAllLinkTypeFiltersActive
   )
+  const missingSoutenanceLinkCount = previewSummary
+    ? Math.max((previewSummary.soutenanceLinkCount || 0) - (previewSummary.soutenanceGeneratedLinkCount || 0), 0)
+    : 0
+  const canReconcileSoutenanceLinks = Boolean(
+    previewSummary &&
+    missingSoutenanceLinkCount > 0 &&
+    previewContexts?.soutenance?.publicationVersion
+  )
   const resetFilters = useCallback(() => {
     setSearchQuery('')
     setLinkTypeFilters(DEFAULT_ACCESS_PHASE_FILTERS)
@@ -3275,7 +4033,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
   const generateLinksTitle = hasKnownGeneratedLinks
     ? "Remplacer tous les accès générables."
     : "Générer tous les accès générables."
-  const isBusy = isPreviewLoading || isGenerating || isAutomaticEmailSending
+  const isBusy = isPreviewLoading || isGenerating || isAutomaticEmailSending || isReconcilingSoutenanceLinks
   const previewStatusLabel = isGenerating
     ? 'Génération'
     : isPreviewLoading
@@ -3392,6 +4150,22 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                 showLabel
               />
             </button>
+            {canReconcileSoutenanceLinks ? (
+              <button
+                type='button'
+                className='page-tools-action-btn secondary'
+                onClick={handleReconcileSoutenanceAccessLinks}
+                disabled={isBusy}
+                title='Créer uniquement les liens défense manquants pour la publication active.'
+                aria-label={isReconcilingSoutenanceLinks ? 'Rattrapage défense...' : 'Rattraper liens défense'}
+              >
+                <IconButtonContent
+                  label={isReconcilingSoutenanceLinks ? 'Rattrapage...' : 'Rattraper défenses'}
+                  icon={RefreshIcon}
+                  showLabel
+                />
+              </button>
+            ) : null}
           </div>
         }
         toggleArrow={toggleArrow}
@@ -3566,6 +4340,28 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
             </AccessNotice>
           ) : null}
 
+          {canReconcileSoutenanceLinks ? (
+            <AccessNotice
+              tone='warning'
+              action={(
+                <button
+                  type='button'
+                  className='token-access-btn secondary'
+                  onClick={handleReconcileSoutenanceAccessLinks}
+                  disabled={isBusy}
+                >
+                  <IconButtonContent
+                    label={isReconcilingSoutenanceLinks ? 'Rattrapage...' : 'Créer les liens manquants'}
+                    icon={RefreshIcon}
+                    showLabel
+                  />
+                </button>
+              )}
+            >
+              Publication défense v{previewContexts.soutenance.publicationVersion}: {missingSoutenanceLinkCount} lien(s) personnel(s) manquant(s) pour les emails HTML.
+            </AccessNotice>
+          ) : null}
+
           {previewSummary?.unrecoverableGeneratedLinkCount > 0 ? (
             <AccessNotice tone='danger'>
               {previewSummary.unrecoverableGeneratedLinkCount} lien(s) généré(s) avant la persistance ne peuvent pas être reconstruits. Régénérez une fois pour les rendre relisibles.
@@ -3613,6 +4409,13 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                           </div>
                         </div>
 
+                        <div className='token-access-status-section'>
+                          <AccessPublicationDiagnostic
+                            context={previewContexts.soutenance}
+                            summary={previewSummary}
+                          />
+                        </div>
+
                         <div className={`token-access-email-console is-${emailDeliverySummary.variant}`.trim()}>
                           <div className='token-access-email-console-head'>
                             <span className='token-access-email-console-icon' aria-hidden='true'>
@@ -3646,6 +4449,20 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                             </small>
                           ) : null}
                         </div>
+
+                        <AccessAuditPanel
+                          events={accessAuditEvents}
+                          isLoading={isAccessAuditLoading}
+                          error={accessAuditError}
+                          onRefresh={() => loadAccessAudit()}
+                        />
+
+                        <AccessUsagePanel
+                          logs={accessUsageLogs}
+                          isLoading={isAccessUsageLoading}
+                          error={accessUsageError}
+                          onRefresh={() => loadAccessUsageLogs()}
+                        />
                       </>
                     ) : (
                       <div className='token-access-status-placeholder'>
@@ -3661,6 +4478,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
               {previewSummary && !isEmailAutomationPanelCollapsed ? (
                 <SoutenanceEmailAutomationPanel
                   targets={soutenanceEmailAutomationTargets}
+                  summary={previewSummary}
                   selectedKeys={selectedSoutenanceEmailKeys}
                   selectedCount={selectedSoutenanceEmailTargets.length}
                   pendingCount={soutenanceEmailAutomationGroups.all.pendingCount}
@@ -3668,6 +4486,7 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                   sentCount={soutenanceEmailAutomationGroups.all.sentCount}
                   preparedCount={soutenanceEmailAutomationGroups.all.preparedCount}
                   deliveryMode={soutenanceEmailDeliveryMode}
+                  messageType={soutenanceEmailMessageType}
                   projectLeadGroup={soutenanceEmailAutomationGroups.projectLeads}
                   expertGroup={soutenanceEmailAutomationGroups.standaloneExperts}
                   preview={soutenanceEmailPreview}
@@ -3684,12 +4503,17 @@ const TokenGenerator = ({ toggleArrow, isArrowUp }) => {
                   onResetDeliveries={handleResetSoutenanceEmailDeliveries}
                   onResetOutlookPrepared={handleResetSoutenanceOutlookPrepared}
                   onDeliveryModeChange={setSoutenanceEmailDeliveryMode}
+                  onMessageTypeChange={setSoutenanceEmailMessageType}
                   onTestEmailChange={setTestEmailAddress}
                   onToggleTarget={handleToggleSoutenanceEmailSelection}
                   onSelectPending={handleSelectPendingSoutenanceEmails}
                   onClearSelection={handleClearSoutenanceEmailSelection}
+                  onSendTarget={handleSendSingleSoutenanceEmail}
                   onOpenNextOutlookDraft={handleOpenNextSoutenanceOutlookDraft}
                   onClearOutlookQueue={handleClearSoutenanceOutlookDraftQueue}
+                  canReconcileMissingLinks={canReconcileSoutenanceLinks}
+                  isReconcilingMissingLinks={isReconcilingSoutenanceLinks}
+                  onReconcileMissingLinks={handleReconcileSoutenanceAccessLinks}
                   onCollapse={() => setIsEmailAutomationPanelCollapsed(true)}
                 />
               ) : null}

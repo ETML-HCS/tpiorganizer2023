@@ -59,7 +59,7 @@ async function ensureConfiguredWindowSlotDocuments(slotDocuments = [], options =
         slotFilter,
         { $setOnInsert: slotDocument },
         {
-          new: true,
+          returnDocument: 'after',
           setDefaultsOnInsert: true,
           upsert: true
         }

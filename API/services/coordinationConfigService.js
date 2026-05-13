@@ -987,7 +987,7 @@ async function getPlanningConfig(year) {
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   )
@@ -1049,7 +1049,7 @@ async function savePlanningConfig(year, payload = {}) {
     },
     {
       upsert: true,
-      new: true,
+      returnDocument: 'after',
       setDefaultsOnInsert: true
     }
   )

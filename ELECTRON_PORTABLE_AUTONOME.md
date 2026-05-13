@@ -45,6 +45,24 @@ Dans cette cible, les sites générés deviennent la surface publique principale
 
 Les modules legacy restent utiles uniquement s'ils permettent de relire d'anciennes données, de maintenir des liens déjà envoyés, ou de faciliter une migration. Sinon, ils doivent être considérés comme du code transitoire à retirer pendant la refonte.
 
+### Orientation UX pour le module Planification
+
+Le module Planification ne doit pas être pensé comme un simple tableau de rooms et de slots. Son rôle principal est d'aider à arbitrer une planification TPI complexe : placer les TPI, résoudre les conflits, respecter les contraintes de classes, salles, personnes, disponibilités, préférences, synchronisation GestionTPI, validation et publication.
+
+Pour la version portable, l'objectif de confort est de transformer la planification en poste de régulation :
+
+- une file de travail intelligente : TPI à placer, conflits durs, préférences non respectées, chefs indisponibles, écarts GestionTPI, TPI non importables et éléments récemment modifiés ;
+- un inspecteur de décision pour le TPI ou le slot sélectionné : participants, contraintes, préférences, conflits actuels, raisons de compatibilité ou d'incompatibilité ;
+- des suggestions classées : meilleurs slots libres, meilleurs swaps, déplacements qui résolvent un conflit, déplacements sans nouveau problème ;
+- un score visuel simple : vert pour amélioration ou absence de dégradation, orange pour compromis acceptable, rouge pour blocage ou conflit créé ;
+- un mode personne : cliquer un candidat, expert ou chef de projet montre tous ses TPI dans le planning ;
+- une action d'annulation après chaque déplacement ;
+- un verrouillage de TPI ou de slot pour protéger les arbitrages déjà validés ;
+- une vue de résolution compacte `créneaux x rooms`, avec maximum 4 rooms visibles, sans rotation CSS du texte ;
+- une mini-navigation ou liste de suggestions capable de scroller automatiquement vers la cible.
+
+La priorité fonctionnelle future est : sélectionner un problème ou un TPI, afficher les meilleurs swaps possibles, prévisualiser l'impact avant/après, puis appliquer l'action choisie. Le confort attendu est de réduire les déplacements manuels et le scroll au hasard, pas seulement de compacter l'affichage.
+
 ## Cible Electron
 
 L'application finale devra pouvoir être lancée comme un exécutable Windows portable, sans installation serveur manuelle.

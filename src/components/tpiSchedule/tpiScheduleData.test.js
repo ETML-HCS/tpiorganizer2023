@@ -1,45 +1,65 @@
 import {
-  buildPlanningConfigForYear,
-  buildPlanningJsonExportFileName,
-  normalizeRoom
+  isTpiPlanningSealed,
+  normalizeBooleanFlag,
+  normalizeRoom,
+  normalizeTpi
 } from './tpiScheduleData'
 
-describe('tpiScheduleData', () => {
-  test('construit le nom du fichier export JSON de planification', () => {
-    expect(buildPlanningJsonExportFileName(2026)).toBe('tpiOrganizer_planning_2026.json')
-    expect(buildPlanningJsonExportFileName('2027')).toBe('tpiOrganizer_planning_2027.json')
+describe('tpiScheduleData planning seal', () => {
+  it('normalise explicitement les valeurs booléennes du verrou', () => {
+    expect(normalizeBooleanFlag(true)).toBe(true)
+    expect(normalizeBooleanFlag(false)).toBe(false)
+    expect(normalizeBooleanFlag('true')).toBe(true)
+    expect(normalizeBooleanFlag('false')).toBe(false)
+    expect(normalizeBooleanFlag('oui')).toBe(true)
+    expect(normalizeBooleanFlag('non')).toBe(false)
+    expect(normalizeBooleanFlag(1)).toBe(true)
+    expect(normalizeBooleanFlag(0)).toBe(false)
   })
 
-  test('propage la couleur planification du site dans la configuration de salle', () => {
-    const config = buildPlanningConfigForYear(
-      {
-        siteConfigs: [
-          {
-            siteCode: 'VENNES',
-            label: 'Vennes',
-            planningColor: '#14532d',
-            tpiColor: '#fee2e2',
-            numSlots: 6
-          }
-        ]
-      },
-      2026
-    )
+  it('conserve les alias historiques sans transformer la chaîne false en verrou actif', () => {
+    expect(normalizeTpi({ refTpi: 'TPI-001', isPlanningSealed: 'false' })).toMatchObject({
+      refTpi: 'TPI-001',
+      isPlanningSealed: false
+    })
+    expect(normalizeTpi({ refTpi: 'TPI-002', planningSealed: 'true' })).toMatchObject({
+      refTpi: 'TPI-002',
+      isPlanningSealed: true
+    })
+    expect(isTpiPlanningSealed({ isSealed: 1 })).toBe(true)
+  })
 
-    const room = normalizeRoom(
-      {
-        site: 'VENNES',
-        date: '2026-06-10',
-        name: 'Vennes - A101',
-        tpiDatas: []
-      },
-      0,
-      config
-    )
+  it('conserve le verrou pendant la normalisation complete d une room', () => {
+    const room = normalizeRoom({
+      name: 'A101',
+      date: '2026-06-10',
+      tpiDatas: [
+        { refTpi: 'TPI-LOCK', candidat: 'Alice', isPlanningSealed: 'true' },
+        { refTpi: 'TPI-FREE', candidat: 'Bob', isPlanningSealed: 'false' }
+      ]
+    })
 
-    expect(room.configSite.planningColor).toBe('#14532D')
-    expect(room.configSite.tpiColor).toBe('#FEE2E2')
-    expect(room.configSite.numSlots).toBe(6)
-    expect(room.configSite.minTpiPerRoom).toBe(3)
+    expect(room.tpiDatas[0]).toMatchObject({
+      refTpi: 'TPI-LOCK',
+      isPlanningSealed: true
+    })
+    expect(room.tpiDatas[1]).toMatchObject({
+      refTpi: 'TPI-FREE',
+      isPlanningSealed: false
+    })
+  })
+
+  it('realigne les périodes des TPI sur les slots affichés', () => {
+    const room = normalizeRoom({
+      name: 'A101',
+      date: '2026-06-10',
+      tpiDatas: [
+        { refTpi: 'TPI-1', period: 7 },
+        { refTpi: 'TPI-2', period: 1 }
+      ]
+    })
+
+    expect(room.tpiDatas[0]).toMatchObject({ refTpi: 'TPI-1', period: 1 })
+    expect(room.tpiDatas[1]).toMatchObject({ refTpi: 'TPI-2', period: 2 })
   })
 })

@@ -5,6 +5,7 @@ const TpiModelsYear = require('../../models/tpiModels')
 const TpiPlanning = require('../../models/tpiCoordinationModel')
 const { deleteTpiCatalogByYear } = require('../../services/tpiCatalogService')
 const { enrichLegacyTpisWithDerivedDates } = require('../../services/legacyTpiDateEnrichmentService')
+const { syncGestionTpiToPlanning } = require('../../services/legacyPlanningBridgeService')
 const { normalizeText } = require('../../services/personIdentityService')
 const { resolveUniquePersonForRole } = require('../../services/personRegistryService')
 const {
@@ -339,11 +340,19 @@ async function saveGestionTpi(year, body = {}) {
     }
   }
 
-  return await TpiModelsYear(normalizedYear).findOneAndUpdate(
+  const savedTpi = await TpiModelsYear(normalizedYear).findOneAndUpdate(
     { refTpi: updateData.refTpi },
     updateData,
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   )
+
+  await syncGestionTpiToPlanning({
+    year: normalizedYear,
+    legacyTpi: savedTpi || updateData,
+    linkedPersonIds: stakeholderValidation.linkedPersonIds
+  })
+
+  return savedTpi
 }
 
 async function updateGestionTpi(year, id, body = {}) {
@@ -448,7 +457,12 @@ async function updateGestionTpi(year, id, body = {}) {
   }
 
   const updatedTpi = await TpiModel.findByIdAndUpdate(tpiId, updateData, {
-    new: true
+    returnDocument: 'after'
+  })
+  await syncGestionTpiToPlanning({
+    year: normalizedYear,
+    legacyTpi: updatedTpi || updateData,
+    linkedPersonIds: stakeholderValidation.linkedPersonIds
   })
 
   return {

@@ -339,6 +339,13 @@ export const voteService = {
   },
 
   /**
+   * Force une réponse OK admin pour des rôles de vote.
+   */
+  forceOk: async (payload) => {
+    return await apiService.post(`${COORDINATION_BASE_URL}/votes/force-ok`, payload)
+  },
+
+  /**
    * Ajoute un choix proposé aux dates idéales du votant
    */
   addProposalToPreferences: async (voteId) => {
@@ -560,19 +567,61 @@ export const workflowCoordinationService = {
     )
   },
 
-  previewSoutenanceAccessEmail: async (year, target = {}) => {
+  reconcileAccessLinks: async (year, baseUrl = null, options = {}) => {
+    const body = {}
+
+    if (baseUrl) {
+      body.baseUrl = baseUrl
+    }
+
+    if (Array.isArray(options.phases) && options.phases.length > 0) {
+      body.phases = options.phases
+    } else if (options.phase) {
+      body.phase = options.phase
+    }
+
+    if (options.publicationVersion) {
+      body.publicationVersion = options.publicationVersion
+    }
+
+    if (options.soutenanceLinkTarget) {
+      body.soutenanceLinkTarget = options.soutenanceLinkTarget
+    }
+
+    if (options.soutenancePublicUrl) {
+      body.soutenancePublicUrl = options.soutenancePublicUrl
+    }
+
+    if (options.voteLinkTarget) {
+      body.voteLinkTarget = options.voteLinkTarget
+    }
+
+    if (options.votePublicUrl) {
+      body.votePublicUrl = options.votePublicUrl
+    }
+
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/access-links/reconcile`,
+      body,
+      STATIC_PUBLICATION_TIMEOUT
+    )
+  },
+
+  previewSoutenanceAccessEmail: async (year, target = {}, options = {}) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/email-preview`, {
       template: 'soutenanceAccess',
-      target
+      target,
+      messageType: options?.messageType || target?.messageType || 'standard'
     })
   },
 
   sendSoutenanceAccessEmails: async (year, targets = [], options = {}) => {
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/access-links/send-soutenance-emails`, {
       targets,
-      testEmail: options.testEmail || '',
-      forceResend: options.forceResend === true,
-      baseUrl: options.baseUrl || null
+      testEmail: options?.testEmail || '',
+      forceResend: options?.forceResend === true,
+      messageType: options?.messageType || 'standard',
+      baseUrl: options?.baseUrl || null
     }, TIMEOUTS.EMAIL_SEND)
   },
 

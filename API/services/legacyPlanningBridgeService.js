@@ -17,8 +17,13 @@ const {
   linkLegacyTpiStakeholders,
   validateLegacyTpiStakeholders
 } = require('./tpiStakeholderService')
+const {
+  normalizeTpiDossierRef
+} = require('../modules/gestionTpi/normalization')
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
+const defaultTpiPlanningFindOne = TpiPlanning.findOne
+const defaultTpiPlanningUpdateOne = TpiPlanning.updateOne
 
 function toPlainObject(value) {
   if (!value) {
@@ -101,7 +106,7 @@ function normalizeLegacyTpiData(rawTpiData, index = 0) {
     ...tpiData,
     refTpi: tpiData.refTpi == null ? null : String(tpiData.refTpi).trim(),
     id: normalizeString(tpiData.id),
-    period: parsePositiveInteger(tpiData.period, index + 1),
+    period: index + 1,
     startTime: normalizeString(tpiData.startTime),
     endTime: normalizeString(tpiData.endTime),
     candidat: normalizeString(tpiData.candidat),
@@ -215,23 +220,15 @@ function extractLegacyTpiParticipantLinkUpdates(previousTpi = {}, nextTpi = {}) 
 }
 
 function buildReference(year, legacyRef, fallbackIndex) {
-  const normalizedRef = normalizeRef(legacyRef)
-  if (normalizedRef) {
-    return `TPI-${year}-${normalizedRef}`
+  const refDescriptor = normalizeTpiDossierRef(year, legacyRef)
+  if (refDescriptor.workflowReference) {
+    return refDescriptor.workflowReference
   }
 
   return `TPI-${year}-${String(fallbackIndex).padStart(3, '0')}`
 }
 
 function buildSlotTimes(roomConfig = {}, tpiData = {}) {
-  const hasExplicitTimes = normalizeString(tpiData.startTime) && normalizeString(tpiData.endTime)
-  if (hasExplicitTimes) {
-    return {
-      startTime: normalizeString(tpiData.startTime),
-      endTime: normalizeString(tpiData.endTime)
-    }
-  }
-
   const firstTpiStart = Number(roomConfig.firstTpiStart) || 8
   const tpiTime = Number(roomConfig.tpiTime) || 1
   const breakline = Number(roomConfig.breakline) || 0.1667
@@ -246,6 +243,62 @@ function buildSlotTimes(roomConfig = {}, tpiData = {}) {
   const endTime = `${Math.floor(endHour)}:${endMinutes.toString().padStart(2, '0')}`
 
   return { startTime, endTime }
+}
+
+function buildSlotIdentity({ year, date, period, roomName, roomSite }) {
+  const dateValue = date instanceof Date ? date : new Date(date)
+  const dateKey = Number.isNaN(dateValue.getTime())
+    ? ''
+    : dateValue.toISOString().slice(0, 10)
+
+  return {
+    key: [
+      Number.parseInt(String(year), 10) || '',
+      dateKey,
+      Number.parseInt(String(period), 10) || '',
+      normalizeString(roomSite),
+      normalizeString(roomName)
+    ].join('|'),
+    dateKey
+  }
+}
+
+function buildLegacySlotDocument({
+  year,
+  date,
+  period,
+  slotTimes,
+  roomName,
+  roomSite,
+  roomConfig = {},
+  tpiId = null,
+  assignments = null
+}) {
+  const isAssigned = Boolean(tpiId)
+
+  return {
+    year,
+    date,
+    period,
+    startTime: slotTimes.startTime,
+    endTime: slotTimes.endTime,
+    room: {
+      name: roomName,
+      site: roomSite,
+      capacity: Number(roomConfig.capacity) || 1
+    },
+    status: isAssigned ? 'pending_votes' : 'available',
+    assignedTpi: tpiId,
+    assignments: assignments || {},
+    config: {
+      duration: (Number(roomConfig.tpiTime) || 1) * 60,
+      breakAfter: (Number(roomConfig.breakline) || 0.1667) * 60,
+      minTpiPerRoom: Number.isInteger(Number(roomConfig.minTpiPerRoom)) && Number(roomConfig.minTpiPerRoom) > 0
+        ? Number(roomConfig.minTpiPerRoom)
+        : 3
+    },
+    history: []
+  }
 }
 
 function toObjectIdOrNull(value) {
@@ -352,6 +405,189 @@ function buildPlanningDraftFromLegacyTpi({ year, legacyTpi, linkedPersonIds = {}
   }
 }
 
+function canQueryPlanningModel() {
+  return mongoose.connection.readyState === 1 ||
+    TpiPlanning.findOne !== defaultTpiPlanningFindOne ||
+    TpiPlanning.updateOne !== defaultTpiPlanningUpdateOne
+}
+
+function buildPlanningReferenceCandidates(year, legacyRef) {
+  const refDescriptor = normalizeTpiDossierRef(year, legacyRef)
+  return Array.from(new Set(
+    (refDescriptor.workflowCandidates || [])
+      .map(normalizeRef)
+      .filter(Boolean)
+  ))
+}
+
+function buildLegacyRoomRefCandidates(year, legacyRef) {
+  const refDescriptor = normalizeTpiDossierRef(year, legacyRef)
+  return Array.from(new Set(
+    [refDescriptor.legacyRef, refDescriptor.rawRef]
+      .map(normalizeRef)
+      .filter((ref) => /^\d+$/.test(ref))
+      .flatMap((ref) => [ref, Number.parseInt(ref, 10)])
+  ))
+}
+
+function buildPlanningUpdateSetFromLegacyTpi(legacyTpi = {}, linkedPersonIds = {}) {
+  const candidat = toObjectIdOrNull(linkedPersonIds.candidatPersonId || legacyTpi?.candidatPersonId)
+  const expert1 = toObjectIdOrNull(linkedPersonIds.expert1PersonId || legacyTpi?.expert1PersonId)
+  const expert2 = toObjectIdOrNull(linkedPersonIds.expert2PersonId || legacyTpi?.expert2PersonId)
+  const chefProjet = toObjectIdOrNull(linkedPersonIds.bossPersonId || legacyTpi?.bossPersonId)
+  const soutenanceDate = normalizeDateOnly(legacyTpi?.dates?.soutenance || legacyTpi?.dateSoutenance)
+  const updateSet = {
+    sujet: pickFirstNonEmpty(legacyTpi?.sujet, legacyTpi?.titre) || '',
+    description: pickFirstNonEmpty(legacyTpi?.description) || '',
+    'entreprise.nom': pickFirstNonEmpty(legacyTpi?.lieu?.entreprise, legacyTpi?.entreprise) || '',
+    classe: pickFirstNonEmpty(legacyTpi?.classe) || '',
+    site: pickFirstNonEmpty(legacyTpi?.lieu?.site, legacyTpi?.site) || '',
+    'dates.debut': normalizeDateOnly(legacyTpi?.dates?.depart || legacyTpi?.dates?.debut),
+    'dates.fin': normalizeDateOnly(legacyTpi?.dates?.fin),
+    'dates.premiereVisite': normalizeDateOnly(legacyTpi?.dates?.premiereVisite),
+    'dates.deuxiemeVisite': normalizeDateOnly(legacyTpi?.dates?.deuxiemeVisite),
+    'dates.renduFinal': normalizeDateOnly(legacyTpi?.dates?.renduFinal),
+    tags: Array.isArray(legacyTpi?.tags) ? legacyTpi.tags.filter(Boolean) : [],
+    updatedAt: new Date()
+  }
+
+  if (soutenanceDate) {
+    updateSet['dates.soutenance'] = soutenanceDate
+  }
+
+  if (legacyTpi?.evaluation && typeof legacyTpi.evaluation === 'object') {
+    updateSet.evaluation = legacyTpi.evaluation
+  }
+
+  if (candidat) {
+    updateSet.candidat = candidat
+  }
+
+  if (expert1) {
+    updateSet.expert1 = expert1
+  }
+
+  if (expert2) {
+    updateSet.expert2 = expert2
+  }
+
+  if (chefProjet) {
+    updateSet.chefProjet = chefProjet
+  }
+
+  return updateSet
+}
+
+function buildLegacyRoomTpiUpdateSetFromLegacyTpi(legacyTpi = {}) {
+  const expert1Name = pickFirstNonEmpty(legacyTpi?.experts?.['1'], legacyTpi?.experts?.[1], legacyTpi?.expert1)
+  const expert2Name = pickFirstNonEmpty(legacyTpi?.experts?.['2'], legacyTpi?.experts?.[2], legacyTpi?.expert2)
+
+  return {
+    'tpiDatas.$[tpi].candidat': pickFirstNonEmpty(legacyTpi?.candidat) || '',
+    'tpiDatas.$[tpi].candidatPersonId': normalizeLinkedPersonId(legacyTpi?.candidatPersonId),
+    'tpiDatas.$[tpi].classe': pickFirstNonEmpty(legacyTpi?.classe) || '',
+    'tpiDatas.$[tpi].lieu.entreprise': pickFirstNonEmpty(legacyTpi?.lieu?.entreprise, legacyTpi?.entreprise) || '',
+    'tpiDatas.$[tpi].lieu.site': pickFirstNonEmpty(legacyTpi?.lieu?.site, legacyTpi?.site) || '',
+    'tpiDatas.$[tpi].site': pickFirstNonEmpty(legacyTpi?.lieu?.site, legacyTpi?.site) || '',
+    'tpiDatas.$[tpi].sujet': pickFirstNonEmpty(legacyTpi?.sujet, legacyTpi?.titre) || '',
+    'tpiDatas.$[tpi].description': pickFirstNonEmpty(legacyTpi?.description) || '',
+    'tpiDatas.$[tpi].expert1.name': expert1Name || '',
+    'tpiDatas.$[tpi].expert1.personId': normalizeLinkedPersonId(legacyTpi?.expert1PersonId),
+    'tpiDatas.$[tpi].expert2.name': expert2Name || '',
+    'tpiDatas.$[tpi].expert2.personId': normalizeLinkedPersonId(legacyTpi?.expert2PersonId),
+    'tpiDatas.$[tpi].boss.name': pickFirstNonEmpty(legacyTpi?.boss, legacyTpi?.chefProjet) || '',
+    'tpiDatas.$[tpi].boss.personId': normalizeLinkedPersonId(legacyTpi?.bossPersonId || legacyTpi?.chefProjetPersonId)
+  }
+}
+
+async function resolvePlanningTpiByReference(year, referenceCandidates) {
+  const query = TpiPlanning.findOne({
+    year,
+    reference: { $in: referenceCandidates }
+  })
+
+  if (query && typeof query.select === 'function') {
+    const selected = query.select('_id reference')
+    return selected && typeof selected.lean === 'function'
+      ? await selected.lean()
+      : await selected
+  }
+
+  return await query
+}
+
+async function syncPersistedLegacyRoomsFromGestionTpi(year, legacyTpi) {
+  if (mongoose.connection.readyState !== 1) {
+    return { matchedCount: 0, modifiedCount: 0 }
+  }
+
+  const roomRefCandidates = buildLegacyRoomRefCandidates(year, legacyTpi?.refTpi || legacyTpi?.id)
+  if (roomRefCandidates.length === 0) {
+    return { matchedCount: 0, modifiedCount: 0 }
+  }
+
+  const RoomModel = createTpiRoomModel(year)
+  return await RoomModel.updateMany(
+    { 'tpiDatas.refTpi': { $in: roomRefCandidates } },
+    {
+      $set: {
+        lastUpdate: Date.now(),
+        ...buildLegacyRoomTpiUpdateSetFromLegacyTpi(legacyTpi)
+      }
+    },
+    {
+      arrayFilters: [
+        { 'tpi.refTpi': { $in: roomRefCandidates } }
+      ]
+    }
+  )
+}
+
+async function syncGestionTpiToPlanning({ year, legacyTpi, linkedPersonIds = {} } = {}) {
+  const normalizedYear = Number.parseInt(String(year), 10)
+  const plainLegacyTpi = toPlainObject(legacyTpi) || {}
+  const referenceCandidates = buildPlanningReferenceCandidates(
+    normalizedYear,
+    plainLegacyTpi?.refTpi || plainLegacyTpi?.id
+  )
+  const summary = {
+    year: Number.isInteger(normalizedYear) ? normalizedYear : null,
+    referenceCandidates,
+    updatedPlanningCount: 0,
+    updatedLegacyRoomCount: 0,
+    skippedMissingReference: false
+  }
+
+  if (!Number.isInteger(normalizedYear) || referenceCandidates.length === 0) {
+    summary.skippedMissingReference = true
+    return summary
+  }
+
+  if (canQueryPlanningModel()) {
+    const existingPlanningTpi = await resolvePlanningTpiByReference(normalizedYear, referenceCandidates)
+
+    if (existingPlanningTpi?._id) {
+      await TpiPlanning.updateOne(
+        { _id: existingPlanningTpi._id },
+        {
+          $set: buildPlanningUpdateSetFromLegacyTpi(plainLegacyTpi, linkedPersonIds)
+        }
+      )
+      summary.updatedPlanningCount = 1
+    }
+  }
+
+  const legacyRoomResult = await syncPersistedLegacyRoomsFromGestionTpi(normalizedYear, plainLegacyTpi)
+  summary.updatedLegacyRoomCount = Number(
+    legacyRoomResult?.modifiedCount ??
+    legacyRoomResult?.nModified ??
+    legacyRoomResult?.matchedCount ??
+    0
+  )
+
+  return summary
+}
+
 async function syncLegacyCatalogToPlanning({ year, createdBy = null }) {
   const normalizedYear = Number.parseInt(String(year), 10)
   if (!Number.isInteger(normalizedYear)) {
@@ -429,18 +665,13 @@ async function syncLegacyCatalogToPlanning({ year, createdBy = null }) {
     const reference = buildReference(normalizedYear, legacyRef, 0)
     if (existingReferences.has(reference)) {
       const existingPlanningTpi = existingPlanningByReference.get(reference)
-      const legacySoutenanceDate = normalizeDateOnly(
-        linkedLegacyTpi?.dates?.soutenance || linkedLegacyTpi?.dateSoutenance
-      )
 
-      if (existingPlanningTpi?._id && legacySoutenanceDate) {
+      if (existingPlanningTpi?._id) {
         planningBulkOperations.push({
           updateOne: {
             filter: { _id: existingPlanningTpi._id },
             update: {
-              $set: {
-                'dates.soutenance': legacySoutenanceDate
-              }
+              $set: buildPlanningUpdateSetFromLegacyTpi(linkedLegacyTpi)
             }
           }
         })
@@ -549,10 +780,13 @@ async function rebuildWorkflowFromLegacyPlanning({
     outOfScopeEntries: 0,
     externalEntries: 0,
     unconfiguredSiteEntries: 0,
+    duplicateSlotEntries: 0,
+    duplicateSlots: [],
     missingReferences: []
   }
 
   const processedReferences = new Set()
+  const processedSlotKeys = new Map()
 
   for (const room of rooms) {
     const roomName = room.name || room.nameRoom || `Salle ${summary.roomCount}`
@@ -569,7 +803,48 @@ async function rebuildWorkflowFromLegacyPlanning({
     for (const [tpiIndex, tpiData] of tpiDatas.entries()) {
       const legacyRef = normalizeRef(tpiData.refTpi || tpiData.id)
       const legacyTpi = legacyRef ? legacyTpiByRef.get(legacyRef) || null : null
+      const period = tpiIndex + 1
+      const slotTimes = buildSlotTimes(roomConfig, { ...tpiData, period })
+      const siteCandidates = [room.site, legacyTpi?.lieu?.site, legacyTpi?.site]
+      const planningSiteValue = pickFirstNonEmpty(...siteCandidates)
+      const slotSite = pickFirstNonEmpty(
+        room.site,
+        legacyTpi?.lieu?.site,
+        legacyTpi?.site,
+        planningSiteValue,
+        'Vennes'
+      )
+      const slotIdentity = buildSlotIdentity({
+        year: normalizedYear,
+        date: roomDate,
+        period,
+        roomName,
+        roomSite: slotSite
+      })
+      const existingSlotEntry = processedSlotKeys.get(slotIdentity.key)
+
       if (isEmptyLegacyPlanningSlot(tpiData, legacyTpi)) {
+        if (isPlanifiableTpi({ site: planningSiteValue }, planningConfig) && !existingSlotEntry) {
+          const slot = await Slot.create(buildLegacySlotDocument({
+            year: normalizedYear,
+            date: roomDate,
+            period,
+            slotTimes,
+            roomName,
+            roomSite: slotSite,
+            roomConfig
+          }))
+          processedSlotKeys.set(slotIdentity.key, {
+            reference: '',
+            date: slotIdentity.dateKey,
+            period,
+            roomName,
+            roomSite: slotSite,
+            slot
+          })
+          summary.slotCount += 1
+        }
+
         summary.emptySlotEntries += 1
         continue
       }
@@ -579,9 +854,6 @@ async function rebuildWorkflowFromLegacyPlanning({
         summary.skippedEntries += 1
         continue
       }
-
-      const siteCandidates = [room.site, legacyTpi?.lieu?.site, legacyTpi?.site]
-      const planningSiteValue = pickFirstNonEmpty(...siteCandidates)
 
       if (!isPlanifiableTpi({ site: planningSiteValue }, planningConfig)) {
         const isExternalSite = siteCandidates.some(isExternalPlanningSite)
@@ -600,12 +872,7 @@ async function rebuildWorkflowFromLegacyPlanning({
         continue
       }
 
-      const participantSite = pickFirstNonEmpty(
-        room.site,
-        legacyTpi?.lieu?.site,
-        legacyTpi?.site,
-        'Vennes'
-      )
+      const participantSite = slotSite
 
       const candidateName = pickFirstNonEmpty(tpiData.candidat, legacyTpi?.candidat)
       const expert1Name = pickFirstNonEmpty(tpiData.expert1?.name, legacyTpi?.experts?.['1'], legacyTpi?.experts?.[1])
@@ -695,8 +962,19 @@ async function rebuildWorkflowFromLegacyPlanning({
         continue
       }
 
-      const slotTimes = buildSlotTimes(roomConfig, tpiData)
-      const period = parsePositiveInteger(tpiData.period, tpiIndex + 1) || (tpiIndex + 1)
+      if (existingSlotEntry) {
+        console.warn(
+          `⚠️ Créneau partagé détecté: ${legacyRef} dans ${roomName}, ${slotIdentity.dateKey}, période ${period} déjà utilisé par ${existingSlotEntry.reference}`
+        )
+        summary.duplicateSlotEntries += 1
+        summary.duplicateSlots.push({
+          date: slotIdentity.dateKey,
+          period,
+          roomName,
+          reference,
+          existingReference: existingSlotEntry.reference
+        })
+      }
 
       const tpi = await TpiPlanning.create({
         reference,
@@ -749,34 +1027,35 @@ async function rebuildWorkflowFromLegacyPlanning({
         createdBy: createdById
       })
 
-      const slot = await Slot.create({
-        year: normalizedYear,
-        date: roomDate,
-        period,
-        startTime: slotTimes.startTime,
-        endTime: slotTimes.endTime,
-        room: {
-          name: roomName,
-          site: participantSite,
-          capacity: Number(roomConfig.capacity) || 1
-        },
-        status: 'pending_votes',
-        assignedTpi: tpi._id,
-        assignments: {
-          candidat: candidat._id,
-          expert1: expert1._id,
-          expert2: expert2._id,
-          chefProjet: chefProjet._id
-        },
-        config: {
-          duration: (Number(roomConfig.tpiTime) || 1) * 60,
-          breakAfter: (Number(roomConfig.breakline) || 0.1667) * 60,
-          minTpiPerRoom: Number.isInteger(Number(roomConfig.minTpiPerRoom)) && Number(roomConfig.minTpiPerRoom) > 0
-            ? Number(roomConfig.minTpiPerRoom)
-            : 3
-        },
-        history: []
-      })
+      let createdSlot = false
+      let slot = existingSlotEntry?.slot || null
+      if (!slot) {
+        slot = await Slot.create(buildLegacySlotDocument({
+          year: normalizedYear,
+          date: roomDate,
+          period,
+          slotTimes,
+          roomName,
+          roomSite: participantSite,
+          roomConfig,
+          tpiId: tpi._id,
+          assignments: {
+            candidat: candidat._id,
+            expert1: expert1._id,
+            expert2: expert2._id,
+            chefProjet: chefProjet._id
+          }
+        }))
+        createdSlot = true
+        processedSlotKeys.set(slotIdentity.key, {
+          reference,
+          date: slotIdentity.dateKey,
+          period,
+          roomName,
+          roomSite: participantSite,
+          slot
+        })
+      }
 
       await TpiPlanning.updateOne(
         { _id: tpi._id },
@@ -821,7 +1100,9 @@ async function rebuildWorkflowFromLegacyPlanning({
       })
 
       summary.tpiCount += 1
-      summary.slotCount += 1
+      if (createdSlot) {
+        summary.slotCount += 1
+      }
       summary.voteCount += voteDocs.length
     }
   }
@@ -831,6 +1112,7 @@ async function rebuildWorkflowFromLegacyPlanning({
 
 module.exports = {
   rebuildWorkflowFromLegacyPlanning,
+  syncGestionTpiToPlanning,
   syncLegacyCatalogToPlanning,
   loadLegacyRooms,
   loadLegacyTpis,

@@ -48,6 +48,46 @@ test('buildValidationIssues reports a person overlap with explicit message', () 
   assert.match(result.issues[0].message, /plusieurs TPI/)
 })
 
+test('buildValidationIssues reports Patrick Chenaux in A23 and B22 on the same 10 June slot', () => {
+  const patrick = buildPerson('person-patrick-chenaux', 'Patrick', 'Chenaux')
+
+  const entries = [
+    {
+      reference: 'TPI-A23',
+      slot: {
+        dateKey: '2026-06-10',
+        period: 2,
+        room: { site: 'ETML', name: 'A23' }
+      },
+      participants: [
+        { role: 'expert1', personId: patrick._id, fullName: 'Patrick Chenaux' }
+      ]
+    },
+    {
+      reference: 'TPI-B22',
+      slot: {
+        dateKey: '2026-06-10',
+        period: 2,
+        room: { site: 'ETML', name: 'B22' }
+      },
+      participants: [
+        { role: 'expert2', personId: patrick._id, fullName: 'Patrick Chenaux' }
+      ]
+    }
+  ]
+
+  const result = buildValidationIssues(entries, [])
+
+  assert.equal(result.issueCount, 1)
+  assert.equal(result.hardConflictSummary.personOverlapCount, 1)
+  assert.equal(result.issues[0].type, 'person_overlap')
+  assert.equal(result.issues[0].personId, 'person-patrick-chenaux')
+  assert.equal(result.issues[0].dateKey, '2026-06-10')
+  assert.equal(result.issues[0].period, 2)
+  assert.deepEqual(result.issues[0].references, ['TPI-A23', 'TPI-B22'])
+  assert.match(result.issues[0].message, /Patrick Chenaux/)
+})
+
 test('buildValidationIssues reports a sequence overflow after 4 consecutive TPI', () => {
   const person = buildPerson('person-2', 'Grace', 'Hopper')
 

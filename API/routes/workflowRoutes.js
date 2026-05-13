@@ -1535,9 +1535,45 @@ async function refreshGeneratedAccessPublications({
   return result
 }
 
-async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
+function normalizeAccessLinkRequestPhases(rawValue, fallback = null) {
+  const fallbackSource = Array.isArray(fallback) ? fallback : []
+  const source = Array.isArray(rawValue)
+    ? rawValue
+    : typeof rawValue === 'string'
+      ? rawValue.split(',')
+      : fallbackSource
+  const phases = source
+    .map((phase) => compactText(phase).toLowerCase())
+    .filter((phase) => ['vote', 'soutenance', 'arbitrage'].includes(phase))
+
+  if (phases.length > 0) {
+    return Array.from(new Set(phases))
+  }
+
+  if (fallbackSource.length > 0 && source !== fallbackSource) {
+    return normalizeAccessLinkRequestPhases(fallbackSource)
+  }
+
+  return null
+}
+
+async function handleAccessLinks(req, res, {
+  generateLinks = false,
+  generateMissingOnly = false,
+  phases = null,
+  acceptRequestedPhases = true,
+  refreshPublications = true,
+  auditAction = null,
+  actionLabel: providedActionLabel = null
+} = {}) {
   const year = req.validatedParams.year
-  const actionLabel = generateLinks ? 'generation' : 'preparation'
+  const actionLabel = providedActionLabel || (generateLinks ? 'generation' : 'preparation')
+  const requestedPhases = acceptRequestedPhases
+    ? normalizeAccessLinkRequestPhases(req.body?.phases || req.body?.phase, phases)
+    : normalizeAccessLinkRequestPhases(phases)
+  const resolvedAuditAction = auditAction || (
+    generateLinks ? 'workflow.access-links.generate' : null
+  )
 
   try {
     const workflow = await workflowService.getWorkflowYearState(year)
@@ -1580,9 +1616,11 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
       autoPublishSoutenance: generateLinks === true,
       publicationUser: req.user,
       workflowFreeModeEnabled: true,
-      generateLinks
+      generateLinks,
+      generateMissingOnly,
+      phases: requestedPhases
     })
-    const publicationRefresh = generateLinks
+    const publicationRefresh = generateLinks && refreshPublications
       ? await refreshGeneratedAccessPublications({
         year,
         voteLinkTarget,
@@ -1590,15 +1628,17 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
       })
       : null
 
-    if (generateLinks) {
+    if (generateLinks && resolvedAuditAction) {
       await safeLogAccessLinksAudit({
         year,
-        action: 'workflow.access-links.generate',
+        action: resolvedAuditAction,
         user: req.user,
         payload: {
           summary: preview.summary,
           contexts: preview.contexts,
-          publicationRefresh
+          publicationRefresh,
+          generateMissingOnly: generateMissingOnly === true,
+          phases: requestedPhases
         },
         success: !publicationRefresh?.warnings?.length,
         error: publicationRefresh?.warnings?.join(' | ') || undefined
@@ -1615,12 +1655,15 @@ async function handleAccessLinks(req, res, { generateLinks = false } = {}) {
       ...preview
     })
   } catch (error) {
-    if (generateLinks) {
+    if (generateLinks && resolvedAuditAction) {
       await safeLogAccessLinksAudit({
         year,
-        action: 'workflow.access-links.generate',
+        action: resolvedAuditAction,
         user: req.user,
-        payload: {},
+        payload: {
+          generateMissingOnly: generateMissingOnly === true,
+          phases: requestedPhases
+        },
         success: false,
         error: error?.message || 'Erreur inconnue'
       })
@@ -1665,7 +1708,11 @@ function formatEmailDeadline(value) {
   return 'selon la configuration active'
 }
 
-function buildSoutenanceEmailTemplateData(year, target = {}) {
+function normalizeSoutenanceAccessEmailMessageType(value) {
+  return compactText(value) === 'schedule_update' ? 'schedule_update' : 'standard'
+}
+
+function buildSoutenanceEmailTemplateData(year, target = {}, options = {}) {
   const normalizedTarget = normalizeEmailPreviewTarget(target)
 
   return {
@@ -1674,13 +1721,15 @@ function buildSoutenanceEmailTemplateData(year, target = {}) {
     recipientRoles: normalizedTarget.recipientRoles.length > 0 ? normalizedTarget.recipientRoles : ['expert'],
     year,
     magicLinkUrl: normalizedTarget.magicLinkUrl || `https://tpi${String(year).slice(-2)}.ch/?ml=preview`,
-    deadline: formatEmailDeadline(normalizedTarget.expiresAt)
+    deadline: formatEmailDeadline(normalizedTarget.expiresAt),
+    messageType: normalizeSoutenanceAccessEmailMessageType(options.messageType || target?.messageType)
   }
 }
 
 async function handleAccessEmailPreview(req, res) {
   const year = req.validatedParams.year
   const template = compactText(req.body?.template || 'soutenanceAccess')
+  const messageType = normalizeSoutenanceAccessEmailMessageType(req.body?.messageType || req.body?.target?.messageType)
 
   if (template !== 'soutenanceAccess') {
     return res.status(400).json({ error: 'Template email non supporté.' })
@@ -1690,7 +1739,7 @@ async function handleAccessEmailPreview(req, res) {
     const emailSettings = await getSharedEmailSettingsIfAvailable()
     const email = emailService.emailTemplates.soutenanceAccess(
       emailService.buildTemplateData(
-        buildSoutenanceEmailTemplateData(year, req.body?.target),
+        buildSoutenanceEmailTemplateData(year, req.body?.target, { messageType }),
         { emailSettings }
       )
     )
@@ -1699,6 +1748,7 @@ async function handleAccessEmailPreview(req, res) {
       success: true,
       year,
       template,
+      messageType,
       subject: email.subject,
       html: email.html,
       text: email.text
@@ -1723,6 +1773,7 @@ async function handleSendSoutenanceAccessEmails(req, res) {
   const targets = normalizeEmailBatchTargets(req.body?.targets)
   const testEmail = getRecipientEmail(req.body?.testEmail)
   const forceResend = parseBoolean(req.body?.forceResend, false)
+  const messageType = normalizeSoutenanceAccessEmailMessageType(req.body?.messageType)
 
   if (targets.length === 0) {
     return res.status(400).json({ error: 'Aucun destinataire sélectionné.' })
@@ -1798,7 +1849,8 @@ async function handleSendSoutenanceAccessEmails(req, res) {
         recipientRoles: target.recipientRoles,
         year,
         magicLinkUrl,
-        deadline: formatEmailDeadline(rawLink.expiresAt)
+        deadline: formatEmailDeadline(rawLink.expiresAt),
+        messageType
       }, { emailSettings })
 
       if (!testEmail) {
@@ -1845,7 +1897,8 @@ async function handleSendSoutenanceAccessEmails(req, res) {
       sentCount,
       skippedCount,
       failedCount,
-      testMode: Boolean(testEmail)
+      testMode: Boolean(testEmail),
+      messageType
     },
     success: failedCount === 0,
     error: failedCount > 0 ? `${failedCount} échec(s) email.` : undefined
@@ -1855,6 +1908,7 @@ async function handleSendSoutenanceAccessEmails(req, res) {
     success: failedCount === 0,
     year,
     testMode: Boolean(testEmail),
+    messageType,
     summary: {
       requestedCount: targets.length,
       sentCount,
@@ -1936,6 +1990,22 @@ router.post(
   authMiddleware,
   requireRole('admin'),
   async (req, res) => handleAccessLinks(req, res, { generateLinks: true })
+)
+
+router.post(
+  '/:year/access-links/reconcile',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => handleAccessLinks(req, res, {
+    generateLinks: true,
+    generateMissingOnly: true,
+    phases: ['soutenance'],
+    acceptRequestedPhases: false,
+    refreshPublications: false,
+    auditAction: 'workflow.access-links.reconcile',
+    actionLabel: 'reconciliation'
+  })
 )
 
 router.get(

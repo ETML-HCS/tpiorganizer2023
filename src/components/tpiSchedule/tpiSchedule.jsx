@@ -17,11 +17,11 @@ import {
 } from "../tpiControllers/TpiRoomsController"
 
 import DateRoom from "./DateRoom"
+import TpiAssignmentPanel from "./TpiAssignmentPanel"
 import IconButtonContent from "../shared/IconButtonContent"
 import {
   AlertIcon,
   ArrowRightIcon,
-  CalendarIcon,
   CloseIcon,
   ConfigurationIcon,
   RefreshIcon,
@@ -33,16 +33,23 @@ import {
   combinedScheduleConfig,
   buildPlanningConfigForYear,
   createEmptyOffer,
+  createEmptyTpi,
+  isTpiPlanningSealed,
   normalizeOrganizerRooms,
   normalizeRoom,
   normalizeTpi
 } from "./tpiScheduleData"
 import {
   normalizeSoutenanceDateEntries,
+  normalizeSoutenanceDateValue,
 } from "./soutenanceDateUtils"
+import {
+  inferRoomClassMode
+} from "./tpiScheduleFilters"
 import { ROUTES } from "../../config/appConfig"
 import {
-  optimizePlanningRooms,
+  analyzePlanningRooms,
+  buildTargetedPlanningOptimizationProposal,
   summarizeLocalPersonConflicts
 } from "./tpiScheduleOptimization"
 import {
@@ -56,6 +63,7 @@ import {
 } from "./tpiScheduleImportability"
 import {
   buildGestionTpiSyncModelMap,
+  buildRoomsWithGestionTpiSync,
   buildPlanningTpiFromGestionModel,
   buildPlanningTpiSyncSummary,
   normalizeTpiSyncRefKey
@@ -85,6 +93,16 @@ import { getPlanningPerimeterState } from "../../utils/coordinationScopeUtils"
 const apiUrl = API_URL
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== "test"
 
+const DEFAULT_VALIDATION_OPTIMIZATION_SETTINGS = {
+  profile: "corrections",
+  mode: "strict",
+  maxSwaps: 3,
+  sameSiteOnly: true,
+  preserveValidated: true,
+  reduceWaitingTime: false,
+  issueTypes: ["person_overlap", "consecutive_limit", "room_class_mismatch"]
+}
+
 function buildApiAbsoluteUrl(path) {
   if (!path) {
     return ""
@@ -95,6 +113,46 @@ function buildApiAbsoluteUrl(path) {
   } catch (error) {
     return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`
   }
+}
+
+function getFullscreenElement(doc = document) {
+  return doc.fullscreenElement ||
+    doc.webkitFullscreenElement ||
+    doc.mozFullScreenElement ||
+    doc.msFullscreenElement ||
+    null
+}
+
+function requestElementFullscreen(element) {
+  if (!element) {
+    return null
+  }
+
+  const requestFullscreen =
+    element.requestFullscreen ||
+    element.webkitRequestFullscreen ||
+    element.mozRequestFullScreen ||
+    element.msRequestFullscreen
+
+  if (typeof requestFullscreen !== "function") {
+    return null
+  }
+
+  return requestFullscreen.call(element)
+}
+
+function exitDocumentFullscreen(doc = document) {
+  const exitFullscreen =
+    doc.exitFullscreen ||
+    doc.webkitExitFullscreen ||
+    doc.mozCancelFullScreen ||
+    doc.msExitFullscreen
+
+  if (typeof exitFullscreen !== "function") {
+    return null
+  }
+
+  return exitFullscreen.call(doc)
 }
 
 function formatPublicationConfirmTarget(url) {
@@ -216,6 +274,52 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizeRoomDateFilterValue(value) {
+  const rawValue = compactText(value)
+  return normalizeSoutenanceDateValue(rawValue) || rawValue
+}
+
+function normalizeRoomDateFilterValues(values) {
+  const source = Array.isArray(values) ? values : [values]
+
+  return Array.from(
+    new Set(source.map((value) => normalizeRoomDateFilterValue(value)).filter(Boolean))
+  )
+}
+
+function getRoomDateFilterValues(filters = {}) {
+  return normalizeRoomDateFilterValues([
+    ...(Array.isArray(filters?.date) ? filters.date : [filters?.date]),
+    ...(Array.isArray(filters?.dates) ? filters.dates : [filters?.dates])
+  ])
+}
+
+function normalizeTpiReference(value) {
+  return compactText(value).toLowerCase()
+}
+
+function tpiHasVisibleContent(tpi) {
+  return Boolean(
+    compactText(tpi?.refTpi) ||
+    compactText(tpi?.candidat) ||
+    compactText(tpi?.expert1?.name) ||
+    compactText(tpi?.expert2?.name) ||
+    compactText(tpi?.boss?.name) ||
+    compactText(tpi?.sujet) ||
+    compactText(tpi?.description)
+  )
+}
+
+function getTpiClassMode(tpi) {
+  const classe = compactText(tpi?.classe).toUpperCase()
+
+  if (!classe) {
+    return null
+  }
+
+  return classe.startsWith("M") ? "matu" : "nonM"
 }
 
 function normalizeStakeholderLookupValue(value) {
@@ -684,13 +788,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [isRoomsWrapMode, setIsRoomsWrapMode] = useState(false)
   const previousRoomsFocusModeRef = useRef(false)
   const roomsWrapModeBeforeFocusRef = useRef(null)
+  const planningPageRef = useRef(null)
   const roomsContainerRef = useRef(null)
+  const requestedFullscreenElementRef = useRef(null)
   const [workflowState, setWorkflowState] = useState("planning")
   const [workflowPhases, setWorkflowPhases] = useState({})
   const [activeSnapshotVersion, setActiveSnapshotVersion] = useState(null)
   // Hash des salles au moment du dernier gel (pour détecter les modifications)
   const [roomsHashAtFreeze, setRoomsHashAtFreeze] = useState(null)
   const [validationResult, setValidationResult] = useState(null)
+  const [validationOptimizationSettings, setValidationOptimizationSettings] = useState(DEFAULT_VALIDATION_OPTIMIZATION_SETTINGS)
   const [workflowActionLoading, setWorkflowActionLoading] = useState(false)
   const [pendingWorkflowAction, setPendingWorkflowAction] = useState("")
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
@@ -706,6 +813,8 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [availableTpiModels, setAvailableTpiModels] = useState(null)
   const [isRefreshingTpiSyncStatus, setIsRefreshingTpiSyncStatus] = useState(false)
   const [peopleRegistry, setPeopleRegistry] = useState(null)
+  const [swapAssistSource, setSwapAssistSource] = useState(null)
+  const autoGestionTpiSyncSignatureRef = useRef("")
   const roomEntries = useMemo(() => (Array.isArray(newRooms) ? newRooms : []), [newRooms])
   const stakeholderShortIdHints = useMemo(() => {
     return buildStakeholderShortIdHints({
@@ -769,6 +878,62 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }, [assignedTpiRefs, planifiableTpiModels])
 
+  const unassignedTpiQueue = useMemo(() => {
+    if (!Array.isArray(planifiableTpiModels)) {
+      return []
+    }
+
+    const assignedRefSet = new Set(assignedTpiRefs.map(normalizeTpiReference).filter(Boolean))
+
+    return planifiableTpiModels
+      .map((model) => {
+        const tpi = buildPlanningTpiFromGestionModel(createEmptyTpi(), model, {
+          preserveOffers: false
+        })
+        const refTpi = compactText(tpi?.refTpi || model?.refTpi)
+        const refKey = normalizeTpiReference(refTpi)
+
+        if (!refKey || assignedRefSet.has(refKey)) {
+          return null
+        }
+
+        return {
+          key: refKey,
+          tpi,
+          refTpi,
+          candidat: compactText(tpi?.candidat || model?.candidat),
+          classe: compactText(tpi?.classe || model?.classe),
+          site: compactText(tpi?.site || tpi?.lieu?.site || tpi?.lieu?.entreprise || model?.site || model?.lieu?.site || model?.lieu?.entreprise),
+          sujet: compactText(tpi?.sujet || tpi?.description || model?.sujet || model?.description || model?.domaine)
+        }
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        const classOrder = left.classe.localeCompare(right.classe, "fr", {
+          numeric: true,
+          sensitivity: "base"
+        })
+
+        if (classOrder !== 0) {
+          return classOrder
+        }
+
+        const nameOrder = left.candidat.localeCompare(right.candidat, "fr", {
+          numeric: true,
+          sensitivity: "base"
+        })
+
+        if (nameOrder !== 0) {
+          return nameOrder
+        }
+
+        return left.refTpi.localeCompare(right.refTpi, "fr", {
+          numeric: true,
+          sensitivity: "base"
+        })
+      })
+  }, [assignedTpiRefs, planifiableTpiModels])
+
   const tpiSyncSummary = useMemo(
     () => buildPlanningTpiSyncSummary(roomEntries, availableTpiModels),
     [availableTpiModels, roomEntries]
@@ -798,13 +963,170 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     return summarizeLocalPersonConflicts(roomEntries)
   }, [roomEntries])
 
+  const planningProblemItems = useMemo(() => {
+    const items = []
+
+    ;(Array.isArray(localConflictSummary.conflicts) ? localConflictSummary.conflicts : []).forEach((conflict, index) => {
+      const references = Array.isArray(conflict?.references) ? conflict.references : []
+      const [dateKey, periodText] = String(conflict?.slotKey || "").split("|")
+      const label = compactText(conflict?.personName) || "Conflit de personne"
+      const slotLabel = [
+        compactText(dateKey),
+        periodText ? `slot ${periodText}` : ""
+      ].filter(Boolean).join(" · ")
+
+      items.push({
+        key: `conflict-${index}-${label}-${slotLabel}`,
+        type: "conflict",
+        label,
+        detail: [
+          slotLabel,
+          references.length > 0 ? references.join(", ") : ""
+        ].filter(Boolean).join(" · ")
+      })
+    })
+
+    ;(Array.isArray(tpiSyncSummary.entries) ? tpiSyncSummary.entries : []).forEach((entry, index) => {
+      items.push({
+        key: `sync-${entry?.slotKey || index}`,
+        type: "sync",
+        label: `GestionTPI: ${compactText(entry?.refTpi) || "TPI"}`,
+        detail: Array.isArray(entry?.changedLabels) && entry.changedLabels.length > 0
+          ? entry.changedLabels.join(", ")
+          : "Données différentes"
+      })
+    })
+
+    ;(Array.isArray(nonImportableTpiRefs) ? nonImportableTpiRefs : []).forEach((refTpi, index) => {
+      items.push({
+        key: `non-importable-${refTpi || index}`,
+        type: "import",
+        label: `Non importable: ${refTpi}`,
+        detail: "À corriger avant le snapshot"
+      })
+    })
+
+    return items.slice(0, 80)
+  }, [localConflictSummary.conflicts, nonImportableTpiRefs, tpiSyncSummary.entries])
+
   const validationMarkersBySlotKey = useMemo(() => {
     return buildValidationMarkers(roomEntries, validationResult, localConflictSummary)
   }, [roomEntries, validationResult, localConflictSummary])
 
+  const validationOptimizationProposal = useMemo(() => {
+    if (
+      !validationResult ||
+      Number(validationResult?.year) !== Number(selectedYear)
+    ) {
+      return null
+    }
+
+    return buildTargetedPlanningOptimizationProposal(roomEntries, {
+      soutenanceDates,
+      validationResult,
+      settings: validationOptimizationSettings
+    })
+  }, [roomEntries, selectedYear, soutenanceDates, validationOptimizationSettings, validationResult])
+
+  const handleValidationOptimizationSettingsChange = useCallback((nextSettings = {}) => {
+    setValidationOptimizationSettings((previousSettings) => ({
+      ...previousSettings,
+      ...nextSettings,
+      profile: typeof nextSettings.profile === "string"
+        ? nextSettings.profile
+        : previousSettings.profile,
+      issueTypes: Array.isArray(nextSettings.issueTypes)
+        ? nextSettings.issueTypes
+        : previousSettings.issueTypes
+    }))
+  }, [])
+
+  const getRoomSwapClassMode = useCallback((room) => {
+    const dateKey = compactText(room?.date).slice(0, 10)
+    const roomDateEntry = (Array.isArray(soutenanceDates) ? soutenanceDates : [])
+      .find((entry) => compactText(entry?.date) === dateKey) || null
+
+    return inferRoomClassMode({
+      roomName: room?.name || room?.nameRoom,
+      roomDateEntry,
+      allowedPrefixes: Array.isArray(roomDateEntry?.classes) ? roomDateEntry.classes : []
+    })
+  }, [soutenanceDates])
+
+  const getTpiRoomCompatibility = useCallback((tpi, room) => {
+    if (!tpiHasVisibleContent(tpi)) {
+      return "compatible"
+    }
+
+    const tpiMode = getTpiClassMode(tpi)
+    const roomMode = getRoomSwapClassMode(room)
+
+    if (!tpiMode || !roomMode) {
+      return "warning"
+    }
+
+    return tpiMode === roomMode ? "compatible" : "blocked"
+  }, [getRoomSwapClassMode])
+
+  const getSwapAssistSlotState = useCallback(({ roomIndex, slotIndex, roomData, tpi }) => {
+    if (!swapAssistSource) {
+      return ""
+    }
+
+    if (roomIndex === swapAssistSource.roomIndex && slotIndex === swapAssistSource.tpiIndex) {
+      return "source"
+    }
+
+    const sourceRoom = roomEntries[swapAssistSource.roomIndex]
+    const sourceTpi = sourceRoom?.tpiDatas?.[swapAssistSource.tpiIndex] || swapAssistSource.tpi
+    const targetRoom = roomData || roomEntries[roomIndex]
+    const targetTpi = tpi || targetRoom?.tpiDatas?.[slotIndex]
+
+    if (
+      isTpiPlanningSealed(sourceTpi) ||
+      (tpiHasVisibleContent(targetTpi) && isTpiPlanningSealed(targetTpi))
+    ) {
+      return "blocked"
+    }
+
+    const sourceToTarget = getTpiRoomCompatibility(sourceTpi, targetRoom)
+    const targetToSource = tpiHasVisibleContent(targetTpi)
+      ? getTpiRoomCompatibility(targetTpi, sourceRoom)
+      : "compatible"
+
+    if (sourceToTarget === "blocked" || targetToSource === "blocked") {
+      return "blocked"
+    }
+
+    if (sourceToTarget === "warning" || targetToSource === "warning") {
+      return "warning"
+    }
+
+    return "target"
+  }, [getTpiRoomCompatibility, roomEntries, swapAssistSource])
+
   const notify = useCallback((message, type = "info", duration = 3000) => {
     showNotification(message, type, duration)
   }, [])
+
+  useEffect(() => {
+    if (!swapAssistSource) {
+      return
+    }
+
+    const currentTpi = roomEntries?.[swapAssistSource.roomIndex]?.tpiDatas?.[swapAssistSource.tpiIndex]
+    const currentRefKey = normalizeTpiReference(currentTpi?.refTpi)
+    const selectedRefKey = normalizeTpiReference(swapAssistSource.refTpi)
+
+    if (
+      !currentTpi ||
+      !tpiHasVisibleContent(currentTpi) ||
+      isTpiPlanningSealed(currentTpi) ||
+      (selectedRefKey && currentRefKey !== selectedRefKey)
+    ) {
+      setSwapAssistSource(null)
+    }
+  }, [roomEntries, swapAssistSource])
 
   const handleRefreshTpiSyncStatus = useCallback(async () => {
     const year = Number.parseInt(selectedYear, 10)
@@ -1069,11 +1391,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   const roomDateOptions = useMemo(() => {
     const uniqueDates = Array.from(
-      new Set(
-        roomEntries
-          .map((room) => compactText(room?.date))
-          .filter(Boolean)
-      )
+      roomEntries.reduce((dateKeys, room) => {
+        const rawDate = compactText(room?.date)
+        const dateKey = normalizeSoutenanceDateValue(rawDate) || rawDate
+
+        if (dateKey) {
+          dateKeys.add(dateKey)
+        }
+
+        return dateKeys
+      }, new Set())
     )
 
     return uniqueDates
@@ -1102,30 +1429,22 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         label: formatRoomDateLabel(value)
       }))
   }, [roomEntries])
-  const selectedRoomDateLabel = useMemo(() => {
-    const selectedDate = compactText(roomFilters.date)
-    if (!selectedDate) {
-      return "Toutes les dates"
-    }
-
-    return roomDateOptions.find((option) => option.value === selectedDate)?.label ||
-      formatRoomDateLabel(selectedDate) ||
-      selectedDate
-  }, [roomDateOptions, roomFilters.date])
 
   const roomNameOptions = useMemo(() => {
     const siteFilter = String(roomFilters.site || "").trim().toLowerCase()
-    const dateFilter = String(roomFilters.date || "").trim().toLowerCase()
+    const dateFilters = getRoomDateFilterValues(roomFilters)
+    const hasDateFilters = dateFilters.length > 0
 
     return Array.from(
       new Set(
         roomEntries
           .filter((room) => {
             const roomSite = String(room?.site || "").trim().toLowerCase()
-            const roomDate = String(room?.date || "").trim().toLowerCase()
+            const rawRoomDate = String(room?.date || "").trim()
+            const roomDate = normalizeSoutenanceDateValue(rawRoomDate) || rawRoomDate
 
             const matchesSite = !siteFilter || roomSite === siteFilter
-            const matchesDate = !dateFilter || roomDate === dateFilter
+            const matchesDate = !hasDateFilters || dateFilters.includes(roomDate)
 
             return matchesSite && matchesDate
           })
@@ -1138,20 +1457,22 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         value,
         label: value
       }))
-  }, [roomEntries, roomFilters.site, roomFilters.date])
+  }, [roomEntries, roomFilters.site, roomFilters.date, roomFilters.dates])
 
   const visibleRooms = useMemo(() => {
     const siteFilter = String(roomFilters.site || "").trim().toLowerCase()
-    const dateFilter = String(roomFilters.date || "").trim()
+    const dateFilters = getRoomDateFilterValues(roomFilters)
+    const hasDateFilters = dateFilters.length > 0
     const roomFilter = String(roomFilters.room || "").trim().toLowerCase()
 
     return roomEntries.filter((room) => {
       const roomSite = String(room?.site || "").trim().toLowerCase()
-      const roomDate = String(room?.date || "").trim()
+      const rawRoomDate = String(room?.date || "").trim()
+      const roomDate = normalizeSoutenanceDateValue(rawRoomDate) || rawRoomDate
       const roomName = String(room?.name || room?.nameRoom || "").trim().toLowerCase()
 
       const matchesSite = !siteFilter || roomSite === siteFilter
-      const matchesDate = !dateFilter || roomDate === dateFilter || roomDate.startsWith(dateFilter)
+      const matchesDate = !hasDateFilters || dateFilters.includes(roomDate)
       const matchesRoom = !roomFilter || roomName === roomFilter
 
       return matchesSite && matchesDate && matchesRoom
@@ -1188,9 +1509,76 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     setValidationResult(null)
   }
 
-  const toggleRoomsFocusMode = useCallback(() => {
-    setIsRoomsFocusMode((prev) => !prev)
+  const enterPlanningFullscreen = useCallback(() => {
+    if (typeof document === "undefined") {
+      return
+    }
+
+    const targetElement = planningPageRef.current || document.documentElement
+
+    if (!targetElement || getFullscreenElement(document)) {
+      return
+    }
+
+    try {
+      const fullscreenRequest = requestElementFullscreen(targetElement)
+
+      if (fullscreenRequest !== null) {
+        requestedFullscreenElementRef.current = targetElement
+      }
+
+      if (fullscreenRequest && typeof fullscreenRequest.catch === "function") {
+        fullscreenRequest.catch(() => {
+          if (requestedFullscreenElementRef.current === targetElement) {
+            requestedFullscreenElementRef.current = null
+          }
+        })
+      }
+    } catch (error) {
+      requestedFullscreenElementRef.current = null
+    }
   }, [])
+
+  const exitPlanningFullscreen = useCallback(() => {
+    if (typeof document === "undefined") {
+      return
+    }
+
+    const activeFullscreenElement = getFullscreenElement(document)
+    const targetElement = planningPageRef.current || requestedFullscreenElementRef.current
+
+    if (!activeFullscreenElement) {
+      requestedFullscreenElementRef.current = null
+      return
+    }
+
+    if (!targetElement || activeFullscreenElement !== targetElement) {
+      return
+    }
+
+    requestedFullscreenElementRef.current = null
+
+    try {
+      const fullscreenExit = exitDocumentFullscreen(document)
+
+      if (fullscreenExit && typeof fullscreenExit.catch === "function") {
+        fullscreenExit.catch(() => {})
+      }
+    } catch (error) {
+      // Browser fullscreen can be interrupted by the user; CSS focus still exits.
+    }
+  }, [])
+
+  const toggleRoomsFocusMode = useCallback(() => {
+    if (isRoomsFocusMode) {
+      setIsRoomsFocusMode(false)
+      exitPlanningFullscreen()
+      return
+    }
+
+    setIsRoomsFocusMode(true)
+    enterPlanningFullscreen()
+  }, [enterPlanningFullscreen, exitPlanningFullscreen, isRoomsFocusMode])
 
   const toggleRoomsWrapMode = useCallback(() => {
     setIsRoomsWrapMode((prev) => !prev)
@@ -1207,6 +1595,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       }
 
       setIsEditing(false)
+      setSwapAssistSource(null)
     }
 
     if (wasFocused && !isRoomsFocusMode) {
@@ -1228,13 +1617,47 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         event.preventDefault()
+        exitPlanningFullscreen()
         setIsRoomsFocusMode(false)
       }
     }
 
     window.addEventListener("keydown", handleEscape)
     return () => window.removeEventListener("keydown", handleEscape)
-  }, [isRoomsFocusMode])
+  }, [exitPlanningFullscreen, isRoomsFocusMode])
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined
+    }
+
+    const handleFullscreenChange = () => {
+      const activeFullscreenElement = getFullscreenElement(document)
+
+      if (!activeFullscreenElement && requestedFullscreenElementRef.current) {
+        requestedFullscreenElementRef.current = null
+        setIsRoomsFocusMode(false)
+      }
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange)
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange)
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange)
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange)
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange)
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange)
+      document.removeEventListener("MSFullscreenChange", handleFullscreenChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      exitPlanningFullscreen()
+    }
+  }, [exitPlanningFullscreen])
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -1660,21 +2083,13 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }[workflowState] || "Aucune"
   }, [workflowPhases, workflowState])
 
-  const handleValidatePlanification = async () => {
-    const loadingToastId = toast.loading(`Vérification ${selectedYear} en cours...`, {
+  const runValidationForRooms = async (roomsToValidate, options = {}) => {
+    const loadingToastId = toast.loading(options.loadingMessage || `Vérification ${selectedYear} en cours...`, {
       position: "top-center"
     })
-
-    const optimization = optimizePlanningRooms(roomEntries, {
+    const localAnalysis = analyzePlanningRooms(roomsToValidate, {
       soutenanceDates
     })
-    const roomsToValidate = optimization.changed ? optimization.rooms : roomEntries
-
-    if (optimization.changed) {
-      clearValidationState()
-      setNewRooms(roomsToValidate)
-      saveDataToLocalStorage(roomsToValidate)
-    }
 
     const result = await executeWorkflowAction({
       actionKey: "validate",
@@ -1686,21 +2101,16 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         const nextValidationResult = buildValidationResultFromSources(
           selectedYear,
           validationResult,
-          optimization.after
+          localAnalysis
         )
         setValidationResult(nextValidationResult)
         const validationToast = buildValidationToast(selectedYear, {
           ...validationResult,
           ...nextValidationResult
         })
-        const optimizationToast = optimization.changed
-          ? buildOptimizationToast(selectedYear, {
-              optimization
-            })
-          : null
         toast.update(loadingToastId, {
-          render: optimizationToast
-            ? `${optimizationToast.message} ${validationToast.message}`
+          render: options.successPrefix
+            ? `${options.successPrefix} ${validationToast.message}`
             : validationToast.message,
           type: validationToast.level,
           isLoading: false,
@@ -1722,6 +2132,33 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     })
 
     return result
+  }
+
+  const handleValidatePlanification = async () => {
+    return await runValidationForRooms(roomEntries)
+  }
+
+  const handleApplyValidationOptimization = async () => {
+    const proposal = validationOptimizationProposal
+
+    if (!proposal?.changed) {
+      notify("Aucune optimisation ciblée applicable avec ces options.", "info")
+      return null
+    }
+
+    const nextRooms = proposal.rooms
+    const optimizationToast = buildOptimizationToast(selectedYear, {
+      optimization: proposal
+    })
+
+    clearValidationState()
+    setNewRooms(nextRooms)
+    saveDataToLocalStorage(nextRooms)
+
+    return await runValidationForRooms(nextRooms, {
+      loadingMessage: `Optimisation ciblée ${selectedYear} en cours...`,
+      successPrefix: optimizationToast.message
+    })
   }
 
   const handleAutomatePlanification = async () => {
@@ -2431,7 +2868,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         ...updatedRooms[roomIndex],
         tpiDatas: [...updatedRooms[roomIndex].tpiDatas]
       }
-      updatedRooms[roomIndex].tpiDatas[tpiIndex] = normalizeTpi(updatedTpi)
+      updatedRooms[roomIndex].tpiDatas[tpiIndex] = normalizeTpi({
+        ...updatedTpi,
+        period: tpiIndex + 1
+      })
 
       setNewRooms(updatedRooms)
       await saveDataToLocalStorage(updatedRooms)
@@ -2495,57 +2935,24 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         return
       }
 
-      const syncSlotKeys = new Set(syncEntries.map((entry) => entry?.slotKey).filter(Boolean))
-      const sourceModelsByRef = buildGestionTpiSyncModelMap(availableTpiModels)
-      let updatedSlotCount = 0
-      const updatedAt = Date.now()
+      const syncResult = buildRoomsWithGestionTpiSync(
+        newRooms,
+        syncEntries,
+        availableTpiModels,
+        { updatedAt: Date.now() }
+      )
 
-      const updatedRooms = newRooms.map((room, roomIndex) => {
-        const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
-        let nextTpiDatas = null
-
-        tpiDatas.forEach((tpi, tpiIndex) => {
-          const slotKey = `${roomIndex}:${tpiIndex}`
-
-          if (!syncSlotKeys.has(slotKey)) {
-            return
-          }
-
-          const sourceModel = sourceModelsByRef.get(normalizeTpiSyncRefKey(tpi?.refTpi))
-          if (!sourceModel) {
-            return
-          }
-
-          if (!nextTpiDatas) {
-            nextTpiDatas = [...tpiDatas]
-          }
-
-          nextTpiDatas[tpiIndex] = buildPlanningTpiFromGestionModel(tpi, sourceModel)
-          updatedSlotCount += 1
-        })
-
-        if (!nextTpiDatas) {
-          return room
-        }
-
-        return {
-          ...room,
-          lastUpdate: updatedAt,
-          tpiDatas: nextTpiDatas
-        }
-      })
-
-      if (updatedSlotCount === 0) {
+      if (syncResult.updatedSlotCount === 0) {
         notify("Aucun slot synchronisable trouvé dans la planification.", "error")
         return
       }
 
       clearValidationState()
-      setNewRooms(updatedRooms)
-      await saveDataToLocalStorage(updatedRooms)
+      setNewRooms(syncResult.rooms)
+      await saveDataToLocalStorage(syncResult.rooms)
 
       notify(
-        `${syncRefs.length} TPI synchronisé(s) depuis GestionTPI dans ${updatedSlotCount} slot(s).`,
+        `${syncResult.refCount || syncRefs.length} TPI synchronisé(s) depuis GestionTPI dans ${syncResult.updatedSlotCount} slot(s).`,
         "success"
       )
     } catch (error) {
@@ -2560,8 +2967,69 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   // Fonction pour sauvegarder les données dans localStorage
   const saveDataToLocalStorage = (data) => {
-    return writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, Array.isArray(data) ? data : [])
+    return writeJSONValue(
+      STORAGE_KEYS.ORGANIZER_DATA,
+      normalizeOrganizerRooms(Array.isArray(data) ? data : [], effectiveConfigData)
+    )
   }
+
+  useEffect(() => {
+    if (
+      !hasLoadedLocalPlanning ||
+      !Array.isArray(availableTpiModels) ||
+      roomEntries.length === 0
+    ) {
+      return
+    }
+
+    const syncEntries = Array.isArray(tpiSyncSummary.entries)
+      ? tpiSyncSummary.entries
+      : []
+
+    if (syncEntries.length === 0) {
+      autoGestionTpiSyncSignatureRef.current = ""
+      return
+    }
+
+    const syncSignature = syncEntries
+      .map((entry) => [
+        entry?.slotKey || "",
+        normalizeTpiSyncRefKey(entry?.refTpi),
+        Array.isArray(entry?.changedFields) ? entry.changedFields.join(",") : ""
+      ].join(":"))
+      .join("|")
+
+    if (!syncSignature || autoGestionTpiSyncSignatureRef.current === syncSignature) {
+      return
+    }
+
+    const syncResult = buildRoomsWithGestionTpiSync(
+      roomEntries,
+      syncEntries,
+      availableTpiModels,
+      { updatedAt: Date.now() }
+    )
+
+    if (syncResult.updatedSlotCount === 0) {
+      return
+    }
+
+    autoGestionTpiSyncSignatureRef.current = syncSignature
+    clearValidationState()
+    setNewRooms(syncResult.rooms)
+    saveDataToLocalStorage(syncResult.rooms)
+    notify(
+      `${syncResult.refCount} TPI synchronisé(s) automatiquement depuis GestionTPI.`,
+      "info",
+      2400
+    )
+  }, [
+    availableTpiModels,
+    hasLoadedLocalPlanning,
+    notify,
+    roomEntries,
+    tpiSyncSummary.entries
+  ])
 
   // Fonction pour gérer le processus de sauvegarde des données
   const handleSave = async () => {
@@ -2762,6 +3230,200 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     }
   }
 
+  const handleDropUnassignedTpi = (sourceTpi, targetTpiID) => {
+    const targetId = compactText(targetTpiID)
+    const sourceRef = compactText(sourceTpi?.refTpi)
+
+    if (!targetId || !sourceRef) {
+      notify("TPI ou slot invalide.", "error")
+      return
+    }
+
+    const sourceRefKey = normalizeTpiReference(sourceRef)
+    if (assignedTpiRefs.some((refTpi) => normalizeTpiReference(refTpi) === sourceRefKey)) {
+      notify(`TPI ${sourceRef} déjà attribué dans la planification.`, "error")
+      return
+    }
+
+    let targetRoomIndex = -1
+    let targetTpiIndex = -1
+
+    roomEntries.some((room, roomIndex) => {
+      const tpiIndex = Array.isArray(room?.tpiDatas)
+        ? room.tpiDatas.findIndex((tpi) => compactText(tpi?.id) === targetId)
+        : -1
+
+      if (tpiIndex >= 0) {
+        targetRoomIndex = roomIndex
+        targetTpiIndex = tpiIndex
+        return true
+      }
+
+      return false
+    })
+
+    if (targetRoomIndex < 0 || targetTpiIndex < 0) {
+      notify("Slot cible introuvable.", "error")
+      return
+    }
+
+    const targetRoom = roomEntries[targetRoomIndex]
+    const targetTpi = targetRoom?.tpiDatas?.[targetTpiIndex]
+    const targetHasTpi = tpiHasVisibleContent(targetTpi)
+
+    if (targetHasTpi && isTpiPlanningSealed(targetTpi)) {
+      notify("Ce TPI est scellé et ne peut pas être remplacé.", "error")
+      return
+    }
+
+    if (targetHasTpi && typeof window !== "undefined") {
+      const targetRef = compactText(targetTpi?.refTpi) || compactText(targetTpi?.candidat) || "ce TPI"
+      const confirmed = window.confirm(
+        `Remplacer ${targetRef} par ${sourceRef} ? Le TPI remplacé retournera dans la liste à placer.`
+      )
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    const updatedRooms = roomEntries.map((room, roomIndex) => {
+      if (roomIndex !== targetRoomIndex) {
+        return room
+      }
+
+      const tpiDatas = Array.isArray(room?.tpiDatas) ? [...room.tpiDatas] : []
+      tpiDatas[targetTpiIndex] = normalizeTpi({
+        ...sourceTpi,
+        id: targetId,
+        period: targetTpiIndex + 1
+      })
+
+      return {
+        ...room,
+        lastUpdate: Date.now(),
+        tpiDatas
+      }
+    })
+
+    clearValidationState()
+    setSwapAssistSource(null)
+    setNewRooms(updatedRooms)
+    saveDataToLocalStorage(updatedRooms)
+
+    notify(
+      `TPI ${sourceRef} placé dans ${targetRoom?.name || "la salle"}, créneau ${targetTpiIndex + 1}.`,
+      "success"
+    )
+  }
+
+  const handleSelectTpiForSwap = ({ tpi, roomIndex, tpiIndex, slotId }) => {
+    if (isEditing || !tpiHasVisibleContent(tpi) || isTpiPlanningSealed(tpi)) {
+      return
+    }
+
+    const normalizedRoomIndex = Number.parseInt(roomIndex, 10)
+    const normalizedTpiIndex = Number.parseInt(tpiIndex, 10)
+
+    if (!Number.isInteger(normalizedRoomIndex) || !Number.isInteger(normalizedTpiIndex)) {
+      return
+    }
+
+    const room = roomEntries[normalizedRoomIndex]
+    const refTpi = compactText(tpi?.refTpi)
+    const tpiId = compactText(slotId || tpi?.id)
+
+    if (!room || !tpiId) {
+      return
+    }
+
+    setSwapAssistSource((current) => {
+      if (
+        current &&
+        current.roomIndex === normalizedRoomIndex &&
+        current.tpiIndex === normalizedTpiIndex
+      ) {
+        return null
+      }
+
+      return {
+        tpi: normalizeTpi(tpi),
+        tpiId,
+        refTpi,
+        candidat: compactText(tpi?.candidat),
+        roomIndex: normalizedRoomIndex,
+        tpiIndex: normalizedTpiIndex,
+        roomName: compactText(room?.name || room?.nameRoom),
+        roomDate: compactText(room?.date).slice(0, 10),
+        period: normalizedTpiIndex + 1
+      }
+    })
+  }
+
+  const clearSwapAssistSource = () => {
+    setSwapAssistSource(null)
+  }
+
+  const handleAssistedSwapToSlot = (targetTpiID) => {
+    if (!swapAssistSource) {
+      return
+    }
+
+    const targetId = compactText(targetTpiID)
+    if (!targetId || targetId === swapAssistSource.tpiId) {
+      setSwapAssistSource(null)
+      return
+    }
+
+    let targetRoomIndex = -1
+    let targetTpiIndex = -1
+    let targetTpi = null
+    let targetRoom = null
+
+    roomEntries.some((room, roomIndex) => {
+      const tpiIndex = Array.isArray(room?.tpiDatas)
+        ? room.tpiDatas.findIndex((tpi) => compactText(tpi?.id) === targetId)
+        : -1
+
+      if (tpiIndex >= 0) {
+        targetRoomIndex = roomIndex
+        targetTpiIndex = tpiIndex
+        targetTpi = room.tpiDatas[tpiIndex]
+        targetRoom = room
+        return true
+      }
+
+      return false
+    })
+
+    if (targetRoomIndex < 0 || targetTpiIndex < 0) {
+      notify("Slot cible introuvable.", "error")
+      return
+    }
+
+    const sourceTpi = roomEntries?.[swapAssistSource.roomIndex]?.tpiDatas?.[swapAssistSource.tpiIndex] || swapAssistSource.tpi
+    if (isTpiPlanningSealed(sourceTpi) || (tpiHasVisibleContent(targetTpi) && isTpiPlanningSealed(targetTpi))) {
+      notify("Les TPI scellés ne peuvent pas être déplacés.", "error")
+      setSwapAssistSource(null)
+      return
+    }
+
+    const slotState = getSwapAssistSlotState({
+      roomIndex: targetRoomIndex,
+      slotIndex: targetTpiIndex,
+      roomData: targetRoom,
+      tpi: targetTpi
+    })
+
+    if (slotState === "blocked") {
+      notify("Ce swap est incompatible avec la classe ou la room cible.", "error")
+      return
+    }
+
+    handleSwapTpiCards(swapAssistSource.tpiId, targetId)
+    setSwapAssistSource(null)
+  }
+
   const handleSwapTpiCards = (draggedTpiID, targetTpiID) => {
     // Recherche des salles qui contiennent les TPI correspondants
     const draggedTpiRoomIndex = roomEntries.findIndex((room) =>
@@ -2795,13 +3457,28 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       return
     }
 
+    const draggedSlotTpi = draggedTpiRoom.tpiDatas[draggedTpiIndex]
+    const targetSlotTpi = targetTpiRoom.tpiDatas[targetTpiIndex]
+
+    if (
+      isTpiPlanningSealed(draggedSlotTpi) ||
+      (tpiHasVisibleContent(targetSlotTpi) && isTpiPlanningSealed(targetSlotTpi))
+    ) {
+      notify("Les TPI scellés ne peuvent pas être déplacés.", "error")
+      return
+    }
+
     clearValidationState()
     // Effectuer le swap en utilisant une variable temporaire
-    const tempTpi = { ...draggedTpiRoom.tpiDatas[draggedTpiIndex] }
+    const tempTpi = { ...draggedSlotTpi }
     draggedTpiRoom.tpiDatas[draggedTpiIndex] = {
-      ...targetTpiRoom.tpiDatas[targetTpiIndex]
+      ...targetTpiRoom.tpiDatas[targetTpiIndex],
+      period: draggedTpiIndex + 1
     }
-    targetTpiRoom.tpiDatas[targetTpiIndex] = tempTpi
+    targetTpiRoom.tpiDatas[targetTpiIndex] = {
+      ...tempTpi,
+      period: targetTpiIndex + 1
+    }
 
     // Créer un nouvel objet newRooms avec les modifications effectuées
     const updatedNewRooms = roomEntries.map((room, index) => {
@@ -2907,7 +3584,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         return
       }
 
-      roomsData = roomEntries.map((room) => ({
+      roomsData = normalizeOrganizerRooms(roomEntries, effectiveConfigData).map((room) => ({
         ...room,
         lastUpdate: new Date().getTime()
       }))
@@ -2960,7 +3637,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const isRoomsWrapModeEffective = isRoomsFocusMode || isRoomsWrapMode
 
   return (
-    <div className={`planning-schedule-page ${isRoomsFocusMode ? "planning-schedule-page--focus" : ""} ${isRoomsWrapModeEffective ? "planning-schedule-page--wrap" : ""}`.trim()}>
+    <div
+      ref={planningPageRef}
+      className={`planning-schedule-page ${isRoomsFocusMode ? "planning-schedule-page--focus" : ""} ${isRoomsWrapModeEffective ? "planning-schedule-page--wrap" : ""}`.trim()}
+    >
       {!isRoomsFocusMode ? (
         <TpiScheduleButtons
           configData={effectiveConfigData}
@@ -2979,6 +3659,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           workflowActionLoading={workflowActionLoading}
           pendingWorkflowAction={pendingWorkflowAction}
           validationResult={validationResult}
+          validationOptimizationProposal={validationOptimizationProposal}
+          validationOptimizationSettings={validationOptimizationSettings}
+          onValidationOptimizationSettingsChange={handleValidationOptimizationSettingsChange}
+          onApplyValidationOptimization={handleApplyValidationOptimization}
           onAutomatePlanification={handleAutomatePlanification}
           onValidatePlanification={handleValidatePlanification}
           onFreezeSnapshot={handleFreezeSnapshot}
@@ -3044,54 +3728,6 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           toggleArrow={toggleArrow}
           isArrowUp={isArrowUp}
         />
-      ) : null}
-
-      {isRoomsFocusMode && roomDateOptions.length > 0 ? (
-        <div className="planning-focus-toolbar" role="toolbar" aria-label="Focus de planification">
-          <div className="planning-focus-toolbar-copy">
-            <CalendarIcon className="planning-focus-toolbar-icon" />
-            <div>
-              <strong>{selectedRoomDateLabel}</strong>
-              <span>
-                {visibleRooms.length}/{roomEntries.length} salle{roomEntries.length > 1 ? "s" : ""}
-              </span>
-            </div>
-          </div>
-          <div className="planning-focus-toolbar-actions">
-            <select
-              className="planning-focus-date-select"
-              value={roomFilters.date || ""}
-              onChange={(event) => updateRoomFilters({ date: event.target.value })}
-              aria-label="Filtrer le focus par date"
-            >
-              <option value="">Toutes les dates</option>
-              {roomDateOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="planning-focus-toolbar-btn icon-button"
-              onClick={clearRoomFilters}
-              disabled={!(roomFilters.site || roomFilters.date || roomFilters.room)}
-              aria-label="Réinitialiser les filtres"
-              title="Réinitialiser les filtres"
-            >
-              <IconButtonContent label='Réinitialiser les filtres' icon={RefreshIcon} />
-            </button>
-            <button
-              type="button"
-              className="planning-focus-toolbar-btn primary icon-button"
-              onClick={() => setIsRoomsFocusMode(false)}
-              aria-label="Quitter le focus"
-              title="Quitter le focus"
-            >
-              <IconButtonContent label='Quitter le focus' icon={CloseIcon} />
-            </button>
-          </div>
-        </div>
       ) : null}
 
       {Number.isInteger(pendingYearChange) && typeof document !== "undefined"
@@ -3329,36 +3965,76 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
         </div>
       ) : (
         <DndProvider backend={HTML5Backend}>
-          <div id='rooms' ref={roomsContainerRef}>
-            {visibleRooms.map((room) => {
-              const originalIndex = roomEntries.findIndex((candidate) => candidate.idRoom === room.idRoom)
+          {!isRoomsFocusMode && swapAssistSource ? (
+            <div className='planning-swap-assist-bar' role='status'>
+              <div className='planning-swap-assist-copy'>
+                <span>Échange</span>
+                <strong>
+                  {[swapAssistSource.refTpi, swapAssistSource.candidat].filter(Boolean).join(" · ") || "TPI sélectionné"}
+                </strong>
+                <em>
+                  {[swapAssistSource.roomDate, swapAssistSource.roomName, `slot ${swapAssistSource.period}`].filter(Boolean).join(" · ")}
+                </em>
+              </div>
+              <button
+                type='button'
+                className='planning-swap-assist-clear icon-button'
+                onClick={clearSwapAssistSource}
+                aria-label='Annuler la sélection de swap'
+                title='Annuler la sélection de swap'
+              >
+                <IconButtonContent label='Annuler la sélection de swap' icon={CloseIcon} />
+              </button>
+            </div>
+          ) : null}
+          <div className='planning-assignment-workbench'>
+            {!isRoomsFocusMode ? (
+              <TpiAssignmentPanel
+                unassignedTpis={unassignedTpiQueue}
+                problemItems={planningProblemItems}
+                isLoading={!Array.isArray(planifiableTpiModels)}
+                isDragDisabled={isEditing}
+                onRefresh={handleRefreshTpiSyncStatus}
+              />
+            ) : null}
+            <div id='rooms' ref={roomsContainerRef}>
+              {visibleRooms.map((room) => {
+                const originalIndex = roomEntries.findIndex((candidate) => candidate.idRoom === room.idRoom)
 
-              return (
-                <DateRoom
-                  key={room.idRoom ?? originalIndex}
-                  roomIndex={originalIndex >= 0 ? originalIndex : 0}
-                  roomData={room}
-                  isEditOfRoom={isEditing}
-                  onUpdateRoom={handleUpdateRoom}
-                  tpiCardDetailLevel={tpiCardDetailLevel}
-                  peopleRegistry={peopleRegistry}
-                  stakeholderShortIdHints={stakeholderShortIdHints}
-                  soutenanceDates={soutenanceDates}
-                  roomCatalogBySite={roomCatalogBySite}
-                  allRooms={roomEntries}
-                  tpiSyncEntriesBySlotKey={tpiSyncEntriesBySlotKey}
-                  onSyncTpiFromGestion={handleSyncTpiFromGestion}
-                  onUpdateTpi={(tpiIndex, updatedTpi) =>
-                    handleUpdateTpi(originalIndex >= 0 ? originalIndex : 0, tpiIndex, updatedTpi)
-                  }
-                  onSwapTpiCards={(draggedTpi, targetTpi) =>
-                    handleSwapTpiCards(draggedTpi, targetTpi)
-                  }
-                  onDelete={() => handleDelete(room.idRoom)}
-                  validationMarkersBySlotKey={validationMarkersBySlotKey}
-                />
-              )
-            })}
+                return (
+                  <DateRoom
+                    key={room.idRoom ?? originalIndex}
+                    roomIndex={originalIndex >= 0 ? originalIndex : 0}
+                    roomData={room}
+                    isEditOfRoom={isEditing}
+                    onUpdateRoom={handleUpdateRoom}
+                    tpiCardDetailLevel={tpiCardDetailLevel}
+                    peopleRegistry={peopleRegistry}
+                    stakeholderShortIdHints={stakeholderShortIdHints}
+                    soutenanceDates={soutenanceDates}
+                    roomCatalogBySite={roomCatalogBySite}
+                    allRooms={roomEntries}
+                    tpiSyncEntriesBySlotKey={tpiSyncEntriesBySlotKey}
+                    onSyncTpiFromGestion={handleSyncTpiFromGestion}
+                    onUpdateTpi={(tpiIndex, updatedTpi) =>
+                      handleUpdateTpi(originalIndex >= 0 ? originalIndex : 0, tpiIndex, updatedTpi)
+                    }
+                    onSwapTpiCards={(draggedTpi, targetTpi) =>
+                      handleSwapTpiCards(draggedTpi, targetTpi)
+                    }
+                    swapAssistSource={swapAssistSource}
+                    getSwapAssistSlotState={getSwapAssistSlotState}
+                    onSelectTpiForSwap={handleSelectTpiForSwap}
+                    onAssistedSwapToSlot={handleAssistedSwapToSlot}
+                    onDropUnassignedTpi={(sourceTpi, targetTpi) =>
+                      handleDropUnassignedTpi(sourceTpi, targetTpi)
+                    }
+                    onDelete={() => handleDelete(room.idRoom)}
+                    validationMarkersBySlotKey={validationMarkersBySlotKey}
+                  />
+                )
+              })}
+            </div>
           </div>
         </DndProvider>
       )}

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useDrag } from "react-dnd";
 import { ItemTypes } from "./Constants";
 import { getTpiModels } from "../tpiControllers/TpiController";
-import { normalizeTpi } from "./tpiScheduleData";
+import { isTpiPlanningSealed, normalizeTpi } from "./tpiScheduleData";
 import { buildPlanningTpiFromGestionModel } from "./tpiScheduleSync";
 import {
   inferRoomClassMode,
@@ -42,6 +42,15 @@ const PREFERENCE_INDICATOR_COPY = Object.freeze({
   }
 });
 
+const VALIDATION_TONE_COPY = Object.freeze({
+  danger: "Conflit de même créneau",
+  sequence: "Limite de TPI consécutifs",
+  room: "Salle ou type incompatible",
+  planning: "TPI non planifié",
+  import: "Écart d'import",
+  warning: "Avertissement de contrainte"
+});
+
 const AFTERNOON_START_MINUTES = 12 * 60 + 30;
 const FALLBACK_MORNING_PERIOD_COUNT = 4;
 
@@ -76,6 +85,13 @@ const normalizeLookupValue = (value) =>
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+
+const normalizeCssToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 const formatRegistryPersonLabel = (person) =>
   [person?.firstName, person?.lastName].filter(Boolean).join(" ").trim();
@@ -397,7 +413,14 @@ const TpiCard = ({
   stakeholderShortIdHints = {},
   soutenanceDates = [],
   hasValidationError = false,
-  validationErrorMessages = []
+  hasValidationWarning = false,
+  validationIssueTypes = [],
+  primaryValidationIssueType = '',
+  validationTone = '',
+  validationErrorMessages = [],
+  isSwapSelected = false,
+  isSwapCandidate = false,
+  onActivateTpi = null
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [editedTpi, setEditedTpi] = useState(() => normalizeTpi(tpi));
@@ -409,6 +432,7 @@ const TpiCard = ({
   const searchInputRef = useRef(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const safeTpi = editedTpi || normalizeTpi(tpi);
+  const isPlanningSealed = isTpiPlanningSealed(safeTpi);
   const roomYear = useMemo(() => getYearFromRoomDate(roomDate), [roomDate]);
 
   const handleToggleSelect = () => {
@@ -944,7 +968,7 @@ const TpiCard = ({
   const [{ isDragging }, dragRef] = useDrag({
     type: ItemTypes.TPI_CARD,
     item: { tpi: safeTpi },
-    canDrag: !isEmptyCard && !isEditingTpiCard,
+    canDrag: !isEmptyCard && !isEditingTpiCard && !isPlanningSealed,
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
@@ -1076,23 +1100,103 @@ const TpiCard = ({
       </div>
     )
   ) : null
+  const canActivateTpi = !isEmptyCard && !isEditingTpiCard && !isPlanningSealed && typeof onActivateTpi === "function"
+  const handleActivateTpi = (event) => {
+    if (!canActivateTpi) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    onActivateTpi(event)
+  }
+  const handleActivateTpiKeyDown = (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return
+    }
+
+    handleActivateTpi(event)
+  }
+  const normalizedValidationIssueTypes = Array.from(
+    new Set(
+      [
+        primaryValidationIssueType,
+        ...(Array.isArray(validationIssueTypes) ? validationIssueTypes : [])
+      ]
+        .map((type) => compactText(type))
+        .filter(Boolean)
+    )
+  )
+  const hasValidationMarker =
+    !isEmptyCard &&
+    (hasValidationError || hasValidationWarning || normalizedValidationIssueTypes.length > 0)
+  const primaryValidationIssueToken = normalizeCssToken(
+    primaryValidationIssueType || normalizedValidationIssueTypes[0] || "unknown"
+  )
+  const validationToneToken = normalizeCssToken(
+    validationTone || (!hasValidationError && hasValidationWarning ? "warning" : "danger")
+  )
+  const validationClassName = hasValidationMarker
+    ? [
+        "has-validation-marker",
+        hasValidationError ? "has-validation-error" : "",
+        !hasValidationError && hasValidationWarning ? "has-validation-warning" : "",
+        validationToneToken ? `validation-tone-${validationToneToken}` : "",
+        primaryValidationIssueToken ? `validation-issue-${primaryValidationIssueToken}` : "",
+        ...normalizedValidationIssueTypes
+          .map((issueType) => normalizeCssToken(issueType))
+          .filter(Boolean)
+          .map((issueType) => `has-validation-issue-${issueType}`)
+      ].filter(Boolean).join(" ")
+    : ""
+  const validationStatusLabel = hasValidationMarker
+    ? VALIDATION_TONE_COPY[validationToneToken] || "Problème de planification"
+    : ""
+  const articleLabel = [
+    displayRef ? `TPI ${displayRef}` : "TPI",
+    hasValidationMarker ? validationStatusLabel : ""
+  ].filter(Boolean).join(" - ")
 
   return (
     <div
       ref={isEmptyCard ? undefined : dragRef}
       role={isEmptyCard ? undefined : "article"}
-      aria-label={displayRef ? `TPI ${displayRef}` : "TPI"}
+      aria-label={articleLabel}
+      tabIndex={canActivateTpi ? 0 : undefined}
+      data-swap-selected={isSwapSelected ? "true" : undefined}
+      data-validation-tone={hasValidationMarker && validationToneToken ? validationToneToken : undefined}
+      data-validation-issue-types={hasValidationMarker && normalizedValidationIssueTypes.length > 0
+        ? normalizedValidationIssueTypes.join(" ")
+        : undefined}
       className={`tpiCard detail-level-${normalizedDetailLevel} ${
         isEmptyCard ? "is-empty" : ""
       } ${isDragging ? "dragging" : ""} ${
-        !isEmptyCard && hasValidationError ? "has-validation-error" : ""
+        validationClassName
       } ${
         hasConstraintWarning ? "has-constraint-warning" : ""
       } ${
         hasBossAvailabilityConflict ? "has-boss-availability-conflict" : ""
+      } ${
+        isPlanningSealed ? "is-planning-sealed" : ""
+      } ${
+        isSwapSelected ? "is-swap-selected" : ""
+      } ${
+        isSwapCandidate ? "is-swap-candidate" : ""
       }`}
-      title={!isEmptyCard && hasValidationError ? validationErrorTitle : undefined}
+      title={hasValidationMarker ? validationErrorTitle : undefined}
+      onClick={handleActivateTpi}
+      onKeyDown={handleActivateTpiKeyDown}
     >
+      {hasValidationMarker ? (
+        <span
+          className="tpi-card-validation-indicator"
+          role="img"
+          tabIndex={0}
+          aria-label={validationStatusLabel}
+          title={validationErrorTitle || validationStatusLabel}
+        />
+      ) : null}
+
       {preferenceIndicator ? (
         <span
           className={`tpi-card-preference-indicator tpi-card-preference-indicator--${preferenceIndicator.status}`}

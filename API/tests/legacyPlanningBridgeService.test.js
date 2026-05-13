@@ -146,7 +146,7 @@ test('rebuildWorkflowFromLegacyPlanning ignores legacy entries outside configure
   }
 })
 
-test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without stakeholder warnings', async () => {
+test('rebuildWorkflowFromLegacyPlanning creates available slots for generated empty room slots without stakeholder warnings', async () => {
   const originalGetPlanningConfig = coordinationConfigService.getPlanningConfig
   const originalPersonFind = Person.find
   const originalSlotDeleteMany = Slot.deleteMany
@@ -163,6 +163,7 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
   let tpiCreateCount = 0
   let slotCreateCount = 0
   let voteInsertCount = 0
+  const createdSlots = []
   const warnings = []
 
   coordinationConfigService.getPlanningConfig = async () => ({
@@ -197,9 +198,13 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
   })
 
   Slot.deleteMany = async () => ({ acknowledged: true })
-  Slot.create = async () => {
+  Slot.create = async (doc) => {
     slotCreateCount += 1
-    throw new Error('Slot.create should not be called for generated empty slots.')
+    createdSlots.push(doc)
+    return {
+      ...doc,
+      _id: `slot-empty-${slotCreateCount}`
+    }
   }
 
   Vote.deleteMany = async () => ({ acknowledged: true })
@@ -255,7 +260,7 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
     })
 
     assert.equal(summary.tpiCount, 0)
-    assert.equal(summary.slotCount, 0)
+    assert.equal(summary.slotCount, 2)
     assert.equal(summary.voteCount, 0)
     assert.equal(summary.skippedEntries, 0)
     assert.equal(summary.emptySlotEntries, 2)
@@ -265,7 +270,15 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
       false
     )
     assert.equal(tpiCreateCount, 0)
-    assert.equal(slotCreateCount, 0)
+    assert.equal(slotCreateCount, 2)
+    assert.deepEqual(createdSlots.map((slot) => ({
+      period: slot.period,
+      status: slot.status,
+      assignedTpi: slot.assignedTpi
+    })), [
+      { period: 1, status: 'available', assignedTpi: null },
+      { period: 2, status: 'available', assignedTpi: null }
+    ])
     assert.equal(voteInsertCount, 0)
   } finally {
     coordinationConfigService.getPlanningConfig = originalGetPlanningConfig
@@ -275,6 +288,208 @@ test('rebuildWorkflowFromLegacyPlanning skips generated empty room slots without
     TpiPlanning.find = originalTpiPlanningFind
     TpiPlanning.deleteMany = originalTpiPlanningDeleteMany
     TpiPlanning.create = originalTpiPlanningCreate
+    tpiRoomsModels.createTpiRoomModel = originalCreateTpiRoomModel
+    Vote.deleteMany = originalVoteDeleteMany
+    Vote.insertMany = originalVoteInsertMany
+    console.warn = originalConsoleWarn
+
+    if (originalTpiModelsModule) {
+      require.cache[TpiModelsYearPath] = originalTpiModelsModule
+    } else {
+      delete require.cache[TpiModelsYearPath]
+    }
+
+    clearLegacyPlanningBridgeService()
+  }
+})
+
+test('rebuildWorkflowFromLegacyPlanning uses displayed slot order instead of stale embedded periods', async () => {
+  const originalGetPlanningConfig = coordinationConfigService.getPlanningConfig
+  const originalPersonFind = Person.find
+  const originalPersonFindById = Person.findById
+  const originalSlotDeleteMany = Slot.deleteMany
+  const originalSlotCreate = Slot.create
+  const originalTpiPlanningFind = TpiPlanning.find
+  const originalTpiPlanningDeleteMany = TpiPlanning.deleteMany
+  const originalTpiPlanningCreate = TpiPlanning.create
+  const originalTpiPlanningUpdateOne = TpiPlanning.updateOne
+  const originalCreateTpiRoomModel = tpiRoomsModels.createTpiRoomModel
+  const originalVoteDeleteMany = Vote.deleteMany
+  const originalVoteInsertMany = Vote.insertMany
+  const originalConsoleWarn = console.warn
+  const originalTpiModelsModule = require.cache[TpiModelsYearPath]
+
+  const people = [
+    {
+      _id: '507f1f77bcf86cd799439031',
+      firstName: 'Alice',
+      lastName: 'Example',
+      roles: ['candidat'],
+      candidateYears: [2026],
+      isActive: true
+    },
+    {
+      _id: '507f1f77bcf86cd799439032',
+      firstName: 'Expert',
+      lastName: 'One',
+      roles: ['expert'],
+      isActive: true
+    },
+    {
+      _id: '507f1f77bcf86cd799439033',
+      firstName: 'Expert',
+      lastName: 'Two',
+      roles: ['expert'],
+      isActive: true
+    },
+    {
+      _id: '507f1f77bcf86cd799439034',
+      firstName: 'Chef',
+      lastName: 'Projet',
+      roles: ['chef_projet'],
+      isActive: true
+    }
+  ]
+  const warnings = []
+  let tpiCreateCount = 0
+  let slotCreateCount = 0
+  let voteInsertCount = 0
+  const createdSlots = []
+
+  coordinationConfigService.getPlanningConfig = async () => ({
+    siteConfigs: [
+      {
+        siteCode: 'VENNES',
+        active: true
+      }
+    ],
+    workflowSettings: {
+      voteDeadlineDays: 7
+    }
+  })
+
+  Person.find = () => ({
+    select() {
+      return {
+        lean: async () => people
+      }
+    }
+  })
+  Person.findById = async (personId) => people.find((person) => person._id === String(personId)) || null
+
+  TpiPlanning.find = () => ({
+    distinct: async () => []
+  })
+  TpiPlanning.deleteMany = async () => ({ acknowledged: true })
+  TpiPlanning.create = async (doc) => {
+    tpiCreateCount += 1
+    return {
+      ...doc,
+      _id: `tpi-${tpiCreateCount}`
+    }
+  }
+  TpiPlanning.updateOne = async () => ({ acknowledged: true, matchedCount: 1, modifiedCount: 1 })
+
+  tpiRoomsModels.createTpiRoomModel = () => ({
+    deleteMany: async () => ({ acknowledged: true }),
+    insertMany: async () => ({ acknowledged: true })
+  })
+
+  Slot.deleteMany = async () => ({ acknowledged: true })
+  Slot.create = async (doc) => {
+    slotCreateCount += 1
+    createdSlots.push(doc)
+
+    return {
+      ...doc,
+      _id: `slot-${slotCreateCount}`
+    }
+  }
+
+  Vote.deleteMany = async () => ({ acknowledged: true })
+  Vote.insertMany = async (docs) => {
+    voteInsertCount += 1
+    return docs
+  }
+
+  require.cache[TpiModelsYearPath].exports = () => ({
+    find() {
+      return {
+        lean: async () => []
+      }
+    }
+  })
+
+  console.warn = (message) => {
+    warnings.push(String(message))
+  }
+
+  clearLegacyPlanningBridgeService()
+  const { rebuildWorkflowFromLegacyPlanning } = require('../services/legacyPlanningBridgeService')
+
+  try {
+    const participantIds = {
+      candidatPersonId: '507f1f77bcf86cd799439031',
+      expert1: { personId: '507f1f77bcf86cd799439032' },
+      expert2: { personId: '507f1f77bcf86cd799439033' },
+      boss: { personId: '507f1f77bcf86cd799439034' }
+    }
+    const summary = await rebuildWorkflowFromLegacyPlanning({
+      year: 2026,
+      legacyRooms: [
+        {
+          idRoom: 1,
+          lastUpdate: Date.now(),
+          site: 'VENNES',
+          date: '2026-06-10',
+          name: 'Vennes - A22',
+          tpiDatas: [
+            {
+              refTpi: '3001',
+              period: 7,
+              ...participantIds
+            },
+            {
+              refTpi: '3002',
+              period: 7,
+              ...participantIds
+            }
+          ]
+        }
+      ]
+    })
+
+    assert.equal(summary.tpiCount, 2)
+    assert.equal(summary.slotCount, 2)
+    assert.equal(summary.voteCount, 6)
+    assert.equal(summary.skippedEntries, 0)
+    assert.equal(summary.duplicateSlotEntries, 0)
+    assert.deepEqual(summary.duplicateSlots, [])
+    assert.equal(tpiCreateCount, 2)
+    assert.equal(slotCreateCount, 2)
+    assert.deepEqual(createdSlots.map((slot) => ({
+      period: slot.period,
+      startTime: slot.startTime,
+      status: slot.status
+    })), [
+      { period: 1, startTime: '8:00', status: 'pending_votes' },
+      { period: 2, startTime: '9:10', status: 'pending_votes' }
+    ])
+    assert.equal(voteInsertCount, 2)
+    assert.equal(
+      warnings.some((message) => message.includes('Créneau partagé détecté')),
+      false
+    )
+  } finally {
+    coordinationConfigService.getPlanningConfig = originalGetPlanningConfig
+    Person.find = originalPersonFind
+    Person.findById = originalPersonFindById
+    Slot.deleteMany = originalSlotDeleteMany
+    Slot.create = originalSlotCreate
+    TpiPlanning.find = originalTpiPlanningFind
+    TpiPlanning.deleteMany = originalTpiPlanningDeleteMany
+    TpiPlanning.create = originalTpiPlanningCreate
+    TpiPlanning.updateOne = originalTpiPlanningUpdateOne
     tpiRoomsModels.createTpiRoomModel = originalCreateTpiRoomModel
     Vote.deleteMany = originalVoteDeleteMany
     Vote.insertMany = originalVoteInsertMany

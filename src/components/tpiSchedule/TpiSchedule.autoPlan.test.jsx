@@ -16,7 +16,8 @@ jest.mock('react-dnd', () => {
       'div',
       { 'data-testid': 'dnd-provider' },
       children
-    )
+    ),
+    useDrag: () => [{ isDragging: false }, jest.fn()]
   }
 })
 
@@ -35,6 +36,7 @@ jest.mock('../../config/appConfig', () => {
 jest.mock('./TpiScheduleButtons', () => {
   return function MockTpiScheduleButtons({
     onAutomatePlanification,
+    onValidatePlanification,
     onOpenVotesWithoutEmails,
     onShowNewRoomForm,
     onCreateRoom,
@@ -47,6 +49,9 @@ jest.mock('./TpiScheduleButtons', () => {
       <div data-testid="mock-toolbar">
         <button type="button" onClick={onAutomatePlanification}>
           auto-plan
+        </button>
+        <button type="button" onClick={onValidatePlanification}>
+          validate-plan
         </button>
         <button type="button" onClick={onOpenVotesWithoutEmails}>
           open-votes-no-email
@@ -97,6 +102,7 @@ jest.mock('../tpiControllers/TpiRoomsController', () => ({
 jest.mock('../../services/coordinationService', () => ({
   workflowCoordinationService: {
     automatePlanification: jest.fn(),
+    validatePlanification: jest.fn(),
     startVotesWithoutEmails: jest.fn(),
     getYearState: jest.fn(() => Promise.resolve({ state: 'planning' })),
     getActiveSnapshot: jest.fn(() => Promise.resolve(null))
@@ -193,6 +199,101 @@ describe('TpiSchedule auto plan', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
+  test('vérifier les conflits ne modifie pas automatiquement les salles locales', async () => {
+    const localRooms = [
+      {
+        idRoom: 1,
+        lastUpdate: 100,
+        site: 'ETML',
+        date: '2026-06-10',
+        name: 'A23',
+        configSite: { numSlots: 2 },
+        tpiDatas: [
+          {
+            refTpi: 'TPI-A23',
+            id: 'slot-a23-1',
+            candidat: 'Alice Example',
+            expert1: { name: 'Patrick Chenaux', personId: 'patrick-chenaux', offres: {} },
+            expert2: { name: 'Expert A', offres: {} },
+            boss: { name: 'Chef A', offres: {} },
+            classe: 'MIN4'
+          },
+          {
+            refTpi: '',
+            id: 'slot-a23-2',
+            candidat: '',
+            expert1: { name: '', offres: {} },
+            expert2: { name: '', offres: {} },
+            boss: { name: '', offres: {} }
+          }
+        ]
+      },
+      {
+        idRoom: 2,
+        lastUpdate: 100,
+        site: 'ETML',
+        date: '2026-06-10',
+        name: 'B22',
+        configSite: { numSlots: 2 },
+        tpiDatas: [
+          {
+            refTpi: 'TPI-B22',
+            id: 'slot-b22-1',
+            candidat: 'Bob Example',
+            expert1: { name: 'Expert B', offres: {} },
+            expert2: { name: 'Patrick Chenaux', personId: 'patrick-chenaux', offres: {} },
+            boss: { name: 'Chef B', offres: {} },
+            classe: 'MIN4'
+          },
+          {
+            refTpi: '',
+            id: 'slot-b22-2',
+            candidat: '',
+            expert1: { name: '', offres: {} },
+            expert2: { name: '', offres: {} },
+            boss: { name: '', offres: {} }
+          }
+        ]
+      }
+    ]
+    const initialJson = JSON.stringify(localRooms)
+    window.localStorage.setItem('organizerData', initialJson)
+    workflowCoordinationService.validatePlanification.mockResolvedValue({
+      year: 2026,
+      checkedAt: '2026-05-13T10:00:00.000Z',
+      summary: {
+        issueCount: 1,
+        hardConflictCount: 1,
+        personOverlapCount: 1,
+        isValid: false
+      },
+      issues: [
+        {
+          type: 'person_overlap',
+          personId: 'patrick-chenaux',
+          personName: 'Patrick Chenaux',
+          dateKey: '2026-06-10',
+          period: 1,
+          references: ['TPI-A23', 'TPI-B22']
+        }
+      ]
+    })
+
+    renderSchedule()
+
+    expect(await screen.findByText('A23')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /validate-plan/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.validatePlanification).toHaveBeenCalled()
+    })
+
+    expect(window.localStorage.getItem('organizerData')).toBe(initialJson)
+    expect(workflowCoordinationService.validatePlanification.mock.calls[0][2][0].tpiDatas[0].refTpi).toBe('TPI-A23')
+    expect(workflowCoordinationService.validatePlanification.mock.calls[0][2][1].tpiDatas[0].refTpi).toBe('TPI-B22')
+  })
+
   test('aligne le compteur Données sur les TPI réellement planifiables', async () => {
     coordinationConfigService.getByYear.mockResolvedValue({
       siteConfigs: [
@@ -264,6 +365,91 @@ describe('TpiSchedule auto plan', () => {
     await waitFor(() => {
       expect(screen.getByTestId('mock-toolbar')).toHaveTextContent('usage:1/1')
     })
+  })
+
+  test('synchronise automatiquement les TPI locaux depuis GestionTPI au chargement', async () => {
+    window.localStorage.setItem('organizerData', JSON.stringify([
+      {
+        idRoom: 1,
+        lastUpdate: 100,
+        site: 'ETML',
+        date: '2026-06-10',
+        name: 'A101',
+        configSite: {
+          numSlots: 1
+        },
+        tpiDatas: [
+          {
+            refTpi: '2247',
+            candidat: 'Ancien Nom',
+            candidatPersonId: 'candidate-old',
+            expert1: {
+              name: 'Expert Ancien',
+              personId: 'expert-old',
+              offres: {
+                isValidated: true,
+                submit: [{ date: '2026-06-10', creneau: 1 }]
+              }
+            },
+            expert2: { name: 'Expert Two', personId: 'expert-2', offres: {} },
+            boss: { name: 'Chef Projet', personId: 'boss-1', offres: {} },
+            sujet: 'Ancien sujet'
+          }
+        ]
+      }
+    ]))
+
+    getTpiModels.mockResolvedValue([
+      {
+        refTpi: '2247',
+        candidat: 'Alice Example',
+        candidatPersonId: 'candidate-1',
+        experts: {
+          1: 'Expert One',
+          2: 'Expert Two'
+        },
+        expert1PersonId: 'expert-1',
+        expert2PersonId: 'expert-2',
+        boss: 'Chef Projet',
+        bossPersonId: 'boss-1',
+        classe: 'INF4A',
+        lieu: {
+          entreprise: 'Entreprise Test',
+          site: 'ETML'
+        },
+        sujet: 'Sujet mis à jour',
+        description: 'Description mise à jour'
+      }
+    ])
+
+    renderSchedule()
+
+    await waitFor(() => {
+      const storedRooms = JSON.parse(window.localStorage.getItem('organizerData'))
+
+      expect(storedRooms[0].tpiDatas[0]).toMatchObject({
+        refTpi: '2247',
+        candidat: 'Alice Example',
+        candidatPersonId: 'candidate-1',
+        classe: 'INF4A',
+        sujet: 'Sujet mis à jour',
+        description: 'Description mise à jour'
+      })
+      expect(storedRooms[0].tpiDatas[0].expert1).toMatchObject({
+        name: 'Expert One',
+        personId: 'expert-1',
+        offres: {
+          isValidated: true,
+          submit: [{ date: '2026-06-10', creneau: 1 }]
+        }
+      })
+    })
+
+    expect(showNotification).toHaveBeenCalledWith(
+      '1 TPI synchronisé(s) automatiquement depuis GestionTPI.',
+      'info',
+      2400
+    )
   })
 
   test('ouvre les votes sans emails depuis le workflow debug', async () => {

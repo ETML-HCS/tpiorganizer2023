@@ -303,6 +303,21 @@ function buildPendingLink({ redirectPath }) {
   }
 }
 
+const ACCESS_PREVIEW_PHASES = Object.freeze(['vote', 'soutenance', 'arbitrage'])
+
+function normalizePreviewPhases(phases) {
+  const source = Array.isArray(phases)
+    ? phases
+    : typeof phases === 'string'
+      ? phases.split(',')
+      : []
+  const normalized = source
+    .map((phase) => compactText(phase).toLowerCase())
+    .filter((phase) => ACCESS_PREVIEW_PHASES.includes(phase))
+
+  return new Set(normalized.length > 0 ? normalized : ACCESS_PREVIEW_PHASES)
+}
+
 function getLinkAvailabilityStatus(link = {}) {
   if (link.availabilityStatus) {
     return link.availabilityStatus
@@ -456,7 +471,8 @@ async function buildVoteAccessLink({
   person,
   generateLinks,
   magicLinks,
-  target = 'app'
+  target = 'app',
+  generateMissingOnly = false
 }) {
   const resolvedRedirectPath = redirectPath || `/coordination/${year}`
   const normalizedTarget = normalizeVoteLinkTarget(target)
@@ -473,7 +489,7 @@ async function buildVoteAccessLink({
     voterRole: null
   }
 
-  if (!generateLinks) {
+  if (!generateLinks || generateMissingOnly) {
     const existingLink = await findReusableAdminAccessLink({
       magicLinks,
       year,
@@ -484,21 +500,23 @@ async function buildVoteAccessLink({
       sources: getVoteAccessRevokeSources(normalizedTarget)
     })
 
-    if (existingLink) {
+    if (existingLink && (!generateLinks || existingLink.url)) {
       return existingLink
     }
 
-    const latestLinkStatus = await findLatestAdminAccessLinkStatus({
-      magicLinks,
-      year,
-      type: 'vote',
-      person,
-      scope: reusableScope,
-      baseUrl,
-      sources: getVoteAccessRevokeSources(normalizedTarget)
-    })
+    if (!generateLinks) {
+      const latestLinkStatus = await findLatestAdminAccessLinkStatus({
+        magicLinks,
+        year,
+        type: 'vote',
+        person,
+        scope: reusableScope,
+        baseUrl,
+        sources: getVoteAccessRevokeSources(normalizedTarget)
+      })
 
-    return latestLinkStatus || buildPendingLink({ redirectPath: resolvedRedirectPath })
+      return latestLinkStatus || buildPendingLink({ redirectPath: resolvedRedirectPath })
+    }
   }
 
   const link = await magicLinks.createVoteMagicLink({
@@ -538,7 +556,8 @@ async function buildSoutenanceAccessLink({
   publicationVersion,
   generateLinks,
   magicLinks,
-  target = 'app'
+  target = 'app',
+  generateMissingOnly = false
 }) {
   const resolvedRedirectPath = redirectPath || buildDefensePublicPath(year)
   const scopedPublicationVersion = publicationVersion || null
@@ -549,7 +568,7 @@ async function buildSoutenanceAccessLink({
     source
   }
 
-  if (!generateLinks) {
+  if (!generateLinks || generateMissingOnly) {
     const existingLink = await findReusableAdminAccessLink({
       magicLinks,
       year,
@@ -562,23 +581,25 @@ async function buildSoutenanceAccessLink({
       sources: [source]
     })
 
-    if (existingLink) {
+    if (existingLink && (!generateLinks || existingLink.url)) {
       return existingLink
     }
 
-    const latestLinkStatus = await findLatestAdminAccessLinkStatus({
-      magicLinks,
-      year,
-      type: 'soutenance',
-      person,
-      scope: {
-        publicationVersion: scopedPublicationVersion
-      },
-      baseUrl,
-      sources: [source]
-    })
+    if (!generateLinks) {
+      const latestLinkStatus = await findLatestAdminAccessLinkStatus({
+        magicLinks,
+        year,
+        type: 'soutenance',
+        person,
+        scope: {
+          publicationVersion: scopedPublicationVersion
+        },
+        baseUrl,
+        sources: [source]
+      })
 
-    return latestLinkStatus || buildPendingLink({ redirectPath: resolvedRedirectPath })
+      return latestLinkStatus || buildPendingLink({ redirectPath: resolvedRedirectPath })
+    }
   }
 
   const link = await magicLinks.createSoutenanceMagicLink({
@@ -617,7 +638,8 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
     voteRedirectPath,
     voteLinkTarget,
     workflowFreeModeEnabled,
-    ensureVoteRecordsForTpis
+    ensureVoteRecordsForTpis,
+    generateMissingOnly
   } = dependencies
   const normalizedVoteLinkTarget = normalizeVoteLinkTarget(voteLinkTarget)
   const voteStatuses = workflowFreeModeEnabled === true
@@ -734,7 +756,8 @@ async function buildVoteLinkPreview(year, baseUrl, peopleMap, dependencies) {
       redirectPath: voteRedirectPath,
       target: normalizedVoteLinkTarget,
       generateLinks,
-      magicLinks
+      magicLinks,
+      generateMissingOnly
     })
 
     entry.voteLinks.push({
@@ -857,7 +880,8 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
     soutenanceLinkTarget,
     autoPublishSoutenance,
     publicationUser,
-    publishConfirmedPlanningSoutenances
+    publishConfirmedPlanningSoutenances,
+    generateMissingOnly
   } = dependencies
   const normalizedSoutenanceLinkTarget = normalizeSoutenanceLinkTarget(soutenanceLinkTarget)
   const source = getSoutenanceAccessLinkSource(normalizedSoutenanceLinkTarget)
@@ -955,7 +979,8 @@ async function buildSoutenanceLinkPreview(year, baseUrl, peopleMap, dependencies
       publicationVersion: publicationVersion.version || null,
       generateLinks,
       magicLinks,
-      target: normalizedSoutenanceLinkTarget
+      target: normalizedSoutenanceLinkTarget,
+      generateMissingOnly
     })
 
     entry.soutenanceLinks.push({
@@ -1143,6 +1168,8 @@ async function buildAccessLinkPreview({
   autoPublishSoutenance = false,
   publicationUser = null,
   generateLinks = false,
+  generateMissingOnly = false,
+  phases = null,
   workflowFreeModeEnabled = false,
   dependencies = {}
 }) {
@@ -1151,6 +1178,7 @@ async function buildAccessLinkPreview({
   const resolvedSoutenanceBaseUrl = typeof soutenanceBaseUrl === 'string' && soutenanceBaseUrl.trim()
     ? soutenanceBaseUrl.trim()
     : baseUrl
+  const selectedPhases = normalizePreviewPhases(phases)
   const peopleMap = new Map()
   const hasInjectedDependencies = Object.keys(dependencies || {}).length > 0
   const resolvedDependencies = {
@@ -1168,6 +1196,7 @@ async function buildAccessLinkPreview({
     autoPublishSoutenance: autoPublishSoutenance === true,
     publicationUser,
     generateLinks: generateLinks === true,
+    generateMissingOnly: generateMissingOnly === true,
     workflowFreeModeEnabled: workflowFreeModeEnabled === true,
     ensureVoteRecordsForTpis: dependencies.ensureVoteRecordsForTpis || defaultEnsureVoteRecordsForTpis,
     voteBaseUrl: typeof voteBaseUrl === 'string' && voteBaseUrl.trim()
@@ -1183,23 +1212,63 @@ async function buildAccessLinkPreview({
     soutenanceLinkTarget: normalizedSoutenanceLinkTarget
   }
 
-  const votePreview = await buildVoteLinkPreview(
-    normalizedYear,
-    baseUrl,
-    peopleMap,
-    resolvedDependencies
-  )
-  const soutenancePreview = await buildSoutenanceLinkPreview(
-    normalizedYear,
-    resolvedSoutenanceBaseUrl,
-    peopleMap,
-    resolvedDependencies
-  )
-  const arbitragePreview = await buildResolutionProposalLinkPreview(
-    normalizedYear,
-    peopleMap,
-    resolvedDependencies
-  )
+  const votePreview = selectedPhases.has('vote')
+    ? await buildVoteLinkPreview(
+      normalizedYear,
+      baseUrl,
+      peopleMap,
+      resolvedDependencies
+    )
+    : {
+        linkCount: 0,
+        generatedLinkCount: 0,
+        availableLinkCount: 0,
+        pendingLinkCount: 0,
+        ...createLinkAvailabilityCounters(),
+        recipientCount: 0,
+        tpiCount: 0,
+        linkTarget: resolvedDependencies.voteLinkTarget,
+        baseUrl: resolvedDependencies.voteBaseUrl,
+        redirectPath: resolvedDependencies.voteRedirectPath,
+        workflowFreeModeEnabled: resolvedDependencies.workflowFreeModeEnabled,
+        preparedVoteRecordCount: 0
+      }
+  const soutenancePreview = selectedPhases.has('soutenance')
+    ? await buildSoutenanceLinkPreview(
+      normalizedYear,
+      resolvedSoutenanceBaseUrl,
+      peopleMap,
+      resolvedDependencies
+    )
+    : {
+        linkCount: 0,
+        generatedLinkCount: 0,
+        availableLinkCount: 0,
+        pendingLinkCount: 0,
+        ...createLinkAvailabilityCounters(),
+        recipientCount: 0,
+        publicationVersion: null,
+        requestedPublicationVersion: parsePublicationVersion(publicationVersion),
+        availableVersions: [],
+        roomsCount: 0,
+        autoPublishedPublicationVersion: null,
+        autoPublishedRoomsCount: 0
+      }
+  const arbitragePreview = selectedPhases.has('arbitrage')
+    ? await buildResolutionProposalLinkPreview(
+      normalizedYear,
+      peopleMap,
+      resolvedDependencies
+    )
+    : {
+        linkCount: 0,
+        generatedLinkCount: 0,
+        pendingResponseCount: 0,
+        acceptedResponseCount: 0,
+        rejectedResponseCount: 0,
+        recipientCount: 0,
+        proposalCount: 0
+      }
 
   const people = sortPeople(Array.from(peopleMap.values()))
     .map((entry) => ({
@@ -1255,6 +1324,7 @@ async function buildAccessLinkPreview({
       exhaustedGeneratedLinkCount
     },
     contexts: {
+      phases: Array.from(selectedPhases),
       vote: {
         linkTarget: votePreview.linkTarget,
         workflowFreeModeEnabled: votePreview.workflowFreeModeEnabled === true,

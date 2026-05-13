@@ -11,7 +11,8 @@ jest.mock('react-dnd', () => {
       'div',
       { 'data-testid': 'dnd-provider' },
       children
-    )
+    ),
+    useDrag: () => [{ isDragging: false }, jest.fn()]
   }
 })
 
@@ -108,5 +109,156 @@ describe('TpiSchedule focus mode', () => {
     expect(document.body).not.toHaveClass('planning-focus-mode')
     expect(page).not.toHaveClass('planning-schedule-page--focus')
     expect(page).not.toHaveClass('planning-schedule-page--wrap')
+  })
+
+  test('demande le plein écran natif quand le focus est activé', async () => {
+    const hadRequestFullscreen = Object.prototype.hasOwnProperty.call(
+      HTMLElement.prototype,
+      'requestFullscreen'
+    )
+    const originalRequestFullscreenDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'requestFullscreen'
+    )
+    const requestFullscreen = jest.fn(() => Promise.resolve())
+
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen
+    })
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/planification']}>
+          <TpiSchedule />
+        </MemoryRouter>
+      )
+
+      expect(await screen.findByTestId('mock-toolbar')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByTestId('mock-focus-toggle'))
+
+      await waitFor(() => {
+        expect(requestFullscreen).toHaveBeenCalledTimes(1)
+      })
+
+      expect(requestFullscreen.mock.instances[0]).toHaveClass('planning-schedule-page')
+    } finally {
+      if (hadRequestFullscreen) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          'requestFullscreen',
+          originalRequestFullscreenDescriptor
+        )
+      } else {
+        delete HTMLElement.prototype.requestFullscreen
+      }
+    }
+  })
+
+  test('quitte le plein écran natif avec Escape', async () => {
+    const hadRequestFullscreen = Object.prototype.hasOwnProperty.call(
+      HTMLElement.prototype,
+      'requestFullscreen'
+    )
+    const hadExitFullscreen = Object.prototype.hasOwnProperty.call(
+      document,
+      'exitFullscreen'
+    )
+    const hadFullscreenElement = Object.prototype.hasOwnProperty.call(
+      document,
+      'fullscreenElement'
+    )
+    const originalRequestFullscreenDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'requestFullscreen'
+    )
+    const originalExitFullscreenDescriptor = Object.getOwnPropertyDescriptor(
+      document,
+      'exitFullscreen'
+    )
+    const originalFullscreenElementDescriptor = Object.getOwnPropertyDescriptor(
+      document,
+      'fullscreenElement'
+    )
+    let activeFullscreenElement = null
+    const requestFullscreen = jest.fn(function requestFullscreenMock() {
+      activeFullscreenElement = this
+      document.dispatchEvent(new Event('fullscreenchange'))
+      return Promise.resolve()
+    })
+    const exitFullscreen = jest.fn(() => {
+      activeFullscreenElement = null
+      document.dispatchEvent(new Event('fullscreenchange'))
+      return Promise.resolve()
+    })
+
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen
+    })
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      value: exitFullscreen
+    })
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => activeFullscreenElement
+    })
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/planification']}>
+          <TpiSchedule />
+        </MemoryRouter>
+      )
+
+      expect(await screen.findByTestId('mock-toolbar')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByTestId('mock-focus-toggle'))
+
+      await waitFor(() => {
+        expect(requestFullscreen).toHaveBeenCalledTimes(1)
+      })
+
+      fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' })
+
+      await waitFor(() => {
+        expect(exitFullscreen).toHaveBeenCalledTimes(1)
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('mock-toolbar')).toBeInTheDocument()
+      })
+    } finally {
+      if (hadRequestFullscreen) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          'requestFullscreen',
+          originalRequestFullscreenDescriptor
+        )
+      } else {
+        delete HTMLElement.prototype.requestFullscreen
+      }
+
+      if (hadExitFullscreen) {
+        Object.defineProperty(
+          document,
+          'exitFullscreen',
+          originalExitFullscreenDescriptor
+        )
+      } else {
+        delete document.exitFullscreen
+      }
+
+      if (hadFullscreenElement) {
+        Object.defineProperty(
+          document,
+          'fullscreenElement',
+          originalFullscreenElementDescriptor
+        )
+      } else {
+        delete document.fullscreenElement
+      }
+    }
   })
 })

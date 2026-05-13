@@ -60,6 +60,18 @@ const baseProps = {
   workflowActionLoading: false,
   pendingWorkflowAction: '',
   validationResult: null,
+  validationOptimizationProposal: null,
+  validationOptimizationSettings: {
+    profile: 'corrections',
+    mode: 'strict',
+    maxSwaps: 3,
+    sameSiteOnly: true,
+    preserveValidated: true,
+    reduceWaitingTime: false,
+    issueTypes: ['person_overlap', 'consecutive_limit', 'room_class_mismatch']
+  },
+  onValidationOptimizationSettingsChange: jest.fn(),
+  onApplyValidationOptimization: jest.fn(),
   onAutomatePlanification: jest.fn(),
   onValidatePlanification: jest.fn(),
   onFreezeSnapshot: jest.fn(),
@@ -321,6 +333,7 @@ describe('TpiScheduleButtons - Données', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Préparation/i }))
 
     const validatedButton = screen.getByRole('button', { name: /Vérifié/i })
     expect(validatedButton).toBeDisabled()
@@ -365,6 +378,199 @@ describe('TpiScheduleButtons - Données', () => {
     expect(screen.getByText(/Erreurs détectées: 2/i)).toBeInTheDocument()
     expect(screen.getByText(/Ada Lovelace est affecté/i)).toBeInTheDocument()
     expect(screen.getByText(/Grace Hopper a 5 TPI consécutifs/i)).toBeInTheDocument()
+  })
+
+  test('affiche et applique une proposition d optimisation ciblée après vérification', () => {
+    const onApplyValidationOptimization = jest.fn()
+    const onValidationOptimizationSettingsChange = jest.fn()
+
+    renderButtons({
+      validationResult: {
+        year: 2024,
+        checkedAt: '2026-04-12T10:00:00.000Z',
+        summary: {
+          issueCount: 1,
+          hardConflictCount: 1,
+          personOverlapCount: 1
+        },
+        issues: [
+          {
+            type: 'person_overlap',
+            message: 'Patrick Chenaux est affecté à plusieurs TPI sur le même créneau.'
+          }
+        ]
+      },
+      validationOptimizationProposal: {
+        changed: true,
+        swapCount: 1,
+        targetReferences: ['TPI-A23', 'TPI-B22'],
+        before: {
+          personOverlapCount: 1,
+          sequenceExcessCount: 0,
+          classMismatchCount: 0,
+          score: 100000
+        },
+        after: {
+          personOverlapCount: 0,
+          sequenceExcessCount: 0,
+          classMismatchCount: 0,
+          score: 0
+        },
+        swaps: [
+          {
+            left: { reference: 'TPI-A23', roomName: 'A23', period: 2 },
+            right: { reference: '', roomName: 'B22', period: 4, isEmpty: true }
+          }
+        ]
+      },
+      onApplyValidationOptimization,
+      onValidationOptimizationSettingsChange
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+
+    expect(screen.getByText(/Optimisations ciblées/i)).toBeInTheDocument()
+    expect(screen.getByText(/Proposition prête/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Appliquer l'optimisation ciblée/i })).toHaveTextContent(/Appliquer 1 échange/i)
+    expect(screen.getByText(/1→0 conflits personne/i)).toBeInTheDocument()
+    expect(screen.getByText(/TPI-A23 · A23 · slot 2/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Élargi/i }))
+    fireEvent.change(screen.getByLabelText(/Échanges/i), {
+      target: { value: '5' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Appliquer l'optimisation ciblée/i }))
+
+    expect(onValidationOptimizationSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'expanded' })
+    )
+    expect(onValidationOptimizationSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ maxSwaps: 5 })
+    )
+    expect(onApplyValidationOptimization).toHaveBeenCalledTimes(1)
+  })
+
+  test('ouvre automatiquement l écran optimisation après une vérification', async () => {
+    renderButtons({
+      validationResult: {
+        year: 2024,
+        checkedAt: '2026-04-12T10:00:00.000Z',
+        summary: {
+          issueCount: 0,
+          hardConflictCount: 0,
+          isValid: true
+        },
+        issues: []
+      }
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Optimisation/i })).toHaveAttribute('aria-selected', 'true')
+    })
+    expect(screen.getByText(/Optimisations ciblées/i)).toBeInTheDocument()
+    expect(screen.getByText(/Rien à appliquer/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Appliquer l'optimisation ciblée/i })).toBeDisabled()
+    expect(screen.getByLabelText(/Réduire attentes/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Vérifier conflits/i })).not.toBeInTheDocument()
+  })
+
+  test('applique les profils d optimisation sans relancer la vérification', async () => {
+    const onValidationOptimizationSettingsChange = jest.fn()
+    const onValidatePlanification = jest.fn()
+
+    renderButtons({
+      validationResult: {
+        year: 2024,
+        checkedAt: '2026-04-12T10:00:00.000Z',
+        summary: {
+          issueCount: 0,
+          hardConflictCount: 0,
+          isValid: true
+        },
+        issues: []
+      },
+      onValidationOptimizationSettingsChange,
+      onValidatePlanification
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Optimisation/i })).toHaveAttribute('aria-selected', 'true')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Attentes/i }))
+
+    expect(onValidationOptimizationSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: 'attentes',
+        reduceWaitingTime: true,
+        mode: 'strict'
+      })
+    )
+    expect(onValidatePlanification).not.toHaveBeenCalled()
+  })
+
+  test('affiche l option de reduction des attentes apres une verification valide', () => {
+    const onValidationOptimizationSettingsChange = jest.fn()
+
+    renderButtons({
+      validationResult: {
+        year: 2024,
+        checkedAt: '2026-04-12T10:00:00.000Z',
+        summary: {
+          issueCount: 0,
+          hardConflictCount: 0,
+          isValid: true
+        },
+        issues: []
+      },
+      validationOptimizationSettings: {
+        ...baseProps.validationOptimizationSettings,
+        reduceWaitingTime: true
+      },
+      validationOptimizationProposal: {
+        changed: true,
+        swapCount: 1,
+        targetReferences: [],
+        before: {
+          personOverlapCount: 0,
+          sequenceExcessCount: 0,
+          classMismatchCount: 0,
+          waitingGapCount: 3,
+          offMealBreakCount: 1,
+          score: 0
+        },
+        after: {
+          personOverlapCount: 0,
+          sequenceExcessCount: 0,
+          classMismatchCount: 0,
+          waitingGapCount: 2,
+          offMealBreakCount: 0,
+          score: 0
+        },
+        swaps: [
+          {
+            left: { reference: 'TPI-003', roomName: 'A101', period: 6 },
+            right: { reference: '', roomName: 'A101', period: 5, isEmpty: true }
+          }
+        ]
+      },
+      onValidationOptimizationSettingsChange
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+
+    expect(screen.getByText(/Planification valide/i)).toBeInTheDocument()
+    expect(screen.getByText(/Optimisations ciblées/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Réduire attentes/i)).toBeChecked()
+    expect(screen.getByText(/Attente globale/i)).toBeInTheDocument()
+    expect(screen.getByText(/3→2 créneau\(x\) d'attente/i)).toBeInTheDocument()
+    expect(screen.getByText(/1→0 pause\(s\) hors repas/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText(/Réduire attentes/i))
+
+    expect(onValidationOptimizationSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ reduceWaitingTime: false })
+    )
   })
 
   test('affiche les overrides de contraintes comme avertissements non bloquants', () => {
@@ -419,6 +625,7 @@ describe('TpiScheduleButtons - Données', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Workflow/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Préparation/i }))
 
     expect(screen.getByRole('button', { name: /Vérifier/i })).toHaveAttribute(
       'title',
@@ -444,14 +651,95 @@ describe('TpiScheduleButtons - Données', () => {
   test('propose les filtres compacts dans l en-tête', () => {
     const onRoomFiltersChange = jest.fn()
 
-    renderButtons({ onRoomFiltersChange })
-
-    fireEvent.click(screen.getByLabelText('Filtres de planification'))
-    fireEvent.change(screen.getByLabelText('Filtrer par date'), {
-      target: { value: '2026-06-10' }
+    renderButtons({
+      onRoomFiltersChange,
+      roomDateOptions: [
+        { value: '2026-06-10', label: 'mer., 10.06.2026' },
+        { value: '2026-06-11', label: 'jeu., 11.06.2026' }
+      ]
     })
 
-    expect(onRoomFiltersChange).toHaveBeenCalledWith({ date: '2026-06-10' })
+    fireEvent.click(screen.getByLabelText('Filtres de planification'))
+    fireEvent.click(screen.getByLabelText('Filtrer par date'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /10\.06\.2026/i }))
+
+    expect(onRoomFiltersChange).toHaveBeenCalledWith({ date: ['2026-06-10'] })
+  })
+
+  test('affiche la légende compacte des couleurs dans l en-tête', () => {
+    renderButtons()
+
+    const legendSummary = screen.getByLabelText('Légende des couleurs de vérification')
+    const legendMenu = legendSummary.closest('details')
+
+    fireEvent.click(legendSummary)
+
+    expect(legendMenu).toHaveAttribute('open')
+    expect(screen.getByText('Rouge')).toBeInTheDocument()
+    expect(screen.getByText('même créneau')).toBeInTheDocument()
+    expect(screen.getByText('Orange')).toBeInTheDocument()
+    expect(screen.getByText('TPI consécutifs')).toBeInTheDocument()
+    expect(screen.getByText('Bleu')).toBeInTheDocument()
+    expect(screen.getByText('salle/type')).toBeInTheDocument()
+    expect(screen.getByText('Gris')).toBeInTheDocument()
+    expect(screen.getByText('import/planif.')).toBeInTheDocument()
+  })
+
+  test('permet de sélectionner plusieurs dates dans le filtre compact', () => {
+    const onRoomFiltersChange = jest.fn()
+
+    renderButtons({
+      roomFilters: { site: '', date: ['2026-06-10'], room: '' },
+      roomDateOptions: [
+        { value: '2026-06-10', label: 'mer., 10.06.2026' },
+        { value: '2026-06-11', label: 'jeu., 11.06.2026' },
+        { value: '2026-06-12', label: 'ven., 12.06.2026' }
+      ],
+      onRoomFiltersChange
+    })
+
+    fireEvent.click(screen.getByLabelText(/1 filtre actif/i))
+    fireEvent.click(screen.getByLabelText('Filtrer par date'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /11\.06\.2026/i }))
+
+    expect(onRoomFiltersChange).toHaveBeenCalledWith({ date: ['2026-06-10', '2026-06-11'] })
+
+    fireEvent.click(screen.getByRole('button', { name: /Effacer/i }))
+
+    expect(onRoomFiltersChange).toHaveBeenCalledWith({ date: [] })
+  })
+
+  test('ferme le menu de filtres au clic extérieur', () => {
+    renderButtons()
+
+    const filterSummary = screen.getByLabelText('Filtres de planification')
+    const filterMenu = filterSummary.closest('details')
+
+    fireEvent.click(filterSummary)
+
+    expect(filterMenu).toHaveAttribute('open')
+
+    fireEvent.pointerDown(document.body)
+
+    expect(filterMenu).not.toHaveAttribute('open')
+  })
+
+  test('déduplique les dates du filtre compact quand une journée existe sous deux formats', () => {
+    renderButtons({
+      roomDateOptions: [
+        { value: '2026-06-10T08:00:00.000Z', label: 'mer., 10.06.2026' },
+        { value: '2026-06-10', label: 'mer., 10.06.2026' }
+      ]
+    })
+
+    fireEvent.click(screen.getByLabelText('Filtres de planification'))
+    fireEvent.click(screen.getByLabelText('Filtrer par date'))
+
+    const dateCheckboxes = Array.from(
+      screen.getByRole('group', { name: 'Dates' }).querySelectorAll('input[type="checkbox"]')
+    )
+
+    expect(dateCheckboxes.filter((option) => option.value === '2026-06-10')).toHaveLength(1)
   })
 
   test('réinitialise les filtres compacts depuis l en-tête', () => {

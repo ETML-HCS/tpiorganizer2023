@@ -539,6 +539,94 @@ test('buildAccessLinkPreview publie la planification confirmee pour generer les 
   assert.equal(soutenanceCreateCalls[0].scope.publicationVersion, 7)
 })
 
+test('buildAccessLinkPreview peut reconcilier uniquement les liens defense manquants', async () => {
+  const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
+  const candidate = createPerson('p2', 'Eva', 'Candidate', 'eva@example.com', ['candidat'])
+  const createCalls = []
+  const revokeCalls = []
+  const publication = {
+    version: 12,
+    rooms: [
+      {
+        tpiDatas: [
+          {
+            candidatPersonId: candidate._id,
+            expert1: { personId: expert._id }
+          }
+        ]
+      }
+    ]
+  }
+
+  const preview = await buildAccessLinkPreview({
+    year: 2026,
+    baseUrl: 'http://localhost:3000',
+    generateLinks: true,
+    generateMissingOnly: true,
+    phases: ['soutenance'],
+    dependencies: {
+      TpiPlanningModel: {
+        find() {
+          throw new Error('La reconciliation defense ne doit pas lire les votes.')
+        }
+      },
+      VoteModel: {
+        find() {
+          throw new Error('La reconciliation defense ne doit pas lire les votes.')
+        }
+      },
+      PersonModel: {
+        find() {
+          return createQuery([expert, candidate])
+        }
+      },
+      getActivePublication: async () => publication,
+      listPublicationVersions: async () => [
+        { version: 12, isActive: true, publishedAt: '2026-05-01T12:00:00Z', source: { roomsCount: 1 } }
+      ],
+      magicLinks: {
+        async findReusableMagicLink({ person }) {
+          if (String(person._id) === expert._id) {
+            return {
+              id: 'existing-expert',
+              url: 'http://localhost:3000/defenses/2026?ml=existing',
+              redirectPath: '/defenses/2026',
+              expiresAt: new Date('2026-06-01T12:00:00Z'),
+              generated: true,
+              availabilityStatus: 'available'
+            }
+          }
+
+          return null
+        },
+        async revokeActiveMagicLinks(params) {
+          revokeCalls.push(params)
+          return { modifiedCount: 0 }
+        },
+        async createSoutenanceMagicLink(params) {
+          createCalls.push(params)
+          return {
+            id: 'created-candidate',
+            url: 'http://localhost:3000/defenses/2026?ml=created',
+            redirectPath: '/defenses/2026',
+            expiresAt: new Date('2026-06-01T12:00:00Z'),
+            generated: true
+          }
+        }
+      }
+    }
+  })
+
+  assert.equal(preview.summary.voteLinkCount, 0)
+  assert.equal(preview.summary.soutenanceLinkCount, 2)
+  assert.equal(preview.summary.soutenanceGeneratedLinkCount, 2)
+  assert.equal(createCalls.length, 1)
+  assert.equal(createCalls[0].person._id, candidate._id)
+  assert.equal(createCalls[0].scope.publicationVersion, 12)
+  assert.equal(revokeCalls.length, 1)
+  assert.deepEqual(revokeCalls[0].excludeIds, ['created-candidate'])
+})
+
 test('buildAccessLinkPreview genere les liens vote en mode libre sans campagne ouverte', async () => {
   const expert = createPerson('p1', 'Alice', 'Expert', 'alice@example.com', ['expert'])
   const boss = createPerson('p2', 'Carla', 'Boss', 'carla@example.com', ['chef_projet'])

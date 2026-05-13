@@ -231,6 +231,12 @@ describe('PlanningDashboard', () => {
       added: true,
       voter: { name: 'Carla Expert' }
     })
+    jest.spyOn(coordinationServices.voteService, 'forceOk').mockResolvedValue({
+      success: true,
+      forcedRoleCount: 1,
+      forcedTpiCount: 1,
+      skippedRoleCount: 0
+    })
     jest.spyOn(coordinationServices.resolutionProposalService, 'create').mockResolvedValue({
       success: true,
       proposal: {
@@ -748,6 +754,42 @@ describe('PlanningDashboard', () => {
         expect.stringMatching(/Carla Expert/i)
       )
     })
+  })
+
+  test('force OK globalement pour les manquants puis individuellement pour un rôle', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', { name: /forcer ok chefs de projet en attente/i }))
+
+    await waitFor(() => {
+      expect(coordinationServices.voteService.forceOk).toHaveBeenCalledWith({
+        year: '2026',
+        roles: ['chef_projet'],
+        tpiIds: ['coordination-vote-1'],
+        onlyMissing: true,
+        reason: expect.stringContaining('chefs de projet en attente')
+      })
+    })
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Seules les réponses manquantes'))
+
+    fireEvent.click(await screen.findByRole('button', { name: /forcer ok pour expert 2 sur tpi-2026-042/i }))
+
+    await waitFor(() => {
+      expect(coordinationServices.voteService.forceOk).toHaveBeenLastCalledWith({
+        year: '2026',
+        roles: ['expert2'],
+        tpiIds: ['coordination-vote-1'],
+        onlyMissing: false,
+        reason: expect.stringContaining('Expert 2 de TPI-2026-042')
+      })
+    })
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('sera remplacée'))
+
+    confirmSpy.mockRestore()
   })
 
   test('masque les TPI sans réponse dans le cockpit de votes', async () => {

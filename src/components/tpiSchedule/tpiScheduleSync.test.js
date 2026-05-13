@@ -2,6 +2,7 @@ import {
   buildGestionTpiSyncModelMap,
   buildPlanningTpiFromGestionModel,
   buildPlanningTpiSyncSummary,
+  buildRoomsWithGestionTpiSync,
   getGestionTpiSyncFields,
   getTpiSyncChangedFields,
   hasPlanningTpiSyncDifference
@@ -93,7 +94,7 @@ describe('tpiScheduleSync', () => {
     )
   })
 
-  test('ignore les champs internes absents des anciennes cartes si les noms visibles sont identiques', () => {
+  test('détecte les champs internes absents des anciennes cartes même si les noms visibles sont identiques', () => {
     const summary = buildPlanningTpiSyncSummary(
       [
         {
@@ -111,11 +112,13 @@ describe('tpiScheduleSync', () => {
       [sourceTpi]
     )
 
-    expect(summary.count).toBe(0)
-    expect(summary.entries).toEqual([])
+    expect(summary.count).toBe(1)
+    expect(summary.entries[0].changedFields).toEqual(
+      expect.arrayContaining(['candidatPersonId', 'expert1PersonId', 'expert2PersonId', 'bossPersonId'])
+    )
   })
 
-  test('ignore les métadonnées absentes des anciennes cartes planifiées', () => {
+  test('détecte les métadonnées absentes des anciennes cartes planifiées', () => {
     const summary = buildPlanningTpiSyncSummary(
       [
         {
@@ -134,8 +137,10 @@ describe('tpiScheduleSync', () => {
       [sourceTpi]
     )
 
-    expect(summary.count).toBe(0)
-    expect(summary.entries).toEqual([])
+    expect(summary.count).toBe(1)
+    expect(summary.entries[0].changedFields).toEqual(
+      expect.arrayContaining(['classe', 'lieuEntreprise', 'lieuSite', 'sujet', 'description'])
+    )
   })
 
   test('ignore les variations de casse, espaces, accents et apostrophes typographiques', () => {
@@ -146,9 +151,17 @@ describe('tpiScheduleSync', () => {
             {
               refTpi: ' tpi-001 ',
               candidat: " elise   d'arc ",
-              expert1: { name: 'expert one', offres: {} },
-              expert2: { name: 'EXPERT TWO', offres: {} },
-              boss: { name: 'chef projet', offres: {} }
+              expert1: { name: 'expert one', personId: 'expert-1', offres: {} },
+              expert2: { name: 'EXPERT TWO', personId: 'expert-2', offres: {} },
+              boss: { name: 'chef projet', personId: 'boss-1', offres: {} },
+              candidatPersonId: 'candidate-1',
+              classe: 'MID4A',
+              lieu: {
+                entreprise: 'ETML',
+                site: 'Vennes'
+              },
+              sujet: 'Sujet synchronisé',
+              description: 'Description synchronisée'
             }
           ]
         }
@@ -312,6 +325,64 @@ describe('tpiScheduleSync', () => {
     )
 
     expect(updatedTpi.period).toBe(3)
+  })
+
+  test('conserve le verrou de planification pendant une synchronisation', () => {
+    const updatedTpi = buildPlanningTpiFromGestionModel(
+      {
+        ...planningTpi,
+        isPlanningSealed: true
+      },
+      sourceTpi
+    )
+
+    expect(updatedTpi.isPlanningSealed).toBe(true)
+  })
+
+  test('synchronise les salles ciblées en conservant les offres et les créneaux', () => {
+    const summary = buildPlanningTpiSyncSummary(
+      [
+        {
+          idRoom: 1,
+          lastUpdate: 100,
+          tpiDatas: [
+            planningTpi,
+            { refTpi: 'TPI-002', candidat: 'Bob' }
+          ]
+        }
+      ],
+      [sourceTpi]
+    )
+
+    const result = buildRoomsWithGestionTpiSync(
+      [
+        {
+          idRoom: 1,
+          lastUpdate: 100,
+          tpiDatas: [
+            planningTpi,
+            { refTpi: 'TPI-002', candidat: 'Bob' }
+          ]
+        }
+      ],
+      summary.entries,
+      [sourceTpi],
+      { updatedAt: 1234 }
+    )
+
+    expect(result.refCount).toBe(1)
+    expect(result.updatedSlotCount).toBe(1)
+    expect(result.rooms[0].lastUpdate).toBe(1234)
+    expect(result.rooms[0].tpiDatas[0]).toMatchObject({
+      refTpi: 'TPI-001',
+      candidat: 'Alice Martin',
+      period: null,
+      sujet: 'Sujet synchronisé'
+    })
+    expect(result.rooms[0].tpiDatas[0].expert1.offres.submit).toEqual([
+      { date: '2026-06-10', creneau: 1 }
+    ])
+    expect(result.rooms[0].tpiDatas[1]).toEqual({ refTpi: 'TPI-002', candidat: 'Bob' })
   })
 
   test('ignore les différences après synchronisation', () => {
