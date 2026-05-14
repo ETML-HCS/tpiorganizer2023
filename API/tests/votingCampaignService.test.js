@@ -1194,6 +1194,187 @@ test('remindPendingVotes skips automatic reminders while automatic sends are dis
   }
 })
 
+test('remindPendingVotes targets only moved requested TPI when requested', async () => {
+  const sentDigestTargets = []
+  const reusableVoteLinks = []
+  const updates = []
+  const voter = {
+    _id: 'person-alice',
+    firstName: 'Alice',
+    lastName: 'Expert',
+    email: 'alice@example.com',
+    sendEmails: true
+  }
+  const rejectedVoter = {
+    _id: 'person-bob',
+    firstName: 'Bob',
+    lastName: 'Expert',
+    email: 'bob@example.com',
+    sendEmails: true
+  }
+
+  function makeTpi(id, reference, moved = false) {
+    return {
+      _id: id,
+      reference,
+      sujet: `Sujet ${reference}`,
+      site: 'ETML',
+      candidat: {
+        _id: `candidate-${id}`,
+        firstName: `Candidat ${id}`,
+        lastName: 'Test'
+      },
+      expert1: voter,
+      expert2: voter,
+      chefProjet: voter,
+      votingSession: {
+        deadline: new Date('2026-04-03T12:00:00.000Z'),
+        remindersCount: 0,
+        lastReminderSentAt: null
+      },
+      proposedSlots: [{ slot: 'slot-moved' }],
+      history: moved
+        ? [{
+            action: 'planning_slot_moved_after_votes',
+            details: {
+              touchedRoles: ['expert1', 'expert2']
+            }
+          }]
+        : []
+    }
+  }
+
+  const movedTpi = makeTpi('planning-moved', 'TPI-2026-010', true)
+  const notMovedTpi = makeTpi('planning-not-moved', 'TPI-2026-011', false)
+  const movedButNotRequestedTpi = makeTpi('planning-moved-not-requested', 'TPI-2026-012', true)
+  const tpis = [movedTpi, notMovedTpi, movedButNotRequestedTpi]
+  const pendingVotes = [
+    {
+      tpiPlanning: movedTpi._id,
+      voter,
+      voterRole: 'expert1',
+      decision: 'pending',
+      slot: {
+        _id: 'slot-moved',
+        date: new Date('2026-06-10T08:00:00.000Z'),
+        period: 'AM',
+        startTime: '08:00',
+        endTime: '08:45',
+        room: { name: 'A101' }
+      }
+    },
+    {
+      tpiPlanning: movedTpi._id,
+      voter: rejectedVoter,
+      voterRole: 'expert2',
+      decision: 'rejected',
+      slot: {
+        _id: 'slot-moved',
+        date: new Date('2026-06-10T08:00:00.000Z'),
+        period: 'AM',
+        startTime: '08:00',
+        endTime: '08:45',
+        room: { name: 'A101' }
+      }
+    },
+    {
+      tpiPlanning: movedTpi._id,
+      voter: {
+        _id: 'person-carla',
+        firstName: 'Carla',
+        lastName: 'Archive',
+        email: 'carla@example.com',
+        sendEmails: true
+      },
+      voterRole: 'chef_projet',
+      decision: 'rejected',
+      slot: {
+        _id: 'slot-archived',
+        date: new Date('2026-06-09T08:00:00.000Z'),
+        period: 'AM',
+        startTime: '08:00',
+        endTime: '08:45',
+        room: { name: 'A099' }
+      }
+    }
+  ]
+
+  const { service, restore: restoreService } = loadVotingCampaignServiceWithPatches()
+  const restore = [
+    restoreService,
+    patchMethod(TpiPlanning, 'find', (query) => {
+      assert.deepEqual(query, { year: 2026, status: 'voting' })
+      return {
+        populate() {
+          return this
+        },
+        select: async () => tpis
+      }
+    }),
+    patchMethod(Vote, 'find', (query) => {
+      assert.deepEqual(query.tpiPlanning.$in, [movedTpi._id])
+      assert.deepEqual(query.decision, { $nin: ['accepted', 'preferred'] })
+      return {
+        populate() {
+          return this
+        },
+        select: async () => pendingVotes
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'findReusableMagicLink', async (params) => {
+      reusableVoteLinks.push(params)
+      return {
+        url: `https://example.test/coordination/${params.year}?ml=${params.person._id}`,
+        expiresAt: new Date('2026-04-09T00:00:00.000Z'),
+        generated: true
+      }
+    }),
+    patchMethod(accessLinkTokenService, 'createVoteMagicLink', async () => {
+      throw new Error('Les liens de relance doivent être réutilisés, pas régénérés.')
+    }),
+    patchMethod(emailService, 'sendVoteDigestRequests', async (targets, options = {}) => {
+      assert.equal(options.reminder, true)
+      sentDigestTargets.push(...targets)
+      return targets.map((target) => ({
+        email: target.email,
+        success: true
+      }))
+    }),
+    patchMethod(TpiPlanning, 'updateMany', async (filter, update) => {
+      updates.push({ filter, update })
+      return { modifiedCount: 1 }
+    })
+  ]
+
+  try {
+    const result = await service.remindPendingVotes(2026, 'https://example.test', {
+      tpiIds: [movedTpi._id, notMovedTpi._id],
+      movedOnly: true,
+      now: new Date('2026-04-02T00:00:00.000Z')
+    })
+
+    assert.equal(result.movedOnly, true)
+    assert.equal(result.requestedTpiCount, 2)
+    assert.equal(result.tpiCount, 1)
+    assert.equal(result.eligibleTpiCount, 1)
+    assert.equal(result.reminderTargets, 2)
+    assert.equal(result.emailsSent, 2)
+    assert.equal(result.emailsSucceeded, 2)
+    assert.equal(reusableVoteLinks.length, 2)
+    assert.equal(sentDigestTargets.length, 2)
+    assert.deepEqual(
+      sentDigestTargets.map((target) => target.email).sort(),
+      ['alice@example.com', 'bob@example.com']
+    )
+    assert.deepEqual(sentDigestTargets.map((target) => target.tpiIds), [[movedTpi._id], [movedTpi._id]])
+    assert.deepEqual(updates[0].filter, { _id: { $in: [movedTpi._id] } })
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
 test('closeVotesCampaign confirme tous les TPI dont les trois rôles ont voté OK', async () => {
   const confirmedSlots = new Map([
     ['planning-1', 'slot-1'],

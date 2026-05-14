@@ -297,6 +297,120 @@ test('buildStaticVoteCampaignPayload groups pending votes by voter and TPI', asy
   }
 })
 
+test('buildStaticVoteCampaignPayload inclut une relance déplacée déjà refusée sur le créneau courant', async () => {
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const tpis = [
+    {
+      _id: tpiId,
+      reference: 'TPI-2026-020',
+      sujet: 'Sujet déplacé',
+      status: 'voting',
+      candidat: { firstName: 'Cara', lastName: 'Candidate' },
+      proposedSlots: [
+        { slot: { _id: fixedSlotId } }
+      ],
+      history: [{
+        action: 'planning_slot_moved_after_votes',
+        details: {
+          touchedRoles: ['expert1']
+        }
+      }]
+    }
+  ]
+  const votes = [
+    {
+      _id: fixedVoteId,
+      tpiPlanning: tpiId,
+      voter: { _id: personId, firstName: 'Alice', lastName: 'Expert', email: 'alice@example.test' },
+      voterRole: 'expert1',
+      decision: 'rejected',
+      slot: {
+        _id: fixedSlotId,
+        date: new Date('2026-06-10T00:00:00.000Z'),
+        period: 1,
+        startTime: '08:00',
+        endTime: '09:00',
+        room: { name: 'A101', site: 'ETML' },
+        status: 'pending_votes'
+      }
+    }
+  ]
+
+  const restore = [
+    replaceProperty(TpiPlanning, 'find', () => makeQueryResult(tpis)),
+    replaceProperty(Vote, 'find', () => makeQueryResult(votes))
+  ]
+
+  try {
+    const payload = await buildStaticVoteCampaignPayload(2026, '2026-05-01T10:00:00.000Z')
+
+    assert.equal(payload.groups.length, 1)
+    assert.equal(payload.groups[0].personId, String(personId))
+    assert.equal(payload.groups[0].fixedVoteId, String(fixedVoteId))
+    assert.equal(payload.groups[0].fixedSlotId, String(fixedSlotId))
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('buildStaticVoteCampaignPayload ne republie pas un refus hors déplacement', async () => {
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const tpis = [
+    {
+      _id: tpiId,
+      reference: 'TPI-2026-021',
+      sujet: 'Sujet non déplacé',
+      status: 'voting',
+      candidat: { firstName: 'Cara', lastName: 'Candidate' },
+      proposedSlots: [
+        { slot: { _id: fixedSlotId } }
+      ],
+      history: []
+    }
+  ]
+  const votes = [
+    {
+      _id: fixedVoteId,
+      tpiPlanning: tpiId,
+      voter: { _id: personId, firstName: 'Alice', lastName: 'Expert', email: 'alice@example.test' },
+      voterRole: 'expert1',
+      decision: 'rejected',
+      slot: {
+        _id: fixedSlotId,
+        date: new Date('2026-06-10T00:00:00.000Z'),
+        period: 1,
+        startTime: '08:00',
+        endTime: '09:00',
+        room: { name: 'A101', site: 'ETML' },
+        status: 'pending_votes'
+      }
+    }
+  ]
+
+  const restore = [
+    replaceProperty(TpiPlanning, 'find', () => makeQueryResult(tpis)),
+    replaceProperty(Vote, 'find', () => makeQueryResult(votes))
+  ]
+
+  try {
+    const payload = await buildStaticVoteCampaignPayload(2026, '2026-05-01T10:00:00.000Z')
+
+    assert.equal(payload.groups.length, 0)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
 test('buildStaticVoteCampaignPayload conserve tous les TPI pour un lien vote groupe', async () => {
   const personId = new mongoose.Types.ObjectId()
   const fixedSlotId = new mongoose.Types.ObjectId()
@@ -768,6 +882,155 @@ test('importStaticVoteRecord applies a static proposal response idempotently', a
   }
 })
 
+test('importStaticVoteRecord remappe une reponse ancien mini-site apres reconstruction', async () => {
+  const year = 2026
+  const publicationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tpiorganizer-static-vote-remap-'))
+  const personId = new mongoose.Types.ObjectId()
+  const oldTpiId = new mongoose.Types.ObjectId()
+  const oldFixedSlotId = new mongoose.Types.ObjectId()
+  const oldAltSlotId = new mongoose.Types.ObjectId()
+  const oldFixedVoteId = new mongoose.Types.ObjectId()
+  const newTpiId = new mongoose.Types.ObjectId()
+  const newFixedSlotId = new mongoose.Types.ObjectId()
+  const newAltSlotId = new mongoose.Types.ObjectId()
+  const newFixedVoteId = new mongoose.Types.ObjectId()
+  const newAltVoteId = new mongoose.Types.ObjectId()
+  const fixedSlotShape = {
+    date: '2026-06-10',
+    period: 2,
+    startTime: '09:10',
+    endTime: '10:10',
+    roomName: 'A101',
+    roomSite: 'ETML',
+    room: { name: 'A101', site: 'ETML' }
+  }
+  const altSlotShape = {
+    date: '2026-06-11',
+    period: 5,
+    startTime: '13:00',
+    endTime: '14:00',
+    roomName: 'A101',
+    roomSite: 'ETML',
+    room: { name: 'A101', site: 'ETML' }
+  }
+  const oldFixedSlot = { id: String(oldFixedSlotId), ...fixedSlotShape }
+  const oldAltSlot = { id: String(oldAltSlotId), ...altSlotShape }
+  const newFixedSlot = { _id: newFixedSlotId, ...fixedSlotShape }
+  const newAltSlot = { _id: newAltSlotId, ...altSlotShape }
+  const campaignId = 'vote-2026-legacy-campaign'
+
+  await withVoteEnv({
+    STATIC_VOTE_PUBLICATION_DIR: publicationRoot
+  }, async () => {
+    const outputDir = path.join(publicationRoot, 'votes', String(year))
+    fs.mkdirSync(outputDir, { recursive: true })
+    fs.writeFileSync(path.join(outputDir, 'index.php'), buildStaticVotePhp({
+      html: '<main></main>',
+      year,
+      campaignPayload: {
+        year,
+        campaignId,
+        groups: [{
+          personId: String(personId),
+          personName: 'Expert Test',
+          tpi: {
+            id: String(oldTpiId),
+            reference: 'TPI-2026-001'
+          },
+          fixedVoteId: String(oldFixedVoteId),
+          fixedSlotId: String(oldFixedSlotId),
+          fixedSlot: oldFixedSlot,
+          proposalOptions: [{
+            slotId: String(oldAltSlotId),
+            slot: oldAltSlot
+          }],
+          voteSettings: { maxProposalsPerTpi: 3 }
+        }]
+      },
+      accessLinks: []
+    }), 'utf8')
+
+    const savedVotes = []
+    let validationInput = null
+    const fixedVote = {
+      _id: newFixedVoteId,
+      slot: newFixedSlot,
+      voterRole: 'expert1',
+      async save() {
+        savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment, magicLinkUsed: this.magicLinkUsed })
+      }
+    }
+    const altVote = {
+      _id: newAltVoteId,
+      slot: newAltSlot,
+      voterRole: 'expert1',
+      async save() {
+        savedVotes.push({ id: String(this._id), decision: this.decision, priority: this.priority, magicLinkUsed: this.magicLinkUsed })
+      }
+    }
+    const tpi = {
+      _id: newTpiId,
+      year,
+      reference: 'TPI-2026-001',
+      status: 'voting',
+      expert1: personId,
+      expert2: new mongoose.Types.ObjectId(),
+      chefProjet: new mongoose.Types.ObjectId(),
+      proposedSlots: [
+        { slot: newFixedSlot },
+        { slot: newAltSlot }
+      ]
+    }
+    const restore = [
+      replaceProperty(Vote, 'exists', async () => null),
+      replaceProperty(TpiPlanning, 'findOne', (query = {}) => {
+        if (String(query._id || '') === String(oldTpiId)) {
+          return makeQueryResult(null)
+        }
+        if (String(query._id || '') === String(newTpiId) || query.reference === 'TPI-2026-001') {
+          return makeQueryResult(tpi)
+        }
+        return makeQueryResult(null)
+      }),
+      replaceProperty(Vote, 'find', () => makeQueryResult([fixedVote, altVote])),
+      replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async (voteId, decision, comment) => {
+        validationInput = { voteId: String(voteId), decision, comment }
+        return { success: true }
+      })
+    ]
+
+    try {
+      const result = await importStaticVoteRecord({
+        id: 'legacy-static-submission',
+        year,
+        campaignId,
+        personId: String(personId),
+        tpiId: String(oldTpiId),
+        fixedVoteId: String(oldFixedVoteId),
+        mode: 'proposal',
+        proposedSlotIds: [String(oldAltSlotId)],
+        remark: 'Possible le lendemain.',
+        submittedAt: '2026-05-10T08:00:00.000Z',
+        tokenHash: 'e'.repeat(64)
+      }, year)
+
+      assert.equal(result.imported, true)
+      assert.equal(result.tpiId, String(newTpiId))
+      assert.equal(savedVotes.length, 2)
+      assert.equal(savedVotes.find((vote) => vote.id === String(newFixedVoteId)).decision, 'rejected')
+      assert.equal(savedVotes.find((vote) => vote.id === String(newFixedVoteId)).comment, 'Possible le lendemain.')
+      assert.equal(savedVotes.find((vote) => vote.id === String(newAltVoteId)).decision, 'preferred')
+      assert.equal(savedVotes.find((vote) => vote.id === String(newAltVoteId)).priority, 1)
+      assert.equal(validationInput.voteId, String(newFixedVoteId))
+      assert.equal(validationInput.decision, 'rejected')
+    } finally {
+      while (restore.length > 0) {
+        restore.pop()()
+      }
+    }
+  })
+})
+
 test('importStaticVoteRecord conserve une réponse déjà enregistrée', async () => {
   const year = 2026
   const personId = new mongoose.Types.ObjectId()
@@ -826,6 +1089,163 @@ test('importStaticVoteRecord conserve une réponse déjà enregistrée', async (
     assert.equal(validationCalled, false)
     assert.equal(fixedVote.decision, 'accepted')
     assert.equal(fixedVote.comment, 'Réponse admin déjà validée.')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteRecord ignore les votes archivés pour accepter une relance déplacée', async () => {
+  const year = 2026
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const archivedSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const archivedVoteId = new mongoose.Types.ObjectId()
+  const savedVotes = []
+  let validationInput = null
+  const fixedVote = {
+    _id: fixedVoteId,
+    slot: {
+      _id: fixedSlotId,
+      status: 'pending_votes'
+    },
+    voterRole: 'expert1',
+    decision: 'pending',
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment })
+    }
+  }
+  const archivedVote = {
+    _id: archivedVoteId,
+    slot: {
+      _id: archivedSlotId,
+      status: 'blocked'
+    },
+    voterRole: 'expert1',
+    decision: 'rejected',
+    comment: 'Ancienne réponse conservée pour comparaison.',
+    votedAt: new Date('2026-05-09T08:00:00.000Z'),
+    async save() {
+      throw new Error('Le vote archivé ne doit pas être modifié.')
+    }
+  }
+  const tpi = {
+    _id: tpiId,
+    year,
+    status: 'voting',
+    expert1: personId,
+    expert2: new mongoose.Types.ObjectId(),
+    chefProjet: new mongoose.Types.ObjectId(),
+    proposedSlots: [
+      { slot: { _id: fixedSlotId } }
+    ]
+  }
+  const restore = [
+    replaceProperty(Vote, 'exists', async () => null),
+    replaceProperty(TpiPlanning, 'findOne', () => makeQueryResult(tpi)),
+    replaceProperty(Vote, 'find', () => makeQueryResult([archivedVote, fixedVote])),
+    replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async (voteId, decision, comment) => {
+      validationInput = { voteId: String(voteId), decision, comment }
+      return { success: true }
+    })
+  ]
+
+  try {
+    const result = await importStaticVoteRecord({
+      id: 'submission-after-planning-move',
+      year,
+      personId: String(personId),
+      tpiId: String(tpiId),
+      fixedVoteId: String(fixedVoteId),
+      mode: 'ok',
+      submittedAt: '2026-05-10T08:00:00.000Z',
+      tokenHash: 'a'.repeat(64)
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.equal(savedVotes.length, 1)
+    assert.equal(savedVotes[0].id, String(fixedVoteId))
+    assert.equal(savedVotes[0].decision, 'accepted')
+    assert.equal(validationInput.voteId, String(fixedVoteId))
+    assert.equal(validationInput.decision, 'accepted')
+    assert.equal(archivedVote.decision, 'rejected')
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
+test('importStaticVoteRecord autorise de remplacer un refus touché par un déplacement', async () => {
+  const year = 2026
+  const personId = new mongoose.Types.ObjectId()
+  const tpiId = new mongoose.Types.ObjectId()
+  const fixedSlotId = new mongoose.Types.ObjectId()
+  const fixedVoteId = new mongoose.Types.ObjectId()
+  const savedVotes = []
+  let validationInput = null
+  const fixedVote = {
+    _id: fixedVoteId,
+    slot: {
+      _id: fixedSlotId,
+      status: 'pending_votes'
+    },
+    voterRole: 'expert1',
+    decision: 'rejected',
+    comment: 'Ancien refus avant relance.',
+    votedAt: new Date('2026-05-09T08:00:00.000Z'),
+    async save() {
+      savedVotes.push({ id: String(this._id), decision: this.decision, comment: this.comment })
+    }
+  }
+  const tpi = {
+    _id: tpiId,
+    year,
+    status: 'voting',
+    expert1: personId,
+    expert2: new mongoose.Types.ObjectId(),
+    chefProjet: new mongoose.Types.ObjectId(),
+    proposedSlots: [
+      { slot: { _id: fixedSlotId } }
+    ],
+    history: [{
+      action: 'planning_slot_moved_after_votes',
+      details: {
+        touchedRoles: ['expert1']
+      }
+    }]
+  }
+  const restore = [
+    replaceProperty(Vote, 'exists', async () => null),
+    replaceProperty(TpiPlanning, 'findOne', () => makeQueryResult(tpi)),
+    replaceProperty(Vote, 'find', () => makeQueryResult([fixedVote])),
+    replaceProperty(schedulingService, 'registerVoteAndCheckValidation', async (voteId, decision, comment) => {
+      validationInput = { voteId: String(voteId), decision, comment }
+      return { success: true }
+    })
+  ]
+
+  try {
+    const result = await importStaticVoteRecord({
+      id: 'submission-after-moved-rejection',
+      year,
+      personId: String(personId),
+      tpiId: String(tpiId),
+      fixedVoteId: String(fixedVoteId),
+      mode: 'ok',
+      submittedAt: '2026-05-10T08:00:00.000Z',
+      tokenHash: 'b'.repeat(64)
+    }, year)
+
+    assert.equal(result.imported, true)
+    assert.equal(savedVotes.length, 1)
+    assert.equal(savedVotes[0].decision, 'accepted')
+    assert.equal(savedVotes[0].comment, '')
+    assert.equal(validationInput.voteId, String(fixedVoteId))
+    assert.equal(validationInput.decision, 'accepted')
   } finally {
     while (restore.length > 0) {
       restore.pop()()

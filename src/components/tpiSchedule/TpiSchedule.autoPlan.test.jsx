@@ -294,6 +294,54 @@ describe('TpiSchedule auto plan', () => {
     expect(workflowCoordinationService.validatePlanification.mock.calls[0][2][1].tpiDatas[0].refTpi).toBe('TPI-B22')
   })
 
+  test('ne reconstruit pas la planification pendant une vérification si les votes sont actifs', async () => {
+    workflowCoordinationService.getYearState.mockResolvedValueOnce({
+      state: 'voting_open',
+      activePhases: ['planning', 'votes'],
+      phases: {
+        planning: { active: true },
+        votes: { active: true }
+      }
+    })
+    window.localStorage.setItem('organizerData', JSON.stringify([
+      {
+        idRoom: 1,
+        name: 'A23',
+        site: 'VENNES',
+        date: '2026-06-10',
+        tpiDatas: [
+          {
+            refTpi: 'TPI-A23',
+            candidat: 'Alice Example',
+            expert1: { name: 'Expert A' },
+            expert2: { name: 'Expert B' },
+            boss: { name: 'Chef A' }
+          }
+        ]
+      }
+    ]))
+    workflowCoordinationService.validatePlanification.mockResolvedValue({
+      year: 2026,
+      checkedAt: '2026-05-13T10:00:00.000Z',
+      summary: {
+        issueCount: 0,
+        hardConflictCount: 0,
+        isValid: true
+      },
+      issues: []
+    })
+
+    renderSchedule()
+
+    fireEvent.click(await screen.findByRole('button', { name: /validate-plan/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.validatePlanification).toHaveBeenCalled()
+    })
+
+    expect(workflowCoordinationService.validatePlanification.mock.calls[0][2]).toBeNull()
+  })
+
   test('aligne le compteur Données sur les TPI réellement planifiables', async () => {
     coordinationConfigService.getByYear.mockResolvedValue({
       siteConfigs: [

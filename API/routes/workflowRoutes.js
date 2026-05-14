@@ -98,6 +98,31 @@ function parseOptionalBoolean(rawValue) {
   return null
 }
 
+function buildPlanningVoteMigrationWarnings(summary = null) {
+  if (!summary || typeof summary !== 'object') {
+    return []
+  }
+
+  const preservedResponses = Number(summary.preservedSubmittedResponseCount || 0)
+  const droppedResponses = Number(summary.droppedSubmittedResponseCount || 0)
+
+  if (preservedResponses <= 0 && droppedResponses <= 0) {
+    return []
+  }
+
+  const warnings = []
+
+  if (preservedResponses > 0) {
+    warnings.push(`${preservedResponses} réponse(s) de vote conservée(s) après reconstruction de la planification.`)
+  }
+
+  if (droppedResponses > 0) {
+    warnings.push(`${droppedResponses} réponse(s) de vote ne correspondaient plus au nouveau créneau et doivent être redemandées.`)
+  }
+
+  return warnings
+}
+
 function normalizeBaseUrl(rawValue, fallbackValue) {
   if (typeof rawValue === 'string' && rawValue.trim().length > 0) {
     return rawValue.trim().replace(/\/+$/, '')
@@ -634,7 +659,8 @@ router.get(
         source: validation.source,
         summary: validation.summary,
         issues: validation.issues,
-        hardConflicts: validation.hardConflicts
+        hardConflicts: validation.hardConflicts,
+        warnings: []
       }
 
       if (includeEntries) {
@@ -742,7 +768,8 @@ router.post(
         source: validation.source,
         summary: validation.summary,
         issues: validation.issues,
-        hardConflicts: validation.hardConflicts
+        hardConflicts: validation.hardConflicts,
+        warnings: buildPlanningVoteMigrationWarnings(migrationSummary)
       }
 
       if (migrationSummary) {
@@ -853,6 +880,7 @@ router.post(
       return res.status(201).json({
         success: true,
         summary: migrationSummary,
+        warnings: buildPlanningVoteMigrationWarnings(migrationSummary),
         snapshot: {
           year: result.snapshot.year,
           version: result.snapshot.version,
@@ -1013,6 +1041,7 @@ router.post(
             legacyRooms,
             createdBy: req.user
           })
+          workflowWarnings.push(...buildPlanningVoteMigrationWarnings(migrationSummary))
         }
       }
 
@@ -2052,6 +2081,17 @@ router.post(
       const reminderOptions = { automatic: req.body?.automatic === true }
       const requestedVoteLinkTarget = compactText(req.body?.voteLinkTarget)
       const requestedVotePublicUrl = compactText(req.body?.votePublicUrl || req.body?.staticVotePublicUrl)
+      const requestedTpiIds = Array.isArray(req.body?.tpiIds)
+        ? req.body.tpiIds.map(compactText).filter(Boolean)
+        : []
+
+      if (requestedTpiIds.length > 0) {
+        reminderOptions.tpiIds = requestedTpiIds
+      }
+
+      if (req.body?.movedOnly === true) {
+        reminderOptions.movedOnly = true
+      }
 
       if (requestedVoteLinkTarget) {
         reminderOptions.voteLinkTarget = requestedVoteLinkTarget
@@ -2072,7 +2112,9 @@ router.post(
           skipped: result.skipped === true,
           reminderTargets: result.reminderTargets,
           emailsSent: result.emailsSent,
-          emailsSucceeded: result.emailsSucceeded
+          emailsSucceeded: result.emailsSucceeded,
+          movedOnly: result.movedOnly === true,
+          requestedTpiCount: result.requestedTpiCount || null
         },
         success: true
       })

@@ -214,6 +214,28 @@ function getBestDecisionSlot(row) {
     })[0] || null
 }
 
+function formatSatisfactionSlot(slot) {
+  if (!slot) {
+    return 'Créneau inconnu'
+  }
+
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+  const startTime = compactText(slot.startTime)
+  const periodLabel = startTime
+    ? (parseInt(startTime, 10) < 12 ? 'Matin' : 'Après-midi')
+    : compactText(slot.period)
+  return [
+    formatVoteDate(slot.date),
+    periodLabel,
+    compactText(room.name || slot.roomName)
+  ].filter(Boolean).join(' · ') || 'Créneau inconnu'
+}
+
+function getMovedVoteSatisfaction(row) {
+  const satisfaction = row?.tpi?.voteDecision?.satisfaction
+  return satisfaction?.movedAfterVotes ? satisfaction : null
+}
+
 function getLatestResolutionProposal(row) {
   const proposals = Array.isArray(row?.resolutionProposals) ? row.resolutionProposals : []
 
@@ -780,6 +802,20 @@ const VoteCommandCenter = ({
   const responseAllRowsCount = useMemo(() => (
     (Array.isArray(allRows) ? allRows : []).filter(hasReceivedVoteResponse).length
   ), [allRows])
+  const movedVoteRelaunchRows = useMemo(() => (
+    (Array.isArray(allRows) ? allRows : [])
+      .filter((row) => {
+        const satisfaction = getMovedVoteSatisfaction(row)
+        return satisfaction && Number(satisfaction.touchedRoleCount || 0) > 0
+      })
+  ), [allRows])
+  const movedVoteRelaunchTpiIds = useMemo(() => (
+    movedVoteRelaunchRows.map((row) => compactText(row.id)).filter(Boolean)
+  ), [movedVoteRelaunchRows])
+  const movedVoteRelaunchRoleCount = movedVoteRelaunchRows.reduce(
+    (total, row) => total + Number(getMovedVoteSatisfaction(row)?.touchedRoleCount || 0),
+    0
+  )
   const projectLeadForceOkTargets = useMemo(() => (
     getForceOkTargets(allRows, PROJECT_LEAD_FORCE_OK_ROLES, true)
   ), [allRows])
@@ -916,6 +952,7 @@ const VoteCommandCenter = ({
   const selectedConstraint = selectedRow ? checkedConstraintByTpiId?.[selectedRow.id] : null
   const selectedDescriptor = selectedRow ? getCaseDescriptor(selectedRow, selectedConstraint) : null
   const selectedBestSlot = selectedRow ? getBestDecisionSlot(selectedRow) : null
+  const selectedSatisfaction = selectedRow ? getMovedVoteSatisfaction(selectedRow) : null
   const selectedResolutionProposal = selectedRow ? getLatestResolutionProposal(selectedRow) : null
   const selectedResolutionTone = getResolutionStatusTone(selectedResolutionProposal?.status)
   const selectedResolutionSlot = selectedResolutionProposal
@@ -1219,6 +1256,26 @@ const VoteCommandCenter = ({
 
         <div className="vote-command-action-group">
             <span className="vote-command-action-group-title">Campagne</span>
+            {movedVoteRelaunchTpiIds.length > 0 ? (
+              <WorkflowActionButton
+                actionKey="remindMovedVotes"
+                primaryActionKey={primaryAction.key}
+                className="warning"
+                onClick={() => onRemindVotes?.({
+                  actionKey: 'remindMovedVotes',
+                  tpiIds: movedVoteRelaunchTpiIds,
+                  movedOnly: true
+                })}
+                disabled={workflowActionLoading || typeof onRemindVotes !== 'function'}
+                isActionRunning={isActionRunning}
+                icon={<MailIcon className="button-icon" />}
+                runningLabel="Relance..."
+                title="Relancer uniquement les parties prenantes non satisfaites par un TPI déplacé."
+                ariaLabel="Relancer les TPI déplacés"
+              >
+                Relancer déplacés ({movedVoteRelaunchRoleCount})
+              </WorkflowActionButton>
+            ) : null}
             <WorkflowActionButton
               actionKey="remindVotes"
               primaryActionKey={primaryAction.key}
@@ -1651,6 +1708,28 @@ const VoteCommandCenter = ({
                     {selectedRow.respondedCount}/3 reponses
                   </span>
                 </div>
+
+                {selectedSatisfaction ? (
+                  <div className={`vote-command-satisfaction ${Number(selectedSatisfaction.delta || 0) >= 0 ? 'is-better' : 'is-worse'}`}>
+                    <strong>
+                      Déplacement: {selectedSatisfaction.currentPositiveCount}/3 accord{Number(selectedSatisfaction.currentPositiveCount || 0) > 1 ? 's' : ''}
+                      {' '}
+                      contre {selectedSatisfaction.baselinePositiveCount}/3 sur la base
+                    </strong>
+                    <span>
+                      {formatSatisfactionSlot(selectedSatisfaction.baselineSlot)} → {formatSatisfactionSlot(selectedSatisfaction.currentSlot)}
+                    </span>
+                    {Number(selectedSatisfaction.touchedRoleCount || 0) > 0 ? (
+                      <small>
+                        Relance ciblée: {selectedSatisfaction.touchedRoles.map((entry) =>
+                          compactText(entry.voterName) || getVoterRoleLabel(entry.role)
+                        ).filter(Boolean).join(', ')}
+                      </small>
+                    ) : (
+                      <small>Aucune relance nécessaire: toutes les parties prenantes sont satisfaites.</small>
+                    )}
+                  </div>
+                ) : null}
 
                 <div className="vote-command-detail-facts">
                   <span>

@@ -343,6 +343,88 @@ test('POST /api/workflow/:year/votes/start keeps admin phases unchanged', async 
   }
 })
 
+test('POST /api/workflow/:year/votes/remind forwards targeted moved TPI options', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const workflowService = require('../services/workflowService')
+  const votingCampaignService = require('../services/votingCampaignService')
+
+  let receivedOptions = null
+  let auditPayload = null
+  const restore = [
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async (entry) => {
+      auditPayload = entry.payload
+    }),
+    patchMethod(votingCampaignService, 'remindPendingVotes', async (_year, _baseUrl, options = {}) => {
+      receivedOptions = options
+      return {
+        tpiCount: 1,
+        eligibleTpiCount: 1,
+        reminderTargets: 1,
+        emailsSent: 1,
+        emailsSucceeded: 1,
+        emailsFailed: 0,
+        automatic: false,
+        movedOnly: true,
+        requestedTpiCount: 2,
+        skipped: false,
+        reason: null
+      }
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/votes/remind`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        tpiIds: ['coord-1', 'coord-2'],
+        movedOnly: true,
+        voteLinkTarget: 'static',
+        votePublicUrl: 'https://tpi26.ch/votes-2026/'
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.movedOnly, true)
+    assert.equal(body.requestedTpiCount, 2)
+    assert.deepEqual(receivedOptions, {
+      automatic: false,
+      tpiIds: ['coord-1', 'coord-2'],
+      movedOnly: true,
+      voteLinkTarget: 'static',
+      votePublicUrl: 'https://tpi26.ch/votes-2026/'
+    })
+    assert.deepEqual(auditPayload, {
+      automatic: false,
+      skipped: false,
+      reminderTargets: 1,
+      emailsSent: 1,
+      emailsSucceeded: 1,
+      movedOnly: true,
+      requestedTpiCount: 2
+    })
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('POST /api/workflow/:year/access-links/preview requires authentication', async () => {
   const jwtSecret = 'test-jwt-secret'
   const { app, restoreEnv } = loadTestApp({

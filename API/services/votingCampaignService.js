@@ -36,6 +36,7 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000
 const HOUR_IN_MS = 60 * 60 * 1000
 const AUTOMATIC_EMAIL_SENDS_ENABLED = false
 const AUTOMATIC_EMAIL_SENDS_DISABLED_REASON = 'automatic_email_sends_disabled'
+const POSITIVE_VOTE_DECISIONS = new Set(['accepted', 'preferred'])
 
 function shouldSkipAutomaticEmailSends(options = {}) {
   return options?.skipEmails === true || AUTOMATIC_EMAIL_SENDS_ENABLED !== true
@@ -293,6 +294,70 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizeIdList(values = []) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map(compactText)
+      .filter(Boolean)
+  ))
+}
+
+function toEntityId(value) {
+  if (!value) {
+    return ''
+  }
+
+  if (value._id) {
+    return String(value._id)
+  }
+
+  return compactText(value)
+}
+
+function getLatestMovedVoteHistory(tpi) {
+  return (Array.isArray(tpi?.history) ? tpi.history : [])
+    .slice()
+    .reverse()
+    .find((entry) => ['planning_slot_moved_after_votes', 'slot_moved_from_vote_proposal'].includes(compactText(entry?.action))) || null
+}
+
+function hasMovedVoteHistory(tpi) {
+  return Boolean(getLatestMovedVoteHistory(tpi))
+}
+
+function getCurrentVoteSlotId(tpi) {
+  const proposedSlot = Array.isArray(tpi?.proposedSlots)
+    ? tpi.proposedSlots.find((entry) => entry?.slot)
+    : null
+
+  return toEntityId(proposedSlot?.slot || tpi?.confirmedSlot)
+}
+
+function getMovedVoteTouchedRoleSet(tpi) {
+  const touchedRoles = getLatestMovedVoteHistory(tpi)?.details?.touchedRoles
+  return new Set(
+    (Array.isArray(touchedRoles) ? touchedRoles : [])
+      .map(compactText)
+      .filter(Boolean)
+  )
+}
+
+function isMovedVoteReminderCandidate(vote, tpi) {
+  const currentSlotId = getCurrentVoteSlotId(tpi)
+  const touchedRoles = getMovedVoteTouchedRoleSet(tpi)
+  const decision = compactText(vote?.decision || 'pending')
+
+  if (currentSlotId && toEntityId(vote?.slot) !== currentSlotId) {
+    return false
+  }
+
+  if (touchedRoles.size > 0 && !touchedRoles.has(compactText(vote?.voterRole))) {
+    return false
+  }
+
+  return !POSITIVE_VOTE_DECISIONS.has(decision)
 }
 
 function buildPublicUrlLinkTarget(rawPublicUrl, fallbackBaseUrl, fallbackRedirectPath) {
@@ -737,6 +802,8 @@ async function startVotesCampaign(year, baseUrl, options = {}) {
 
 async function remindPendingVotes(year, baseUrl, options = {}) {
   const automatic = options?.automatic === true
+  const requestedTpiIds = normalizeIdList(options?.tpiIds)
+  const movedOnly = options?.movedOnly === true
   const planningConfig = await getPlanningConfigIfAvailable(year)
   const workflowSettings = normalizeWorkflowSettings(planningConfig?.workflowSettings)
   const now = resolveDate(options?.now) || new Date()
@@ -750,6 +817,8 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
       emailsSucceeded: 0,
       emailsFailed: 0,
       automatic: true,
+      movedOnly,
+      requestedTpiCount: requestedTpiIds.length || null,
       skipped: true,
       reason: AUTOMATIC_EMAIL_SENDS_DISABLED_REASON
     }
@@ -764,6 +833,8 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
       emailsSucceeded: 0,
       emailsFailed: 0,
       automatic: true,
+      movedOnly,
+      requestedTpiCount: requestedTpiIds.length || null,
       skipped: true,
       reason: 'automatic_reminders_disabled'
     }
@@ -771,8 +842,15 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
 
   const rawTpis = await TpiPlanning.find({ year, status: 'voting' })
     .populate('candidat expert1 expert2 chefProjet', 'firstName lastName email sendEmails')
-    .select('reference sujet votingSession candidat expert1 expert2 chefProjet site')
-  const tpis = filterPlanifiableTpis(rawTpis, planningConfig)
+    .select('reference sujet votingSession candidat expert1 expert2 chefProjet site history proposedSlots.slot confirmedSlot')
+  let tpis = filterPlanifiableTpis(rawTpis, planningConfig)
+  if (requestedTpiIds.length > 0) {
+    const requestedTpiIdSet = new Set(requestedTpiIds)
+    tpis = tpis.filter((tpi) => requestedTpiIdSet.has(String(tpi._id)))
+  }
+  if (movedOnly) {
+    tpis = tpis.filter(hasMovedVoteHistory)
+  }
   const reminderTpis = automatic
     ? tpis.filter((tpi) => isTpiEligibleForAutomaticReminder(tpi, workflowSettings, now))
     : tpis
@@ -786,6 +864,8 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
       emailsSucceeded: 0,
       emailsFailed: 0,
       automatic,
+      movedOnly,
+      requestedTpiCount: requestedTpiIds.length || null,
       skipped: automatic,
       reason: automatic ? 'no_eligible_tpi' : null
     }
@@ -794,17 +874,30 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
   const tpiById = new Map(reminderTpis.map(tpi => [String(tpi._id), tpi]))
   const tpiIds = reminderTpis.map(tpi => tpi._id)
 
-  const pendingVotes = await Vote.find({
+  const voteQuery = {
     tpiPlanning: { $in: tpiIds },
-    decision: 'pending'
-  })
-    .populate('slot', 'date period startTime endTime room')
+    decision: movedOnly
+      ? { $nin: Array.from(POSITIVE_VOTE_DECISIONS) }
+      : 'pending'
+  }
+  const pendingVotes = await Vote.find(voteQuery)
+    .populate('slot', 'date period startTime endTime room status')
     .populate('voter', 'firstName lastName email sendEmails')
-    .select('tpiPlanning voter voterRole slot')
+    .select('tpiPlanning voter voterRole slot decision')
 
   const targetsByPersonId = new Map()
   for (const vote of pendingVotes) {
     const tpiId = String(vote.tpiPlanning)
+    const tpi = tpiById.get(tpiId)
+
+    if (!tpi) {
+      continue
+    }
+
+    if (movedOnly && !isMovedVoteReminderCandidate(vote, tpi)) {
+      continue
+    }
+
     const voterId = vote.voter?._id ? String(vote.voter._id) : null
 
     if (!voterId || !vote.voter?.email) {
@@ -812,11 +905,6 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
     }
 
     if (vote.voter.sendEmails === false) {
-      continue
-    }
-
-    const tpi = tpiById.get(tpiId)
-    if (!tpi) {
       continue
     }
 
@@ -886,6 +974,8 @@ async function remindPendingVotes(year, baseUrl, options = {}) {
     missingAccessLinkCount: missingAccessLinks.length,
     missingAccessLinks,
     automatic,
+    movedOnly,
+    requestedTpiCount: requestedTpiIds.length || null,
     skipped: false,
     reason: null
   }

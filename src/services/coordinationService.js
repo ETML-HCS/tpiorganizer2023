@@ -663,6 +663,12 @@ export const workflowCoordinationService = {
     if (options.votePublicUrl) {
       body.votePublicUrl = options.votePublicUrl
     }
+    if (Array.isArray(options.tpiIds) && options.tpiIds.length > 0) {
+      body.tpiIds = options.tpiIds
+    }
+    if (options.movedOnly === true) {
+      body.movedOnly = true
+    }
     return await apiService.post(`${WORKFLOW_BASE_URL}/${year}/votes/remind`, body)
   },
 

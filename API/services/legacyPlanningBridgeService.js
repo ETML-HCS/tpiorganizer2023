@@ -24,6 +24,21 @@ const {
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const defaultTpiPlanningFindOne = TpiPlanning.findOne
 const defaultTpiPlanningUpdateOne = TpiPlanning.updateOne
+const PRESERVED_VOTE_FIELDS = Object.freeze([
+  '_id',
+  'decision',
+  'comment',
+  'availabilityException',
+  'hardConstraint',
+  'specialRequestReason',
+  'specialRequestDate',
+  'priority',
+  'votedAt',
+  'magicLinkUsed',
+  'reminders',
+  'createdAt',
+  'updatedAt'
+])
 
 function toPlainObject(value) {
   if (!value) {
@@ -263,6 +278,89 @@ function buildSlotIdentity({ year, date, period, roomName, roomSite }) {
   }
 }
 
+function getVoteTransferSlotKey(slot = {}, year = null) {
+  if (!slot) {
+    return ''
+  }
+
+  return buildSlotIdentity({
+    year: year || slot.year,
+    date: slot.date,
+    period: slot.period,
+    roomName: slot.room?.name,
+    roomSite: slot.room?.site
+  }).key
+}
+
+function toIsoDate(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
+}
+
+function buildVoteTransferKey({ reference, voterRole, voter, slotKey }) {
+  return [
+    normalizeString(reference),
+    normalizeString(voterRole),
+    normalizeLinkedPersonId(voter),
+    normalizeString(slotKey)
+  ].join('|')
+}
+
+function buildVoteResponseTransferKey({ reference, voterRole, voter }) {
+  return [
+    normalizeString(reference),
+    normalizeString(voterRole),
+    normalizeLinkedPersonId(voter)
+  ].join('|')
+}
+
+function hasSubmittedVote(vote = {}) {
+  return Boolean(vote?.decision && vote.decision !== 'pending')
+}
+
+function clonePreservedVoteValue(value) {
+  if (value instanceof Date) {
+    return new Date(value.getTime())
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => clonePreservedVoteValue(entry))
+  }
+
+  if (value && typeof value === 'object') {
+    return { ...value }
+  }
+
+  return value
+}
+
+function buildVoteDocumentWithPreservedResponse(baseVoteDoc, preservedVote = null) {
+  const voteDoc = {
+    ...baseVoteDoc,
+    decision: 'pending'
+  }
+
+  if (!preservedVote) {
+    return voteDoc
+  }
+
+  for (const field of PRESERVED_VOTE_FIELDS) {
+    if (preservedVote[field] !== undefined) {
+      voteDoc[field] = clonePreservedVoteValue(preservedVote[field])
+    }
+  }
+
+  return voteDoc
+}
+
+function buildVoteSummaryFromDocuments(voteDocs = []) {
+  return {
+    expert1Voted: voteDocs.some((vote) => vote.voterRole === 'expert1' && hasSubmittedVote(vote)),
+    expert2Voted: voteDocs.some((vote) => vote.voterRole === 'expert2' && hasSubmittedVote(vote)),
+    chefProjetVoted: voteDocs.some((vote) => vote.voterRole === 'chef_projet' && hasSubmittedVote(vote))
+  }
+}
+
 function buildLegacySlotDocument({
   year,
   date,
@@ -298,6 +396,162 @@ function buildLegacySlotDocument({
         : 3
     },
     history: []
+  }
+}
+
+function buildLegacySlotAssignmentFields({
+  slotTimes,
+  roomName,
+  roomSite,
+  roomConfig = {},
+  tpiId,
+  assignments = null
+}) {
+  const slotDocument = buildLegacySlotDocument({
+    year: 2000,
+    date: new Date('2000-01-01T00:00:00.000Z'),
+    period: 1,
+    slotTimes,
+    roomName,
+    roomSite,
+    roomConfig,
+    tpiId,
+    assignments
+  })
+
+  return {
+    startTime: slotDocument.startTime,
+    endTime: slotDocument.endTime,
+    room: slotDocument.room,
+    status: slotDocument.status,
+    assignedTpi: slotDocument.assignedTpi,
+    assignments: slotDocument.assignments,
+    config: slotDocument.config
+  }
+}
+
+function buildArchivedVoteSlotDocument(slot = {}, now = new Date()) {
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+
+  return {
+    year: slot.year,
+    date: slot.date,
+    period: slot.period,
+    startTime: slot.startTime || '',
+    endTime: slot.endTime || '',
+    room: {
+      name: room.name || '',
+      site: room.site || '',
+      capacity: Number(room.capacity) || 1
+    },
+    status: 'blocked',
+    assignedTpi: null,
+    assignments: {},
+    config: slot.config && typeof slot.config === 'object'
+      ? { ...slot.config }
+      : {},
+    history: [{
+      action: 'archived_vote_slot_after_planning_move',
+      at: now,
+      details: 'Créneau conservé pour comparer les réponses de vote après déplacement.'
+    }]
+  }
+}
+
+function buildVoteHistorySlotSnapshot(slot = null) {
+  if (!slot) {
+    return null
+  }
+
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+
+  return {
+    _id: slot._id || null,
+    year: slot.year || null,
+    date: slot.date || null,
+    period: slot.period || '',
+    startTime: slot.startTime || '',
+    endTime: slot.endTime || '',
+    room: {
+      name: room.name || '',
+      site: room.site || '',
+      capacity: Number(room.capacity) || 1
+    }
+  }
+}
+
+async function findSlotByTransferSlot(slot = {}, year = null) {
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+  const normalizedYear = Number.parseInt(String(year || slot.year), 10)
+  const period = Number.parseInt(String(slot.period), 10)
+  const date = slot.date ? new Date(slot.date) : null
+  const roomName = pickFirstNonEmpty(room.name)
+  const roomSite = pickFirstNonEmpty(room.site)
+
+  if (!Number.isInteger(normalizedYear) || Number.isNaN(date?.getTime()) || !Number.isInteger(period) || !roomName || !roomSite) {
+    return null
+  }
+
+  return Slot.findOne({
+    year: normalizedYear,
+    date,
+    period,
+    'room.name': roomName,
+    'room.site': roomSite
+  })
+}
+
+async function ensureArchivedVoteSlot({
+  year,
+  slot,
+  slotKey,
+  processedSlotKeys,
+  now
+}) {
+  if (!slot || !slotKey) {
+    return null
+  }
+
+  const existingProcessed = processedSlotKeys.get(slotKey)
+  if (existingProcessed?.slot) {
+    return existingProcessed.slot
+  }
+
+  const existingSlot = await findSlotByTransferSlot(slot, year)
+  if (existingSlot) {
+    processedSlotKeys.set(slotKey, {
+      reference: '',
+      date: toIsoDate(slot.date),
+      period: slot.period,
+      roomName: slot.room?.name || '',
+      roomSite: slot.room?.site || '',
+      slot: existingSlot,
+      archivedVoteOnly: existingSlot.status === 'blocked' && !existingSlot.assignedTpi
+    })
+    return existingSlot
+  }
+
+  try {
+    const archivedSlot = await Slot.create(buildArchivedVoteSlotDocument({
+      ...slot,
+      year
+    }, now))
+    processedSlotKeys.set(slotKey, {
+      reference: '',
+      date: toIsoDate(slot.date),
+      period: slot.period,
+      roomName: slot.room?.name || '',
+      roomSite: slot.room?.site || '',
+      slot: archivedSlot,
+      archivedVoteOnly: true
+    })
+    return archivedSlot
+  } catch (error) {
+    if (error?.code === 11000) {
+      return findSlotByTransferSlot(slot, year)
+    }
+
+    throw error
   }
 }
 
@@ -514,6 +768,175 @@ async function resolvePlanningTpiByReference(year, referenceCandidates) {
   }
 
   return await query
+}
+
+async function loadExistingTpisForVoteTransfer(year) {
+  const query = TpiPlanning.find({ year })
+
+  if (query && typeof query.select === 'function') {
+    const selected = query.select('_id reference proposedSlots.slot')
+    return selected && typeof selected.lean === 'function'
+      ? await selected.lean()
+      : await selected
+  }
+
+  if (query && typeof query.distinct === 'function') {
+    const ids = await query.distinct('_id')
+    return (Array.isArray(ids) ? ids : []).map((id) => ({ _id: id }))
+  }
+
+  return []
+}
+
+async function loadExistingSlotsById(slotIds = []) {
+  const normalizedSlotIds = [...new Set(
+    (Array.isArray(slotIds) ? slotIds : [])
+      .map(normalizeLinkedPersonId)
+      .filter(Boolean)
+  )]
+
+  if (normalizedSlotIds.length === 0) {
+    return new Map()
+  }
+
+  const query = Slot.find({ _id: { $in: normalizedSlotIds } })
+
+  if (query && typeof query.select === 'function') {
+    const selected = query.select('_id year date period startTime endTime room status assignedTpi config')
+    const slots = selected && typeof selected.lean === 'function'
+      ? await selected.lean()
+      : await selected
+
+    return new Map(
+      (Array.isArray(slots) ? slots : [])
+        .filter((slot) => slot?._id)
+        .map((slot) => [normalizeLinkedPersonId(slot._id), slot])
+    )
+  }
+
+  return new Map()
+}
+
+async function loadExistingVotesForTransfer(existingTpis = []) {
+  const normalizedTpis = Array.isArray(existingTpis) ? existingTpis : []
+  const existingTpiIds = normalizedTpis
+    .map((tpi) => tpi?._id)
+    .filter(Boolean)
+  const tpiReferenceById = new Map(
+    normalizedTpis
+      .filter((tpi) => tpi?._id)
+      .map((tpi) => [normalizeLinkedPersonId(tpi._id), normalizeString(tpi.reference)])
+  )
+  const baselineSlotIdByReference = new Map(
+    normalizedTpis
+      .filter((tpi) => tpi?._id)
+      .map((tpi) => {
+        const fixedSlot = Array.isArray(tpi.proposedSlots)
+          ? tpi.proposedSlots.find((proposedSlot) => proposedSlot?.slot)
+          : null
+
+        return [
+          normalizeString(tpi.reference),
+          normalizeLinkedPersonId(fixedSlot?.slot)
+        ]
+      })
+      .filter(([reference, slotId]) => reference && slotId)
+  )
+
+  if (existingTpiIds.length === 0) {
+    return {
+      tpiIds: [],
+      votesByTransferKey: new Map(),
+      submittedVotesByReference: new Map(),
+      baselineSlotKeyByReference: new Map(),
+      baselineSlotByReference: new Map(),
+      submittedVoteCount: 0,
+      submittedResponseKeys: new Set()
+    }
+  }
+
+  const query = Vote.find({ tpiPlanning: { $in: existingTpiIds } })
+  const selected = query && typeof query.select === 'function'
+    ? query.select(PRESERVED_VOTE_FIELDS.concat(['tpiPlanning', 'slot', 'voter', 'voterRole']).join(' '))
+    : query
+  const oldVotes = selected && typeof selected.lean === 'function'
+    ? await selected.lean()
+    : await selected
+  const normalizedVotes = Array.isArray(oldVotes) ? oldVotes : []
+  const slotsById = await loadExistingSlotsById([
+    ...normalizedVotes.map((vote) => vote.slot),
+    ...baselineSlotIdByReference.values()
+  ])
+  const votesByTransferKey = new Map()
+  const submittedVotesByReference = new Map()
+  const baselineSlotKeyByReference = new Map()
+  const baselineSlotByReference = new Map()
+  const submittedResponseKeys = new Set()
+  let submittedVoteCount = 0
+
+  for (const [reference, slotId] of baselineSlotIdByReference.entries()) {
+    const slot = slotsById.get(slotId)
+    const slotKey = getVoteTransferSlotKey(slot)
+    if (slotKey) {
+      baselineSlotKeyByReference.set(reference, slotKey)
+      baselineSlotByReference.set(reference, slot)
+    }
+  }
+
+  for (const vote of normalizedVotes) {
+    const tpiId = normalizeLinkedPersonId(vote?.tpiPlanning)
+    const reference = tpiReferenceById.get(tpiId)
+    const slot = slotsById.get(normalizeLinkedPersonId(vote?.slot))
+    const slotKey = getVoteTransferSlotKey(slot)
+
+    if (!reference || !slotKey) {
+      continue
+    }
+
+    const responseKey = buildVoteResponseTransferKey({
+      reference,
+      voterRole: vote.voterRole,
+      voter: vote.voter
+    })
+    const transferKey = buildVoteTransferKey({
+      reference,
+      voterRole: vote.voterRole,
+      voter: vote.voter,
+      slotKey
+    })
+    const enrichedVote = {
+      ...vote,
+      reference,
+      slot,
+      slotKey,
+      transferKey,
+      responseKey
+    }
+
+    if (hasSubmittedVote(vote)) {
+      submittedVoteCount += 1
+      submittedResponseKeys.add(responseKey)
+
+      if (!submittedVotesByReference.has(reference)) {
+        submittedVotesByReference.set(reference, [])
+      }
+      submittedVotesByReference.get(reference).push(enrichedVote)
+    }
+
+    if (!votesByTransferKey.has(transferKey)) {
+      votesByTransferKey.set(transferKey, enrichedVote)
+    }
+  }
+
+  return {
+    tpiIds: existingTpiIds,
+    votesByTransferKey,
+    submittedVotesByReference,
+    baselineSlotKeyByReference,
+    baselineSlotByReference,
+    submittedVoteCount,
+    submittedResponseKeys
+  }
 }
 
 async function syncPersistedLegacyRoomsFromGestionTpi(year, legacyTpi) {
@@ -745,9 +1168,11 @@ async function rebuildWorkflowFromLegacyPlanning({
     legacyTpis.map(tpi => [normalizeRef(tpi.refTpi), tpi])
   )
 
-  const existingTpiIds = await TpiPlanning.find({ year: normalizedYear }).distinct('_id')
-  if (existingTpiIds.length > 0) {
-    await Vote.deleteMany({ tpiPlanning: { $in: existingTpiIds } })
+  const existingVoteTransfer = await loadExistingVotesForTransfer(
+    await loadExistingTpisForVoteTransfer(normalizedYear)
+  )
+  if (existingVoteTransfer.tpiIds.length > 0) {
+    await Vote.deleteMany({ tpiPlanning: { $in: existingVoteTransfer.tpiIds } })
   }
 
   await Slot.deleteMany({ year: normalizedYear })
@@ -782,11 +1207,19 @@ async function rebuildWorkflowFromLegacyPlanning({
     unconfiguredSiteEntries: 0,
     duplicateSlotEntries: 0,
     duplicateSlots: [],
-    missingReferences: []
+    missingReferences: [],
+    preservedVoteCount: 0,
+    preservedSubmittedVoteCount: 0,
+    droppedSubmittedVoteCount: 0,
+    preservedSubmittedResponseCount: 0,
+    droppedSubmittedResponseCount: 0,
+    movedVoteTpiCount: 0,
+    movedVoteStakeholderCount: 0
   }
 
   const processedReferences = new Set()
   const processedSlotKeys = new Map()
+  const preservedSubmittedResponseKeys = new Set()
 
   for (const room of rooms) {
     const roomName = room.name || room.nameRoom || `Salle ${summary.roomCount}`
@@ -821,7 +1254,7 @@ async function rebuildWorkflowFromLegacyPlanning({
         roomName,
         roomSite: slotSite
       })
-      const existingSlotEntry = processedSlotKeys.get(slotIdentity.key)
+      let existingSlotEntry = processedSlotKeys.get(slotIdentity.key)
 
       if (isEmptyLegacyPlanningSlot(tpiData, legacyTpi)) {
         if (isPlanifiableTpi({ site: planningSiteValue }, planningConfig) && !existingSlotEntry) {
@@ -962,7 +1395,7 @@ async function rebuildWorkflowFromLegacyPlanning({
         continue
       }
 
-      if (existingSlotEntry) {
+      if (existingSlotEntry && !existingSlotEntry.archivedVoteOnly) {
         console.warn(
           `⚠️ Créneau partagé détecté: ${legacyRef} dans ${roomName}, ${slotIdentity.dateKey}, période ${period} déjà utilisé par ${existingSlotEntry.reference}`
         )
@@ -1029,6 +1462,15 @@ async function rebuildWorkflowFromLegacyPlanning({
 
       let createdSlot = false
       let slot = existingSlotEntry?.slot || null
+      const slotKey = existingSlotEntry
+        ? buildSlotIdentity({
+            year: normalizedYear,
+            date: existingSlotEntry.date,
+            period: existingSlotEntry.period,
+            roomName: existingSlotEntry.roomName,
+            roomSite: existingSlotEntry.roomSite
+          }).key
+        : slotIdentity.key
       if (!slot) {
         slot = await Slot.create(buildLegacySlotDocument({
           year: normalizedYear,
@@ -1055,43 +1497,192 @@ async function rebuildWorkflowFromLegacyPlanning({
           roomSite: participantSite,
           slot
         })
+      } else if (existingSlotEntry?.archivedVoteOnly) {
+        const assignmentFields = buildLegacySlotAssignmentFields({
+          slotTimes,
+          roomName,
+          roomSite: participantSite,
+          roomConfig,
+          tpiId: tpi._id,
+          assignments: {
+            candidat: candidat._id,
+            expert1: expert1._id,
+            expert2: expert2._id,
+            chefProjet: chefProjet._id
+          }
+        })
+        await Slot.updateOne(
+          { _id: slot._id },
+          {
+            $set: assignmentFields,
+            $push: {
+              history: {
+                action: 'archived_vote_slot_reused_by_planning',
+                by: createdById,
+                at: now,
+                details: 'Créneau de comparaison réutilisé par la nouvelle planification.'
+              }
+            }
+          }
+        )
+        Object.assign(slot, assignmentFields)
+        existingSlotEntry = {
+          ...existingSlotEntry,
+          reference,
+          date: slotIdentity.dateKey,
+          period,
+          roomName,
+          roomSite: participantSite,
+          slot,
+          archivedVoteOnly: false
+        }
+        processedSlotKeys.set(slotIdentity.key, existingSlotEntry)
+        createdSlot = true
       }
 
-      await TpiPlanning.updateOne(
-        { _id: tpi._id },
-        {
-          $set: {
+      const currentStakeholderIds = new Set([
+        normalizeLinkedPersonId(expert1._id),
+        normalizeLinkedPersonId(expert2._id),
+        normalizeLinkedPersonId(chefProjet._id)
+      ].filter(Boolean))
+      const referenceKey = normalizeString(reference)
+      const preservedOldVoteIds = new Set()
+      const countPreservedVote = (preservedVote) => {
+        const oldVoteId = normalizeLinkedPersonId(preservedVote?._id)
+        const identityKey = oldVoteId || preservedVote?.transferKey || ''
+        if (identityKey && preservedOldVoteIds.has(identityKey)) {
+          return
+        }
+
+        if (identityKey) {
+          preservedOldVoteIds.add(identityKey)
+        }
+
+        summary.preservedVoteCount += 1
+        if (hasSubmittedVote(preservedVote)) {
+          summary.preservedSubmittedVoteCount += 1
+          preservedSubmittedResponseKeys.add(buildVoteResponseTransferKey({
+            reference,
+            voterRole: preservedVote.voterRole,
+            voter: preservedVote.voter
+          }))
+        }
+      }
+      const voteDocs = [
+        { voter: expert1._id, voterRole: 'expert1' },
+        { voter: expert2._id, voterRole: 'expert2' },
+        { voter: chefProjet._id, voterRole: 'chef_projet' }
+      ].map((voteIdentity) => {
+        const transferKey = buildVoteTransferKey({
+          reference,
+          voterRole: voteIdentity.voterRole,
+          voter: voteIdentity.voter,
+          slotKey
+        })
+        const preservedVote = existingVoteTransfer.votesByTransferKey.get(transferKey)
+        const voteDoc = buildVoteDocumentWithPreservedResponse({
+          tpiPlanning: tpi._id,
+          slot: slot._id,
+          ...voteIdentity
+        }, preservedVote)
+
+        if (preservedVote) {
+          countPreservedVote(preservedVote)
+        }
+
+        return voteDoc
+      })
+      const existingVoteDocKeys = new Set(
+        voteDocs.map((vote) => [
+          normalizeLinkedPersonId(vote.voter),
+          normalizeLinkedPersonId(vote.slot)
+        ].join('|'))
+      )
+      const submittedVotesForReference = existingVoteTransfer.submittedVotesByReference.get(referenceKey) || []
+
+      for (const preservedVote of submittedVotesForReference) {
+        const preservedSlotKey = preservedVote.slotKey
+        const voterId = normalizeLinkedPersonId(preservedVote.voter)
+
+        if (!preservedSlotKey || preservedSlotKey === slotKey || !currentStakeholderIds.has(voterId)) {
+          continue
+        }
+
+        const archivedSlot = await ensureArchivedVoteSlot({
+          year: normalizedYear,
+          slot: preservedVote.slot,
+          slotKey: preservedSlotKey,
+          processedSlotKeys,
+          now
+        })
+        const archivedSlotId = normalizeLinkedPersonId(archivedSlot?._id)
+        const voteDocKey = [voterId, archivedSlotId].join('|')
+
+        if (!archivedSlotId || existingVoteDocKeys.has(voteDocKey)) {
+          continue
+        }
+
+        const archivedVoteDoc = buildVoteDocumentWithPreservedResponse({
+          tpiPlanning: tpi._id,
+          slot: archivedSlot._id,
+          voter: preservedVote.voter,
+          voterRole: preservedVote.voterRole
+        }, preservedVote)
+
+        voteDocs.push(archivedVoteDoc)
+        existingVoteDocKeys.add(voteDocKey)
+        countPreservedVote(preservedVote)
+      }
+      const voteSummary = buildVoteSummaryFromDocuments(voteDocs)
+      const baselineSlotKey = existingVoteTransfer.baselineSlotKeyByReference.get(referenceKey)
+      const baselineSlot = existingVoteTransfer.baselineSlotByReference.get(referenceKey)
+      const movedAfterVotes = Boolean(
+        baselineSlotKey &&
+        baselineSlotKey !== slotKey &&
+        submittedVotesForReference.length > 0
+      )
+      const touchedRoles = voteDocs
+        .filter((vote) => normalizeLinkedPersonId(vote.slot) === normalizeLinkedPersonId(slot._id))
+        .filter((vote) => !['accepted', 'preferred'].includes(vote.decision))
+        .map((vote) => vote.voterRole)
+        .filter(Boolean)
+      const moveHistoryEntry = movedAfterVotes
+        ? {
+            action: 'planning_slot_moved_after_votes',
+            by: createdById,
+            at: now,
+            details: {
+              previousSlotKey: baselineSlotKey,
+              currentSlotKey: slotKey,
+              previousSlot: buildVoteHistorySlotSnapshot(baselineSlot),
+              currentSlot: buildVoteHistorySlotSnapshot(slot),
+              touchedRoles,
+              source: 'legacy_planning_rebuild'
+            }
+          }
+        : null
+      if (moveHistoryEntry) {
+        summary.movedVoteTpiCount += 1
+        summary.movedVoteStakeholderCount += touchedRoles.length
+      }
+
+      const planningUpdate = {
+        $set: {
             proposedSlots: [{
               slot: slot._id,
               proposedAt: now,
               score: 100,
               reason: 'Import legacy depuis la planification'
             }],
+            'votingSession.voteSummary': voteSummary,
             updatedAt: now
-          }
         }
-      )
+      }
+      if (moveHistoryEntry) {
+        planningUpdate.$push = { history: moveHistoryEntry }
+      }
 
-      const voteDocs = [
-        {
-          tpiPlanning: tpi._id,
-          slot: slot._id,
-          voter: expert1._id,
-          voterRole: 'expert1'
-        },
-        {
-          tpiPlanning: tpi._id,
-          slot: slot._id,
-          voter: expert2._id,
-          voterRole: 'expert2'
-        },
-        {
-          tpiPlanning: tpi._id,
-          slot: slot._id,
-          voter: chefProjet._id,
-          voterRole: 'chef_projet'
-        }
-      ]
+      await TpiPlanning.updateOne({ _id: tpi._id }, planningUpdate)
 
       await Vote.insertMany(voteDocs, { ordered: false }).catch(error => {
         if (error?.code !== 11000) {
@@ -1106,6 +1697,16 @@ async function rebuildWorkflowFromLegacyPlanning({
       summary.voteCount += voteDocs.length
     }
   }
+
+  summary.droppedSubmittedVoteCount = Math.max(
+    existingVoteTransfer.submittedVoteCount - summary.preservedSubmittedVoteCount,
+    0
+  )
+  summary.preservedSubmittedResponseCount = preservedSubmittedResponseKeys.size
+  summary.droppedSubmittedResponseCount = Math.max(
+    existingVoteTransfer.submittedResponseKeys.size - summary.preservedSubmittedResponseCount,
+    0
+  )
 
   return summary
 }

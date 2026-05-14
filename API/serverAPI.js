@@ -41,6 +41,11 @@ const staticVotePublicationService = require('./services/staticVotePublicationSe
 
 // Constante pour vérifier si l'application est en mode démo
 const isDemo = process.env.NODE_ENV !== 'production' && process.env.REACT_APP_DEBUG === 'true'
+const isProduction = process.env.NODE_ENV === 'production'
+const clientBuildDir = process.env.CLIENT_BUILD_DIR
+  ? path.resolve(rootDir, process.env.CLIENT_BUILD_DIR)
+  : path.resolve(rootDir, 'build')
+const clientIndexPath = path.join(clientBuildDir, 'index.html')
 
 assertProductionAuthSafety()
 
@@ -93,10 +98,6 @@ app.use('/api/coordination', coordinationRoutes)
 app.use('/api/planning', coordinationRoutes)
 app.use('/api/workflow', workflowRoutes)
 app.use('/api/import', importRoutes)
-
-app.get('/', (req, res) => {
-  res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`)
-})
 
 // Configurer Nodemailer avec vos paramètres d'envoi d'email
 // Définir un endpoint pour récupérer le contenu d'un fichier PDF
@@ -280,6 +281,17 @@ app.put(
     }
   }
 )
+
+if (isProduction && fs.existsSync(clientIndexPath)) {
+  app.use(express.static(clientBuildDir))
+  app.get(/^\/(?!api(?:\/|$)).*/, (req, res) => {
+    res.sendFile(clientIndexPath)
+  })
+} else {
+  app.get('/', (req, res) => {
+    res.send(`App is Working\nport: ${port}\nthis version is demo: ${isDemo}`)
+  })
+}
 
 function parseStaticVoteAutoSyncYears() {
   const rawValue = (

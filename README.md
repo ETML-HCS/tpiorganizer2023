@@ -1,4 +1,4 @@
-# TPIorganizer 2023 - version 26.5.6
+# TPIorganizer 2023 - version 26.5.8
 
 TPIorganizer 2023 est une application React + Node/Express pour organiser les défenses TPI : configuration annuelle, gestion des parties prenantes, planification, coordination des votes, liens d'accès et publication publique.
 
@@ -42,7 +42,11 @@ Scripts utiles :
 - `npm run dev` : API locale en watch + frontend Vite.
 - `npm run backend` : API seule sur `http://localhost:5001`.
 - `npm start` : frontend seul.
-- `npm run build` : build de production Vite.
+- `npm run build` : build de production du client React dans `build/`.
+- `npm run build:app` : alias explicite du build applicatif actuel. Le backend Node n'a pas d'etape de compilation, mais il sert `build/` en production.
+- `npm run start:prod` : demarre l'API en `NODE_ENV=production` et sert le client compile si `build/index.html` existe.
+- `npm run prod` : controle la configuration de production, reconstruit le client, puis demarre le serveur production.
+- `easyStart_prod.cmd` : lanceur Windows pour `npm run prod`.
 - `npm test` : tests frontend Jest.
 - `npm run test:api` : tests API Node.
 - `npm run check-env-prod` : contrôle des variables sensibles avant production.
@@ -71,9 +75,18 @@ La publication des votes génère un mini-site statique protégé par liens pers
 
 La configuration publique et FTP est centralisée dans l'écran de configuration de planification. Le protocole FTP est opérationnel pour la publication automatique actuelle ; FTPS/SFTP/SSH sont cadrés dans la configuration mais ne sont pas encore publiés automatiquement.
 
+## Démarrage production local
+
+1. Copier `.env.example` vers `.env.production` ou `.env.production.local`.
+2. Renseigner les secrets, MongoDB, SMTP, `CORS_ORIGIN` et `REACT_APP_API_URL_FALSE`.
+3. Lancer `easyStart_prod.cmd` ou `npm run prod`.
+4. Ouvrir `http://localhost:8080` si `PORT` n'est pas surcharge.
+
+En production, Express sert le dossier `build/` genere par Vite. Les routes `/api/...` restent reservees au backend; les autres routes sont renvoyees vers `index.html` pour React Router.
+
 ## Orientation desktop
 
-La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : cette version `26.5.6` fige le socle web 2026 avant une refonte plus large vers une application portable centrée sur la génération, la publication et la synchronisation des sites statiques.
+La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AUTONOME.md](./ELECTRON_PORTABLE_AUTONOME.md). Aucun runtime Electron n'est inclus pour l'instant : cette version `26.5.8` fige le socle web 2026 avant une refonte plus large vers une application portable centrée sur la génération, la publication et la synchronisation des sites statiques.
 
 ## Maintenance récente
 

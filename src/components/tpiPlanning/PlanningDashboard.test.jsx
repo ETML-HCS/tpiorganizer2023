@@ -847,6 +847,63 @@ describe('PlanningDashboard', () => {
     expect(screen.getByText(/1\/1 TPI avec réponse/i)).toBeInTheDocument()
   })
 
+  test('relance uniquement les parties prenantes touchées par un déplacement de vote', async () => {
+    const movedTpi = buildVoteProposalTpi()
+    movedTpi.voteDecision = {
+      ...movedTpi.voteDecision,
+      satisfaction: {
+        movedAfterVotes: true,
+        currentSlotId: 'slot-fixed',
+        currentSlot: {
+          _id: 'slot-fixed',
+          date: '2026-06-10T08:00:00.000Z',
+          startTime: '08:00',
+          endTime: '12:00',
+          room: { name: 'A101' }
+        },
+        currentPositiveCount: 1,
+        baselineSlotId: 'slot-alt',
+        baselineSlot: {
+          _id: 'slot-alt',
+          date: '2026-06-11T08:00:00.000Z',
+          startTime: '13:00',
+          endTime: '17:00',
+          room: { name: 'B202' }
+        },
+        baselinePositiveCount: 2,
+        delta: -1,
+        touchedRoleCount: 2,
+        touchedRoles: [
+          { role: 'expert2', voterName: 'Carla Expert', decision: 'rejected' },
+          { role: 'chef_projet', voterName: 'Diane Boss', decision: 'pending' }
+        ]
+      }
+    }
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([movedTpi])
+    jest.spyOn(coordinationServices.workflowCoordinationService, 'remindVotes').mockResolvedValue({
+      success: true,
+      emailsSucceeded: 2,
+      emailsSent: 2
+    })
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', { name: /relancer les tpi déplacés/i }))
+
+    expect(screen.getByText(/Déplacement: 1\/3 accord contre 2\/3 sur la base/i)).toBeInTheDocument()
+    expect(screen.getByText(/Relance ciblée: Carla Expert, Diane Boss/i)).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(coordinationServices.workflowCoordinationService.remindVotes).toHaveBeenCalledWith('2026', {
+        actionKey: 'remindMovedVotes',
+        tpiIds: ['coordination-vote-1'],
+        movedOnly: true
+      })
+    })
+    expect(await screen.findByText('Relance ciblée (1 TPI): 2/2.')).toBeInTheDocument()
+  })
+
   test('garde une file filtrée vide quand aucun TPI avec réponse ne correspond', async () => {
     coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
     coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([

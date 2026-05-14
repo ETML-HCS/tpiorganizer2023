@@ -2090,10 +2090,18 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const localAnalysis = analyzePlanningRooms(roomsToValidate, {
       soutenanceDates
     })
+    const shouldSendRoomsForBackendValidation =
+      !isWorkflowPhaseActive("votes") &&
+      !isWorkflowPhaseActive("arbitrage") &&
+      !isWorkflowPhaseActive("defenses")
 
     const result = await executeWorkflowAction({
       actionKey: "validate",
-      run: () => workflowCoordinationService.validatePlanification(selectedYear, false, roomsToValidate),
+      run: () => workflowCoordinationService.validatePlanification(
+        selectedYear,
+        false,
+        shouldSendRoomsForBackendValidation ? roomsToValidate : null
+      ),
       successMessage: null,
       showSuccessNotification: false,
       showErrorNotification: false,

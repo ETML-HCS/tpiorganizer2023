@@ -717,6 +717,23 @@ function buildSlotPayload(slot) {
   }
 }
 
+function buildStaticVoteSlotTransferKey(slot) {
+  if (!slot) {
+    return ''
+  }
+
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+
+  return [
+    toIsoDate(slot.date),
+    compactText(slot.period),
+    compactText(slot.startTime),
+    compactText(slot.endTime),
+    normalizePlanningLookup(slot.roomName || room.name),
+    normalizePlanningLookup(slot.roomSite || room.site)
+  ].join('|')
+}
+
 function buildCampaignId(year, groups = []) {
   const hash = crypto
     .createHash('sha256')
@@ -983,7 +1000,7 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
   })
     .populate('candidat', 'firstName lastName name fullName')
     .populate('proposedSlots.slot', 'date period startTime endTime room status')
-    .select('reference sujet year status candidat classe site proposedSlots')
+    .select('reference sujet year status candidat classe site proposedSlots history')
     .sort({ reference: 1 })
 
   if (!Array.isArray(tpis) || tpis.length === 0) {
@@ -998,7 +1015,7 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
   const tpiById = new Map(tpis.map((tpi) => [toIdString(tpi), tpi]))
   const votes = await Vote.find({
     tpiPlanning: { $in: tpis.map((tpi) => tpi._id) },
-    decision: 'pending'
+    decision: { $nin: ['accepted', 'preferred'] }
   })
     .populate('slot', 'date period startTime endTime room status')
     .populate('voter', 'firstName lastName name fullName email')
@@ -1014,6 +1031,10 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
     const slotId = toIdString(vote?.slot)
 
     if (!tpi || !personId || !slotId) {
+      continue
+    }
+
+    if (compactText(vote.decision || 'pending') !== 'pending' && !isMovedVoteRelaunchVote(vote, tpi)) {
       continue
     }
 
@@ -3745,9 +3766,16 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         'personId' => staticVoteText($accessEntry['personId'] ?? ''),
         'personName' => staticVoteText($accessEntry['name'] ?? ''),
         'tpiId' => $tpiId,
+        'tpiReference' => isset($group['tpi']) && is_array($group['tpi'])
+            ? staticVoteText($group['tpi']['reference'] ?? '')
+            : '',
         'fixedVoteId' => $fixedVoteId,
+        'fixedSlot' => isset($group['fixedSlot']) && is_array($group['fixedSlot']) ? $group['fixedSlot'] : null,
         'mode' => $mode,
         'proposedSlotIds' => $proposedSlotIds,
+        'proposalOptions' => isset($group['proposalOptions']) && is_array($group['proposalOptions'])
+            ? $group['proposalOptions']
+            : [],
         'onlyAvailabilitySlotIds' => $onlyAvailabilitySlotIds,
         'hardConstraint' => $hardConstraint,
         'remark' => $remark,
@@ -4409,6 +4437,55 @@ function normalizeObjectId(value) {
   return mongoose.Types.ObjectId.isValid(text) ? text : ''
 }
 
+function normalizeStaticVoteSlotSnapshot(slot = null) {
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+    return null
+  }
+
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+  const normalized = {
+    id: normalizeObjectId(slot.id || slot._id),
+    date: toIsoDate(slot.date),
+    period: Number.parseInt(String(slot.period || ''), 10) || null,
+    startTime: compactText(slot.startTime),
+    endTime: compactText(slot.endTime),
+    roomName: compactText(slot.roomName || room.name),
+    roomSite: compactText(slot.roomSite || room.site)
+  }
+
+  if (!normalized.date && !normalized.period && !normalized.startTime && !normalized.roomName) {
+    return null
+  }
+
+  normalized.room = normalized.roomName || normalized.roomSite
+    ? {
+        name: normalized.roomName,
+        site: normalized.roomSite
+      }
+    : null
+
+  return normalized
+}
+
+function normalizeStaticVoteProposalSnapshot(option = {}) {
+  if (!option || typeof option !== 'object' || Array.isArray(option)) {
+    return null
+  }
+
+  const slot = normalizeStaticVoteSlotSnapshot(option.slot)
+  const slotId = normalizeObjectId(option.slotId || slot?.id)
+
+  if (!slotId && !slot) {
+    return null
+  }
+
+  return {
+    slotId,
+    voteId: normalizeObjectId(option.voteId),
+    slot
+  }
+}
+
 function normalizeStaticVoteRecord(record = {}) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) {
     return null
@@ -4427,10 +4504,16 @@ function normalizeStaticVoteRecord(record = {}) {
     campaignId: compactText(record.campaignId),
     personId: normalizeObjectId(record.personId),
     tpiId: normalizeObjectId(record.tpiId),
+    tpiReference: compactText(record.tpiReference || record.tpiRef || record.reference),
     fixedVoteId: normalizeObjectId(record.fixedVoteId),
+    fixedSlotId: normalizeObjectId(record.fixedSlotId || record.fixedSlot?.id || record.fixedSlot?._id),
+    fixedSlot: normalizeStaticVoteSlotSnapshot(record.fixedSlot),
     mode,
     proposedSlotIds: Array.isArray(record.proposedSlotIds)
       ? [...new Set(record.proposedSlotIds.map(normalizeObjectId).filter(Boolean))]
+      : [],
+    proposalOptions: Array.isArray(record.proposalOptions)
+      ? record.proposalOptions.map(normalizeStaticVoteProposalSnapshot).filter(Boolean)
       : [],
     onlyAvailabilitySlotIds: Array.isArray(record.onlyAvailabilitySlotIds)
       ? [...new Set(record.onlyAvailabilitySlotIds.map(normalizeObjectId).filter(Boolean))]
@@ -4501,6 +4584,338 @@ function hasRecordedVoteResponse(vote) {
   )
 }
 
+function isPositiveVoteDecision(decision) {
+  return decision === 'accepted' || decision === 'preferred'
+}
+
+function isActiveVoteSlot(slot) {
+  if (!slot || typeof slot !== 'object') {
+    return true
+  }
+
+  const status = compactText(slot.status)
+  return status !== 'blocked' && status !== 'cancelled'
+}
+
+function isActiveVoteDocument(vote) {
+  return isActiveVoteSlot(vote?.slot)
+}
+
+function getLatestMovedVoteHistory(tpi) {
+  return (Array.isArray(tpi?.history) ? tpi.history : [])
+    .slice()
+    .reverse()
+    .find((entry) => ['planning_slot_moved_after_votes', 'slot_moved_from_vote_proposal'].includes(compactText(entry?.action))) || null
+}
+
+function getMovedVoteTouchedRoleSet(tpi) {
+  const touchedRoles = getLatestMovedVoteHistory(tpi)?.details?.touchedRoles
+  return new Set(
+    (Array.isArray(touchedRoles) ? touchedRoles : [])
+      .map(compactText)
+      .filter(Boolean)
+  )
+}
+
+function isMovedVoteRelaunchVote(vote, tpi) {
+  const currentSlotId = getFixedSlotIdFromTpi(tpi)
+  const touchedRoles = getMovedVoteTouchedRoleSet(tpi)
+  const decision = compactText(vote?.decision || 'pending')
+
+  if (!getLatestMovedVoteHistory(tpi)) {
+    return false
+  }
+
+  if (currentSlotId && toIdString(vote?.slot) !== currentSlotId) {
+    return false
+  }
+
+  if (touchedRoles.size > 0 && !touchedRoles.has(compactText(vote?.voterRole))) {
+    return false
+  }
+
+  return !isPositiveVoteDecision(decision)
+}
+
+function parseStaticVotePayloadFromPhp(content) {
+  const text = typeof content === 'string' ? content : ''
+  const match = text.match(/\$staticVotePayload\s*=\s*json_decode\(<<<'STATIC_VOTE_PAYLOAD_JSON'\r?\n([\s\S]*?)\r?\nSTATIC_VOTE_PAYLOAD_JSON,\s*true\)/)
+
+  if (!match) {
+    return null
+  }
+
+  try {
+    const payload = JSON.parse(match[1])
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null
+  } catch (error) {
+    return null
+  }
+}
+
+async function loadStaticVoteCampaignSnapshot(year) {
+  const phpIndexPath = getPhpIndexPath(year)
+
+  if (!fs.existsSync(phpIndexPath)) {
+    return null
+  }
+
+  try {
+    return parseStaticVotePayloadFromPhp(await fs.promises.readFile(phpIndexPath, 'utf8'))
+  } catch (error) {
+    return null
+  }
+}
+
+function buildStaticVoteArchiveGroupFromRecord(record = {}) {
+  const proposalOptions = Array.isArray(record.proposalOptions)
+    ? record.proposalOptions.map(normalizeStaticVoteProposalSnapshot).filter(Boolean)
+    : []
+  const fixedSlot = normalizeStaticVoteSlotSnapshot(record.fixedSlot)
+  const tpiReference = compactText(record.tpiReference)
+
+  if (!tpiReference && !fixedSlot && proposalOptions.length === 0) {
+    return null
+  }
+
+  return {
+    personId: record.personId,
+    tpi: {
+      id: record.tpiId,
+      reference: tpiReference
+    },
+    fixedVoteId: record.fixedVoteId,
+    fixedSlotId: normalizeObjectId(record.fixedSlotId || fixedSlot?.id),
+    fixedSlot,
+    proposalOptions
+  }
+}
+
+function findStaticVoteArchiveGroupInPayload(record, payload) {
+  const groups = Array.isArray(payload?.groups) ? payload.groups : []
+  const matchingGroups = groups.filter((group) => {
+    const groupTpi = group?.tpi && typeof group.tpi === 'object' ? group.tpi : {}
+
+    return (
+      compactText(group?.personId) === record.personId &&
+      compactText(groupTpi.id) === record.tpiId &&
+      (!record.fixedVoteId || compactText(group?.fixedVoteId) === record.fixedVoteId)
+    )
+  })
+
+  if (matchingGroups.length !== 1) {
+    return null
+  }
+
+  return matchingGroups[0]
+}
+
+async function findStaticVoteArchiveGroup(record) {
+  const embeddedGroup = buildStaticVoteArchiveGroupFromRecord(record)
+
+  if (embeddedGroup?.tpi?.reference) {
+    return embeddedGroup
+  }
+
+  const snapshot = await loadStaticVoteCampaignSnapshot(record.year)
+  return findStaticVoteArchiveGroupInPayload(record, snapshot)
+}
+
+function indexArchiveSlotsByOldId(archiveGroup = {}) {
+  const slotsById = new Map()
+  const fixedSlot = normalizeStaticVoteSlotSnapshot(archiveGroup.fixedSlot)
+  const fixedSlotId = normalizeObjectId(archiveGroup.fixedSlotId || fixedSlot?.id)
+
+  if (fixedSlotId && fixedSlot) {
+    slotsById.set(fixedSlotId, fixedSlot)
+  }
+
+  for (const option of Array.isArray(archiveGroup.proposalOptions) ? archiveGroup.proposalOptions : []) {
+    const normalizedOption = normalizeStaticVoteProposalSnapshot(option)
+    if (normalizedOption?.slotId && normalizedOption.slot) {
+      slotsById.set(normalizedOption.slotId, normalizedOption.slot)
+    }
+  }
+
+  for (const slotEntry of Array.isArray(archiveGroup.slots) ? archiveGroup.slots : []) {
+    const slot = normalizeStaticVoteSlotSnapshot(slotEntry.slot)
+    const slotId = normalizeObjectId(slotEntry.slotId || slot?.id)
+    if (slotId && slot) {
+      slotsById.set(slotId, slot)
+    }
+  }
+
+  return slotsById
+}
+
+function addSlotToStaticVoteTransferIndex(index, slot, value = {}) {
+  const key = buildStaticVoteSlotTransferKey(slot)
+
+  if (!key) {
+    return
+  }
+
+  const existing = index.get(key) || {}
+
+  index.set(key, {
+    ...existing,
+    ...value,
+    slotId: value.slotId || existing.slotId || toIdString(slot),
+    voteId: value.voteId || existing.voteId || '',
+    slot
+  })
+}
+
+async function buildCurrentStaticVoteSlotTransferIndex({ year, currentTpi, existingVotes, archiveSlotsByOldId }) {
+  const index = new Map()
+
+  for (const vote of Array.isArray(existingVotes) ? existingVotes : []) {
+    const slot = vote?.slot && typeof vote.slot === 'object' ? vote.slot : null
+    if (!slot) {
+      continue
+    }
+
+    addSlotToStaticVoteTransferIndex(index, slot, {
+      voteId: toIdString(vote),
+      slotId: toIdString(slot)
+    })
+  }
+
+  for (const proposedSlot of Array.isArray(currentTpi?.proposedSlots) ? currentTpi.proposedSlots : []) {
+    const slot = proposedSlot?.slot && typeof proposedSlot.slot === 'object' ? proposedSlot.slot : null
+    if (!slot) {
+      continue
+    }
+
+    addSlotToStaticVoteTransferIndex(index, slot)
+  }
+
+  const missingDateKeys = Array.from(archiveSlotsByOldId.values())
+    .filter((slot) => !index.has(buildStaticVoteSlotTransferKey(slot)))
+    .map((slot) => toIsoDate(slot.date))
+    .filter(Boolean)
+
+  if (missingDateKeys.length === 0 || mongoose.connection?.readyState !== 1) {
+    return index
+  }
+
+  const dateRangeFilters = buildDateRangeFilters([...new Set(missingDateKeys)])
+  if (dateRangeFilters.length === 0) {
+    return index
+  }
+
+  const slotDocuments = await Slot.find({
+    year,
+    $or: dateRangeFilters
+  })
+    .select('date period startTime endTime room status')
+    .lean()
+
+  for (const slot of Array.isArray(slotDocuments) ? slotDocuments : []) {
+    addSlotToStaticVoteTransferIndex(index, slot)
+  }
+
+  return index
+}
+
+function remapStaticVoteSlotIds(slotIds = [], archiveSlotsByOldId, currentSlotsByTransferKey) {
+  const mappedIds = []
+
+  for (const oldSlotId of slotIds) {
+    const archiveSlot = archiveSlotsByOldId.get(oldSlotId)
+    const transferKey = buildStaticVoteSlotTransferKey(archiveSlot)
+    const currentSlotId = transferKey ? currentSlotsByTransferKey.get(transferKey)?.slotId : ''
+
+    if (!currentSlotId) {
+      return null
+    }
+
+    if (!mappedIds.includes(currentSlotId)) {
+      mappedIds.push(currentSlotId)
+    }
+  }
+
+  return mappedIds
+}
+
+async function remapStaticVoteRecordFromSnapshot(record, existingTpi = null, existingVotes = null) {
+  const archiveGroup = await findStaticVoteArchiveGroup(record)
+  const tpiReference = compactText(archiveGroup?.tpi?.reference)
+
+  if (!archiveGroup || !tpiReference) {
+    return null
+  }
+
+  const currentTpi = existingTpi && compactText(existingTpi.reference) === tpiReference
+    ? existingTpi
+    : await TpiPlanning.findOne({
+      year: record.year,
+      reference: tpiReference
+    }).populate('proposedSlots.slot', 'date period startTime endTime room status')
+
+  if (!currentTpi) {
+    return null
+  }
+
+  const currentVotes = Array.isArray(existingVotes)
+    ? existingVotes
+    : await Vote.find({
+      tpiPlanning: currentTpi._id,
+      voter: record.personId
+    })
+      .populate('slot', 'date period startTime endTime room status')
+      .select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority magicLinkUsed')
+
+  if (!Array.isArray(currentVotes) || currentVotes.length === 0) {
+    return null
+  }
+  const activeCurrentVotes = currentVotes.filter(isActiveVoteDocument)
+
+  if (activeCurrentVotes.length === 0) {
+    return null
+  }
+
+  const archiveSlotsByOldId = indexArchiveSlotsByOldId(archiveGroup)
+  const currentSlotsByTransferKey = await buildCurrentStaticVoteSlotTransferIndex({
+    year: record.year,
+    currentTpi,
+    existingVotes: activeCurrentVotes,
+    archiveSlotsByOldId
+  })
+  const archiveFixedSlot = archiveSlotsByOldId.get(record.fixedSlotId || archiveGroup.fixedSlotId) ||
+    normalizeStaticVoteSlotSnapshot(archiveGroup.fixedSlot)
+  const archiveFixedKey = buildStaticVoteSlotTransferKey(archiveFixedSlot)
+  const currentFixedVoteId = archiveFixedKey ? currentSlotsByTransferKey.get(archiveFixedKey)?.voteId : ''
+
+  if (!currentFixedVoteId) {
+    return null
+  }
+
+  const proposedSlotIds = remapStaticVoteSlotIds(
+    record.proposedSlotIds,
+    archiveSlotsByOldId,
+    currentSlotsByTransferKey
+  )
+  const onlyAvailabilitySlotIds = remapStaticVoteSlotIds(
+    record.onlyAvailabilitySlotIds,
+    archiveSlotsByOldId,
+    currentSlotsByTransferKey
+  )
+
+  if (!proposedSlotIds || !onlyAvailabilitySlotIds) {
+    return null
+  }
+
+  return {
+    ...record,
+    tpiId: toIdString(currentTpi),
+    tpiReference,
+    fixedVoteId: currentFixedVoteId,
+    proposedSlotIds,
+    onlyAvailabilitySlotIds
+  }
+}
+
 async function importStaticVoteRecord(rawRecord, expectedYear) {
   let record
 
@@ -4534,10 +4949,23 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
     }
   }
 
-  const tpi = await TpiPlanning.findOne({
+  let remapAttempted = false
+  let tpi = await TpiPlanning.findOne({
     _id: record.tpiId,
     year: record.year
   }).populate('proposedSlots.slot', 'date period startTime endTime room status')
+
+  if (!tpi) {
+    const remappedRecord = await remapStaticVoteRecordFromSnapshot(record)
+    if (remappedRecord) {
+      record = normalizeStaticVoteRecord(remappedRecord)
+      remapAttempted = true
+      tpi = await TpiPlanning.findOne({
+        _id: record.tpiId,
+        year: record.year
+      }).populate('proposedSlots.slot', 'date period startTime endTime room status')
+    }
+  }
 
   if (!tpi) {
     return {
@@ -4575,7 +5003,9 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
   const existingVotes = await Vote.find({
     tpiPlanning: tpi._id,
     voter: record.personId
-  }).select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority magicLinkUsed')
+  })
+    .populate('slot', 'date period startTime endTime room status')
+    .select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority magicLinkUsed')
 
   if (!Array.isArray(existingVotes) || existingVotes.length === 0) {
     return {
@@ -4585,19 +5015,31 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
       importKey
     }
   }
+  const activeExistingVotes = existingVotes.filter(isActiveVoteDocument)
 
-  if (existingVotes.some(hasRecordedVoteResponse)) {
+  if (activeExistingVotes.length === 0) {
     return {
       imported: false,
-      skipped: true,
-      reason: 'already_answered',
+      skipped: false,
+      reason: 'votes_not_found',
       importKey
     }
   }
 
-  const existingVotesById = new Map(existingVotes.map((vote) => [toIdString(vote), vote]))
-  const existingVotesBySlotId = new Map(existingVotes.map((vote) => [toIdString(vote.slot), vote]))
-  const fixedVote = existingVotesById.get(record.fixedVoteId)
+  const existingVotesById = new Map(activeExistingVotes.map((vote) => [toIdString(vote), vote]))
+  const existingVotesBySlotId = new Map(activeExistingVotes.map((vote) => [toIdString(vote.slot), vote]))
+  let fixedVote = existingVotesById.get(record.fixedVoteId)
+
+  if (!fixedVote) {
+    if (!remapAttempted) {
+      const remappedRecord = await remapStaticVoteRecordFromSnapshot(record, tpi, activeExistingVotes)
+      if (remappedRecord) {
+        record = normalizeStaticVoteRecord(remappedRecord)
+        fixedVote = existingVotesById.get(record.fixedVoteId)
+        remapAttempted = true
+      }
+    }
+  }
 
   if (!fixedVote) {
     return {
@@ -4610,6 +5052,26 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
 
   const fixedSlotId = getFixedSlotIdFromTpi(tpi)
   if (fixedSlotId && toIdString(fixedVote.slot) !== fixedSlotId) {
+    if (!remapAttempted) {
+      const remappedRecord = await remapStaticVoteRecordFromSnapshot(record, tpi, activeExistingVotes)
+      if (remappedRecord) {
+        record = normalizeStaticVoteRecord(remappedRecord)
+        fixedVote = existingVotesById.get(record.fixedVoteId)
+        remapAttempted = true
+      }
+    }
+  }
+
+  if (!fixedVote) {
+    return {
+      imported: false,
+      skipped: false,
+      reason: 'fixed_vote_not_found',
+      importKey
+    }
+  }
+
+  if (fixedSlotId && toIdString(fixedVote.slot) !== fixedSlotId) {
     return {
       imported: false,
       skipped: false,
@@ -4618,8 +5080,19 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
     }
   }
 
+  if (activeExistingVotes.some((vote) =>
+    hasRecordedVoteResponse(vote) && !isMovedVoteRelaunchVote(vote, tpi)
+  )) {
+    return {
+      imported: false,
+      skipped: true,
+      reason: 'already_answered',
+      importKey
+    }
+  }
+
   const allowedProposalSlotIds = new Set(
-    existingVotes
+    activeExistingVotes
       .map((vote) => toIdString(vote.slot))
       .filter((slotId) => slotId && slotId !== fixedSlotId)
   )
@@ -4663,7 +5136,7 @@ async function importStaticVoteRecord(rawRecord, expectedYear) {
   const sharedSpecialReason = hasSpecialRequest ? record.specialRequest.reason : ''
   const sharedSpecialDate = hasSpecialRequest ? record.specialRequest.requestedDate : null
 
-  for (const vote of existingVotes) {
+  for (const vote of activeExistingVotes) {
     const slotId = toIdString(vote.slot)
     const isFixedSlot = slotId === fixedSlotId
     const isSelectedProposal = proposalSelectionSet.has(slotId)

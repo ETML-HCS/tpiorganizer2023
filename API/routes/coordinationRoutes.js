@@ -797,7 +797,7 @@ async function attachVoteQueueCountsToProposalOptions(options = [], tpi = {}) {
 }
 
 function buildVoteResponseMode(roleStatus) {
-  if (!roleStatus || roleStatus.decision === 'pending') {
+  if (!roleStatus) {
     return 'pending'
   }
 
@@ -813,6 +813,10 @@ function buildVoteResponseMode(roleStatus) {
     roleStatus.specialRequestDate
   ) {
     return 'proposal'
+  }
+
+  if (roleStatus.decision === 'pending') {
+    return 'pending'
   }
 
   return roleStatus.decision
@@ -849,6 +853,19 @@ function toIdString(value) {
   return String(value)
 }
 
+function isActiveVoteSlot(slot) {
+  if (!slot || typeof slot !== 'object') {
+    return true
+  }
+
+  const status = compactText(slot.status)
+  return status !== 'blocked' && status !== 'cancelled'
+}
+
+function isActiveVoteDocument(vote) {
+  return isActiveVoteSlot(vote?.slot)
+}
+
 function serializeVoteSlot(slot) {
   if (!slot) {
     return null
@@ -857,9 +874,13 @@ function serializeVoteSlot(slot) {
   const rawSlot = typeof slot.toObject === 'function'
     ? slot.toObject()
     : slot
+  const slotId = rawSlot && typeof rawSlot === 'object'
+    ? toIdString(rawSlot._id)
+    : toIdString(rawSlot)
 
   return {
-    _id: toIdString(rawSlot),
+    _id: slotId,
+    year: rawSlot.year || null,
     date: rawSlot.date || null,
     period: rawSlot.period || '',
     startTime: rawSlot.startTime || '',
@@ -867,6 +888,30 @@ function serializeVoteSlot(slot) {
     room: rawSlot.room || null,
     status: rawSlot.status || ''
   }
+}
+
+function normalizeVoteDecisionSlotKeyPart(value) {
+  return compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
+}
+
+function buildVoteDecisionSlotKey(slot = {}) {
+  const room = slot.room && typeof slot.room === 'object' ? slot.room : {}
+  const date = slot.date ? new Date(slot.date) : null
+  const dateKey = date && !Number.isNaN(date.getTime())
+    ? date.toISOString().slice(0, 10)
+    : ''
+
+  return [
+    slot.year || '',
+    dateKey,
+    slot.period || '',
+    normalizeVoteDecisionSlotKeyPart(room.site),
+    normalizeVoteDecisionSlotKeyPart(room.name)
+  ].join('|')
 }
 
 function formatVotePersonName(person) {
@@ -927,6 +972,74 @@ function countVoteSlotDecisions(roleDecisions) {
     pendingCount,
     hardConstraintCount,
     respondedCount: decisions.length - pendingCount
+  }
+}
+
+function getLatestVoteMoveHistory(tpi) {
+  const history = Array.isArray(tpi?.history) ? tpi.history : []
+
+  return history
+    .slice()
+    .reverse()
+    .find((entry) => ['planning_slot_moved_after_votes', 'slot_moved_from_vote_proposal'].includes(compactText(entry?.action))) || null
+}
+
+function isPositiveVoteDecision(decision) {
+  return decision === 'accepted' || decision === 'preferred'
+}
+
+function buildVoteSatisfactionComparison(tpi, slots, fixedSlotId) {
+  const currentSlot = slots.find((slot) => slot.slotId && slot.slotId === fixedSlotId) || null
+  const moveHistory = getLatestVoteMoveHistory(tpi)
+
+  if (!currentSlot) {
+    return null
+  }
+
+  const previousSlotId = compactText(moveHistory?.details?.previousSlotId)
+  const previousSlotKey = compactText(moveHistory?.details?.previousSlotKey)
+  const baselineSlot = previousSlotId
+    ? slots.find((slot) => slot.slotId === previousSlotId)
+    : previousSlotKey
+      ? slots.find((slot) => buildVoteDecisionSlotKey(slot.slot) === previousSlotKey)
+      : currentSlot
+  const previousSlotSnapshot = moveHistory?.details?.previousSlot
+  const baselineSlotFromHistory = !baselineSlot && previousSlotSnapshot
+    ? {
+        slotId: previousSlotId || previousSlotKey || 'previous-slot',
+        slot: serializeVoteSlot(previousSlotSnapshot),
+        positiveCount: 0,
+        roleDecisions: []
+      }
+    : null
+  const resolvedBaselineSlot = baselineSlot || baselineSlotFromHistory || currentSlot
+  const touchedRoles = currentSlot.roleDecisions
+    .filter((decision) => !isPositiveVoteDecision(decision.decision))
+    .map((decision) => ({
+      role: decision.role,
+      voterName: decision.voterName,
+      decision: decision.decision || 'pending',
+      hardConstraint: decision.hardConstraint === true
+    }))
+  const currentPositiveCount = Number(currentSlot.positiveCount || 0)
+  const baselinePositiveCount = Number(resolvedBaselineSlot.positiveCount || 0)
+
+  return {
+    movedAfterVotes: Boolean(moveHistory && (
+      resolvedBaselineSlot.slotId !== currentSlot.slotId ||
+      (previousSlotKey && previousSlotKey !== buildVoteDecisionSlotKey(currentSlot.slot))
+    )),
+    currentSlotId: currentSlot.slotId,
+    currentSlot: currentSlot.slot,
+    currentPositiveCount,
+    baselineSlotId: resolvedBaselineSlot.slotId,
+    baselineSlot: resolvedBaselineSlot.slot,
+    baselinePositiveCount,
+    delta: currentPositiveCount - baselinePositiveCount,
+    touchedRoles,
+    touchedRoleCount: touchedRoles.length,
+    satisfiedRoleCount: currentPositiveCount,
+    historyAction: compactText(moveHistory?.action)
   }
 }
 
@@ -1004,6 +1117,7 @@ function buildAdminVoteDecision(tpi, votes = [], fixedSlotId = '') {
       roleDecisions: VOTE_REQUIRED_ROLES.map((role) => slotEntry.roleDecisions[role])
     }
   })
+  const satisfaction = buildVoteSatisfactionComparison(tpi, slots, fixedSlotId)
 
   slots.sort((a, b) => {
     if (a.isFixed !== b.isFixed) {
@@ -1019,7 +1133,8 @@ function buildAdminVoteDecision(tpi, votes = [], fixedSlotId = '') {
 
   return {
     requiredRoles: VOTE_REQUIRED_ROLES,
-    slots
+    slots,
+    satisfaction
   }
 }
 
@@ -2417,22 +2532,28 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
       return res.status(400).json({ error: 'La demande spéciale est désactivée pour cette année.' })
     }
 
-    const existingVotes = await Vote.find({
+    const existingVotesQuery = Vote.find({
       tpiPlanning: tpi._id,
       voter: voterObjectId
     })
+    if (existingVotesQuery && typeof existingVotesQuery.populate === 'function') {
+      existingVotesQuery.populate('slot', 'status')
+    }
+    const existingVotes = await existingVotesQuery
       .select('tpiPlanning slot voter voterRole decision comment availabilityException hardConstraint specialRequestReason specialRequestDate priority')
       .sort({ createdAt: 1 })
 
-    if (existingVotes.length === 0) {
+    const activeExistingVotes = existingVotes.filter(isActiveVoteDocument)
+
+    if (activeExistingVotes.length === 0) {
       return res.status(404).json({ error: 'Aucun vote disponible pour ce TPI.' })
     }
 
     const existingVotesById = new Map(
-      existingVotes.map(vote => [String(vote._id), vote])
+      activeExistingVotes.map(vote => [String(vote._id), vote])
     )
     const existingVotesBySlotId = new Map(
-      existingVotes.map(vote => [String(vote.slot), vote])
+      activeExistingVotes.map(vote => [toIdString(vote.slot), vote])
     )
 
     const fixedVote = existingVotesById.get(fixedVoteId)
@@ -2441,13 +2562,13 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
     }
 
     const fixedSlotId = getFixedSlotIdFromTpi(tpi)
-    if (fixedSlotId && String(fixedVote.slot) !== fixedSlotId) {
+    if (fixedSlotId && toIdString(fixedVote.slot) !== fixedSlotId) {
       return res.status(400).json({ error: 'fixedVoteId doit pointer vers la date fixée du TPI.' })
     }
 
     const allowedProposalSlotIds = new Set(
-      existingVotes
-        .map(vote => String(vote.slot))
+      activeExistingVotes
+        .map(vote => toIdString(vote.slot))
         .filter(slotId => slotId !== fixedSlotId)
     )
 
@@ -2486,8 +2607,8 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
     const sharedSpecialReason = hasSpecialRequest ? specialRequestReason : ''
     const sharedSpecialDate = hasSpecialRequest ? specialRequestDate : null
 
-    for (const vote of existingVotes) {
-      const slotId = String(vote.slot)
+    for (const vote of activeExistingVotes) {
+      const slotId = toIdString(vote.slot)
       const isFixedSlot = slotId === fixedSlotId
       const isSelectedProposal = proposalSelectionSet.has(slotId)
       const isOnlyAvailabilitySlot = onlyAvailabilitySelectionSet.has(slotId)
@@ -2617,7 +2738,10 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
 
     for (const voteData of votes) {
       const vote = await Vote.findById(voteData.voteId)
-        .populate('tpiPlanning', 'year')
+        .populate([
+          { path: 'tpiPlanning', select: 'year' },
+          { path: 'slot', select: 'status' }
+        ])
 
       if (!vote || vote.voter.toString() !== voterObjectId.toString()) {
         results.push({ voteId: voteData.voteId, success: false, error: 'Non autorisé' })
@@ -2631,6 +2755,11 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
 
       if (context?.scope?.tpiId && String(vote.tpiPlanning?._id || '') !== String(context.scope.tpiId)) {
         results.push({ voteId: voteData.voteId, success: false, error: 'Hors scope du lien de vote' })
+        continue
+      }
+
+      if (!isActiveVoteDocument(vote)) {
+        results.push({ voteId: voteData.voteId, success: false, error: 'Vote archivé' })
         continue
       }
 

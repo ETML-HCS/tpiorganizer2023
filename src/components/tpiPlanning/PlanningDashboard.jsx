@@ -2752,12 +2752,13 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     }
   }, [year, executeWorkflowAction])
 
-  const handleRemindVotes = useCallback(async () => {
+  const handleRemindVotes = useCallback(async (options = {}) => {
+    const tpiCount = Array.isArray(options?.tpiIds) ? options.tpiIds.length : 0
     await executeWorkflowAction({
-      actionKey: 'remindVotes',
-      run: () => workflowCoordinationService.remindVotes(year),
+      actionKey: options?.actionKey || 'remindVotes',
+      run: () => workflowCoordinationService.remindVotes(year, options),
       successBuilder: (result) =>
-        `Relances envoyees: ${result?.emailsSucceeded || 0}/${result?.emailsSent || 0}.`,
+        `${tpiCount > 0 ? `Relance ciblée (${tpiCount} TPI): ` : 'Relances envoyees: '}${result?.emailsSucceeded || 0}/${result?.emailsSent || 0}.`,
       errorFallback: 'Erreur lors de la relance des votes.',
       reloadAfterSuccess: true
     })

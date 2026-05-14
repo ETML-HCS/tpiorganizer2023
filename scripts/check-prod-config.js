@@ -3,6 +3,14 @@ const emailService = require('../API/services/emailService')
 const requiredSecrets = ['AUTH_SESSION_SECRET', 'JWT_SECRET']
 const requiredSmtpVars = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM']
 
+function loadConfiguredEnvironment(env = process.env) {
+  if (env !== process.env) {
+    return
+  }
+
+  require('../API/config/loadEnv')
+}
+
 function validateProductionConfig(env = process.env, services = {}) {
   const mail = services.emailService || emailService
   const errors = []
@@ -113,6 +121,8 @@ function printValidationReport(report, logger = console) {
 }
 
 function main(env = process.env, logger = console) {
+  loadConfiguredEnvironment(env)
+
   const report = validateProductionConfig(env)
   printValidationReport(report, logger)
 
@@ -128,6 +138,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  loadConfiguredEnvironment,
   requiredSecrets,
   requiredSmtpVars,
   main,
