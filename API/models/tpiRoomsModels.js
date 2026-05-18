@@ -17,7 +17,7 @@ const constraintWarningSchema = new mongoose.Schema({
 
 const tpiDataSchema = new mongoose.Schema({
   refTpi: {
-    type: Number
+    type: String
   },
   id: { type: String },
   candidatPersonId: { type: String },
@@ -89,10 +89,18 @@ const tpiRoomSchema = new mongoose.Schema({
     default: null
   },
   configSite: {
+    siteId: String,
+    siteCode: String,
+    label: String,
+    active: Boolean,
     breakline: Number,
+    breaklineMinutes: Number,
     tpiTime: Number,
+    tpiTimeMinutes: Number,
     firstTpiStart: Number,
+    firstTpiStartTime: String,
     numSlots: Number,
+    minTpiPerRoom: Number,
     maxConsecutiveTpi: Number,
     planningColor: String,
     tpiColor: String,
@@ -110,11 +118,11 @@ const tpiRoomSchema = new mongoose.Schema({
 // Exporte une fonction pour créer un modèle avec un nom de collection personnalisé
 const createTpiRoomModel = year => {
   const collectionName = `tpiRooms_${year}`
-  return mongoose.model(collectionName, tpiRoomSchema, collectionName)
+  return mongoose.models[collectionName] || mongoose.model(collectionName, tpiRoomSchema, collectionName)
 }
 
 const createCustomTpiRoomModel = collectionName => {
-  return mongoose.model(collectionName, tpiRoomSchema, collectionName)
+  return mongoose.models[collectionName] || mongoose.model(collectionName, tpiRoomSchema, collectionName)
 }
 
 // Exportez les schémas ainsi que les fonctions de création de modèles

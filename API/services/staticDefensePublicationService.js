@@ -2975,6 +2975,7 @@ function getFtpConfig(deploymentConfig = null) {
 async function publishStaticDefensesSite(year) {
   const normalizedYear = parseYear(year)
   const deploymentConfig = await getPublicationDeploymentConfigIfAvailable({ includeSecret: true })
+  await generateStaticDefensesSite(normalizedYear)
   const status = await getStaticPublicationStatus(normalizedYear, deploymentConfig)
 
   if (!status.available) {

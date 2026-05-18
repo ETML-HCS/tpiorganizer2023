@@ -15,6 +15,20 @@ export const transmitToDatabase = async data => {
   }
 }
 
+export const replacePlanningRoomsInDatabase = async (year, rooms = []) => {
+  try {
+    return await apiService.post(`/api/save-tpi-rooms/${year}/replace`, {
+      rooms: Array.isArray(rooms) ? rooms : []
+    })
+  } catch (error) {
+    console.error(
+      `Erreur lors du remplacement vérifié de la planification ${year} en base de données :`,
+      error
+    )
+    throw error
+  }
+}
+
 export const createTpiCollectionForYear = async (year, roomData) => {
   try {
     const response = await soutenancesService.publishRoom(year, roomData)

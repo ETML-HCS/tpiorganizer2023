@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import TpiSchedule from './TpiSchedule'
 import { getTpiModels } from '../tpiControllers/TpiController'
+import { replacePlanningRoomsInDatabase } from '../tpiControllers/TpiRoomsController'
 import { showNotification } from '../Tools'
 import { coordinationConfigService, workflowCoordinationService } from '../../services/coordinationService'
 import { installFetchMock } from '../../test-utils/mockFetch'
@@ -38,6 +39,8 @@ jest.mock('./TpiScheduleButtons', () => {
     onAutomatePlanification,
     onValidatePlanification,
     onOpenVotesWithoutEmails,
+    onSendBD,
+    onPublishStaticPublication,
     onShowNewRoomForm,
     onCreateRoom,
     showNewRoomForm,
@@ -55,6 +58,12 @@ jest.mock('./TpiScheduleButtons', () => {
         </button>
         <button type="button" onClick={onOpenVotesWithoutEmails}>
           open-votes-no-email
+        </button>
+        <button type="button" onClick={onSendBD}>
+          send-db
+        </button>
+        <button type="button" onClick={onPublishStaticPublication}>
+          static-publish
         </button>
         <button type="button" onClick={onShowNewRoomForm}>
           open-manual-room-form
@@ -96,6 +105,11 @@ jest.mock('../tpiControllers/TpiRoomsController', () => ({
   createTpiCollectionForYear: jest.fn(),
   publishSoutenancesFromPlanification: jest.fn(),
   publishSoutenancesFromPlanning: jest.fn(),
+  replacePlanningRoomsInDatabase: jest.fn(() => Promise.resolve({
+    exactMatch: true,
+    roomCount: 1,
+    tpiCount: 1
+  })),
   transmitToDatabase: jest.fn(() => Promise.resolve(true))
 }))
 
@@ -104,6 +118,8 @@ jest.mock('../../services/coordinationService', () => ({
     automatePlanification: jest.fn(),
     validatePlanification: jest.fn(),
     startVotesWithoutEmails: jest.fn(),
+    publishDefinitive: jest.fn(),
+    publishStaticPublication: jest.fn(),
     getYearState: jest.fn(() => Promise.resolve({ state: 'planning' })),
     getActiveSnapshot: jest.fn(() => Promise.resolve(null))
   },
@@ -415,7 +431,7 @@ describe('TpiSchedule auto plan', () => {
     })
   })
 
-  test('synchronise automatiquement les TPI locaux depuis GestionTPI au chargement', async () => {
+  test('signale les écarts GestionTPI au chargement sans modifier automatiquement les salles locales', async () => {
     window.localStorage.setItem('organizerData', JSON.stringify([
       {
         idRoom: 1,
@@ -477,15 +493,13 @@ describe('TpiSchedule auto plan', () => {
 
       expect(storedRooms[0].tpiDatas[0]).toMatchObject({
         refTpi: '2247',
-        candidat: 'Alice Example',
-        candidatPersonId: 'candidate-1',
-        classe: 'INF4A',
-        sujet: 'Sujet mis à jour',
-        description: 'Description mise à jour'
+        candidat: 'Ancien Nom',
+        candidatPersonId: 'candidate-old',
+        sujet: 'Ancien sujet'
       })
       expect(storedRooms[0].tpiDatas[0].expert1).toMatchObject({
-        name: 'Expert One',
-        personId: 'expert-1',
+        name: 'Expert Ancien',
+        personId: 'expert-old',
         offres: {
           isValidated: true,
           submit: [{ date: '2026-06-10', creneau: 1 }]
@@ -493,10 +507,120 @@ describe('TpiSchedule auto plan', () => {
       })
     })
 
+    await waitFor(() => {
+      expect(showNotification).toHaveBeenCalledWith(
+        '1 TPI à synchroniser depuis GestionTPI. Utilise "Sync tout" pour appliquer les changements.',
+        'info',
+        2400
+      )
+    })
+  })
+
+  test('remplace la planification distante et affiche une confirmation 100% vérifiée', async () => {
+    window.localStorage.setItem('organizerData', JSON.stringify([
+      {
+        idRoom: 1,
+        lastUpdate: 100,
+        site: 'ETML',
+        date: '2026-06-10',
+        name: 'A101',
+        configSite: {
+          numSlots: 1
+        },
+        tpiDatas: [
+          {
+            refTpi: '2247',
+            candidat: 'Alice Example',
+            expert1: { name: 'Expert One', offres: {} },
+            expert2: { name: 'Expert Two', offres: {} },
+            boss: { name: 'Chef Projet', offres: {} }
+          }
+        ]
+      }
+    ]))
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {})
+    replacePlanningRoomsInDatabase.mockResolvedValue({
+      exactMatch: true,
+      roomCount: 1,
+      tpiCount: 1
+    })
+
+    renderSchedule()
+
+    fireEvent.click(await screen.findByRole('button', { name: /send-db/i }))
+
+    await waitFor(() => {
+      expect(replacePlanningRoomsInDatabase).toHaveBeenCalledTimes(1)
+    })
+
+    expect(replacePlanningRoomsInDatabase.mock.calls[0][0]).toBe(2026)
+    expect(replacePlanningRoomsInDatabase.mock.calls[0][1]).toHaveLength(1)
     expect(showNotification).toHaveBeenCalledWith(
-      '1 TPI synchronisé(s) automatiquement depuis GestionTPI.',
-      'info',
-      2400
+      'Sauvegarde BDD 2026 vérifiée à 100%: 1 salle(s), 1 TPI.',
+      'success',
+      5000
+    )
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Sauvegarde BDD 2026 vérifiée à 100%: 1 salle(s), 1 TPI.'
+    )
+  })
+
+  test('publie les défenses courantes avant le transfert statique tpi26', async () => {
+    window.localStorage.setItem('organizerData', JSON.stringify([
+      {
+        idRoom: 1,
+        lastUpdate: 100,
+        site: 'ETML',
+        date: '2026-06-10',
+        name: 'A101',
+        configSite: {
+          numSlots: 1
+        },
+        tpiDatas: [
+          {
+            refTpi: '2247',
+            candidat: 'Alice Example',
+            expert1: { name: 'Expert One', offres: {} },
+            expert2: { name: 'Expert Two', offres: {} },
+            boss: { name: 'Chef Projet', offres: {} }
+          }
+        ]
+      }
+    ]))
+    workflowCoordinationService.publishDefinitive.mockResolvedValue({
+      success: true,
+      workflowState: 'published',
+      message: '1 salle publiée depuis la planification courante'
+    })
+    workflowCoordinationService.publishStaticPublication.mockResolvedValue({
+      success: true,
+      available: true,
+      defenseCount: 1,
+      roomCount: 1,
+      publicUrl: 'https://tpi26.ch/soutenances-2026/',
+      publishedAt: '2026-05-18T10:00:00.000Z'
+    })
+
+    renderSchedule()
+
+    fireEvent.click(await screen.findByRole('button', { name: /static-publish/i }))
+
+    await waitFor(() => {
+      expect(workflowCoordinationService.publishDefinitive).toHaveBeenCalledTimes(1)
+      expect(workflowCoordinationService.publishStaticPublication).toHaveBeenCalledTimes(1)
+    })
+
+    expect(workflowCoordinationService.publishDefinitive.mock.calls[0][0]).toBe(2026)
+    expect(workflowCoordinationService.publishDefinitive.mock.calls[0][1]).toHaveLength(1)
+    expect(
+      workflowCoordinationService.publishDefinitive.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      workflowCoordinationService.publishStaticPublication.mock.invocationCallOrder[0]
+    )
+    expect(showNotification).toHaveBeenCalledWith(
+      'Défenses publiées puis transfert FTP réussi: 1 défense(s) en ligne sur https://tpi26.ch/soutenances-2026/.',
+      'success',
+      3000
     )
   })
 

@@ -8,9 +8,11 @@ const { requireAppAuth } = require('../middleware/appAuth')
 const {
   requireNonEmptyBody,
   requireObjectIdParam,
-  requireStringBodyFields,
   requireYearParam
 } = require('../middleware/requestValidation')
+const {
+  replacePlanningRoomsForYear
+} = require('../services/legacyPlanningBackupService')
 
 const router = express.Router()
 const TpiRooms = createCustomTpiRoomModel('tpiRooms')
@@ -20,12 +22,15 @@ router.post(
   requireAppAuth,
   requireYearParam('year'),
   requireNonEmptyBody('Données de salle requises.'),
-  requireStringBodyFields(['idRoom'], 'idRoom requis.'),
   async (req, res) => {
   const year = req.params.year
   const roomData = req.body
 
   try {
+    if (roomData.idRoom === null || roomData.idRoom === undefined || roomData.idRoom === '') {
+      return res.status(400).json({ error: 'idRoom requis.' })
+    }
+
     const TpiModel = createTpiRoomModel(year)
     const existingRoom = await TpiModel.findOne({ idRoom: roomData.idRoom })
 
@@ -41,6 +46,35 @@ router.post(
     console.error(`Erreur lors de la gestion de la salle TPI pour l'année ${year}:`, error)
     return res.status(500).json({
       error: `Erreur lors de la gestion de la salle TPI pour l'année ${year}`
+    })
+  }
+})
+
+router.post(
+  '/save-tpi-rooms/:year/replace',
+  requireAppAuth,
+  requireYearParam('year'),
+  requireNonEmptyBody('Données de planification requises.'),
+  async (req, res) => {
+  const year = req.validatedParams.year
+  const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : null
+
+  if (!rooms) {
+    return res.status(400).json({ error: 'Liste des salles requise.' })
+  }
+
+  try {
+    const result = await replacePlanningRoomsForYear(year, rooms)
+
+    return res.status(200).json({
+      ...result,
+      message: `Sauvegarde BDD ${year} vérifiée à 100%.`
+    })
+  } catch (error) {
+    console.error(`Erreur lors du remplacement de la planification ${year}:`, error)
+    return res.status(error.statusCode || 500).json({
+      error: error.message || `Erreur lors du remplacement de la planification ${year}`,
+      details: error.details
     })
   }
 })

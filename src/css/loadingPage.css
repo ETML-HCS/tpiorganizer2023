@@ -40,6 +40,14 @@
   animation-delay: calc(var(--letter-index) * 45ms);
 }
 
+.loading-version {
+  margin: -12px 0 0;
+  color: #475569;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
 .loading-mark {
   position: relative;
   width: 86px;

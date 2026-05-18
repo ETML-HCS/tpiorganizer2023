@@ -1,5 +1,7 @@
 const { defineConfig, loadEnv } = require('vite')
 const react = require('@vitejs/plugin-react')
+const { execFileSync } = require('child_process')
+const packageJson = require('./package.json')
 
 const normalizeModuleId = (id = '') => String(id).replace(/\\/g, '/')
 
@@ -84,6 +86,23 @@ const getManualChunkName = (id) => {
   return 'vendor'
 }
 
+const runGitCommand = (args) => {
+  try {
+    return execFileSync('git', args, {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim()
+  } catch (_error) {
+    return ''
+  }
+}
+
+const getGitVersionTag = () =>
+  runGitCommand(['describe', '--tags', '--exact-match', 'HEAD']) ||
+  runGitCommand(['describe', '--tags', '--abbrev=7', '--dirty']) ||
+  `v${packageJson.version}`
+
 module.exports = defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const clientEnv = Object.entries(env).reduce((accumulator, [key, value]) => {
@@ -93,6 +112,8 @@ module.exports = defineConfig(({ mode }) => {
 
     return accumulator
   }, { NODE_ENV: mode })
+
+  clientEnv.REACT_APP_VERSION_TAG = env.REACT_APP_VERSION_TAG || getGitVersionTag()
 
   return {
     plugins: [react()],

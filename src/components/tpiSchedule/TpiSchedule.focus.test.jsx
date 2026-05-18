@@ -61,6 +61,7 @@ jest.mock('../tpiControllers/TpiRoomsController', () => ({
   createTpiCollectionForYear: jest.fn(),
   publishSoutenancesFromPlanification: jest.fn(),
   publishSoutenancesFromPlanning: jest.fn(),
+  replacePlanningRoomsInDatabase: jest.fn(() => Promise.resolve({ exactMatch: true })),
   transmitToDatabase: jest.fn(() => Promise.resolve(true))
 }))
 

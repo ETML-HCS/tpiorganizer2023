@@ -657,7 +657,7 @@ const TpiScheduleButtons = ({
     ? staticPublicationInfo.lastPublishMessage.trim()
     : ""
   const canPreviewStaticPublication = staticPublicationAvailable && typeof onPreviewStaticPublication === "function"
-  const canPublishStaticPublication = staticPublicationAvailable && typeof onPublishStaticPublication === "function"
+  const canPublishStaticPublication = typeof onPublishStaticPublication === "function"
   const staticPublicationStatusTone = isActionRunning("staticPublish")
     ? "pending"
     : staticPublicationLastPublishStatus === "error"
@@ -2192,8 +2192,8 @@ const TpiScheduleButtons = ({
                         disabled={workflowActionLoading || !canPublishStaticPublication}
                         title={
                           staticPublicationAvailable
-                            ? `Publier le dossier généré sur ${staticPublicationTargetLabel} via FTP.`
-                            : "Génère la page statique avant la publication FTP."
+                            ? `Régénérer la page statique puis publier sur ${staticPublicationTargetLabel} via FTP.`
+                            : `Générer la page statique puis publier sur ${staticPublicationTargetLabel} via FTP.`
                         }
                         aria-label={publishStaticPublicationLabel}
                       >

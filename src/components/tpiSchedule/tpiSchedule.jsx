@@ -13,7 +13,7 @@ import { getTpiModels } from "../tpiControllers/TpiController"
 import {
   createTpiCollectionForYear,
   publishSoutenancesFromPlanification,
-  transmitToDatabase
+  replacePlanningRoomsInDatabase
 } from "../tpiControllers/TpiRoomsController"
 
 import DateRoom from "./DateRoom"
@@ -814,7 +814,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   const [isRefreshingTpiSyncStatus, setIsRefreshingTpiSyncStatus] = useState(false)
   const [peopleRegistry, setPeopleRegistry] = useState(null)
   const [swapAssistSource, setSwapAssistSource] = useState(null)
-  const autoGestionTpiSyncSignatureRef = useRef("")
+  const gestionTpiSyncNoticeSignatureRef = useRef("")
   const roomEntries = useMemo(() => (Array.isArray(newRooms) ? newRooms : []), [newRooms])
   const stakeholderShortIdHints = useMemo(() => {
     return buildStakeholderShortIdHints({
@@ -2541,15 +2541,47 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   const handlePublishStaticPublication = async () => {
     const publicationTargetLabel = formatPublicationConfirmTarget(staticPublicationInfo?.publicUrl)
+    const warnings = [
+      "La publication Défenses sera d'abord recréée depuis la planification courante.",
+      hasStaleSnapshotForCurrentPlanning
+        ? "La planification locale a changé depuis le dernier snapshot."
+        : "",
+      hasBlockingValidationForCurrentPlanning
+        ? "La dernière vérification contient encore des erreurs."
+        : ""
+    ]
 
     await executeWorkflowAction({
       actionKey: "staticPublish",
-      confirmMessage: `Publier la page statique générée sur ${publicationTargetLabel} par FTP ?`,
-      run: () => workflowCoordinationService.publishStaticPublication(selectedYear),
+      confirmMessage: buildWorkflowGuidanceConfirm(
+        `publier les défenses puis transférer sur ${publicationTargetLabel}`,
+        "Défenses + tpi26",
+        warnings
+      ),
+      run: async () => {
+        const publication = await workflowCoordinationService.publishDefinitive(
+          selectedYear,
+          newRooms,
+          soutenanceSiteLinkOptions
+        )
+        const ftpPublication = await workflowCoordinationService.publishStaticPublication(selectedYear)
+
+        return {
+          ...(ftpPublication || {}),
+          publication
+        }
+      },
       successMessage: (result) =>
-        `Publication FTP réussie: ${result?.defenseCount || 0} défense(s) en ligne${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,
+        `Défenses publiées puis transfert FTP réussi: ${result?.defenseCount || 0} défense(s) en ligne${result?.publicUrl ? ` sur ${result.publicUrl}.` : "."}`,
       onSuccess: (result) => {
         const publishedAt = result?.publishedAt || new Date().toISOString()
+        const publicationResult = result?.publication
+        if (publicationResult?.workflowState) {
+          setWorkflowState(publicationResult.workflowState)
+        }
+        if (publicationResult?.workflowPhases) {
+          setWorkflowPhases(publicationResult.workflowPhases)
+        }
         setStaticPublicationInfo({
           ...(result || {}),
           lastPublishStatus: "success",
@@ -2995,7 +3027,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       : []
 
     if (syncEntries.length === 0) {
-      autoGestionTpiSyncSignatureRef.current = ""
+      gestionTpiSyncNoticeSignatureRef.current = ""
       return
     }
 
@@ -3007,27 +3039,13 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       ].join(":"))
       .join("|")
 
-    if (!syncSignature || autoGestionTpiSyncSignatureRef.current === syncSignature) {
+    if (!syncSignature || gestionTpiSyncNoticeSignatureRef.current === syncSignature) {
       return
     }
 
-    const syncResult = buildRoomsWithGestionTpiSync(
-      roomEntries,
-      syncEntries,
-      availableTpiModels,
-      { updatedAt: Date.now() }
-    )
-
-    if (syncResult.updatedSlotCount === 0) {
-      return
-    }
-
-    autoGestionTpiSyncSignatureRef.current = syncSignature
-    clearValidationState()
-    setNewRooms(syncResult.rooms)
-    saveDataToLocalStorage(syncResult.rooms)
+    gestionTpiSyncNoticeSignatureRef.current = syncSignature
     notify(
-      `${syncResult.refCount} TPI synchronisé(s) automatiquement depuis GestionTPI.`,
+      `${tpiSyncSummary.count} TPI à synchroniser depuis GestionTPI. Utilise "Sync tout" pour appliquer les changements.`,
       "info",
       2400
     )
@@ -3036,6 +3054,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     hasLoadedLocalPlanning,
     notify,
     roomEntries,
+    tpiSyncSummary.count,
     tpiSyncSummary.entries
   ])
 
@@ -3600,42 +3619,27 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       setNewRooms(roomsData)
       writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, roomsData)
 
-      notify(`Synchronisation BDD ${selectedYear} en cours...`, "info", 2200)
+      notify(`Synchronisation BDD ${selectedYear} en cours avec vérification complète...`, "info", 2200)
 
-      let successCount = 0
-      const failedRooms = []
+      const result = await replacePlanningRoomsInDatabase(selectedYear, roomsData)
 
-      for (const room of roomsData) {
-        const roomLabel = compactText(room?.name || room?.nameRoom || room?.idRoom)
-        try {
-          const isDataTransmitted = await transmitToDatabase(room)
-
-          if (isDataTransmitted) {
-            successCount += 1
-          } else {
-            failedRooms.push(roomLabel || "Salle inconnue")
-          }
-        } catch (error) {
-          console.error("Erreur lors de la transmission de la salle :", error)
-          failedRooms.push(roomLabel || "Salle inconnue")
-        }
+      if (!result?.exactMatch) {
+        throw new Error("La vérification BDD a échoué: la base ne correspond pas à l'écran.")
       }
 
-      if (failedRooms.length === 0) {
-        notify(
-          `Synchronisation BDD ${selectedYear} terminée: ${successCount}/${roomsData.length} salle(s) envoyée(s).`,
-          "success"
-        )
-        return
-      }
+      const roomCount = Number(result.roomCount ?? roomsData.length)
+      const tpiCount = Number(result.tpiCount ?? 0)
+      const successMessage = `Sauvegarde BDD ${selectedYear} vérifiée à 100%: ${roomCount} salle(s), ${tpiCount} TPI.`
 
-      const failedPreview = failedRooms.slice(0, 3).join(", ")
-      const extraCount = failedRooms.length > 3 ? ` + ${failedRooms.length - 3} autre(s)` : ""
       notify(
-        `Synchronisation ${selectedYear} partielle: ${successCount}/${roomsData.length} salle(s) envoyée(s). Échec: ${failedPreview}${extraCount}.`,
-        "error",
-        4200
+        successMessage,
+        "success",
+        5000
       )
+
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(successMessage)
+      }
     } catch (error) {
       console.error("Erreur lors de la transmission des données :", error)
       notify(error.message || "Erreur lors de la synchronisation vers la BDD.", "error")
