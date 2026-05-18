@@ -3,7 +3,10 @@ const fs = require('fs')
 const net = require('net')
 const path = require('path')
 const { rootDir } = require('../config/loadEnv')
-const { listPublishedSoutenances } = require('./publishedSoutenanceService')
+const {
+  getActivePublicationVersion,
+  listPublishedSoutenances
+} = require('./publishedSoutenanceService')
 const { MagicLink } = require('../models/magicLinkModel')
 const Person = require('../models/personModel')
 const { getSharedPublicationSettingsIfAvailable } = require('./coordinationCatalogService')
@@ -84,6 +87,15 @@ function toIsoDate(value) {
   const raw = compactText(value)
   const match = raw.match(/^(\d{4}-\d{2}-\d{2})/)
   return match ? match[1] : raw
+}
+
+function toIsoDateTime(value) {
+  if (!value) {
+    return null
+  }
+
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
 function formatDateLabel(value) {
@@ -756,6 +768,25 @@ body {
   background: #0f766e;
 }
 
+.static-soutenance-page .soutenance-person-publication-warning {
+  flex: 1 0 100%;
+  margin: -2px 0 0;
+  padding: 9px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.static-soutenance-page .soutenance-person-publication-warning.is-stale {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #78350f;
+}
+
 .static-soutenance-page .static-hidden {
   display: none !important;
 }
@@ -800,6 +831,10 @@ body {
     white-space: normal;
     line-height: 1.25;
     text-align: center;
+  }
+
+  .static-soutenance-page .soutenance-person-publication-warning {
+    grid-column: 1 / -1;
   }
 }
 
@@ -894,14 +929,25 @@ body {
 `
 }
 
-function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
+function buildStaticDefenseHtml({
+  year,
+  generatedAt,
+  publicationVersion = null,
+  publicationPublishedAt = null,
+  rooms = [],
+  rows = []
+}) {
   const normalizedYear = parseYear(year)
+  const normalizedPublicationVersion = parsePositiveInteger(publicationVersion, null)
+  const normalizedPublicationPublishedAt = toIsoDateTime(publicationPublishedAt)
   const normalizedRooms = normalizeStaticRooms(
     Array.isArray(rooms) && rooms.length > 0 ? rooms : rowsToRooms(rows)
   )
   const payload = {
     year: normalizedYear,
     generatedAt,
+    publicationVersion: normalizedPublicationVersion,
+    publicationPublishedAt: normalizedPublicationPublishedAt,
     rooms: normalizedRooms
   }
   const css = buildStaticSoutenanceCss()
@@ -1023,6 +1069,10 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
           disabled
         >Vue admin</button>
       </div>
+      <p
+        class="soutenance-person-publication-warning static-hidden"
+        id="static-person-publication-warning"
+      ></p>
     </section>
   </div>
 
@@ -1052,6 +1102,7 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       var personIcalLabel = document.getElementById('static-person-ical-label');
       var personActionsCopy = document.getElementById('static-person-actions-copy');
       var personVoteLink = document.getElementById('static-person-vote-link');
+      var personPublicationWarning = document.getElementById('static-person-publication-warning');
       var adminViewToggle = document.getElementById('static-admin-view-toggle');
       var adminFiltersNode = document.getElementById('static-admin-filters');
       var adminDateFilter = document.getElementById('static-admin-filter-date');
@@ -1275,6 +1326,105 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
       function parseNonNegativeInteger(value, fallback) {
         var parsed = Number.parseInt(String(value), 10);
         return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+      }
+
+      function parsePublicationVersion(value) {
+        var parsed = Number.parseInt(String(value || ''), 10);
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+      }
+
+      function getStaticPublicationVersion() {
+        return parsePublicationVersion(payload.publicationVersion);
+      }
+
+      function getViewerPublicationVersion() {
+        if (!magicLinkViewer) {
+          return null;
+        }
+
+        return parsePublicationVersion(magicLinkViewer.publicationVersion) ||
+          parsePublicationVersion(magicLinkViewer.scope && magicLinkViewer.scope.publicationVersion);
+      }
+
+      function formatDateTime(value) {
+        var date = value ? new Date(value) : null;
+        if (!date || Number.isNaN(date.getTime())) {
+          return '';
+        }
+
+        return new Intl.DateTimeFormat('fr-CH', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }).format(date);
+      }
+
+      function getPublicationMetaText() {
+        var publicationVersion = getStaticPublicationVersion();
+        var publicationPublishedAt = formatDateTime(payload.publicationPublishedAt);
+        var generatedAt = formatDateTime(payload.generatedAt);
+        var publicationText = '';
+        var generationText = generatedAt ? 'mini-site généré le ' + generatedAt : '';
+
+        if (publicationVersion && publicationPublishedAt) {
+          publicationText = 'Publication v' + publicationVersion + ' du ' + publicationPublishedAt;
+        } else if (publicationVersion) {
+          publicationText = 'Publication v' + publicationVersion;
+        } else if (publicationPublishedAt) {
+          publicationText = 'Publication des défenses du ' + publicationPublishedAt;
+        }
+
+        if (publicationText && generationText && publicationPublishedAt !== generatedAt) {
+          return publicationText + '; ' + generationText + '.';
+        }
+
+        if (publicationText) {
+          return publicationText + '.';
+        }
+
+        if (generationText) {
+          return generationText.charAt(0).toUpperCase() + generationText.slice(1) + '.';
+        }
+
+        return '';
+      }
+
+      function syncPersonPublicationWarning(hasVoteAccess) {
+        if (!personPublicationWarning) {
+          return;
+        }
+
+        if (!hasVoteAccess) {
+          personPublicationWarning.classList.add('static-hidden');
+          personPublicationWarning.textContent = '';
+          return;
+        }
+
+        var staticPublicationVersion = getStaticPublicationVersion();
+        var viewerPublicationVersion = getViewerPublicationVersion();
+        var hasVersionMismatch = Boolean(
+          staticPublicationVersion &&
+          viewerPublicationVersion &&
+          staticPublicationVersion !== viewerPublicationVersion
+        );
+
+        personPublicationWarning.classList.remove('static-hidden');
+        personPublicationWarning.classList.toggle('is-stale', hasVersionMismatch);
+
+        if (hasVersionMismatch) {
+          personPublicationWarning.textContent =
+            'Attention: ce lien personnel vise la publication v' + viewerPublicationVersion +
+            ', mais ce mini-site affiche la publication v' + staticPublicationVersion +
+            '. Le formulaire de modification peut être déphasé; utilisez le dernier lien reçu ou contactez le backoffice avant de déposer une demande.';
+          return;
+        }
+
+        var metaText = getPublicationMetaText();
+        personPublicationWarning.textContent =
+          (metaText ? metaText + ' ' : '') +
+          'Le formulaire de modification reprend l’état publié lors de la génération du mini-site; après une adaptation côté backoffice, il peut être déphasé jusqu’à la prochaine republication.';
       }
 
       function decimalTime(value) {
@@ -1699,9 +1849,15 @@ function buildStaticDefenseHtml({ year, generatedAt, rooms = [], rows = [] }) {
             'aria-label',
             'Demander une modification de créneau pour ' + (magicLinkViewer.name || 'vos défenses')
           );
+          personVoteLink.title = 'Ouvrir le formulaire de demande de modification';
         } else {
           personVoteLink.href = '#';
+          if (typeof personVoteLink.removeAttribute === 'function') {
+            personVoteLink.removeAttribute('title');
+          }
         }
+
+        syncPersonPublicationWarning(hasVoteAccess);
 
         if (personActionsCopy) {
           personActionsCopy.textContent = hasAdminAccess
@@ -2494,6 +2650,7 @@ $staticViewer = [
     'personId' => $staticAccessEntry['personId'] ?? null,
     'name' => $staticAccessEntry['name'] ?? null,
     'email' => $staticAccessEntry['email'] ?? null,
+    'publicationVersion' => $staticAccessEntry['publicationVersion'] ?? null,
     'roles' => isset($staticAccessEntry['roles']) && is_array($staticAccessEntry['roles'])
         ? array_values($staticAccessEntry['roles'])
         : [],
@@ -2528,7 +2685,7 @@ async function listStaticPublicationAccessLinks(year, deploymentConfig = null) {
     revokedAt: null,
     expiresAt: { $gt: now }
   })
-    .select('+rawToken tokenHash personId personName recipientEmail expiresAt maxUses usageCount')
+    .select('+rawToken tokenHash personId personName recipientEmail expiresAt maxUses usageCount scope')
     .lean()
   const rolesByPersonId = await buildPublicationAccessRolesByPersonId(
     (Array.isArray(links) ? links : []).map((link) => link?.personId)
@@ -2559,6 +2716,7 @@ async function listStaticPublicationAccessLinks(year, deploymentConfig = null) {
         personId: personId || null,
         name: compactText(link.personName) || null,
         email: compactText(link.recipientEmail) || null,
+        publicationVersion: parsePositiveInteger(link?.scope?.publicationVersion, null),
         roles,
         isAdmin: roles.includes('admin'),
         expiresAt: link.expiresAt instanceof Date
@@ -2641,7 +2799,13 @@ async function generateStaticDefensesSite(year) {
   const normalizedYear = parseYear(year)
   const deploymentConfig = await getPublicationDeploymentConfigIfAvailable()
   const generatedAt = new Date().toISOString()
-  const rooms = await listPublishedSoutenances(normalizedYear)
+  const activePublicationVersion = await getActivePublicationVersion(normalizedYear)
+  const publicationVersion = parsePositiveInteger(activePublicationVersion?.version, null)
+  const publicationPublishedAt = toIsoDateTime(activePublicationVersion?.publishedAt)
+  const rooms = await listPublishedSoutenances(
+    normalizedYear,
+    publicationVersion ? { version: publicationVersion } : {}
+  )
   const rows = flattenPublishedRooms(rooms)
   const outputDir = getOutputDir(normalizedYear)
   const indexPath = getIndexPath(normalizedYear)
@@ -2651,6 +2815,8 @@ async function generateStaticDefensesSite(year) {
   const html = buildStaticDefenseHtml({
     year: normalizedYear,
     generatedAt,
+    publicationVersion,
+    publicationPublishedAt,
     rooms,
     rows
   })
@@ -2658,6 +2824,8 @@ async function generateStaticDefensesSite(year) {
   const manifest = {
     year: normalizedYear,
     generatedAt,
+    publicationVersion,
+    publicationPublishedAt,
     roomCount: Array.isArray(rooms) ? rooms.length : 0,
     defenseCount: rows.length,
     previewPath: getPreviewPath(normalizedYear),
@@ -2997,6 +3165,8 @@ async function publishStaticDefensesSite(year) {
     year: normalizedYear,
     generatedAt: status.generatedAt || null,
     publishedAt,
+    publicationVersion: status.publicationVersion || null,
+    publicationPublishedAt: status.publicationPublishedAt || null,
     roomCount: status.roomCount || 0,
     defenseCount: status.defenseCount || 0,
     accessLinkCount: accessFiles.accessLinkCount,

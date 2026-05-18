@@ -1,13 +1,19 @@
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 
 import TpiAssignmentPanel from './TpiAssignmentPanel'
 
+let mockLastDropConfig = null
 const mockUseDrag = jest.fn(() => [{ isDragging: false }, jest.fn()])
+const mockUseDrop = jest.fn((config) => {
+  mockLastDropConfig = config
+  return [{ isDropOver: false, canDropAssignedTpi: false }, jest.fn()]
+})
 const PANEL_COLLAPSED_STORAGE_KEY = 'tpiOrganizer.planning.assignmentPanelCollapsed'
 
 jest.mock('react-dnd', () => ({
-  useDrag: (config) => mockUseDrag(config)
+  useDrag: (config) => mockUseDrag(config),
+  useDrop: (config) => mockUseDrop(config)
 }))
 
 const makeEntry = (overrides = {}) => ({
@@ -32,6 +38,8 @@ const makeEntry = (overrides = {}) => ({
 describe('TpiAssignmentPanel', () => {
   beforeEach(() => {
     mockUseDrag.mockClear()
+    mockUseDrop.mockClear()
+    mockLastDropConfig = null
     window.localStorage.removeItem(PANEL_COLLAPSED_STORAGE_KEY)
   })
 
@@ -74,7 +82,54 @@ describe('TpiAssignmentPanel', () => {
     })
   })
 
-  it('affiche les problèmes dans l onglet dédié', () => {
+  it('accepte un TPI planifié pour le remettre dans la liste à placer', () => {
+    const onUnassignTpi = jest.fn()
+    const plannedTpi = {
+      id: 'slot-1',
+      refTpi: 'TPI-123',
+      candidat: 'Nora Placée'
+    }
+
+    render(
+      <TpiAssignmentPanel
+        unassignedTpis={[]}
+        onUnassignTpi={onUnassignTpi}
+      />
+    )
+
+    expect(mockLastDropConfig.canDrop({ tpi: plannedTpi })).toBe(true)
+
+    act(() => {
+      mockLastDropConfig.drop({ tpi: plannedTpi }, { didDrop: () => false })
+    })
+
+    expect(onUnassignTpi).toHaveBeenCalledWith(plannedTpi)
+  })
+
+  it('ignore les cartes déjà issues de la liste à placer', () => {
+    const onUnassignTpi = jest.fn()
+    const unassignedTpi = {
+      id: 'slot-1',
+      refTpi: 'TPI-123'
+    }
+
+    render(
+      <TpiAssignmentPanel
+        unassignedTpis={[]}
+        onUnassignTpi={onUnassignTpi}
+      />
+    )
+
+    expect(mockLastDropConfig.canDrop({ source: 'unassigned', tpi: unassignedTpi })).toBe(false)
+
+    act(() => {
+      mockLastDropConfig.drop({ source: 'unassigned', tpi: unassignedTpi }, { didDrop: () => false })
+    })
+
+    expect(onUnassignTpi).not.toHaveBeenCalled()
+  })
+
+  it('affiche les points à vérifier dans l onglet dédié', () => {
     render(
       <TpiAssignmentPanel
         unassignedTpis={[]}
@@ -82,16 +137,16 @@ describe('TpiAssignmentPanel', () => {
           {
             key: 'conflict-1',
             type: 'conflict',
-            label: 'Ada Lovelace',
-            detail: '2026-06-10 · slot 2 · TPI-001, TPI-002'
+            label: 'Conflit horaire: Ada Lovelace',
+            detail: '10.06.2026 · créneau 2 · TPI-001, TPI-002'
           }
         ]}
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: /Problèmes/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /À vérifier/i }))
 
-    expect(screen.getByRole('list', { name: /Problèmes de planification/i })).toHaveTextContent('Ada Lovelace')
+    expect(screen.getByRole('list', { name: /Points de planification à vérifier/i })).toHaveTextContent('Ada Lovelace')
     expect(screen.getByText(/TPI-001, TPI-002/i)).toBeInTheDocument()
   })
 

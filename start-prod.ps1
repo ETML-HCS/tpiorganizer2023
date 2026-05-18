@@ -42,6 +42,108 @@ function Invoke-Npm {
     }
 }
 
+function Test-NpmBinShim {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $binPath = Join-Path -Path (Get-Location) -ChildPath "node_modules\.bin\$CommandName.cmd"
+    return Test-Path -LiteralPath $binPath
+}
+
+function Get-MissingNpmBinShims {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$CommandNames
+    )
+
+    return @($CommandNames | Where-Object { -not (Test-NpmBinShim -CommandName $_) })
+}
+
+function Get-RequiredNativeDependencyPaths {
+    $nodeTarget = (& node -p "process.platform + ':' + process.arch" | Select-Object -Last 1)
+
+    switch ($nodeTarget) {
+        'win32:x64' {
+            return @('@rolldown\binding-win32-x64-msvc')
+        }
+        'win32:arm64' {
+            return @('@rolldown\binding-win32-arm64-msvc')
+        }
+        default {
+            return @()
+        }
+    }
+}
+
+function Get-MissingNpmPackagePaths {
+    param(
+        [string[]]$RelativePaths = @()
+    )
+
+    return @($RelativePaths | Where-Object {
+        $packagePath = Join-Path -Path (Get-Location) -ChildPath "node_modules\$_"
+        -not (Test-Path -LiteralPath $packagePath)
+    })
+}
+
+function Format-MissingNpmDependencies {
+    param(
+        [string[]]$MissingCommands = @(),
+        [string[]]$MissingPackages = @()
+    )
+
+    $parts = @()
+
+    if ($MissingCommands.Count -ne 0) {
+        $parts += "commandes: $($MissingCommands -join ', ')"
+    }
+
+    if ($MissingPackages.Count -ne 0) {
+        $parts += "paquets: $($MissingPackages -join ', ')"
+    }
+
+    return $parts -join '; '
+}
+
+function Ensure-NpmDependencies {
+    $requiredCommands = @('cross-env', 'vite')
+    $requiredPackages = @(Get-RequiredNativeDependencyPaths)
+
+    if (-not (Test-Path node_modules)) {
+        Write-Host "node_modules absents -> npm install" -ForegroundColor Yellow
+        Invoke-Npm -Arguments @('install', '--include=dev')
+    }
+
+    $missingCommands = @(Get-MissingNpmBinShims -CommandNames $requiredCommands)
+    $missingPackages = @(Get-MissingNpmPackagePaths -RelativePaths $requiredPackages)
+
+    if ($missingCommands.Count -eq 0 -and $missingPackages.Count -eq 0) {
+        return
+    }
+
+    Write-Host "Dependances npm Windows manquantes ($(Format-MissingNpmDependencies -MissingCommands $missingCommands -MissingPackages $missingPackages)) -> npm rebuild" -ForegroundColor Yellow
+    Invoke-Npm -Arguments @('rebuild')
+
+    $missingCommands = @(Get-MissingNpmBinShims -CommandNames $requiredCommands)
+    $missingPackages = @(Get-MissingNpmPackagePaths -RelativePaths $requiredPackages)
+
+    if ($missingCommands.Count -eq 0 -and $missingPackages.Count -eq 0) {
+        return
+    }
+
+    Write-Host "Dependances npm incompletes ($(Format-MissingNpmDependencies -MissingCommands $missingCommands -MissingPackages $missingPackages)) -> npm install --include=dev" -ForegroundColor Yellow
+    Invoke-Npm -Arguments @('install', '--include=dev')
+
+    $missingCommands = @(Get-MissingNpmBinShims -CommandNames $requiredCommands)
+    $missingPackages = @(Get-MissingNpmPackagePaths -RelativePaths $requiredPackages)
+
+    if ($missingCommands.Count -ne 0 -or $missingPackages.Count -ne 0) {
+        throw "Dependances npm incompletes: $(Format-MissingNpmDependencies -MissingCommands $missingCommands -MissingPackages $missingPackages)"
+    }
+}
+
 function Resolve-ProdPort {
     $resolvedPort = ''
 
@@ -85,10 +187,7 @@ function Open-SiteWhenReady {
     } -ArgumentList $Url | Out-Null
 }
 
-if (-not (Test-Path node_modules)) {
-    Write-Host "node_modules absents -> npm install" -ForegroundColor Yellow
-    Invoke-Npm -Arguments @('install')
-}
+Ensure-NpmDependencies
 
 $env:NODE_ENV = 'production'
 $env:REACT_APP_DEBUG = 'false'

@@ -138,6 +138,42 @@ describe('tpiScheduleOptimization', () => {
     })
   })
 
+  it('ne signale pas de limite consecutive quand une pause coupe la sequence', () => {
+    const rooms = [
+      makeRoom({
+        date: '2026-06-11',
+        name: 'Vennes - A23',
+        site: 'VENNES',
+        configSite: { maxConsecutiveTpi: 4 },
+        cards: [
+          makeCardWithStakeholders('TPI-2026-29', {
+            expert2: { name: 'Nemanja Pantic', personId: 'person-nemanja-pantic' }
+          }),
+          makeCardWithStakeholders('TPI-2026-19', {
+            expert2: { name: 'Nemanja Pantic', personId: 'person-nemanja-pantic' }
+          }),
+          makeCardWithStakeholders('TPI-2026-31', {
+            expert1: { name: 'Nemanja Pantic', personId: 'person-nemanja-pantic' }
+          }),
+          emptyCard(),
+          makeCardWithStakeholders('TPI-2026-46', {
+            expert1: { name: 'Nemanja Pantic', personId: 'person-nemanja-pantic' }
+          }),
+          makeCardWithStakeholders('TPI-2026-15', {
+            expert2: { name: 'Nemanja Pantic', personId: 'person-nemanja-pantic' }
+          })
+        ]
+      })
+    ]
+
+    const analysis = analyzePlanningRooms(rooms)
+    const validation = buildLocalValidationIssues(analysis)
+
+    expect(analysis.summary.sequenceViolationCount).toBe(0)
+    expect(validation.summary.sequenceViolationCount).toBe(0)
+    expect(validation.issues.some((issue) => issue.type === 'consecutive_limit')).toBe(false)
+  })
+
   it('conserve la detection par nom quand une seule carte a un personId', () => {
     const rooms = [
       makeRoom({

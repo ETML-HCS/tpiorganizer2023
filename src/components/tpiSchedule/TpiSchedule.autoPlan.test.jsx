@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 
 import TpiSchedule from './TpiSchedule'
 import { getTpiModels } from '../tpiControllers/TpiController'
@@ -8,6 +8,8 @@ import { showNotification } from '../Tools'
 import { coordinationConfigService, workflowCoordinationService } from '../../services/coordinationService'
 import { installFetchMock } from '../../test-utils/mockFetch'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
+
+let mockLastDropConfig = null
 
 jest.mock('react-dnd', () => {
   const React = require('react')
@@ -18,7 +20,11 @@ jest.mock('react-dnd', () => {
       { 'data-testid': 'dnd-provider' },
       children
     ),
-    useDrag: () => [{ isDragging: false }, jest.fn()]
+    useDrag: () => [{ isDragging: false }, jest.fn()],
+    useDrop: (config) => {
+      mockLastDropConfig = config
+      return [{ isDropOver: false, canDropAssignedTpi: false }, jest.fn()]
+    }
   }
 })
 
@@ -43,6 +49,7 @@ jest.mock('./TpiScheduleButtons', () => {
     onPublishStaticPublication,
     onShowNewRoomForm,
     onCreateRoom,
+    onToggleRoomsChronologicalSortMode,
     showNewRoomForm,
     roomsCount,
     usedTpiCount,
@@ -67,6 +74,9 @@ jest.mock('./TpiScheduleButtons', () => {
         </button>
         <button type="button" onClick={onShowNewRoomForm}>
           open-manual-room-form
+        </button>
+        <button type="button" onClick={onToggleRoomsChronologicalSortMode}>
+          sort-rooms
         </button>
         {showNewRoomForm ? (
           <button
@@ -145,6 +155,7 @@ describe('TpiSchedule auto plan', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockLastDropConfig = null
     window.localStorage.clear()
     fetchMock = installFetchMock()
     jest.spyOn(window, 'confirm').mockReturnValue(true)
@@ -153,6 +164,47 @@ describe('TpiSchedule auto plan', () => {
   afterEach(() => {
     jest.restoreAllMocks()
     fetchMock.restore()
+  })
+
+  test('affiche les salles en ordre chronologique quand le tri du header est activé', async () => {
+    window.localStorage.setItem('organizerData', JSON.stringify([
+      {
+        idRoom: 1,
+        name: 'Salle tardive',
+        site: 'ETML',
+        date: '2026-06-12',
+        tpiDatas: []
+      },
+      {
+        idRoom: 2,
+        name: 'Salle matinale',
+        site: 'ETML',
+        date: '2026-06-10',
+        tpiDatas: []
+      },
+      {
+        idRoom: 3,
+        name: 'Salle milieu',
+        site: 'ETML',
+        date: '2026-06-11',
+        tpiDatas: []
+      }
+    ]))
+
+    renderSchedule()
+
+    const getRoomNames = () =>
+      screen.getAllByTestId('mock-date-room').map((node) => node.textContent)
+
+    await waitFor(() => {
+      expect(getRoomNames()).toEqual(['Salle tardive', 'Salle matinale', 'Salle milieu'])
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /sort-rooms/i }))
+
+    await waitFor(() => {
+      expect(getRoomNames()).toEqual(['Salle matinale', 'Salle milieu', 'Salle tardive'])
+    })
   })
 
   test('injecte directement les salles legacy générées après auto-planification', async () => {
@@ -514,6 +566,90 @@ describe('TpiSchedule auto plan', () => {
         2400
       )
     })
+
+    fireEvent.click(screen.getByRole('tab', { name: /À vérifier/i }))
+
+    expect(screen.getByRole('list', { name: /Points de planification à vérifier/i })).toHaveTextContent('Aucun point à vérifier.')
+    expect(screen.queryByText(/GestionTPI:/i)).not.toBeInTheDocument()
+  })
+
+  test('remet un TPI planifié dans la liste à placer via le panneau TPI à traiter', async () => {
+    coordinationConfigService.getByYear.mockResolvedValue({
+      siteConfigs: [
+        {
+          siteCode: 'ETML',
+          active: true
+        }
+      ]
+    })
+    window.localStorage.setItem('organizerData', JSON.stringify([
+      {
+        idRoom: 1,
+        lastUpdate: 100,
+        site: 'ETML',
+        date: '2026-06-10',
+        name: 'A101',
+        configSite: {
+          numSlots: 1
+        },
+        tpiDatas: [
+          {
+            refTpi: '2247',
+            id: 'slot-2247',
+            candidat: 'Alice Example',
+            expert1: { name: 'Expert One', offres: {} },
+            expert2: { name: 'Expert Two', offres: {} },
+            boss: { name: 'Chef Projet', offres: {} }
+          }
+        ]
+      }
+    ]))
+    getTpiModels.mockResolvedValue([
+      {
+        refTpi: '2247',
+        candidat: 'Alice Example',
+        classe: 'INF4A',
+        lieu: {
+          site: 'ETML'
+        },
+        sujet: 'Sujet test'
+      }
+    ])
+
+    renderSchedule()
+
+    expect(await screen.findByText('A101')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-toolbar')).toHaveTextContent('usage:1/1')
+      expect(mockLastDropConfig).toBeTruthy()
+    })
+
+    act(() => {
+      mockLastDropConfig.drop({
+        tpi: {
+          id: 'slot-2247',
+          refTpi: '2247'
+        }
+      }, { didDrop: () => false })
+    })
+
+    await waitFor(() => {
+      const storedRooms = JSON.parse(window.localStorage.getItem('organizerData'))
+
+      expect(storedRooms[0].tpiDatas[0]).toMatchObject({
+        refTpi: null,
+        id: 'slot-2247',
+        candidat: '',
+        period: 1
+      })
+      expect(screen.getByRole('list', { name: /TPI non attribués/i })).toHaveTextContent('2247')
+    })
+    expect(showNotification).toHaveBeenCalledWith(
+      'TPI 2247 remis dans la liste à placer.',
+      'success',
+      3000
+    )
   })
 
   test('remplace la planification distante et affiche une confirmation 100% vérifiée', async () => {

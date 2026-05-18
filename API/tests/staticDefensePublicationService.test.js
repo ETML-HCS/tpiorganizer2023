@@ -117,6 +117,9 @@ function createFakeStaticElement(id) {
     addEventListener() {},
     setAttribute(name, value) {
       this[name] = String(value)
+    },
+    removeAttribute(name) {
+      delete this[name]
     }
   }
 }
@@ -256,6 +259,8 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   const html = buildStaticDefenseHtml({
     year: 2026,
     generatedAt: '2026-05-01T10:00:00.000Z',
+    publicationVersion: 2,
+    publicationPublishedAt: '2026-04-30T08:30:00.000Z',
     rooms: [
       {
         idRoom: 1,
@@ -308,7 +313,9 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /id="static-person-ical"/)
   assert.match(html, /id="static-person-ical-download"/)
   assert.match(html, /id="static-person-vote-link"/)
+  assert.match(html, /id="static-person-publication-warning"/)
   assert.match(html, /Demander une modification/)
+  assert.match(html, /formulaire de modification reprend/)
   assert.match(html, /id="static-admin-view-toggle"/)
   assert.match(html, /id="static-admin-filters"/)
   assert.match(html, /id="static-admin-filter-date"/)
@@ -328,6 +335,53 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /getMagicLinkViewerRooms/)
   assert.match(html, /STATIC_MAGIC_LINK_BOOTSTRAP/)
   assert.match(html, /__STATIC_MAGIC_LINK_VALIDATED__/)
+
+  const payload = JSON.parse(extractStaticPayload(html))
+  assert.equal(payload.publicationVersion, 2)
+  assert.equal(payload.publicationPublishedAt, '2026-04-30T08:30:00.000Z')
+})
+
+test('buildStaticDefenseHtml avertit quand le lien personnel vise une autre publication', () => {
+  const html = buildStaticDefenseHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    publicationVersion: 2,
+    rooms: []
+  })
+
+  const elements = runStaticDefenseRuntime(html, {
+    personId: 'person-1',
+    name: 'Alice Expert',
+    publicationVersion: 3,
+    voteAccessUrl: 'https://tpi26.test/votes-2026/?ml=vote-token'
+  })
+  const warning = elements.get('static-person-publication-warning').textContent
+
+  assert.match(warning, /publication v3/)
+  assert.match(warning, /publication v2/)
+  assert.match(warning, /peut être déphasé/)
+})
+
+test('buildStaticDefenseHtml indique la publication source dans la note du formulaire', () => {
+  const html = buildStaticDefenseHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    publicationVersion: 2,
+    publicationPublishedAt: '2026-04-30T08:30:00.000Z',
+    rooms: []
+  })
+
+  const elements = runStaticDefenseRuntime(html, {
+    personId: 'person-1',
+    name: 'Alice Expert',
+    publicationVersion: 2,
+    voteAccessUrl: 'https://tpi26.test/votes-2026/?ml=vote-token'
+  })
+  const warning = elements.get('static-person-publication-warning').textContent
+
+  assert.match(warning, /Publication v2 du/)
+  assert.match(warning, /mini-site généré le/)
+  assert.match(warning, /republication/)
 })
 
 test('buildStaticDefenseHtml trie la vue personnelle statique par date puis horaire visible', () => {
@@ -503,6 +557,7 @@ test('buildStaticDefensePhp gates static data behind a magic link hash', () => {
         personId: 'person-1',
         name: 'Alice Candidate',
         email: 'alice@example.test',
+        publicationVersion: 4,
         roles: ['admin'],
         isAdmin: true,
         expiresAt: '2026-06-01T10:00:00.000Z'
@@ -515,6 +570,7 @@ test('buildStaticDefensePhp gates static data behind a magic link hash', () => {
   assert.match(php, /hash_equals\(\$candidateHash, \$staticTokenHash\)/)
   assert.match(php, /staticPublicationDecryptLinkedVoteUrl/)
   assert.match(php, /voteAccessUrl/)
+  assert.match(php, /publicationVersion/)
   assert.match(php, /isAdmin/)
   assert.match(php, /admin/)
   assert.match(php, /__STATIC_MAGIC_LINK_VALIDATED__/)
@@ -573,6 +629,11 @@ test('listStaticPublicationAccessLinks chiffre uniquement le lien vote de la mem
         personId: 'person-1',
         personName: 'Alice Expert',
         recipientEmail: 'alice@example.test',
+        scope: {
+          publicationVersion: 4,
+          source: 'admin_static_soutenance_access_generated',
+          kind: 'published_soutenances'
+        },
         expiresAt: new Date('2026-05-30T10:00:00.000Z'),
         maxUses: 60,
         usageCount: 0
@@ -583,6 +644,11 @@ test('listStaticPublicationAccessLinks chiffre uniquement le lien vote de la mem
         personId: 'person-2',
         personName: 'Bob Expert',
         recipientEmail: 'bob@example.test',
+        scope: {
+          publicationVersion: 4,
+          source: 'admin_static_soutenance_access_generated',
+          kind: 'published_soutenances'
+        },
         expiresAt: new Date('2026-05-30T10:00:00.000Z'),
         maxUses: 60,
         usageCount: 0
@@ -616,6 +682,7 @@ test('listStaticPublicationAccessLinks chiffre uniquement le lien vote de la mem
       ['admin_access_generated', 'admin_static_vote_access_generated']
     )
     assert.equal(links.length, 2)
+    assert.equal(links[0].publicationVersion, 4)
     assert.deepEqual(links[0].roles, ['expert', 'admin'])
     assert.equal(links[0].isAdmin, true)
     assert.deepEqual(links[1].roles, ['expert'])

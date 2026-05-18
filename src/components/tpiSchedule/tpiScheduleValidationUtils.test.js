@@ -87,6 +87,145 @@ describe("tpiScheduleValidationUtils", () => {
     ])
   })
 
+  it("ecarte une limite consecutive backend absente de la planification locale courante", () => {
+    const localAnalysis = {
+      personOverlaps: [],
+      sequenceViolations: [],
+      classMismatches: []
+    }
+
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 2,
+        hardConflictCount: 2,
+        sequenceViolationCount: 1,
+        importIssueCount: 1
+      },
+      issues: [
+        {
+          type: "consecutive_limit",
+          severity: "error",
+          personId: "person-nemanja-pantic",
+          personName: "Nemanja Pantic",
+          consecutiveCount: 5,
+          maxConsecutiveTpi: 4,
+          slotKeys: [
+            "2026-06-11|1",
+            "2026-06-11|2",
+            "2026-06-11|3",
+            "2026-06-11|4",
+            "2026-06-11|5"
+          ],
+          message: "Nemanja Pantic a 5 TPI consécutifs."
+        },
+        {
+          type: "legacy_tpi_not_imported",
+          severity: "error",
+          reference: "TPI-2026-099",
+          message: "TPI-2026-099 existe dans GestionTPI mais n'est pas encore intégré."
+        }
+      ]
+    }, localAnalysis)
+
+    expect(result.issues.map((issue) => issue.type)).toEqual(["legacy_tpi_not_imported"])
+    expect(result.summary.issueCount).toBe(1)
+    expect(result.summary.sequenceViolationCount).toBe(0)
+    expect(result.summary.importIssueCount).toBe(1)
+    expect(result.summary.isValid).toBe(false)
+  })
+
+  it("recalcule l etat bloquant quand un conflit backend localement absent est retire", () => {
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        hasHardConflicts: true,
+        issueCount: 1,
+        hardConflictCount: 1,
+        sequenceViolationCount: 1
+      },
+      issues: [
+        {
+          type: "consecutive_limit",
+          severity: "error",
+          personName: "Nemanja Pantic",
+          consecutiveCount: 5,
+          maxConsecutiveTpi: 4,
+          slotKeys: [
+            "2026-06-11|1",
+            "2026-06-11|2",
+            "2026-06-11|3",
+            "2026-06-11|4",
+            "2026-06-11|5"
+          ],
+          message: "Nemanja Pantic a 5 TPI consécutifs."
+        }
+      ]
+    }, {
+      personOverlaps: [],
+      sequenceViolations: [],
+      classMismatches: []
+    })
+
+    expect(result.issues).toHaveLength(0)
+    expect(result.summary.issueCount).toBe(0)
+    expect(result.summary.hasHardConflicts).toBe(false)
+    expect(result.summary.isValid).toBe(true)
+  })
+
+  it("conserve une limite consecutive backend confirmee par l analyse locale", () => {
+    const localAnalysis = {
+      sequenceViolations: [
+        {
+          personId: "person-nemanja-pantic",
+          personName: "Nemanja Pantic",
+          consecutiveCount: 5,
+          maxConsecutiveTpi: 4,
+          slotKeys: [
+            "2026-06-11|1",
+            "2026-06-11|2",
+            "2026-06-11|3",
+            "2026-06-11|4",
+            "2026-06-11|5"
+          ]
+        }
+      ]
+    }
+
+    const result = buildValidationResultFromSources(2026, {
+      checkedAt: "2026-04-13T10:00:00.000Z",
+      summary: {
+        issueCount: 1,
+        hardConflictCount: 1,
+        sequenceViolationCount: 1
+      },
+      issues: [
+        {
+          type: "consecutive_limit",
+          severity: "error",
+          personId: "person-nemanja-pantic",
+          personName: "Nemanja Pantic",
+          consecutiveCount: 5,
+          maxConsecutiveTpi: 4,
+          slotKeys: [
+            "2026-06-11|1",
+            "2026-06-11|2",
+            "2026-06-11|3",
+            "2026-06-11|4",
+            "2026-06-11|5"
+          ],
+          message: "Nemanja Pantic a 5 TPI consécutifs."
+        }
+      ]
+    }, localAnalysis)
+
+    expect(result.issues).toHaveLength(1)
+    expect(result.issues[0].type).toBe("consecutive_limit")
+    expect(result.summary.sequenceViolationCount).toBe(1)
+    expect(result.summary.hasHardConflicts).toBe(true)
+    expect(result.summary.isValid).toBe(false)
+  })
+
   it("ignore un conflit local de personne avec une seule reference", () => {
     const result = buildLocalValidationIssues({
       personOverlaps: [

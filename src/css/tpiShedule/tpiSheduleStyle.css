@@ -186,6 +186,20 @@
   transition: flex-basis 0.18s ease, width 0.18s ease, max-height 0.18s ease;
 }
 
+.planning-assignment-panel.is-drop-target {
+  border-color: #93c5fd;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.16);
+}
+
+.planning-assignment-panel.is-drop-over {
+  border-color: #2563eb;
+  background: #f8fbff;
+}
+
+.planning-assignment-panel.is-drop-over .planning-assignment-panel-head {
+  background: #eff6ff;
+}
+
 .planning-assignment-panel--collapsed {
   flex-basis: 48px;
   width: 48px;
@@ -3097,6 +3111,7 @@
 .planning-schedule-page .planning-year-change-btn,
 .planning-schedule-page .planning-room-create-btn,
 .planning-schedule-page .planning-room-filter-reset,
+.planning-schedule-page .planning-room-chronology-toggle,
 .planning-schedule-page .planning-room-wrap-toggle,
 .planning-schedule-page .planning-room-focus-toggle {
   border-radius: var(--app-radius-card, 8px);

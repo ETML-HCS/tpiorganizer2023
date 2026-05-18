@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { useDrag } from "react-dnd"
+import { useDrag, useDrop } from "react-dnd"
 
 import { ItemTypes } from "./Constants"
 import { readStorageValue, writeStorageValue } from "../../utils/storage"
@@ -116,6 +116,7 @@ const TpiAssignmentPanel = ({
   problemItems = [],
   isLoading = false,
   isDragDisabled = false,
+  onUnassignTpi = null,
   onRefresh = null
 }) => {
   const [activeView, setActiveView] = useState("unassigned")
@@ -125,6 +126,36 @@ const TpiAssignmentPanel = ({
   const [query, setQuery] = useState("")
   const [classFilter, setClassFilter] = useState("")
   const [siteFilter, setSiteFilter] = useState("")
+  const canUnassignTpi = !isDragDisabled && typeof onUnassignTpi === "function"
+
+  const [{ isDropOver, canDropAssignedTpi }, dropRef] = useDrop({
+    accept: ItemTypes.TPI_CARD,
+    canDrop: (item) => (
+      canUnassignTpi &&
+      item?.source !== "unassigned" &&
+      Boolean(compactText(item?.tpi?.id) || compactText(item?.tpi?.refTpi))
+    ),
+    drop: (item, monitor) => {
+      if (monitor?.didDrop?.()) {
+        return
+      }
+
+      if (
+        !canUnassignTpi ||
+        item?.source === "unassigned" ||
+        (!compactText(item?.tpi?.id) && !compactText(item?.tpi?.refTpi))
+      ) {
+        return
+      }
+
+      setActiveView("unassigned")
+      onUnassignTpi(item.tpi)
+    },
+    collect: (monitor) => ({
+      isDropOver: monitor.isOver({ shallow: true }),
+      canDropAssignedTpi: monitor.canDrop()
+    })
+  })
 
   const classOptions = useMemo(
     () => buildOptionList(unassignedTpis, "classe"),
@@ -159,7 +190,13 @@ const TpiAssignmentPanel = ({
 
   return (
     <aside
-      className={`planning-assignment-panel ${isCollapsed ? "planning-assignment-panel--collapsed" : ""}`.trim()}
+      ref={dropRef}
+      className={[
+        "planning-assignment-panel",
+        isCollapsed ? "planning-assignment-panel--collapsed" : "",
+        canDropAssignedTpi ? "is-drop-target" : "",
+        canDropAssignedTpi && isDropOver ? "is-drop-over" : ""
+      ].filter(Boolean).join(" ")}
       data-state={isCollapsed ? "collapsed" : "expanded"}
       aria-label="Placement TPI à traiter"
     >
@@ -214,7 +251,7 @@ const TpiAssignmentPanel = ({
               role="tab"
               aria-selected={activeView === "problems"}
             >
-              Problèmes
+              À vérifier
               <span>{Array.isArray(problemItems) ? problemItems.length : 0}</span>
             </button>
           </div>
@@ -279,13 +316,13 @@ const TpiAssignmentPanel = ({
               </div>
             </>
           ) : (
-            <div className="planning-assignment-list planning-assignment-problems" role="list" aria-label="Problèmes de planification">
+            <div className="planning-assignment-list planning-assignment-problems" role="list" aria-label="Points de planification à vérifier">
               {Array.isArray(problemItems) && problemItems.length > 0 ? (
                 problemItems.map((item) => (
                   <ProblemRow key={item.key} item={item} />
                 ))
               ) : (
-                <div className="planning-assignment-empty">Aucun problème actif.</div>
+                <div className="planning-assignment-empty">Aucun point à vérifier.</div>
               )}
             </div>
           )}
@@ -293,7 +330,7 @@ const TpiAssignmentPanel = ({
           <div className="planning-assignment-panel-foot" role="status">
             {activeView === "unassigned"
               ? `${activeCount}/${unassignedTpis.length} affiché(s)`
-              : `${activeCount} problème(s)`}
+              : `${activeCount} point(s)`}
           </div>
         </div>
       ) : null}

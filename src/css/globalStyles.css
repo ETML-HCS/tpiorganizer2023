@@ -190,7 +190,8 @@ body.planning-focus-mode .app-header-tools-toggle-label {
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-#header:has(.app-header-planification-filter-menu[open]) {
+#header:has(.app-header-planification-filter-menu[open]),
+#header:has(.app-header-planification-legend-menu[open]) {
   z-index: 12000;
   overflow: visible;
 }
@@ -752,6 +753,7 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 .app-header-planification-slot .app-header-planification-wrap-toggle,
+.app-header-planification-slot .app-header-planification-chronology-toggle,
 .app-header-planification-slot .app-header-planification-focus-toggle,
 .app-header-planification-legend-menu > summary {
   width: 24px;
@@ -768,6 +770,7 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 .app-header-planification-slot .app-header-planification-wrap-toggle:hover:not(:disabled),
+.app-header-planification-slot .app-header-planification-chronology-toggle:hover:not(:disabled),
 .app-header-planification-slot .app-header-planification-focus-toggle:hover:not(:disabled),
 .app-header-planification-legend-menu > summary:hover {
   background: #f8fafc;
@@ -779,6 +782,10 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   position: relative;
   flex: 0 0 auto;
   z-index: 12020;
+}
+
+.app-header-planification-legend-menu[open] {
+  z-index: 12040;
 }
 
 .app-header-planification-legend-menu > summary {
@@ -813,7 +820,7 @@ body.planning-focus-mode .app-header-tools-toggle-label {
   position: absolute;
   top: calc(100% + 7px);
   right: 0;
-  z-index: 12030;
+  z-index: 12050;
   display: grid;
   gap: 5px;
   width: max-content;
@@ -898,6 +905,7 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 .app-header-planification-slot .app-header-planification-wrap-toggle.active,
+.app-header-planification-slot .app-header-planification-chronology-toggle.active,
 .app-header-planification-slot .app-header-planification-focus-toggle.active {
   background: #dbeafe;
   border-color: #93c5fd;
@@ -905,12 +913,14 @@ body.planning-focus-mode .app-header-tools-toggle-label {
 }
 
 .app-header-planification-slot .planning-room-wrap-toggle-icon,
+.app-header-planification-slot .planning-room-chronology-toggle-icon,
 .app-header-planification-slot .planning-room-focus-toggle-icon {
   font-size: 0.8rem;
   line-height: 1;
 }
 
 .app-header-planification-slot .planning-room-wrap-toggle-icon svg,
+.app-header-planification-slot .planning-room-chronology-toggle-icon svg,
 .app-header-planification-slot .planning-room-focus-toggle-icon svg {
   width: 0.82rem;
   height: 0.82rem;

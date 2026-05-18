@@ -152,6 +152,15 @@ function hasDateValue(value) {
   return !Number.isNaN(date.getTime())
 }
 
+function hasExplicitField(source, key) {
+  return Boolean(
+    source &&
+    typeof source === 'object' &&
+    Object.prototype.hasOwnProperty.call(source, key) &&
+    source[key] !== undefined
+  )
+}
+
 function buildPublicationLookup(rooms = [], year = null) {
   const lookup = new Map()
 
@@ -238,6 +247,9 @@ function enrichLegacyTpiWithDerivedDates(tpi, options = {}) {
   const nextLieu = {
     ...(plainTpi?.lieu && typeof plainTpi.lieu === 'object' ? plainTpi.lieu : {})
   }
+  const hasExplicitSoutenanceDate = hasExplicitField(nextDates, 'soutenance')
+  const hasExplicitRoom = hasExplicitField(plainTpi, 'salle')
+  const hasExplicitSite = hasExplicitField(nextLieu, 'site') || hasExplicitField(plainTpi, 'site')
 
   if (!hasDateValue(nextDates.depart) && compactText(matchingClassType?.startDate)) {
     nextDates.depart = compactText(matchingClassType.startDate)
@@ -247,15 +259,15 @@ function enrichLegacyTpiWithDerivedDates(tpi, options = {}) {
     nextDates.fin = compactText(matchingClassType.endDate)
   }
 
-  if (publicationEntry?.date) {
+  if (!hasExplicitSoutenanceDate && publicationEntry?.date) {
     nextDates.soutenance = publicationEntry.date
   }
 
-  if (publicationEntry?.roomName) {
+  if (!hasExplicitRoom && publicationEntry?.roomName) {
     plainTpi.salle = publicationEntry.roomName
   }
 
-  if (publicationEntry?.site) {
+  if (!hasExplicitSite && publicationEntry?.site) {
     nextLieu.site = publicationEntry.site
   }
 

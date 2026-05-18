@@ -109,6 +109,8 @@ const baseProps = {
   onSyncAllTpisFromGestion: jest.fn(),
   tpiCardDetailLevel: 2,
   onTpiCardDetailLevelChange: jest.fn(),
+  isRoomsChronologicalSortMode: false,
+  onToggleRoomsChronologicalSortMode: jest.fn(),
   roomFilters: { site: '', date: '', room: '' },
   roomSiteOptions: ['ETML'],
   roomDateOptions: ['2026-06-10'],
@@ -803,6 +805,22 @@ describe('TpiScheduleButtons - Données', () => {
     fireEvent.click(focusButton)
 
     expect(onToggleRoomsFocusMode).toHaveBeenCalledTimes(1)
+  })
+
+  test('affiche le bouton de tri chronologique et déclenche le callback', () => {
+    const onToggleRoomsChronologicalSortMode = jest.fn()
+
+    renderButtons({
+      onToggleRoomsChronologicalSortMode
+    })
+
+    const sortButton = screen.getByTestId('planning-room-chronology-toggle')
+    expect(sortButton).toHaveAttribute('aria-label', 'Trier par ordre chronologique')
+    expect(sortButton.querySelector('svg')).not.toBeNull()
+
+    fireEvent.click(sortButton)
+
+    expect(onToggleRoomsChronologicalSortMode).toHaveBeenCalledTimes(1)
   })
 
   test('propose la vue 0 et propage le changement de niveau de détail', () => {

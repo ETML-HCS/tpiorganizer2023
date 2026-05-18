@@ -644,6 +644,60 @@ describe("tpiScheduleValidationMarkers", () => {
     })
   })
 
+  it("ne marque pas une limite consecutive backend absente de l analyse locale", () => {
+    const rooms = [
+      makeRoom({
+        date: "2026-06-11",
+        name: "Vennes - A23",
+        site: "VENNES",
+        cards: [
+          makeCardWithStakeholders("TPI-2026-29", {
+            expert2: { name: "Nemanja Pantic", personId: "person-nemanja-pantic" }
+          }),
+          makeCardWithStakeholders("TPI-2026-19", {
+            expert2: { name: "Nemanja Pantic", personId: "person-nemanja-pantic" }
+          }),
+          makeCardWithStakeholders("TPI-2026-31", {
+            expert1: { name: "Nemanja Pantic", personId: "person-nemanja-pantic" }
+          }),
+          makeCard("", "", "", "", ""),
+          makeCardWithStakeholders("TPI-2026-46", {
+            expert1: { name: "Nemanja Pantic", personId: "person-nemanja-pantic" }
+          })
+        ]
+      })
+    ]
+
+    const markers = buildValidationMarkers(rooms, {
+      issues: [
+        {
+          type: "consecutive_limit",
+          severity: "error",
+          personId: "person-nemanja-pantic",
+          personName: "Nemanja Pantic",
+          consecutiveCount: 5,
+          maxConsecutiveTpi: 4,
+          slotKeys: [
+            "2026-06-11|1",
+            "2026-06-11|2",
+            "2026-06-11|3",
+            "2026-06-11|4",
+            "2026-06-11|5"
+          ],
+          message: "Nemanja Pantic a 5 TPI consécutifs."
+        }
+      ]
+    }, {
+      personOverlaps: [],
+      sequenceViolations: [],
+      classMismatches: []
+    })
+
+    expect(Object.values(markers).some((marker) =>
+      marker.issueTypes.includes("consecutive_limit")
+    )).toBe(false)
+  })
+
   it("ne transforme pas un avertissement d override en erreur visuelle", () => {
     const rooms = [
       makeRoom({

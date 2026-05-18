@@ -12,7 +12,8 @@ jest.mock('react-dnd', () => {
       { 'data-testid': 'dnd-provider' },
       children
     ),
-    useDrag: () => [{ isDragging: false }, jest.fn()]
+    useDrag: () => [{ isDragging: false }, jest.fn()],
+    useDrop: () => [{ isDropOver: false, canDropAssignedTpi: false }, jest.fn()]
   }
 })
 

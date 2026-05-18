@@ -121,6 +121,7 @@ router.get('/resolve', async (req, res) => {
         personId: link.personId ? String(link.personId) : null,
         name: link.personName || null,
         email: link.recipientEmail || null,
+        publicationVersion: link.scope?.publicationVersion || null,
         roles: viewerRoles,
         isAdmin: viewerRoles.includes('admin'),
         voteAccessUrl: linkedVoteAccess?.url || null,

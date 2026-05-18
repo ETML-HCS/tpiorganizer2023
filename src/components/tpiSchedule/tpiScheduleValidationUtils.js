@@ -49,6 +49,32 @@ export const isValidationWarningIssue = (issue = {}) =>
 
 const toRoomModeLabel = (mode) => mode === "matu" ? "MATU" : ""
 
+const LOCAL_AUTHORITATIVE_ISSUE_TYPES = new Set([
+  "person_overlap",
+  "consecutive_limit",
+  "room_class_mismatch"
+])
+
+const hasLocalAnalysisForIssueType = (localAnalysis, issueType) => {
+  if (!localAnalysis || typeof localAnalysis !== "object") {
+    return false
+  }
+
+  if (issueType === "person_overlap") {
+    return Array.isArray(localAnalysis.personOverlaps) || Array.isArray(localAnalysis.conflicts)
+  }
+
+  if (issueType === "consecutive_limit") {
+    return Array.isArray(localAnalysis.sequenceViolations)
+  }
+
+  if (issueType === "room_class_mismatch") {
+    return Array.isArray(localAnalysis.classMismatches)
+  }
+
+  return false
+}
+
 export const buildValidationIssueKey = (issue = {}) => {
   const type = compactText(issue.type)
 
@@ -201,6 +227,33 @@ export const buildLocalValidationIssues = (analysis = {}) => {
   }
 }
 
+export const filterBackendValidationIssuesForLocalAnalysis = (
+  backendIssuesSource = [],
+  localAnalysis = {},
+  localIssues = null
+) => {
+  const localValidationIssues = Array.isArray(localIssues)
+    ? localIssues
+    : buildLocalValidationIssues(localAnalysis).issues
+  const localIssueKeys = new Set(
+    localValidationIssues.map((issue) => buildValidationIssueKey(issue))
+  )
+
+  return (Array.isArray(backendIssuesSource) ? backendIssuesSource : []).filter((issue) => {
+    const type = compactText(issue?.type)
+
+    if (!LOCAL_AUTHORITATIVE_ISSUE_TYPES.has(type)) {
+      return true
+    }
+
+    if (!hasLocalAnalysisForIssueType(localAnalysis, type)) {
+      return true
+    }
+
+    return localIssueKeys.has(buildValidationIssueKey(issue))
+  })
+}
+
 export const buildValidationResultFromSources = (year, validationResponse, localAnalysis = {}) => {
   const backendSummary = validationResponse?.summary || {}
   const backendIssuesSource = Array.isArray(validationResponse?.issues)
@@ -209,9 +262,14 @@ export const buildValidationResultFromSources = (year, validationResponse, local
       ? validationResponse.hardConflicts
       : []
   const localValidation = buildLocalValidationIssues(localAnalysis)
+  const backendIssues = filterBackendValidationIssuesForLocalAnalysis(
+    backendIssuesSource,
+    localAnalysis,
+    localValidation.issues
+  )
   const mergedIssuesMap = new Map()
 
-  for (const issue of [...backendIssuesSource, ...localValidation.issues]) {
+  for (const issue of [...backendIssues, ...localValidation.issues]) {
     const issueKey = buildValidationIssueKey(issue)
     if (!mergedIssuesMap.has(issueKey)) {
       mergedIssuesMap.set(issueKey, issue)
@@ -240,6 +298,7 @@ export const buildValidationResultFromSources = (year, validationResponse, local
       classMismatchCount: Number(typeCounts.room_class_mismatch || 0),
       issueCount: blockingIssues.length,
       hardConflictCount: blockingIssues.length,
+      hasHardConflicts: blockingIssues.length > 0,
       warningCount: warningIssues.length,
       constraintOverrideWarningCount: warningIssues.filter((issue) => issue?.isConstraintOverride === true).length,
       totalIssueCount: mergedIssues.length,

@@ -1,6 +1,7 @@
 import { normalizeSoutenanceDateValue } from "./soutenanceDateUtils"
 import {
   buildLocalValidationIssues,
+  filterBackendValidationIssuesForLocalAnalysis,
   isValidationWarningIssue
 } from "./tpiScheduleValidationUtils"
 
@@ -282,10 +283,13 @@ const addMarker = (markers, slotKey, issue) => {
 }
 
 export const buildValidationMarkers = (roomEntries, validationResult, localAnalysis = null) => {
-  const validationIssues = Array.isArray(validationResult?.issues) ? validationResult.issues : []
+  const validationIssuesSource = Array.isArray(validationResult?.issues) ? validationResult.issues : []
   const localIssues = localAnalysis
     ? buildLocalValidationIssues(localAnalysis).issues
     : []
+  const validationIssues = localAnalysis
+    ? filterBackendValidationIssuesForLocalAnalysis(validationIssuesSource, localAnalysis, localIssues)
+    : validationIssuesSource
   const issues = [...validationIssues, ...localIssues]
   const { slots, slotsByReference } = buildSlotIndex(roomEntries)
   const markers = new Map()

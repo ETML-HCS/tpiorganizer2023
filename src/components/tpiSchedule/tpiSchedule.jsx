@@ -289,6 +289,53 @@ function normalizeRoomDateFilterValues(values) {
   )
 }
 
+function getRoomStartSortValue(room) {
+  const timeText = compactText(room?.configSite?.firstTpiStartTime)
+  const timeMatch = timeText.match(/^(\d{1,2}):(\d{2})$/)
+
+  if (timeMatch) {
+    const hours = Number.parseInt(timeMatch[1], 10)
+    const minutes = Number.parseInt(timeMatch[2], 10)
+
+    if (
+      Number.isInteger(hours) &&
+      Number.isInteger(minutes) &&
+      hours >= 0 &&
+      minutes >= 0 &&
+      minutes < 60
+    ) {
+      return hours * 60 + minutes
+    }
+  }
+
+  const legacyHours = Number(room?.configSite?.firstTpiStart)
+  return Number.isFinite(legacyHours) ? Math.round(legacyHours * 60) : 0
+}
+
+function getRoomChronologicalSortValue(room, originalIndex = 0) {
+  const rawDate = compactText(room?.date)
+  const dateKey = normalizeSoutenanceDateValue(rawDate) || rawDate
+  const dateTime = new Date(dateKey).getTime()
+
+  return {
+    dateSort: Number.isNaN(dateTime) ? Number.MAX_SAFE_INTEGER : dateTime,
+    dateLabel: dateKey,
+    startSort: getRoomStartSortValue(room),
+    site: compactText(room?.site).toUpperCase(),
+    name: compactText(room?.name || room?.nameRoom).toLowerCase(),
+    originalIndex
+  }
+}
+
+function compareRoomChronologicalSortValues(left, right) {
+  return left.dateSort - right.dateSort ||
+    left.dateLabel.localeCompare(right.dateLabel) ||
+    left.startSort - right.startSort ||
+    left.site.localeCompare(right.site) ||
+    left.name.localeCompare(right.name) ||
+    left.originalIndex - right.originalIndex
+}
+
 function getRoomDateFilterValues(filters = {}) {
   return normalizeRoomDateFilterValues([
     ...(Array.isArray(filters?.date) ? filters.date : [filters?.date]),
@@ -786,6 +833,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   })
   const [isRoomsFocusMode, setIsRoomsFocusMode] = useState(false)
   const [isRoomsWrapMode, setIsRoomsWrapMode] = useState(false)
+  const [isRoomsChronologicalSortMode, setIsRoomsChronologicalSortMode] = useState(false)
   const previousRoomsFocusModeRef = useRef(false)
   const roomsWrapModeBeforeFocusRef = useRef(null)
   const planningPageRef = useRef(null)
@@ -969,16 +1017,17 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     ;(Array.isArray(localConflictSummary.conflicts) ? localConflictSummary.conflicts : []).forEach((conflict, index) => {
       const references = Array.isArray(conflict?.references) ? conflict.references : []
       const [dateKey, periodText] = String(conflict?.slotKey || "").split("|")
-      const label = compactText(conflict?.personName) || "Conflit de personne"
+      const personLabel = compactText(conflict?.personName) || "Personne"
+      const dateLabel = formatRoomDateLabel(dateKey) || compactText(dateKey)
       const slotLabel = [
-        compactText(dateKey),
-        periodText ? `slot ${periodText}` : ""
+        dateLabel,
+        periodText ? `créneau ${periodText}` : ""
       ].filter(Boolean).join(" · ")
 
       items.push({
-        key: `conflict-${index}-${label}-${slotLabel}`,
+        key: `conflict-${index}-${personLabel}-${slotLabel}`,
         type: "conflict",
-        label,
+        label: `Conflit horaire: ${personLabel}`,
         detail: [
           slotLabel,
           references.length > 0 ? references.join(", ") : ""
@@ -986,28 +1035,17 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       })
     })
 
-    ;(Array.isArray(tpiSyncSummary.entries) ? tpiSyncSummary.entries : []).forEach((entry, index) => {
-      items.push({
-        key: `sync-${entry?.slotKey || index}`,
-        type: "sync",
-        label: `GestionTPI: ${compactText(entry?.refTpi) || "TPI"}`,
-        detail: Array.isArray(entry?.changedLabels) && entry.changedLabels.length > 0
-          ? entry.changedLabels.join(", ")
-          : "Données différentes"
-      })
-    })
-
     ;(Array.isArray(nonImportableTpiRefs) ? nonImportableTpiRefs : []).forEach((refTpi, index) => {
       items.push({
         key: `non-importable-${refTpi || index}`,
         type: "import",
-        label: `Non importable: ${refTpi}`,
-        detail: "À corriger avant le snapshot"
+        label: `TPI incomplet: ${refTpi}`,
+        detail: "Participant manquant pour le snapshot"
       })
     })
 
     return items.slice(0, 80)
-  }, [localConflictSummary.conflicts, nonImportableTpiRefs, tpiSyncSummary.entries])
+  }, [localConflictSummary.conflicts, nonImportableTpiRefs])
 
   const validationMarkersBySlotKey = useMemo(() => {
     return buildValidationMarkers(roomEntries, validationResult, localConflictSummary)
@@ -1465,7 +1503,9 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     const hasDateFilters = dateFilters.length > 0
     const roomFilter = String(roomFilters.room || "").trim().toLowerCase()
 
-    return roomEntries.filter((room) => {
+    const filteredRooms = []
+
+    roomEntries.forEach((room, index) => {
       const roomSite = String(room?.site || "").trim().toLowerCase()
       const rawRoomDate = String(room?.date || "").trim()
       const roomDate = normalizeSoutenanceDateValue(rawRoomDate) || rawRoomDate
@@ -1475,9 +1515,25 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       const matchesDate = !hasDateFilters || dateFilters.includes(roomDate)
       const matchesRoom = !roomFilter || roomName === roomFilter
 
-      return matchesSite && matchesDate && matchesRoom
+      if (matchesSite && matchesDate && matchesRoom) {
+        filteredRooms.push({ room, index })
+      }
     })
-  }, [roomEntries, roomFilters])
+
+    if (!isRoomsChronologicalSortMode) {
+      return filteredRooms.map((entry) => entry.room)
+    }
+
+    return filteredRooms
+      .map((entry) => ({
+        ...entry,
+        sortValue: getRoomChronologicalSortValue(entry.room, entry.index)
+      }))
+      .sort((left, right) =>
+        compareRoomChronologicalSortValues(left.sortValue, right.sortValue)
+      )
+      .map((entry) => entry.room)
+  }, [isRoomsChronologicalSortMode, roomEntries, roomFilters])
 
   const updateRoomFilters = (patch) => {
     setRoomFilters((prev) => {
@@ -1582,6 +1638,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
   const toggleRoomsWrapMode = useCallback(() => {
     setIsRoomsWrapMode((prev) => !prev)
+  }, [])
+
+  const toggleRoomsChronologicalSortMode = useCallback(() => {
+    setIsRoomsChronologicalSortMode((prev) => !prev)
   }, [])
 
   useEffect(() => {
@@ -3344,6 +3404,86 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
     )
   }
 
+  const handleUnassignTpiFromPlanning = (sourceTpi) => {
+    const sourceId = compactText(sourceTpi?.id)
+    const sourceRef = compactText(sourceTpi?.refTpi)
+    const sourceRefKey = normalizeTpiReference(sourceRef)
+
+    if (!sourceId && !sourceRefKey) {
+      notify("TPI invalide.", "error")
+      return
+    }
+
+    let targetRoomIndex = -1
+    let targetTpiIndex = -1
+
+    roomEntries.some((room, roomIndex) => {
+      const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+      let tpiIndex = sourceId
+        ? tpiDatas.findIndex((tpi) => compactText(tpi?.id) === sourceId)
+        : -1
+
+      if (tpiIndex < 0 && sourceRefKey) {
+        tpiIndex = tpiDatas.findIndex((tpi) =>
+          normalizeTpiReference(tpi?.refTpi) === sourceRefKey
+        )
+      }
+
+      if (tpiIndex >= 0) {
+        targetRoomIndex = roomIndex
+        targetTpiIndex = tpiIndex
+        return true
+      }
+
+      return false
+    })
+
+    if (targetRoomIndex < 0 || targetTpiIndex < 0) {
+      notify("TPI introuvable dans la planification.", "error")
+      return
+    }
+
+    const targetRoom = roomEntries[targetRoomIndex]
+    const targetTpi = targetRoom?.tpiDatas?.[targetTpiIndex]
+
+    if (!tpiHasVisibleContent(targetTpi)) {
+      notify("Ce créneau est déjà vide.", "info")
+      return
+    }
+
+    if (isTpiPlanningSealed(targetTpi)) {
+      notify("Ce TPI est scellé et ne peut pas être retiré.", "error")
+      return
+    }
+
+    const updatedRooms = roomEntries.map((room, roomIndex) => {
+      if (roomIndex !== targetRoomIndex) {
+        return room
+      }
+
+      const tpiDatas = Array.isArray(room?.tpiDatas) ? [...room.tpiDatas] : []
+      tpiDatas[targetTpiIndex] = normalizeTpi({
+        ...createEmptyTpi(),
+        id: compactText(targetTpi?.id) || sourceId,
+        period: targetTpiIndex + 1
+      })
+
+      return {
+        ...room,
+        lastUpdate: Date.now(),
+        tpiDatas
+      }
+    })
+
+    clearValidationState()
+    setSwapAssistSource(null)
+    setNewRooms(updatedRooms)
+    saveDataToLocalStorage(updatedRooms)
+
+    const removedRef = sourceRef || compactText(targetTpi?.refTpi) || "sélectionné"
+    notify(`TPI ${removedRef} remis dans la liste à placer.`, "success")
+  }
+
   const handleSelectTpiForSwap = ({ tpi, roomIndex, tpiIndex, slotId }) => {
     if (isEditing || !tpiHasVisibleContent(tpi) || isTpiPlanningSealed(tpi)) {
       return
@@ -3735,8 +3875,10 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           currentRoomsHash={JSON.stringify(newRooms.map(r => ({ name: r.name, date: r.date, tpiCount: r.tpiDatas?.length || 0 })))}
           isRoomsFocusMode={isRoomsFocusMode}
           isRoomsWrapMode={isRoomsWrapMode}
+          isRoomsChronologicalSortMode={isRoomsChronologicalSortMode}
           onToggleRoomsFocusMode={toggleRoomsFocusMode}
           onToggleRoomsWrapMode={toggleRoomsWrapMode}
+          onToggleRoomsChronologicalSortMode={toggleRoomsChronologicalSortMode}
           toggleArrow={toggleArrow}
           isArrowUp={isArrowUp}
         />
@@ -4006,6 +4148,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
                 problemItems={planningProblemItems}
                 isLoading={!Array.isArray(planifiableTpiModels)}
                 isDragDisabled={isEditing}
+                onUnassignTpi={handleUnassignTpiFromPlanning}
                 onRefresh={handleRefreshTpiSyncStatus}
               />
             ) : null}

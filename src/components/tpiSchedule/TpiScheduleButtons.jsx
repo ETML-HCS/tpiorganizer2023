@@ -31,6 +31,7 @@ import {
   SnowflakeIcon,
   TrashIcon,
   VoteIcon,
+  TimeIcon,
   WrapIcon,
   WrenchIcon
 } from "../shared/InlineIcons"
@@ -153,8 +154,10 @@ const TpiScheduleButtons = ({
   existingRooms = [],
   isRoomsFocusMode = false,
   isRoomsWrapMode = false,
+  isRoomsChronologicalSortMode = false,
   onToggleRoomsFocusMode = null,
   onToggleRoomsWrapMode = null,
+  onToggleRoomsChronologicalSortMode = null,
   nonImportableTpiCount = 0,
   roomsHashAtFreeze = null,
   currentRoomsHash = null,
@@ -1067,6 +1070,12 @@ const TpiScheduleButtons = ({
     }
   }
 
+  const handleToggleRoomsChronologicalSortMode = () => {
+    if (typeof onToggleRoomsChronologicalSortMode === "function") {
+      onToggleRoomsChronologicalSortMode()
+    }
+  }
+
   const planningHeaderPortal = !isRoomsFocusMode && planningHeaderSlot
     ? createPortal(
         <div className="app-header-planification-slot">
@@ -1203,6 +1212,21 @@ const TpiScheduleButtons = ({
             >
               <span className="planning-room-wrap-toggle-icon" aria-hidden="true">
                 <WrapIcon />
+              </span>
+            </button>
+          ) : null}
+          {typeof onToggleRoomsChronologicalSortMode === "function" ? (
+            <button
+              type="button"
+              className={`page-tools-action-btn secondary planning-room-chronology-toggle app-header-planification-chronology-toggle ${isRoomsChronologicalSortMode ? "active" : ""}`.trim()}
+              onClick={handleToggleRoomsChronologicalSortMode}
+              aria-pressed={isRoomsChronologicalSortMode}
+              aria-label={isRoomsChronologicalSortMode ? "Désactiver le tri chronologique" : "Trier par ordre chronologique"}
+              title={isRoomsChronologicalSortMode ? "Revenir à l'ordre actuel des salles" : "Trier les salles par ordre chronologique"}
+              data-testid="planning-room-chronology-toggle"
+            >
+              <span className="planning-room-chronology-toggle-icon" aria-hidden="true">
+                <TimeIcon />
               </span>
             </button>
           ) : null}
