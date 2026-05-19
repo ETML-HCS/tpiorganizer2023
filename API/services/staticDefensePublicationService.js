@@ -117,6 +117,26 @@ function formatDateLabel(value) {
   }).format(date)
 }
 
+function formatDateTimeLabel(value) {
+  const isoDateTime = toIsoDateTime(value)
+  if (!isoDateTime) {
+    return ''
+  }
+
+  const date = new Date(isoDateTime)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('fr-CH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
+}
+
 function parsePositiveInteger(value, fallback = null) {
   const parsed = Number.parseInt(String(value), 10)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
@@ -708,6 +728,27 @@ body {
   max-width: min(100%, 860px);
 }
 
+.static-soutenance-page .static-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.static-soutenance-page .static-title-version {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .static-soutenance-page .static-hero-pdf-action {
   min-width: 56px;
   min-height: 34px;
@@ -768,6 +809,20 @@ body {
   background: #0f766e;
 }
 
+.static-soutenance-page .soutenance-person-vote-meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .static-soutenance-page .soutenance-person-publication-warning {
   flex: 1 0 100%;
   margin: -2px 0 0;
@@ -825,7 +880,8 @@ body {
   }
 
   .static-soutenance-page .soutenance-person-ical-button,
-  .static-soutenance-page .soutenance-person-vote-button {
+  .static-soutenance-page .soutenance-person-vote-button,
+  .static-soutenance-page .soutenance-person-vote-meta {
     width: 100%;
     min-width: 0;
     white-space: normal;
@@ -951,6 +1007,24 @@ function buildStaticDefenseHtml({
     rooms: normalizedRooms
   }
   const css = buildStaticSoutenanceCss()
+  const titleVersionBadge = normalizedPublicationVersion
+    ? `<span class="static-title-version">v${escapeHtml(normalizedPublicationVersion)}</span>`
+    : ''
+  const publicationMetaParts = []
+  const publicationPublishedAtLabel = formatDateTimeLabel(normalizedPublicationPublishedAt)
+  const generatedAtLabel = formatDateTimeLabel(generatedAt)
+
+  if (publicationPublishedAtLabel) {
+    publicationMetaParts.push(`publiée le ${publicationPublishedAtLabel}`)
+  }
+
+  if (generatedAtLabel) {
+    publicationMetaParts.push(`page créée le ${generatedAtLabel}`)
+  }
+
+  const publicationGreeting = publicationMetaParts.length > 0
+    ? `Version statique ${publicationMetaParts.join(' · ')}.`
+    : 'Version statique publiée pour consultation.'
 
   return `<!doctype html>
 <html lang="fr">
@@ -965,8 +1039,8 @@ function buildStaticDefenseHtml({
     <header class="soutenance-toolbar">
       <div class="soutenance-toolbar-head soutenance-toolbar-hero has-fullscreen-action">
         <div class="soutenance-toolbar-hero-content">
-          <div class="title">Défenses ${escapeHtml(normalizedYear)}</div>
-          <p class="soutenance-toolbar-greeting">Version statique publiée pour consultation.</p>
+          <div class="title static-title-line">Défenses ${escapeHtml(normalizedYear)}${titleVersionBadge ? ` ${titleVersionBadge}` : ''}</div>
+          <p class="soutenance-toolbar-greeting">${escapeHtml(publicationGreeting)}</p>
           <div class="soutenance-hero-meta">
             <span class="static-filter-result" id="result-count"></span>
             <span class="soutenance-view-status static-hidden" id="view-status"></span>
@@ -1060,6 +1134,10 @@ function buildStaticDefenseHtml({
           target="_blank"
           rel="noopener noreferrer"
         >Demander une modification</a>
+        <span
+          class="soutenance-person-vote-meta static-hidden"
+          id="static-person-vote-meta"
+        ></span>
         <button
           type="button"
           class="soutenance-person-ical-button static-admin-view-toggle static-hidden"
@@ -1102,6 +1180,7 @@ function buildStaticDefenseHtml({
       var personIcalLabel = document.getElementById('static-person-ical-label');
       var personActionsCopy = document.getElementById('static-person-actions-copy');
       var personVoteLink = document.getElementById('static-person-vote-link');
+      var personVoteMeta = document.getElementById('static-person-vote-meta');
       var personPublicationWarning = document.getElementById('static-person-publication-warning');
       var adminViewToggle = document.getElementById('static-admin-view-toggle');
       var adminFiltersNode = document.getElementById('static-admin-filters');
@@ -1346,6 +1425,26 @@ function buildStaticDefenseHtml({
           parsePublicationVersion(magicLinkViewer.scope && magicLinkViewer.scope.publicationVersion);
       }
 
+      function getVoteAccessPublicationVersion() {
+        if (!magicLinkViewer) {
+          return null;
+        }
+
+        return parsePublicationVersion(magicLinkViewer.voteAccessPublicationVersion) ||
+          parsePublicationVersion(magicLinkViewer.voteAccess && magicLinkViewer.voteAccess.publicationVersion) ||
+          getViewerPublicationVersion();
+      }
+
+      function getVoteAccessCreatedAt() {
+        if (!magicLinkViewer) {
+          return '';
+        }
+
+        return magicLinkViewer.voteAccessCreatedAt ||
+          (magicLinkViewer.voteAccess && magicLinkViewer.voteAccess.createdAt) ||
+          '';
+      }
+
       function formatDateTime(value) {
         var date = value ? new Date(value) : null;
         if (!date || Number.isNaN(date.getTime())) {
@@ -1366,7 +1465,7 @@ function buildStaticDefenseHtml({
         var publicationPublishedAt = formatDateTime(payload.publicationPublishedAt);
         var generatedAt = formatDateTime(payload.generatedAt);
         var publicationText = '';
-        var generationText = generatedAt ? 'mini-site généré le ' + generatedAt : '';
+        var generationText = generatedAt ? 'page générée le ' + generatedAt : '';
 
         if (publicationVersion && publicationPublishedAt) {
           publicationText = 'Publication v' + publicationVersion + ' du ' + publicationPublishedAt;
@@ -1389,6 +1488,38 @@ function buildStaticDefenseHtml({
         }
 
         return '';
+      }
+
+      function getModificationFormMetaText() {
+        var parts = [];
+        var publicationVersion = getVoteAccessPublicationVersion();
+        var createdAt = formatDateTime(getVoteAccessCreatedAt());
+
+        if (publicationVersion) {
+          parts.push('Formulaire v' + publicationVersion);
+        }
+
+        if (createdAt) {
+          parts.push('créé le ' + createdAt);
+        }
+
+        return parts.join(' · ');
+      }
+
+      function syncPersonVoteMeta(hasVoteAccess) {
+        if (!personVoteMeta) {
+          return;
+        }
+
+        if (!hasVoteAccess) {
+          personVoteMeta.classList.add('static-hidden');
+          personVoteMeta.textContent = '';
+          return;
+        }
+
+        var formMetaText = getModificationFormMetaText();
+        personVoteMeta.textContent = formMetaText;
+        personVoteMeta.classList.toggle('static-hidden', !formMetaText);
       }
 
       function syncPersonPublicationWarning(hasVoteAccess) {
@@ -1414,17 +1545,17 @@ function buildStaticDefenseHtml({
         personPublicationWarning.classList.toggle('is-stale', hasVersionMismatch);
 
         if (hasVersionMismatch) {
+          var formMetaText = getModificationFormMetaText() || ('Formulaire v' + viewerPublicationVersion);
           personPublicationWarning.textContent =
-            'Attention: ce lien personnel vise la publication v' + viewerPublicationVersion +
-            ', mais ce mini-site affiche la publication v' + staticPublicationVersion +
-            '. Le formulaire de modification peut être déphasé; utilisez le dernier lien reçu ou contactez le backoffice avant de déposer une demande.';
+            formMetaText + '. Dates différentes possibles.';
           return;
         }
 
         var metaText = getPublicationMetaText();
+        var formMetaText = getModificationFormMetaText();
         personPublicationWarning.textContent =
-          (metaText ? metaText + ' ' : '') +
-          'Le formulaire de modification reprend l’état publié lors de la génération du mini-site; après une adaptation côté backoffice, il peut être déphasé jusqu’à la prochaine republication.';
+          (formMetaText ? formMetaText + '. ' : '') +
+          (metaText || 'Formulaire lié à la publication affichée.');
       }
 
       function decimalTime(value) {
@@ -1849,7 +1980,10 @@ function buildStaticDefenseHtml({
             'aria-label',
             'Demander une modification de créneau pour ' + (magicLinkViewer.name || 'vos défenses')
           );
-          personVoteLink.title = 'Ouvrir le formulaire de demande de modification';
+          var formMetaText = getModificationFormMetaText();
+          personVoteLink.title = formMetaText
+            ? 'Ouvrir le formulaire de demande de modification · ' + formMetaText
+            : 'Ouvrir le formulaire de demande de modification';
         } else {
           personVoteLink.href = '#';
           if (typeof personVoteLink.removeAttribute === 'function') {
@@ -1857,6 +1991,7 @@ function buildStaticDefenseHtml({
           }
         }
 
+        syncPersonVoteMeta(hasVoteAccess);
         syncPersonPublicationWarning(hasVoteAccess);
 
         if (personActionsCopy) {
@@ -2651,6 +2786,7 @@ $staticViewer = [
     'name' => $staticAccessEntry['name'] ?? null,
     'email' => $staticAccessEntry['email'] ?? null,
     'publicationVersion' => $staticAccessEntry['publicationVersion'] ?? null,
+    'createdAt' => $staticAccessEntry['createdAt'] ?? null,
     'roles' => isset($staticAccessEntry['roles']) && is_array($staticAccessEntry['roles'])
         ? array_values($staticAccessEntry['roles'])
         : [],
@@ -2661,6 +2797,9 @@ $staticLinkedVoteUrl = staticPublicationDecryptLinkedVoteUrl($staticAccessEntry,
 if ($staticLinkedVoteUrl !== '') {
     $staticViewer['voteAccessUrl'] = $staticLinkedVoteUrl;
     $staticViewer['voteAccessExpiresAt'] = $staticAccessEntry['voteAccess']['expiresAt'] ?? null;
+    $staticViewer['voteAccessCreatedAt'] = $staticAccessEntry['voteAccess']['createdAt'] ?? null;
+    $staticViewer['voteAccessPublicationVersion'] = $staticAccessEntry['voteAccess']['publicationVersion'] ?? null;
+    $staticViewer['voteAccessSource'] = $staticAccessEntry['voteAccess']['source'] ?? null;
 }
 
 $staticMagicLinkBootstrap = '<script>window.__STATIC_MAGIC_LINK_VALIDATED__=true;window.__STATIC_MAGIC_LINK_VIEWER__=' .
@@ -2685,7 +2824,7 @@ async function listStaticPublicationAccessLinks(year, deploymentConfig = null) {
     revokedAt: null,
     expiresAt: { $gt: now }
   })
-    .select('+rawToken tokenHash personId personName recipientEmail expiresAt maxUses usageCount scope')
+    .select('+rawToken tokenHash personId personName recipientEmail expiresAt maxUses usageCount scope createdAt')
     .lean()
   const rolesByPersonId = await buildPublicationAccessRolesByPersonId(
     (Array.isArray(links) ? links : []).map((link) => link?.personId)
@@ -2717,6 +2856,9 @@ async function listStaticPublicationAccessLinks(year, deploymentConfig = null) {
         name: compactText(link.personName) || null,
         email: compactText(link.recipientEmail) || null,
         publicationVersion: parsePositiveInteger(link?.scope?.publicationVersion, null),
+        createdAt: link.createdAt instanceof Date
+          ? link.createdAt.toISOString()
+          : toIsoDateTime(link.createdAt),
         roles,
         isAdmin: roles.includes('admin'),
         expiresAt: link.expiresAt instanceof Date
@@ -2726,10 +2868,14 @@ async function listStaticPublicationAccessLinks(year, deploymentConfig = null) {
           ? {
             voteAccess: {
               encryptedUrl: encryptedVoteUrl,
-                expiresAt: linkedVoteAccess.expiresAt || null,
-                source: compactText(linkedVoteAccess.link?.scope?.source) || null
-              }
+              expiresAt: linkedVoteAccess.expiresAt || null,
+              createdAt: linkedVoteAccess.link?.createdAt instanceof Date
+                ? linkedVoteAccess.link.createdAt.toISOString()
+                : toIsoDateTime(linkedVoteAccess.link?.createdAt),
+              publicationVersion: parsePositiveInteger(linkedVoteAccess.link?.scope?.publicationVersion, null),
+              source: compactText(linkedVoteAccess.link?.scope?.source) || null
             }
+          }
           : {})
       }
     })

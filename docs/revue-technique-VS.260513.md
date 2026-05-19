@@ -12,6 +12,17 @@ Passe lecture et validations. Aucun fichier applicatif n'a ete modifie pendant c
 
 Globalement, les tests et le build passent, mais la diff ne doit pas etre consideree comme simplement cosmetique. Plusieurs zones meritent une vraie revue technique ou metier avant d'etre considerees comme stabilisees.
 
+## Mise a jour 2026-05-19
+
+Depuis cette revue, un flux d'envoi final des horaires a ete ajoute autour des soutenances publiees. Il prepare les destinataires depuis les `Person`, genere un iCal personnel, un PDF personnel et un PDF global des salles, puis trace l'envoi dans `finalScheduleDeliveries`.
+
+Points de revue a ajouter au prochain passage:
+
+- verifier le volume et le poids des pieces jointes pour les grandes annees TPI;
+- confirmer que le verrouillage `pending` puis `sent` couvre bien les doubles clics, les retries SMTP et les pannes apres envoi mais avant enregistrement;
+- valider les PDF/iCal sur Outlook, Apple Calendar, Google Calendar et lecteurs PDF usuels;
+- decider la politique de retention de `finalScheduleDeliveries`.
+
 ## A traiter serieusement
 
 ### Identite des slots planning mutee pendant le render

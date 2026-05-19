@@ -370,7 +370,15 @@ function buildDeliverabilityHeaders(messageType = '', options = {}) {
   return headers
 }
 
-function buildMailOptions({ to, emailContent, emailSettings = {}, fromArbitrage = false, env = process.env, messageType = '' }) {
+function buildMailOptions({
+  to,
+  emailContent,
+  emailSettings = {},
+  fromArbitrage = false,
+  env = process.env,
+  messageType = '',
+  attachments = []
+}) {
   const settings = normalizeEmailSettings(emailSettings)
   const replyToEmail = sanitizeEmailAddress(settings.replyToEmail)
   const sender = resolveMailSender(settings, { env, fromArbitrage })
@@ -401,6 +409,10 @@ function buildMailOptions({ to, emailContent, emailSettings = {}, fromArbitrage 
 
   if (messageId) {
     mailOptions.messageId = messageId
+  }
+
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    mailOptions.attachments = attachments
   }
 
   return mailOptions
@@ -719,6 +731,98 @@ function buildSoutenanceAccessEmail(data) {
   }
 }
 
+function buildSoutenanceSchedulePackageEmail(data) {
+  const brandName = escapeHtml(data.brandName || 'TPI Organizer')
+  const recipientName = escapeHtml(data.recipientName || '')
+  const year = escapeHtml(data.year)
+  const tpiCount = Number(data.tpiCount || 0)
+  const roomCount = Number(data.roomCount || 0)
+  const publicationVersion = data.publicationVersion
+    ? escapeHtml(data.publicationVersion)
+    : ''
+  const generatedAt = escapeHtml(data.generatedAtLabel || '')
+  const publicationCopy = publicationVersion
+    ? `Publication ${publicationVersion}`
+    : 'Publication active'
+  const generatedCopyHtml = generatedAt
+    ? `<p style="margin:0 0 8px; color:#64748b; font-size:13px; line-height:20px;">Généré le ${generatedAt}</p>`
+    : ''
+  const generatedCopyText = generatedAt ? `\nGénéré le ${data.generatedAtLabel}` : ''
+
+  return {
+    subject: `[${data.brandName || 'TPI Organizer'}] Horaire définitif des défenses TPI ${data.year}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Horaire définitif des défenses TPI ${year}</title>
+      </head>
+      <body style="margin:0; padding:0; background:#f3f6f8; color:#172033; font-family:Arial, Helvetica, sans-serif;">
+        <div style="display:none; max-height:0; overflow:hidden; color:#f3f6f8; opacity:0;">Votre horaire personnel, votre iCal et la vue globale des salles sont joints à ce message.</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#f3f6f8;">
+          <tr>
+            <td align="center" style="padding:32px 16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; max-width:660px; border-collapse:separate; border-spacing:0; background:#ffffff; border:1px solid #dbe5ec; border-radius:14px; overflow:hidden; box-shadow:0 12px 30px rgba(15, 23, 42, 0.08);">
+                <tr>
+                  <td style="height:6px; line-height:6px; background:#0f766e; font-size:1px;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="padding:26px 30px 20px; background:#ffffff;">
+                    <div style="display:inline-block; margin:0 0 12px; padding:5px 10px; border-radius:999px; background:#ecfdf5; color:#0f766e; font-size:12px; line-height:16px; font-weight:700; text-transform:uppercase;">${brandName}</div>
+                    <h1 style="margin:0; color:#0f172a; font-size:25px; line-height:32px; font-weight:700;">Horaire définitif des défenses TPI ${year}</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 30px 30px;">
+                    <p style="margin:0 0 16px; color:#172033; font-size:16px; line-height:25px;">Bonjour ${recipientName},</p>
+                    <p style="margin:0 0 20px; color:#334155; font-size:16px; line-height:26px;">La planification définitive des défenses TPI ${year} est jointe à ce message.</p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate; border-spacing:0; margin:0 0 22px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                      <tr>
+                        <td style="padding:18px 20px;">
+                          <p style="margin:0 0 10px; color:#0f172a; font-size:15px; line-height:23px;"><strong>${publicationCopy}</strong></p>
+                          <p style="margin:0 0 8px; color:#334155; font-size:15px; line-height:23px;">Vous êtes concerné(e) par <strong>${tpiCount}</strong> défense(s).</p>
+                          <p style="margin:0 0 8px; color:#334155; font-size:15px; line-height:23px;">La vue globale contient <strong>${roomCount}</strong> salle(s).</p>
+                          ${generatedCopyHtml}
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 12px; color:#334155; font-size:15px; line-height:24px;">Pièces jointes :</p>
+                    <ul style="margin:0 0 22px 18px; padding:0; color:#334155; font-size:15px; line-height:24px;">
+                      <li>un fichier iCal personnel pour votre calendrier ;</li>
+                      <li>un PDF avec vos horaires personnels ;</li>
+                      <li>un PDF global avec la planification des salles.</li>
+                    </ul>
+                    <p style="margin:0; color:#334155; font-size:15px; line-height:23px;">Meilleures salutations</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `,
+    text: `
+      Horaire définitif des défenses TPI ${data.year}
+
+      Bonjour ${data.recipientName},
+
+      La planification définitive des défenses TPI ${data.year} est jointe à ce message.
+
+      ${publicationCopy}
+      Vous êtes concerné(e) par ${tpiCount} défense(s).
+      La vue globale contient ${roomCount} salle(s).${generatedCopyText}
+
+      Pièces jointes:
+      - fichier iCal personnel
+      - PDF avec vos horaires personnels
+      - PDF global avec la planification des salles
+    `
+  }
+}
+
 function buildDefenseChangeNotificationEmail(data) {
   const brandName = escapeHtml(data.brandName || 'TPI Organizer')
   const recipientName = escapeHtml(data.recipientName || '')
@@ -934,6 +1038,11 @@ const emailTemplates = {
    * Email d'acces a la vue finale des défenses
    */
   soutenanceAccess: buildSoutenanceAccessEmail,
+
+  /**
+   * Email final avec PDF/iCal joints pour les parties prenantes.
+   */
+  soutenanceSchedulePackage: buildSoutenanceSchedulePackageEmail,
 
   /**
    * Email ciblé après changement dans une nouvelle publication des défenses.
@@ -1333,7 +1442,8 @@ async function sendEmail(to, template, data, options = {}) {
     emailContent,
     emailSettings: options.emailSettings || templateData?.emailSettings,
     fromArbitrage: options.fromArbitrage === true,
-    messageType: template
+    messageType: template,
+    attachments: options.attachments
   })
   
   let transporter

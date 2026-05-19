@@ -1171,6 +1171,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [staticPublicationInfo, setStaticPublicationInfo] = useState(null)
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const [defenseChangeNotificationInfo, setDefenseChangeNotificationInfo] = useState(null)
+  const [finalScheduleDeliveryPreview, setFinalScheduleDeliveryPreview] = useState(null)
   const [magicLinkViewer, setMagicLinkViewer] = useState(null)
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
   const [planningClassTypes, setPlanningClassTypes] = useState([])
@@ -2804,7 +2805,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         return (result?.message || 'Publication definitive terminee.') + sentLabel
       },
       errorFallback: 'Erreur lors de la publication definitive.',
-      reloadAfterSuccess: true
+      reloadAfterSuccess: true,
+      onSuccess: () => {
+        setFinalScheduleDeliveryPreview(null)
+      }
     })
   }, [year, executeWorkflowAction, soutenanceSiteLinkOptions])
 
@@ -2819,6 +2823,53 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       errorFallback: 'Erreur lors de l envoi des liens défense.'
     })
   }, [year, executeWorkflowAction, soutenanceSiteLinkOptions])
+
+  const handlePreviewFinalScheduleDelivery = useCallback(async () => {
+    await executeWorkflowAction({
+      actionKey: 'previewFinalScheduleDelivery',
+      run: () => workflowCoordinationService.previewFinalScheduleDelivery(year),
+      successBuilder: (result) => {
+        if (!result?.available) {
+          return 'Aucune publication de défenses active pour préparer l’envoi final.'
+        }
+
+        const summary = result?.summary || {}
+        return `Envoi final préparé: ${summary.pendingSendCount || 0} destinataire(s) à envoyer, ${summary.alreadySentCount || 0} déjà envoyé(s).`
+      },
+      errorFallback: 'Erreur lors de la préparation de l’envoi final.',
+      onSuccess: (result) => {
+        setFinalScheduleDeliveryPreview(result || null)
+      }
+    })
+  }, [year, executeWorkflowAction])
+
+  const handleSendFinalScheduleDelivery = useCallback(async () => {
+    const summary = finalScheduleDeliveryPreview?.summary || {}
+    const pendingCount = Number(summary.pendingSendCount || summary.sendableCount || 0)
+    const alreadySentCount = Number(summary.alreadySentCount || 0)
+    const confirmMessage = pendingCount > 0
+      ? `Envoyer l’horaire définitif à ${pendingCount} partie(s) prenante(s) ? Chaque email aura un iCal personnel, un PDF personnel et le PDF global des salles.${alreadySentCount > 0 ? ` ${alreadySentCount} destinataire(s) déjà envoyé(s) seront ignoré(s).` : ''}`
+      : 'Aucun destinataire en attente selon le dernier aperçu. Relancer quand même la vérification d’envoi ?'
+
+    await executeWorkflowAction({
+      actionKey: 'sendFinalScheduleDelivery',
+      confirmMessage,
+      run: () => workflowCoordinationService.sendFinalScheduleDelivery(year, {
+        publicationVersion: finalScheduleDeliveryPreview?.publicationVersion || null
+      }),
+      successBuilder: (result) => {
+        const resultSummary = result?.summary || {}
+        const recordingWarning = Number(resultSummary.recordingFailedCount || 0) > 0
+          ? `, ${resultSummary.recordingFailedCount} statut(s) non enregistré(s)`
+          : ''
+        return `Horaires définitifs: ${resultSummary.sentCount || 0} envoyé(s), ${resultSummary.skippedCount || 0} ignoré(s), ${resultSummary.failedCount || 0} échec(s)${recordingWarning}.`
+      },
+      errorFallback: 'Erreur lors de l’envoi des horaires définitifs.',
+      onSuccess: (result) => {
+        setFinalScheduleDeliveryPreview(result?.preview || null)
+      }
+    })
+  }, [year, executeWorkflowAction, finalScheduleDeliveryPreview])
 
   const handleSendDefenseChangeNotifications = useCallback(async () => {
     const pendingCount = Number(defenseChangeNotificationInfo?.summary?.pendingRecipientCount || 0)
@@ -3521,6 +3572,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             constraintCheckResult={constraintCheckResult}
             staticVotePublicationInfo={staticVotePublicationInfo}
             defenseChangeNotificationInfo={defenseChangeNotificationInfo}
+            finalScheduleDeliveryPreview={finalScheduleDeliveryPreview}
             preferenceActionLoadingKey={preferenceActionLoadingKey}
             proposalMoveLoadingKey={proposalMoveLoadingKey}
             proposalMoveApplying={proposalMoveApplying}
@@ -3540,6 +3592,8 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             onCheckVoteConstraints={handleCheckVoteConstraints}
             onPublishDefinitive={handlePublishDefinitive}
             onSendPublicationLinks={handleSendPublicationLinks}
+            onPreviewFinalScheduleDelivery={handlePreviewFinalScheduleDelivery}
+            onSendFinalScheduleDelivery={handleSendFinalScheduleDelivery}
             onSendDefenseChangeNotifications={handleSendDefenseChangeNotifications}
             onOpenPublishedView={handleOpenPublishedView}
             onOpenManualResolver={openManualResolver}

@@ -1802,6 +1802,114 @@ test('POST /api/workflow/:year/publication/send-links requires authentication', 
   }
 })
 
+test('GET /api/workflow/:year/publication/final-schedule/preview requires authentication', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/final-schedule/preview`)
+
+    assert.equal(response.status, 401)
+  } finally {
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/publication/final-schedule/send enforces admin role', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['expert1'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/final-schedule/send`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    })
+
+    assert.equal(response.status, 403)
+  } finally {
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
+test('POST /api/workflow/:year/publication/final-schedule/send calls final delivery service', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const finalScheduleDeliveryService = require('../services/finalScheduleDeliveryService')
+  const workflowService = require('../services/workflowService')
+  let receivedPayload = null
+  const restore = [
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(finalScheduleDeliveryService, 'sendFinalScheduleDelivery', async (payload) => {
+      receivedPayload = payload
+      return {
+        success: true,
+        available: true,
+        year: payload.year,
+        publicationVersion: payload.publicationVersion,
+        summary: {
+          sentCount: 2,
+          skippedCount: 0,
+          failedCount: 0
+        },
+        results: []
+      }
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/final-schedule/send`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        publicationVersion: 4,
+        forceResend: true
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.deepEqual(receivedPayload, {
+      year: 2026,
+      publicationVersion: 4,
+      forceResend: true
+    })
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('GET /api/workflow/:year/publication/defense-changes/preview returns targeted notification preview', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])

@@ -59,6 +59,9 @@ async function findLinkedVoteAccess(link, person, req) {
   return {
     url: linkedVote.url,
     expiresAt: linkedVote.expiresAt || null,
+    createdAt: linkedVote.createdAt || null,
+    publicationVersion: linkedVote.publicationVersion || null,
+    source: linkedVote.source || null,
     maxUses: linkedVote.maxUses,
     usageCount: linkedVote.usageCount,
     availabilityStatus: linkedVote.availabilityStatus || 'available'
@@ -125,7 +128,10 @@ router.get('/resolve', async (req, res) => {
         roles: viewerRoles,
         isAdmin: viewerRoles.includes('admin'),
         voteAccessUrl: linkedVoteAccess?.url || null,
-        voteAccessExpiresAt: linkedVoteAccess?.expiresAt || null
+        voteAccessExpiresAt: linkedVoteAccess?.expiresAt || null,
+        voteAccessCreatedAt: linkedVoteAccess?.createdAt || null,
+        voteAccessPublicationVersion: linkedVoteAccess?.publicationVersion || null,
+        voteAccessSource: linkedVoteAccess?.source || null
       },
       linkedVoteAccess
     })

@@ -54,6 +54,13 @@ Passe transversale sur les modules refondus:
   - correction de l'import statique differe: l'expiration d'un arbitrage est evaluee sur `submittedAt`, pas sur l'heure de synchronisation;
   - une reponse soumise avant expiration reste importable meme si le sync admin est lance apres la deadline;
   - une reponse soumise apres expiration reste ignoree avec `proposal_expired`.
+- Passe publication finale 2026-05-19:
+  - ajout de `finalScheduleDeliveryService` et du modele `FinalScheduleDelivery` pour preparer et tracer les envois d'horaires definitifs;
+  - endpoints admin `GET /api/workflow/:year/publication/final-schedule/preview` et `POST /api/workflow/:year/publication/final-schedule/send`;
+  - generation d'un iCal personnel, d'un PDF personnel et d'un PDF global des salles pour chaque destinataire envoyable;
+  - envoi SMTP via le template `soutenanceSchedulePackage`, avec pieces jointes supportees par `emailService`;
+  - UI de coordination enrichie avec apercu, compteur de destinataires, blocage des doublons et bouton d'envoi des horaires;
+  - mini-site statique des defenses enrichi avec version de publication, date de generation et metadonnees du formulaire de modification lie.
 
 ## Tests ajoutes ou ajustes
 
@@ -72,12 +79,14 @@ Passe transversale sur les modules refondus:
 - Tests d'import statique ajoutes pour refuser une reponse d'arbitrage recue apres expiration.
 - Tests d'import statique ajoutes pour couvrir une synchronisation tardive d'une reponse soumise avant expiration.
 - Tests front ajoutes pour verrouiller les libelles de statut issus du contrat coordination.
+- Tests d'envoi final ajoutes pour couvrir l'apercu, les destinataires non envoyables, les envois idempotents, les pieces jointes iCal/PDF et les routes admin.
 
 ## Validation
 
 - `npm run test:api`: 377 tests passes.
 - `npm test -- --runInBand`: 48 suites, 344 tests passes.
 - `npm run build`: build Vite production OK.
+- Validation 2026-05-19 apres ajout de l'envoi final: `npm run test:api` -> 447 tests passes.
 - Scan final: aucun helper local `formatRoleLabel` residuel sur les modules refondus; les routes legacy encore montees sont inventoriees dans `docs/legacy-boundary.md`.
 
 ## Plan de migration global

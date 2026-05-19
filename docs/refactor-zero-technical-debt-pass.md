@@ -67,6 +67,15 @@ Resultats:
 - `scripts/reset-year.js` est maintenant en dry-run par defaut et exige `--apply`.
 - Les scripts affichent les collections et compteurs avant toute ecriture.
 
+## Etat courant 2026-05-19
+
+- Nouvelle collection applicative: `finalScheduleDeliveries`, indexee par `year`, `publicationVersion` et `personId`, pour eviter les doublons d'envoi des horaires definitifs.
+- Nouvelle surface backend a surveiller: generation PDF/iCal dans `API/services/finalScheduleDeliveryService.js`, qui depend de `jsPDF`, des publications actives et du referentiel `Person`.
+- Nouvelle surface email: `emailService.sendEmail` accepte des pieces jointes et expose le template `soutenanceSchedulePackage`.
+- Nouvelle surface statique: les liens de soutenance embarquent les metadonnees de creation et de version du formulaire de modification lie.
+
+Ces ajouts ne demandent pas de migration destructive, mais ils ajoutent une responsabilite operationnelle: nettoyer ou archiver `finalScheduleDeliveries` si plusieurs publications et renvois sont effectues sur plusieurs annees.
+
 ## Validation executee
 
 - Tests cibles scripts: `node --test API/tests/refactorGlobalMigrationScript.test.js API/tests/resetYearScript.test.js` -> 10 tests passes.
@@ -78,6 +87,7 @@ Resultats:
 - Derniere passe: `npx knip --reporter json`, `npx depcheck --json`, `npm outdated --json`, `npm audit --json` relances.
 - Derniere passe: `npm run test:api`, `npm test -- --runInBand` et `npm run build` relances avec les memes resultats OK.
 - Derniere passe: verification des variables SMTP/DKIM uniques dans `.env.example` et `git diff --check -- . ':!ELECTRON_PORTABLE_AUTONOME.md'` OK, hors avertissements CRLF Windows.
+- Mise a jour 2026-05-19: `npm run test:api` relance apres documentation et ajout du flux d'envoi final -> 447 tests passes.
 
 ## Risques residuels
 

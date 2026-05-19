@@ -206,6 +206,7 @@ function buildStoredMagicLinkResponse(link, baseUrl) {
     redirectPath: link?.redirectPath,
     url: canExposeUrl ? buildMagicLinkUrl(baseUrl, link.redirectPath, rawToken) : null,
     expiresAt: link?.expiresAt || null,
+    createdAt: link?.createdAt || null,
     deliveryStatus: link?.emailDeliveryStatus || '',
     deliveryError: link?.emailDeliveryError || '',
     sentAt: link?.emailSentAt || null,
@@ -215,6 +216,8 @@ function buildStoredMagicLinkResponse(link, baseUrl) {
     usageCount: Number(link?.usageCount || 0),
     lastUsedAt: link?.lastUsedAt || null,
     type: link?.type,
+    source: link?.scope?.source || '',
+    publicationVersion: link?.scope?.publicationVersion || null,
     generated: true,
     recoverable: Boolean(rawToken),
     availabilityStatus

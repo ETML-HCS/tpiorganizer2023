@@ -216,6 +216,23 @@
   line-height: 1.35;
 }
 
+.vote-command-action-note {
+  flex: 0 0 100%;
+  margin: -2px 0 2px;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.vote-command-action-note.is-ok {
+  color: #166534;
+}
+
+.vote-command-action-note.is-warning {
+  color: #b45309;
+}
+
 .vote-command-alert {
   display: grid;
   gap: 10px;

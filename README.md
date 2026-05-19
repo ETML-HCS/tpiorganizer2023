@@ -19,6 +19,7 @@ TPIorganizer 2023 est une application React + Node/Express pour organiser les d�
 - Campagnes de vote par magic links, avec liens vers l'application ou vers le mini-site statique de vote.
 - Génération et prévisualisation des liens d'accès admin pour les votes et les soutenances publiées, avec récupération des liens encore valides.
 - Publication statique des soutenances et publication statique des votes, avec génération locale, aperçu, publication FTP et synchronisation des réponses de vote.
+- Envoi final des horaires de soutenance aux parties prenantes, avec iCal personnel, PDF personnel et PDF global des salles.
 - Configuration centralisée de l'email, de l'expéditeur, du reply-to et de l'URL publique de publication.
 - Exports/imports, snapshots de planification, gel de planification et vérifications avant publication.
 
@@ -73,6 +74,8 @@ La publication des soutenances génère une page publique autonome pour les déf
 
 La publication des votes génère un mini-site statique protégé par liens personnels. Les réponses sont enregistrées côté hébergement dans un flux JSONL, puis synchronisées dans MongoDB via l'API. Les liens de vote peuvent cibler l'application ou ce mini-site selon l'option choisie dans la génération de liens.
 
+Après publication active des soutenances, le tableau de coordination peut préparer puis envoyer l'horaire définitif aux parties prenantes concernées. Chaque email contient trois pièces jointes: un fichier iCal personnel, un PDF personnel et le PDF global des salles. Les envois sont tracés dans `finalScheduleDeliveries` par année, version de publication et personne, afin d'éviter les doublons sauf renvoi forcé côté API.
+
 La configuration publique et FTP est centralisée dans l'écran de configuration de planification. Le protocole FTP est opérationnel pour la publication automatique actuelle ; FTPS/SFTP/SSH sont cadrés dans la configuration mais ne sont pas encore publiés automatiquement.
 
 ## Démarrage production local
@@ -94,6 +97,7 @@ La piste Electron portable autonome reste documentée dans [ELECTRON_PORTABLE_AU
 - Remplacement du flux de tests frontend `react-scripts test` par Jest direct.
 - Ajout des paramètres annuels de vote, d'accès, d'email et de publication dans les modèles de configuration.
 - Ajout de la publication statique des votes et de la synchronisation distante.
+- Ajout de l'envoi final des horaires définitifs avec pièces jointes iCal/PDF et suivi d'envoi par version publiée.
 - Nettoyage d'anciens artefacts, scripts et dépendances obsolètes.
 
 ## Licence

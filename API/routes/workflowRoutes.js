@@ -8,6 +8,7 @@ const accessLinkTokenService = require('../modules/accessLinks/tokenService')
 const emailService = require('../services/emailService')
 const publishedSoutenanceService = require('../services/publishedSoutenanceService')
 const publicationChangeNotificationService = require('../services/publicationChangeNotificationService')
+const finalScheduleDeliveryService = require('../services/finalScheduleDeliveryService')
 const coordinationAutomationService = require('../services/coordinationAutomationService')
 const coordinationValidationService = require('../services/coordinationValidationService')
 const schedulingService = require('../services/schedulingService')
@@ -2434,6 +2435,79 @@ router.post(
     } catch (error) {
       console.error('Erreur envoi liens défenses:', error)
       return res.status(500).json({ error: 'Erreur lors de l\'envoi des liens défenses.' })
+    }
+  }
+)
+
+router.get(
+  '/:year/publication/final-schedule/preview',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const preview = await finalScheduleDeliveryService.previewFinalScheduleDelivery({
+        year,
+        publicationVersion: parseOptionalPositiveInteger(req.query?.publicationVersion)
+      })
+
+      return res.status(200).json(preview)
+    } catch (error) {
+      console.error('Erreur aperçu envoi horaires définitifs:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la préparation de l’envoi des horaires définitifs.'
+      })
+    }
+  }
+)
+
+router.post(
+  '/:year/publication/final-schedule/send',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const result = await finalScheduleDeliveryService.sendFinalScheduleDelivery({
+        year,
+        publicationVersion: parseOptionalPositiveInteger(req.body?.publicationVersion),
+        forceResend: parseBoolean(req.body?.forceResend, false)
+      })
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.final-schedule.send',
+        user: req.user,
+        payload: {
+          publicationVersion: result.publicationVersion || null,
+          summary: result.summary || null,
+          available: result.available === true,
+          reason: result.reason || null
+        },
+        success: result.success !== false
+      })
+
+      return res.status(200).json(result)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.final-schedule.send',
+        user: req.user,
+        payload: {
+          publicationVersion: parseOptionalPositiveInteger(req.body?.publicationVersion)
+        },
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+
+      console.error('Erreur envoi horaires définitifs:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de l’envoi des horaires définitifs.'
+      })
     }
   }
 )

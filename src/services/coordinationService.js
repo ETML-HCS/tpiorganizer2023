@@ -699,6 +699,29 @@ export const workflowCoordinationService = {
     )
   },
 
+  previewFinalScheduleDelivery: async (year, options = {}) => {
+    const params = new URLSearchParams()
+    if (options.publicationVersion) {
+      params.set('publicationVersion', String(options.publicationVersion))
+    }
+
+    const query = params.toString()
+    return await apiService.get(
+      `${WORKFLOW_BASE_URL}/${year}/publication/final-schedule/preview${query ? `?${query}` : ''}`
+    )
+  },
+
+  sendFinalScheduleDelivery: async (year, options = {}) => {
+    return await apiService.post(
+      `${WORKFLOW_BASE_URL}/${year}/publication/final-schedule/send`,
+      {
+        publicationVersion: options?.publicationVersion || null,
+        forceResend: options?.forceResend === true
+      },
+      TIMEOUTS.EMAIL_SEND
+    )
+  },
+
   getDefenseChangeNotificationPreview: async (year, options = {}) => {
     const params = new URLSearchParams()
     if (options.publicationVersion) {

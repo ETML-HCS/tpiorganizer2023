@@ -82,6 +82,17 @@ Ces chemins ne sont plus canoniques, mais restent montes comme redirections ou l
 
 Ces chemins UI restent uniquement comme redirections vers les routes canoniques.
 
+## Hors legacy ajoute depuis
+
+Le flux d'envoi final des horaires n'est pas un module legacy. Il est expose par le routeur workflow canonique:
+
+- `GET /api/workflow/:year/publication/final-schedule/preview`
+- `POST /api/workflow/:year/publication/final-schedule/send`
+
+Ces endpoints exigent une session admin, utilisent la publication de soutenances active ou la version demandee, et tracent les statuts dans `finalScheduleDeliveries`. Ils ne remplacent pas les routes legacy de consultation des defenses publiees, qui restent conservees pour les liens deja diffuses.
+
+Le resolve des liens de soutenance expose aussi les metadonnees du lien de vote associe (`createdAt`, `publicationVersion`, `source`) afin que le mini-site statique affiche le contexte du formulaire de modification. Cette exposition complete les liens existants sans creer de nouvel alias legacy.
+
 ## Script de migration
 
 Le script `scripts/refactor-global-migration.js` est non destructif par defaut.

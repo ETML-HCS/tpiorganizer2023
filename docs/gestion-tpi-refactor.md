@@ -97,6 +97,12 @@ Les alias historiques `/api/get-tpi`, `/api/save-tpi/:year`,
 - Routes canoniques du catalogue TPI: `API/tests/gestionTpiRoutes.test.js`.
 - Round-trip UI des champs statut/journal/rapport: `src/components/tpiManagement/tpiManagementUtils.test.js`.
 
+## Mise a jour 2026-05-19
+
+Le flux d'envoi final des horaires s'appuie sur les soutenances publiees et sur les identifiants `Person` embarques dans les donnees de planification. Les champs `candidatPersonId`, `expert1.personId`, `expert2.personId` et `boss.personId` doivent donc rester resolus avant publication si l'on veut produire les destinataires, les iCal personnels et les PDF personnels.
+
+Cette dependance ne change pas les endpoints Gestion TPI, mais elle renforce le point de migration: charger l'annee dans Gestion TPI puis valider les parties prenantes avant de publier les defenses.
+
 ## Deuxieme passe
 
 - Normalisation stricte des annees: les valeurs partielles comme `2026abc` sont refusees.

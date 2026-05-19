@@ -749,6 +749,7 @@ const VoteCommandCenter = ({
   constraintCheckResult,
   staticVotePublicationInfo,
   defenseChangeNotificationInfo,
+  finalScheduleDeliveryPreview,
   preferenceActionLoadingKey,
   proposalMoveLoadingKey,
   proposalMoveApplying,
@@ -768,6 +769,8 @@ const VoteCommandCenter = ({
   onCheckVoteConstraints,
   onPublishDefinitive,
   onSendPublicationLinks,
+  onPreviewFinalScheduleDelivery,
+  onSendFinalScheduleDelivery,
   onSendDefenseChangeNotifications,
   onOpenPublishedView,
   onOpenManualResolver,
@@ -854,6 +857,35 @@ const VoteCommandCenter = ({
         : sentDefenseChangeNotifications > 0 && changedDefenseCount > 0
           ? 'Les parties prenantes concernées par les changements ont déjà été notifiées.'
           : 'Aucune modification entre les deux dernières publications des défenses.'
+  const finalScheduleSummary = finalScheduleDeliveryPreview?.summary || {}
+  const finalScheduleAvailable = finalScheduleDeliveryPreview?.available === true
+  const finalSchedulePendingCount = Number(finalScheduleSummary.pendingSendCount || 0)
+  const finalScheduleAlreadySentCount = Number(finalScheduleSummary.alreadySentCount || 0)
+  const finalScheduleInProgressCount = Number(finalScheduleSummary.inProgressCount || 0)
+  const finalScheduleRecipientCount = Number(finalScheduleSummary.recipientCount || 0)
+  const finalScheduleSkippedConfigCount = Number(finalScheduleSummary.disabledEmailCount || 0) +
+    Number(finalScheduleSummary.missingEmailCount || 0) +
+    Number(finalScheduleSummary.personNotFoundCount || 0) +
+    Number(finalScheduleSummary.invalidPersonIdCount || 0)
+  const finalSchedulePreviewLabel = finalScheduleAvailable
+    ? finalSchedulePendingCount > 0
+      ? `Prêt: ${finalSchedulePendingCount} à envoyer`
+      : finalScheduleInProgressCount > 0
+        ? `En cours: ${finalScheduleInProgressCount}`
+        : 'A jour'
+    : finalScheduleDeliveryPreview
+      ? 'Publication manquante'
+      : 'Préparer final'
+  const finalScheduleStatusNote = [
+    `${finalScheduleRecipientCount} destinataire(s)`,
+    finalScheduleAlreadySentCount > 0 ? `${finalScheduleAlreadySentCount} déjà envoyé(s)` : '',
+    finalScheduleInProgressCount > 0 ? `${finalScheduleInProgressCount} en cours` : '',
+    finalScheduleSkippedConfigCount > 0 ? `${finalScheduleSkippedConfigCount} non envoyable(s)` : ''
+  ].filter(Boolean).join(', ')
+  const finalScheduleSendDisabled = workflowActionLoading ||
+    !finalScheduleAvailable ||
+    finalSchedulePendingCount <= 0 ||
+    typeof onSendFinalScheduleDelivery !== 'function'
 
   const [selectedCaseId, setSelectedCaseId] = useState('')
   const detailPanelRef = useRef(null)
@@ -1482,6 +1514,43 @@ const VoteCommandCenter = ({
             >
               Envoyer liens
             </WorkflowActionButton>
+            <WorkflowActionButton
+              actionKey="previewFinalScheduleDelivery"
+              primaryActionKey={primaryAction.key}
+              className="neutral"
+              onClick={onPreviewFinalScheduleDelivery}
+              disabled={workflowActionLoading || typeof onPreviewFinalScheduleDelivery !== 'function'}
+              isActionRunning={isActionRunning}
+              icon={<FileTextIcon className="button-icon" />}
+              runningLabel="Préparation..."
+              title="Préparer l’aperçu des emails finaux avec iCal et PDF joints."
+              ariaLabel="Préparer l’envoi final des horaires."
+            >
+              {finalSchedulePreviewLabel}
+            </WorkflowActionButton>
+            <WorkflowActionButton
+              actionKey="sendFinalScheduleDelivery"
+              primaryActionKey={primaryAction.key}
+              className="success"
+              onClick={onSendFinalScheduleDelivery}
+              disabled={finalScheduleSendDisabled}
+              isActionRunning={isActionRunning}
+              icon={<SendIcon className="button-icon" />}
+              runningLabel="Envoi..."
+              title={finalScheduleAvailable
+                ? 'Envoyer iCal personnel, PDF personnel et PDF global des salles.'
+                : 'Préparer l’aperçu final avant l’envoi.'}
+              ariaLabel="Envoyer les horaires définitifs avec pièces jointes."
+            >
+              Envoyer horaires
+            </WorkflowActionButton>
+            {finalScheduleDeliveryPreview ? (
+              <span className={`vote-command-action-note ${finalScheduleAvailable ? 'is-ok' : 'is-warning'}`.trim()}>
+                {finalScheduleAvailable
+                  ? `${finalScheduleStatusNote}.`
+                  : 'Aucune publication de défenses active: publier les défenses avant l’envoi final.'}
+              </span>
+            ) : null}
             {pendingDefenseChangeNotifications > 0 ? (
               <span className="vote-command-action-warning">
                 {changedDefenseCount} défense{changedDefenseCount > 1 ? 's' : ''} modifiée{changedDefenseCount > 1 ? 's' : ''}, notification ciblée à transmettre.

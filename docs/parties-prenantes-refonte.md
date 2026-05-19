@@ -115,6 +115,12 @@ Plan de migration conseillé:
 3. Relancer la validation Coordination pour confirmer que les incohérences `legacy_tpi_missing_stakeholders` et `legacy_tpi_unresolved_stakeholders` disparaissent.
 4. Remplacer tout usage externe éventuel de `POST /api/coordination/persons/purge` par un script de maintenance explicite et auditable si un reset complet est encore nécessaire.
 
+## Mise à jour 2026-05-19
+
+Le référentiel `Person` pilote maintenant aussi l’envoi final des horaires définitifs. Après publication des soutenances, le service `finalScheduleDeliveryService` regroupe les défenses par personne, lit `email` et `sendEmails`, puis exclut explicitement les fiches sans email, désactivées pour l’envoi, introuvables ou sans identifiant Mongo valide.
+
+Chaque envoi réussi est tracé par personne et par version publiée dans `finalScheduleDeliveries`. Une fiche personne corrigée après un premier aperçu doit donc être rechargée via l’aperçu d’envoi final avant de lancer l’envoi.
+
 ## Tests
 
 Validations exécutées:

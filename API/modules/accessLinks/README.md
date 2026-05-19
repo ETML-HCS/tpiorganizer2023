@@ -22,6 +22,17 @@ ont ete supprimees pendant le nettoyage.
 - `GET /api/workflow/:year/access-links/logs`
 - `GET /api/magic-link/resolve`
 
+## Metadonnees exposees
+
+Les liens recuperables exposent maintenant aussi:
+
+- `createdAt`;
+- `source`;
+- `publicationVersion`;
+- les statuts d'envoi email deja presents (`deliveryStatus`, `deliveryError`, `sentAt`).
+
+Quand un lien de soutenance est resolu, l'API peut rattacher le lien de vote associe et renvoyer `voteAccessCreatedAt`, `voteAccessPublicationVersion` et `voteAccessSource`. Le mini-site statique des defenses utilise ces champs pour afficher la version et la date du formulaire de demande de modification lie.
+
 ## Migration
 
 Aucune migration de donnees obligatoire. Les liens historiques sans `rawToken`

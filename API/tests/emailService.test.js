@@ -217,6 +217,28 @@ test('Email service should build mail options from configured sender settings', 
   assert.equal(mailOptions.to, 'expert@example.com')
 })
 
+test('Email service should pass through explicit attachments', () => {
+  const attachments = [
+    {
+      filename: 'horaire.ics',
+      content: Buffer.from('BEGIN:VCALENDAR'),
+      contentType: 'text/calendar'
+    }
+  ]
+  const mailOptions = emailService.buildMailOptions({
+    to: 'expert@example.com',
+    emailContent: {
+      subject: 'Test',
+      text: 'Texte',
+      html: '<p>Texte</p>'
+    },
+    attachments,
+    env: {}
+  })
+
+  assert.equal(mailOptions.attachments, attachments)
+})
+
 test('Email service should build arbitrage sender from configured settings', () => {
   const mailOptions = emailService.buildMailOptions({
     to: 'expert@example.com',

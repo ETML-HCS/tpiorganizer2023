@@ -4,7 +4,7 @@
 
 La piste desktop retenue reste une application Electron portable et autonome pour Windows.
 
-La version `VS.260504` sert de gel fonctionnel pour 2026 avant la refonte portable. Le projet ne contient pas encore Electron. Les derniers nettoyages ont au contraire gardé l'application centrée sur le web, avec React/Vite côté frontend et Node/Express côté API. Ce document sert de référence unique pour préparer la future version desktop sans mélanger cette direction avec les travaux web en cours.
+La version web `26.5.8` sert de gel fonctionnel pour 2026 avant la refonte portable. Le projet ne contient pas encore Electron. Les derniers nettoyages ont au contraire gardé l'application centrée sur le web, avec React/Vite côté frontend et Node/Express côté API. Ce document sert de référence unique pour préparer la future version desktop sans mélanger cette direction avec les travaux web en cours.
 
 La cible change toutefois de nature : l'application portable ne doit pas simplement empaqueter tout le web existant. Elle doit devenir un outil local de préparation, génération, publication et synchronisation. Les surfaces consultées par les personnes externes doivent être les sites générés ; les modules qui ne servent pas ce flux devront être isolés, simplifiés ou supprimés.
 
@@ -28,6 +28,8 @@ Les dernières évolutions ajoutent aussi :
 - publication statique des soutenances ;
 - publication statique des votes avec `index.php`, `sync.php`, `.htaccess` et synchronisation JSONL ;
 - synchronisation automatique optionnelle des votes statiques au démarrage de l'API.
+- envoi final des horaires définitifs depuis une publication active, avec iCal personnel, PDF personnel, PDF global des salles et suivi `finalScheduleDeliveries`.
+- métadonnées de version et de création exposées dans les liens de soutenance afin d'afficher le contexte du formulaire de modification lié.
 - Une base de données noSQL, est-ce vraiment le bon format ?
 
 ## Nouvelle orientation
@@ -39,6 +41,7 @@ Le programme doit être repensé autour d'un flux plus court :
 - générer les planifications et les propositions de résolution ;
 - générer les sites publics nécessaires ;
 - publier ces sites et récupérer les réponses distantes ;
+- envoyer ou préparer les horaires définitifs pour les parties prenantes ;
 - exporter ou sauvegarder les données.
 
 Dans cette cible, les sites générés deviennent la surface publique principale. Le reste de l'application sert surtout à produire, contrôler et synchroniser ces sites. Les écrans, routes et services historiques qui ne participent pas à ce flux ne doivent pas être portés automatiquement dans Electron.
@@ -76,6 +79,7 @@ La cible fonctionnelle est :
 - conserver une configuration minimale pour les usages hors ligne ;
 - permettre un import/export complet pour migration, sauvegarde ou synchronisation ;
 - générer et publier les sites statiques depuis le poste local ;
+- générer les paquets finaux d'horaires, avec iCal/PDF, sans dépendre d'un serveur web public complet ;
 - conserver uniquement les modules web nécessaires à l'administration locale et à la génération.
 
 ## Points favorables
@@ -85,6 +89,7 @@ La cible fonctionnelle est :
 - Les secrets restent côté backend et ne doivent pas être injectés dans le bundle frontend.
 - Les publications statiques utilisent `path.resolve()` et une racine configurable, ce qui prépare mieux les chemins desktop.
 - Les paramètres métier sont maintenant stockés dans des collections identifiables plutôt que dispersés dans le code.
+- L'envoi final des horaires est déjà isolé dans un service backend, ce qui permet de le conserver comme action locale ou de le brancher plus tard sur Outlook.
 
 ## Points bloquants
 
@@ -99,15 +104,15 @@ Autres points à traiter avant un vrai portable autonome :
 - retirer les modules non liés plutôt que les embarquer dans le portable ;
 - éviter que la publication statique PHP devienne une dépendance du mode desktop ;
 - gérer les secrets de publication et SMTP sans les exposer au renderer Electron ;
-- décider si l'envoi email doit fonctionner hors ligne, être désactivé, ou rester lié à SMTP.
+- décider si l'envoi email doit fonctionner hors ligne, ouvrir Outlook, être désactivé, ou rester lié à SMTP.
 
 ## Stratégie recommandée
 
 ### Phase 1 - Gel 2026 et inventaire
 
-- Garder la version `VS.260504` comme dernier état web stable de référence.
+- Garder la version web `26.5.8` comme dernier état web stable de référence.
 - Ne pas ajouter Electron directement sur tout le programme existant.
-- Lister les modules à conserver : configuration, import/export, planification, coordination des votes, génération, publication, synchronisation.
+- Lister les modules à conserver : configuration, import/export, planification, coordination des votes, génération, publication, synchronisation, envoi final des horaires.
 - Lister les modules à supprimer ou isoler : administration web historique, accès non utilisés, routes legacy sans rôle de migration.
 - Documenter toute collection ou structure de données nécessaire avant migration.
 - Conserver des exports/imports robustes pour préparer le changement de stockage.
@@ -164,6 +169,7 @@ Fonctionnement hors ligne et envoi d’emails
 L’application doit‑elle fonctionner entièrement hors ligne, y compris pour l’envoi d’emails
 → Oui, tout fonctionne localement.
 Pour l’envoi d’emails : soit l’utilisateur fournit son adresse Outlook, soit une fenêtre Outlook s’ouvre pour finaliser l’envoi.
+Le web sait déjà envoyer les paquets finaux via SMTP et tracer les statuts dans `finalScheduleDeliveries`; la version portable doit décider si elle garde ce canal ou si elle transforme cet envoi en brouillons Outlook contrôlés par l'utilisateur.
 
 Compatibilité MongoDB Atlas (mode hybride)
 → Non, aucune compatibilité Atlas n’est requise.
