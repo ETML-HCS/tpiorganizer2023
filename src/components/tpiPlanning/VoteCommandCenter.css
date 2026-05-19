@@ -639,6 +639,11 @@
   gap: 8px;
 }
 
+.vote-command-detail-facts small {
+  color: #0f766e;
+  font-size: 0.72rem;
+}
+
 .vote-command-resolution {
   display: grid;
   gap: 10px;

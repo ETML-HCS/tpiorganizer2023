@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
@@ -8,6 +8,7 @@ import * as coordinationServices from '../../services/coordinationService'
 import * as tpiController from '../tpiControllers/TpiController.jsx'
 import { ROUTES, STORAGE_KEYS } from '../../config/appConfig'
 import { renderWithRouter } from '../../test-utils/renderWithRouter'
+import { writeJSONValue } from '../../utils/storage'
 
 jest.mock('../../config/appConfig', () => {
   const actual = jest.requireActual('../../config/appConfig')
@@ -371,6 +372,63 @@ describe('PlanningDashboard', () => {
     expect(screen.queryByText(/lecture croisée gestiontpi \/ coordination/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/navigation interne de la fiche/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /fiche complète/i })).toHaveAttribute('href', '/tpi/2026/TPI-2026-001')
+  })
+
+  test('affiche la date courante de Planification dans la fiche Coordination', async () => {
+    localStorage.setItem(STORAGE_KEYS.ORGANIZER_DATA, JSON.stringify([
+      {
+        site: 'ETML',
+        name: 'B204',
+        date: '2026-06-12',
+        configSite: {
+          firstTpiStartTime: '13:00',
+          tpiTimeMinutes: 60,
+          breaklineMinutes: 10
+        },
+        tpiDatas: [
+          { refTpi: '1', period: 2 }
+        ]
+      }
+    ]))
+
+    renderDashboard()
+
+    fireEvent.click(await screen.findByRole('button', { name: /liste complète/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /sélectionner un tpi/i }))
+
+    expect(await screen.findByRole('dialog', { name: /tpi-2026-001/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/12\.06\.2026 .* après-midi .* B204/i).length).toBeGreaterThan(0)
+  })
+
+  test('met à jour la fiche Coordination quand Planification écrit dans le même onglet', async () => {
+    renderDashboard()
+
+    fireEvent.click(await screen.findByRole('button', { name: /liste complète/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /sélectionner un tpi/i }))
+
+    expect(await screen.findByRole('dialog', { name: /tpi-2026-001/i })).toBeInTheDocument()
+
+    act(() => {
+      writeJSONValue(STORAGE_KEYS.ORGANIZER_DATA, [
+        {
+          site: 'ETML',
+          name: 'C305',
+          date: '2026-06-13',
+          configSite: {
+            firstTpiStartTime: '08:00',
+            tpiTimeMinutes: 60,
+            breaklineMinutes: 10
+          },
+          tpiDatas: [
+            { refTpi: 'TPI-2026-001', period: 1 }
+          ]
+        }
+      ])
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/13\.06\.2026 .* matin .* C305/i).length).toBeGreaterThan(0)
+    })
   })
 
   test('synchronise automatiquement les votes du mini-site au chargement admin', async () => {

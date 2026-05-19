@@ -1804,6 +1804,9 @@ const VoteCommandCenter = ({
                   <span>
                     <CalendarIcon className="inline-icon" />
                     {selectedRow.fixedSlotLabel}
+                    {selectedRow.hasLivePlanningSlot ? (
+                      <small>Planification courante</small>
+                    ) : null}
                   </span>
                   <span>{selectedRow.deadlineLabel || 'Echeance non definie'}</span>
                 </div>

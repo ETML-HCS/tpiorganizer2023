@@ -41,7 +41,7 @@ import {
 } from '../../utils/stakeholderRules'
 import { getPlanningPerimeterState } from '../../utils/coordinationScopeUtils'
 import { buildValidationToast, extractValidationResultFromError } from '../../utils/workflowFeedback'
-import { writeJSONValue } from '../../utils/storage'
+import { readJSONListValue, writeJSONValue } from '../../utils/storage'
 import './PlanningDashboard.css'
 
 const WORKFLOW_LABELS = {
@@ -349,6 +349,10 @@ function getVoteRoleStatusLabel(roleStatus) {
 }
 
 function getVoteFixedSlot(tpi) {
+  if (tpi?.livePlanningSlot) {
+    return tpi.livePlanningSlot
+  }
+
   if (tpi?.confirmedSlot) {
     return tpi.confirmedSlot
   }
@@ -426,6 +430,7 @@ function addSlotDateKey(target, slot) {
 function getTpiPlanningDateKeys(tpi) {
   const dateKeys = new Set()
 
+  addSlotDateKey(dateKeys, tpi?.livePlanningSlot)
   addSlotDateKey(dateKeys, tpi?.confirmedSlot)
 
   if (Array.isArray(tpi?.proposedSlots)) {
@@ -437,6 +442,160 @@ function getTpiPlanningDateKeys(tpi) {
   }
 
   return Array.from(dateKeys)
+}
+
+function normalizePlanningReference(value) {
+  const text = compactText(value).toUpperCase()
+
+  if (!text) {
+    return ''
+  }
+
+  const tpiMatch = text.match(/^TPI-(?:\d{4}-)?(.+)$/)
+  const referenceBody = tpiMatch ? tpiMatch[1] : text
+
+  if (/^\d+$/.test(referenceBody)) {
+    return String(Number.parseInt(referenceBody, 10))
+  }
+
+  return referenceBody
+}
+
+function getPlanningReferenceKeys(...values) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => normalizePlanningReference(value))
+        .filter(Boolean)
+    )
+  )
+}
+
+function findLivePlanningEntryForTpi(tpi, livePlanningIndex) {
+  const referenceKeys = getPlanningReferenceKeys(
+    tpi?.reference,
+    tpi?.refTpi,
+    tpi?.id,
+    tpi?._id
+  )
+
+  for (const referenceKey of referenceKeys) {
+    const liveEntry = livePlanningIndex.get(referenceKey)
+    if (liveEntry) {
+      return liveEntry
+    }
+  }
+
+  return null
+}
+
+function getPlanningRoomYear(room) {
+  const roomYear = Number(room?.year)
+  if (Number.isInteger(roomYear)) {
+    return roomYear
+  }
+
+  const dateKey = toPlanningDateKey(room?.date)
+  if (!dateKey) {
+    return null
+  }
+
+  const parsedYear = Number.parseInt(dateKey.slice(0, 4), 10)
+  return Number.isInteger(parsedYear) ? parsedYear : null
+}
+
+function formatPlanningTimeFromMinutes(value) {
+  if (!Number.isFinite(value)) {
+    return ''
+  }
+
+  const normalizedMinutes = Math.max(0, Math.round(value))
+  const hours = Math.floor(normalizedMinutes / 60)
+  const minutes = normalizedMinutes % 60
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function buildLivePlanningSlot(room, tpi, tpiIndex) {
+  const date = toPlanningDateKey(room?.date) || compactText(room?.date)
+  const period = Number.parseInt(String(tpi?.period || tpiIndex + 1), 10) || tpiIndex + 1
+  const config = room?.configSite && typeof room.configSite === 'object' ? room.configSite : {}
+  const startBase = parseVoteTimeToMinutes(config.firstTpiStartTime || '08:00')
+  const duration = Number(config.tpiTimeMinutes || config.tpiDurationMinutes || 60)
+  const breakline = Number(config.breaklineMinutes || 0)
+  const startMinutes = startBase === null
+    ? null
+    : startBase + Math.max(period - 1, 0) * (Number.isFinite(duration) ? duration : 60) +
+      Math.max(period - 1, 0) * (Number.isFinite(breakline) ? breakline : 0)
+  const endMinutes = startMinutes === null
+    ? null
+    : startMinutes + (Number.isFinite(duration) ? duration : 60)
+  const roomName = compactText(room?.name || room?.nameRoom)
+  const roomSite = compactText(room?.site || tpi?.site || tpi?.lieu?.site)
+
+  return {
+    _id: `live-planning:${normalizePlanningReference(tpi?.refTpi)}`,
+    source: 'livePlanning',
+    isLivePlanningSlot: true,
+    date,
+    period,
+    startTime: startMinutes === null ? '' : formatPlanningTimeFromMinutes(startMinutes),
+    endTime: endMinutes === null ? '' : formatPlanningTimeFromMinutes(endMinutes),
+    room: {
+      name: roomName,
+      site: roomSite
+    },
+    roomName,
+    roomSite
+  }
+}
+
+function buildLivePlanningIndex(rooms = [], year) {
+  const targetYear = Number.parseInt(year, 10)
+  const index = new Map()
+
+  for (const room of Array.isArray(rooms) ? rooms : []) {
+    const roomYear = getPlanningRoomYear(room)
+    if (Number.isInteger(targetYear) && Number.isInteger(roomYear) && roomYear !== targetYear) {
+      continue
+    }
+
+    const tpiDatas = Array.isArray(room?.tpiDatas) ? room.tpiDatas : []
+    tpiDatas.forEach((tpi, tpiIndex) => {
+      const referenceKeys = getPlanningReferenceKeys(tpi?.refTpi, tpi?.id)
+      if (referenceKeys.length === 0) {
+        return
+      }
+
+      const entry = {
+        reference: compactText(tpi?.refTpi),
+        slot: buildLivePlanningSlot(room, tpi, tpiIndex),
+        room,
+        tpi
+      }
+
+      referenceKeys.forEach((referenceKey) => {
+        index.set(referenceKey, entry)
+      })
+    })
+  }
+
+  return index
+}
+
+function applyLivePlanningOverlay(tpi, livePlanningIndex) {
+  const liveEntry = findLivePlanningEntryForTpi(tpi, livePlanningIndex)
+
+  if (!liveEntry?.slot) {
+    return tpi
+  }
+
+  return {
+    ...tpi,
+    livePlanningSlot: liveEntry.slot,
+    livePlanningReference: liveEntry.reference,
+    livePlanningUpdatedAt: liveEntry.room?.lastUpdate || null
+  }
 }
 
 function formatVoteDeadline(value) {
@@ -1125,6 +1284,8 @@ function buildVoteWorkflowRow(tpi) {
     missingCount: missingRoles.length,
     missingLabels: missingRoles.map((entry) => entry.label),
     fixedSlotLabel: formatVoteSlotLabel(getVoteFixedSlot(tpi)),
+    livePlanningSlot: tpi?.livePlanningSlot || null,
+    hasLivePlanningSlot: Boolean(tpi?.livePlanningSlot),
     decisionSlots,
     proposalSummaries: getVoteProposalSummaries(tpi),
     resolutionProposals: Array.isArray(tpi?.resolutionProposals) ? tpi.resolutionProposals : [],
@@ -1162,6 +1323,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
   // États principaux
   const [tpis, setTpis] = useState([])
+  const [livePlanningRooms, setLivePlanningRooms] = useState([])
   const [legacyTpis, setLegacyTpis] = useState([])
   const [calendarData, setCalendarData] = useState([])
   const [pendingVotes, setPendingVotes] = useState([])
@@ -1202,6 +1364,17 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState('')
+
+  const refreshLivePlanningRooms = useCallback(() => {
+    if (!isAdmin) {
+      setLivePlanningRooms([])
+      return []
+    }
+
+    const rooms = readJSONListValue(STORAGE_KEYS.ORGANIZER_DATA, [], ['organizerData'])
+    setLivePlanningRooms(rooms)
+    return rooms
+  }, [isAdmin])
 
   const fetchStaticVotePublicationStatus = useCallback(async () => {
     if (!isAdmin || typeof workflowCoordinationService.getStaticVotePublicationStatus !== 'function') {
@@ -1494,17 +1667,65 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     loadData()
   }, [isMagicLinkReady, loadData])
 
+  useEffect(() => {
+    refreshLivePlanningRooms()
+
+    if (!isAdmin || typeof window === 'undefined') {
+      return undefined
+    }
+
+    const handleStorage = (event) => {
+      if (!event?.key || event.key === STORAGE_KEYS.ORGANIZER_DATA || event.key === 'organizerData') {
+        refreshLivePlanningRooms()
+      }
+    }
+    const handleAppStorageChange = (event) => {
+      const changedKey = event?.detail?.key
+      if (!changedKey || changedKey === STORAGE_KEYS.ORGANIZER_DATA || changedKey === 'organizerData') {
+        refreshLivePlanningRooms()
+      }
+    }
+    const handleFocus = () => refreshLivePlanningRooms()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshLivePlanningRooms()
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener('tpiorganizer:storage-change', handleAppStorageChange)
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('tpiorganizer:storage-change', handleAppStorageChange)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [isAdmin, refreshLivePlanningRooms])
+
+  const livePlanningIndex = useMemo(
+    () => buildLivePlanningIndex(livePlanningRooms, year),
+    [livePlanningRooms, year]
+  )
+
+  const displayTpis = useMemo(
+    () => tpis.map((tpi) => applyLivePlanningOverlay(tpi, livePlanningIndex)),
+    [tpis, livePlanningIndex]
+  )
+
   /**
    * TPI filtrés selon les critères de recherche
    */
   const visibleTpis = useMemo(() => {
     const scopedViewerId = !isAdmin ? magicLinkViewer?.personId : null
     if (!scopedViewerId) {
-      return tpis
+      return displayTpis
     }
 
-    return tpis.filter(tpi => isTpiVisibleForViewer(tpi, scopedViewerId))
-  }, [tpis, isAdmin, magicLinkViewer])
+    return displayTpis.filter(tpi => isTpiVisibleForViewer(tpi, scopedViewerId))
+  }, [displayTpis, isAdmin, magicLinkViewer])
 
   const planningDateOptions = useMemo(() => {
     const dateKeys = new Set()
@@ -1914,10 +2135,10 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     return getPlanningStatusMeta(selectedTpi?.status)
   }, [selectedTpi])
   const selectedTpiSlotLabel = useMemo(() => {
-    return formatVoteSlotLabel(selectedTpi?.confirmedSlot || getVoteFixedSlot(selectedTpi))
+    return formatVoteSlotLabel(getVoteFixedSlot(selectedTpi))
   }, [selectedTpi])
   const selectedTpiHasSlot = useMemo(() => {
-    return Boolean(selectedTpi?.confirmedSlot || getVoteFixedSlot(selectedTpi))
+    return Boolean(getVoteFixedSlot(selectedTpi))
   }, [selectedTpi])
   const selectedTpiIssueCount = useMemo(() => {
     const planningIssues = Array.isArray(selectedTpi?.conflicts)
@@ -2014,6 +2235,23 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     visibleTpis,
     isAdmin
   ])
+
+  useEffect(() => {
+    if (!selectedTpi) {
+      return
+    }
+
+    const selectedId = compactText(selectedTpi?._id)
+    const selectedReference = normalizePlanningReference(selectedTpi?.reference)
+    const refreshedTpi = visibleTpis.find((tpi) => (
+      (selectedId && compactText(tpi?._id) === selectedId) ||
+      (selectedReference && normalizePlanningReference(tpi?.reference) === selectedReference)
+    ))
+
+    if (refreshedTpi && refreshedTpi !== selectedTpi) {
+      setSelectedTpi(refreshedTpi)
+    }
+  }, [selectedTpi, visibleTpis])
 
   useEffect(() => {
     if (!selectedTpi) {

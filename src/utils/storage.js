@@ -20,6 +20,24 @@ const getStorage = () => {
   return hasLocalStorage() ? window.localStorage : null
 }
 
+const dispatchStorageChange = (key, value = null, action = "set") => {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+    return
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent("tpiorganizer:storage-change", {
+      detail: {
+        key,
+        value,
+        action
+      }
+    }))
+  } catch {
+    // Ignore notification failures; storage already succeeded.
+  }
+}
+
 const normalizeBase64Url = (value) => {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
   const padding = normalized.length % 4
@@ -166,7 +184,9 @@ export const writeStorageValue = (key, value) => {
   }
 
   try {
-    storage.setItem(key, String(value))
+    const serializedValue = String(value)
+    storage.setItem(key, serializedValue)
+    dispatchStorageChange(key, serializedValue, "set")
     return true
   } catch {
     return false
@@ -181,6 +201,7 @@ export const removeStorageValue = (key) => {
 
   try {
     storage.removeItem(key)
+    dispatchStorageChange(key, null, "remove")
     return true
   } catch {
     return false

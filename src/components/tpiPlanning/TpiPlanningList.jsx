@@ -31,6 +31,7 @@ import './TpiPlanningList.css'
 
 function getPlannedSlot(tpi) {
   return (
+    tpi?.livePlanningSlot ||
     tpi?.confirmedSlot ||
     tpi?.proposedSlots?.find(proposedSlot => proposedSlot?.slot)?.slot ||
     null
