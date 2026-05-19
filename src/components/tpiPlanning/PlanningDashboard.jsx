@@ -1710,6 +1710,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     [livePlanningRooms, year]
   )
 
+  const currentPlanningRoomsForWorkflow = useMemo(() => (
+    Array.isArray(livePlanningRooms) && livePlanningRooms.length > 0
+      ? livePlanningRooms
+      : null
+  ), [livePlanningRooms])
+
   const displayTpis = useMemo(
     () => tpis.map((tpi) => applyLivePlanningOverlay(tpi, livePlanningIndex)),
     [tpis, livePlanningIndex]
@@ -2776,7 +2782,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
 
     const result = await executeWorkflowAction({
       actionKey: 'validate',
-      run: () => workflowCoordinationService.validatePlanification(year),
+      run: () => currentPlanningRoomsForWorkflow
+        ? workflowCoordinationService.validatePlanification(year, false, currentPlanningRoomsForWorkflow)
+        : workflowCoordinationService.validatePlanification(year),
       successBuilder: null,
       errorFallback: 'Erreur lors de la validation de la planification.',
       onSuccess: (validationResult) => {
@@ -2812,7 +2820,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     })
 
     return result
-  }, [year, executeWorkflowAction])
+  }, [year, executeWorkflowAction, currentPlanningRoomsForWorkflow])
 
   const handleCheckVoteConstraints = useCallback(() => {
     const result = buildVoteConstraintCheckResult(voteWorkflowAllRows, year)
@@ -2883,8 +2891,12 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const handleFreezePlanification = useCallback(async () => {
     const result = await executeWorkflowAction({
       actionKey: 'freeze',
-      confirmMessage: `Confirmer le gel du snapshot de planification ${year} ?`,
-      run: () => workflowCoordinationService.freezePlanification(year),
+      confirmMessage: currentPlanningRoomsForWorkflow
+        ? `Synchroniser la Planification courante ${year} dans Coordination et geler un nouveau snapshot ?`
+        : `Confirmer le gel du snapshot de planification ${year} ?`,
+      run: () => currentPlanningRoomsForWorkflow
+        ? workflowCoordinationService.freezePlanification(year, false, currentPlanningRoomsForWorkflow)
+        : workflowCoordinationService.freezePlanification(year),
       successBuilder: (result) => `Snapshot v${result?.snapshot?.version || '?'} gele avec succes.`,
       errorFallback: 'Erreur lors du freeze de la planification.',
       reloadAfterSuccess: true
@@ -2896,7 +2908,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         isActive: true
       })
     }
-  }, [year, executeWorkflowAction])
+  }, [year, executeWorkflowAction, currentPlanningRoomsForWorkflow])
 
   const handleSyncPlanificationFromCoordination = useCallback(async () => {
     const result = await executeWorkflowAction({
@@ -2931,7 +2943,9 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     const result = await executeWorkflowAction({
       actionKey: 'startVotes',
       confirmMessage: 'Confirmer l ouverture de la campagne de votes sans envoyer d emails ?',
-      run: () => workflowCoordinationService.startVotesWithoutEmails(year),
+      run: () => currentPlanningRoomsForWorkflow
+        ? workflowCoordinationService.startVotesWithoutEmails(year, currentPlanningRoomsForWorkflow)
+        : workflowCoordinationService.startVotesWithoutEmails(year),
       successBuilder: (result) => {
         const tpiCount = result?.tpiCount || 0
         return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye automatiquement.`
@@ -2957,13 +2971,15 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ...(result?.workflow?.phases ? { phases: result.workflow.phases } : {})
       }))
     }
-  }, [year, executeWorkflowAction])
+  }, [year, executeWorkflowAction, currentPlanningRoomsForWorkflow])
 
   const handleStartVotesCampaignWithoutEmails = useCallback(async () => {
     const result = await executeWorkflowAction({
       actionKey: 'startVotesNoEmail',
       confirmMessage: 'Confirmer l ouverture de la campagne de votes sans envoyer d emails ?',
-      run: () => workflowCoordinationService.startVotesWithoutEmails(year),
+      run: () => currentPlanningRoomsForWorkflow
+        ? workflowCoordinationService.startVotesWithoutEmails(year, currentPlanningRoomsForWorkflow)
+        : workflowCoordinationService.startVotesWithoutEmails(year),
       successBuilder: (result) => {
         const tpiCount = result?.tpiCount || 0
         return `Campagne ouverte: ${tpiCount} TPI synchronises, aucun email envoye.`
@@ -2989,7 +3005,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         ...(result?.workflow?.phases ? { phases: result.workflow.phases } : {})
       }))
     }
-  }, [year, executeWorkflowAction])
+  }, [year, executeWorkflowAction, currentPlanningRoomsForWorkflow])
 
   const handleRemindVotes = useCallback(async (options = {}) => {
     const tpiCount = Array.isArray(options?.tpiIds) ? options.tpiIds.length : 0
@@ -3032,7 +3048,11 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     await executeWorkflowAction({
       actionKey: 'publish',
       confirmMessage: 'Confirmer la publication definitive des défenses ?',
-      run: () => workflowCoordinationService.publishDefinitive(year, null, soutenanceSiteLinkOptions),
+      run: () => workflowCoordinationService.publishDefinitive(
+        year,
+        currentPlanningRoomsForWorkflow,
+        soutenanceSiteLinkOptions
+      ),
       successBuilder: (result) => {
         const sent = result?.sentLinks
         const sentLabel = sent?.emailsSkipped
@@ -3048,7 +3068,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
         setFinalScheduleDeliveryPreview(null)
       }
     })
-  }, [year, executeWorkflowAction, soutenanceSiteLinkOptions])
+  }, [year, executeWorkflowAction, soutenanceSiteLinkOptions, currentPlanningRoomsForWorkflow])
 
   const handleSendPublicationLinks = useCallback(async () => {
     await executeWorkflowAction({

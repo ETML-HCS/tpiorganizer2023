@@ -1106,6 +1106,9 @@ const VoteCommandCenter = ({
     isOnlyAvailabilityVoteComment(item.decision?.comment || selectedRoleProposal?.comment)
   )
   const selectedRoleShouldShowSpecialRequest = selectedRoleHasSpecialRequest && !selectedRoleHasHardSlotDecision
+  const selectedLivePlanningLabel = selectedRow?.hasLivePlanningSlot
+    ? compactText(selectedRow.fixedSlotLabel)
+    : ''
   const selectedRoleCanForceOk = Boolean(
     selectedRow &&
     selectedRoleEntry &&
@@ -1247,7 +1250,7 @@ const VoteCommandCenter = ({
               runningLabel="Sync..."
               title="Reconstruire Planification depuis Coordination et geler un nouveau snapshot."
             >
-              Sync + gel
+              Coord. → Planif.
             </WorkflowActionButton>
             <WorkflowActionButton
               actionKey="startVotes"
@@ -1920,6 +1923,13 @@ const VoteCommandCenter = ({
                       </span>
                     ) : null}
 
+                    {selectedLivePlanningLabel ? (
+                      <div className="vote-command-current-planning">
+                        <span>Planification actuelle</span>
+                        <strong>{selectedLivePlanningLabel}</strong>
+                      </div>
+                    ) : null}
+
                     <div className="vote-command-role-slot-list">
                       {selectedRoleSlotDecisions.map(({ slot, decision, proposalSlot, tone, isRiskSlot }) => {
                         const isOnlyAvailabilityNote = isOnlyAvailabilityVoteComment(decision.comment)
@@ -1950,7 +1960,7 @@ const VoteCommandCenter = ({
                             <div className="vote-command-role-slot-main">
                               <span>
                                 {slot.isFixed
-                                  ? 'Créneau proposé'
+                                  ? (selectedLivePlanningLabel ? 'Vote initial' : 'Créneau proposé')
                                   : isOnlyAvailabilityNote
                                     ? 'Seule disponibilité'
                                     : isBlockingDecision

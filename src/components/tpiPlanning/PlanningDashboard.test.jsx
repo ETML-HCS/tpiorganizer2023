@@ -431,6 +431,34 @@ describe('PlanningDashboard', () => {
     })
   })
 
+  test('distingue la planification actuelle des créneaux de vote figés', async () => {
+    localStorage.setItem(STORAGE_KEYS.ORGANIZER_DATA, JSON.stringify([
+      {
+        site: 'ETML',
+        name: 'C303',
+        date: '2026-06-12',
+        configSite: {
+          firstTpiStartTime: '08:00',
+          tpiTimeMinutes: 60,
+          breaklineMinutes: 10
+        },
+        tpiDatas: [
+          { refTpi: '42', period: 1 }
+        ]
+      }
+    ]))
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    expect(await screen.findByText('TPI-2026-042')).toBeInTheDocument()
+    expect(screen.getAllByText(/Planification actuelle/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/12\.06\.2026 .* Matin .* C303/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/^Vote initial$/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/10\.06\.2026 .* Matin .* A101/i).length).toBeGreaterThan(0)
+  })
+
   test('synchronise automatiquement les votes du mini-site au chargement admin', async () => {
     coordinationServices.workflowCoordinationService.getStaticVotePublicationStatus.mockResolvedValueOnce({
       available: true,
@@ -556,6 +584,35 @@ describe('PlanningDashboard', () => {
     confirmSpy.mockRestore()
   })
 
+  test('ouvre les votes avec la Planification courante quand elle existe', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
+    const currentRooms = [
+      {
+        site: 'ETML',
+        name: 'D101',
+        date: '2026-06-11',
+        tpiDatas: [
+          { refTpi: '1', period: 1 }
+        ]
+      }
+    ]
+    localStorage.setItem(STORAGE_KEYS.ORGANIZER_DATA, JSON.stringify(currentRooms))
+    coordinationServices.workflowCoordinationService.getActiveSnapshot.mockResolvedValue({
+      version: 2,
+      isActive: true
+    })
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    fireEvent.click(await screen.findByRole('button', { name: /^ouvrir votes$/i }))
+
+    await waitFor(() => {
+      expect(coordinationServices.workflowCoordinationService.startVotesWithoutEmails).toHaveBeenCalledWith('2026', currentRooms)
+    })
+
+    confirmSpy.mockRestore()
+  })
+
   test('transmet les notifications ciblées après changement de publication des défenses', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
     coordinationServices.workflowCoordinationService.getDefenseChangeNotificationPreview.mockResolvedValueOnce({
@@ -601,12 +658,12 @@ describe('PlanningDashboard', () => {
     confirmSpy.mockRestore()
   })
 
-  test('synchronise la planification depuis coordination et met a jour le cache local', async () => {
+  test('exporte la planification depuis coordination et met a jour le cache local', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true)
 
     renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
 
-    fireEvent.click(await screen.findByRole('button', { name: /sync \+ gel/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /coord\. → planif\./i }))
 
     await waitFor(() => {
       expect(coordinationServices.workflowCoordinationService.syncPlanificationFromCoordination).toHaveBeenCalledWith('2026')

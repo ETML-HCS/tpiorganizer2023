@@ -644,6 +644,27 @@
   font-size: 0.72rem;
 }
 
+.vote-command-current-planning {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: var(--app-radius-card, 8px);
+  background: #ecfdf5;
+}
+
+.vote-command-current-planning span {
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vote-command-current-planning strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
 .vote-command-resolution {
   display: grid;
   gap: 10px;
