@@ -42,6 +42,7 @@ const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
 const DEFAULT_STATIC_VOTE_PATH_PREFIX = 'votes'
 const DEFAULT_STATIC_VOTE_SYNC_TIMEOUT_MS = 15000
 const STATIC_VOTE_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_VOTE_BOOTSTRAP -->'
+const STATIC_VOTE_CAMPAIGN_ARCHIVE_FILE = 'campaign-archive.json'
 const STATIC_VOTE_IMPORT_PREFIX = 'static-vote'
 const VOTE_TPI_STATUSES = COORDINATION_VOTE_STATUSES
 const ALLOWED_RESPONSE_MODES = new Set(['ok', 'proposal'])
@@ -208,6 +209,10 @@ function getHtaccessPath(year) {
 
 function getManifestPath(year) {
   return path.join(getOutputDir(year), 'manifest.json')
+}
+
+function getCampaignArchivePath(year) {
+  return path.join(getOutputDir(year), STATIC_VOTE_CAMPAIGN_ARCHIVE_FILE)
 }
 
 function getPreviewPath(year) {
@@ -3457,14 +3462,82 @@ function staticVoteReadRecords(): array
     return $records;
 }
 
-function staticVoteFindExistingRecordInList(array $records, string $tokenHash, string $campaignId, string $tpiId): ?array
+function staticVoteSlotText($value): string
+{
+    return strtoupper(preg_replace('/[^A-Z0-9]+/', '', staticVoteText($value)) ?? '');
+}
+
+function staticVoteSlotDateKey($value): string
+{
+    $text = staticVoteText($value);
+    if ($text === '') {
+        return '';
+    }
+
+    return substr($text, 0, 10);
+}
+
+function staticVoteFixedSlotId(array $source): string
+{
+    $slot = isset($source['fixedSlot']) && is_array($source['fixedSlot']) ? $source['fixedSlot'] : [];
+    return staticVoteText($source['fixedSlotId'] ?? ($slot['id'] ?? ($slot['_id'] ?? '')));
+}
+
+function staticVoteFixedSlotKey($slot): string
+{
+    if (!is_array($slot)) {
+        return '';
+    }
+
+    $room = isset($slot['room']) && is_array($slot['room']) ? $slot['room'] : [];
+    $parts = [
+        staticVoteSlotDateKey($slot['date'] ?? ''),
+        staticVoteText($slot['period'] ?? ''),
+        staticVoteText($slot['startTime'] ?? ''),
+        staticVoteText($slot['endTime'] ?? ''),
+        staticVoteSlotText($slot['roomName'] ?? ($room['name'] ?? '')),
+        staticVoteSlotText($slot['roomSite'] ?? ($room['site'] ?? '')),
+    ];
+
+    $key = implode('|', $parts);
+    return trim(str_replace('|', '', $key)) === '' ? '' : $key;
+}
+
+function staticVoteRecordMatchesCurrentGroup(array $record, string $campaignId, array $group): bool
+{
+    $recordCampaignId = staticVoteText($record['campaignId'] ?? '');
+    if ($campaignId !== '' && $recordCampaignId === $campaignId) {
+        return true;
+    }
+
+    $recordFixedVoteId = staticVoteText($record['fixedVoteId'] ?? '');
+    $groupFixedVoteId = staticVoteText($group['fixedVoteId'] ?? '');
+    if ($recordFixedVoteId !== '' && $groupFixedVoteId !== '' && $recordFixedVoteId === $groupFixedVoteId) {
+        return true;
+    }
+
+    $recordFixedSlotId = staticVoteFixedSlotId($record);
+    $groupFixedSlotId = staticVoteFixedSlotId($group);
+    if ($recordFixedSlotId !== '' && $groupFixedSlotId !== '' && $recordFixedSlotId === $groupFixedSlotId) {
+        return true;
+    }
+
+    $recordFixedSlotKey = staticVoteFixedSlotKey($record['fixedSlot'] ?? null);
+    $groupFixedSlotKey = staticVoteFixedSlotKey($group['fixedSlot'] ?? null);
+    return $recordFixedSlotKey !== '' && $groupFixedSlotKey !== '' && $recordFixedSlotKey === $groupFixedSlotKey;
+}
+
+function staticVoteFindExistingRecordInList(array $records, string $tokenHash, string $campaignId, string $tpiId, ?array $group = null): ?array
 {
     foreach ($records as $record) {
         if (
             is_array($record) &&
             staticVoteText($record['tokenHash'] ?? '') === $tokenHash &&
-            staticVoteText($record['campaignId'] ?? '') === $campaignId &&
-            staticVoteText($record['tpiId'] ?? '') === $tpiId
+            staticVoteText($record['tpiId'] ?? '') === $tpiId &&
+            (
+                ($group !== null && staticVoteRecordMatchesCurrentGroup($record, $campaignId, $group)) ||
+                ($group === null && staticVoteText($record['campaignId'] ?? '') === $campaignId)
+            )
         ) {
             return $record;
         }
@@ -3473,7 +3546,7 @@ function staticVoteFindExistingRecordInList(array $records, string $tokenHash, s
     return null;
 }
 
-function staticVoteAppendUniqueRecord(array $record, string $tokenHash, string $campaignId, string $tpiId): ?array
+function staticVoteAppendUniqueRecord(array $record, string $tokenHash, string $campaignId, string $tpiId, array $group): ?array
 {
     $dir = staticVoteDataDir();
     $lockPath = $dir . DIRECTORY_SEPARATOR . 'votes.lock';
@@ -3492,7 +3565,8 @@ function staticVoteAppendUniqueRecord(array $record, string $tokenHash, string $
         staticVoteReadRecords(),
         $tokenHash,
         $campaignId,
-        $tpiId
+        $tpiId,
+        $group
     );
 
     if ($existingSubmission !== null) {
@@ -3597,7 +3671,7 @@ function staticVoteAllowedProposalSlotIds(array $group): array
     return $ids;
 }
 
-function staticVoteSubmittedTpiIds(string $tokenHash, string $campaignId): array
+function staticVoteSubmittedTpiIds(string $tokenHash, string $campaignId, array $groups): array
 {
     $ids = [];
 
@@ -3606,22 +3680,34 @@ function staticVoteSubmittedTpiIds(string $tokenHash, string $campaignId): array
             continue;
         }
 
-        if ($campaignId !== '' && staticVoteText($record['campaignId'] ?? '') !== $campaignId) {
+        $tpiId = staticVoteText($record['tpiId'] ?? '');
+        if ($tpiId === '') {
             continue;
         }
 
-        $tpiId = staticVoteText($record['tpiId'] ?? '');
-        if ($tpiId !== '') {
-            $ids[$tpiId] = true;
+        foreach ($groups as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+
+            $groupTpi = isset($group['tpi']) && is_array($group['tpi']) ? $group['tpi'] : [];
+            if (staticVoteText($groupTpi['id'] ?? '') !== $tpiId) {
+                continue;
+            }
+
+            if (staticVoteRecordMatchesCurrentGroup($record, $campaignId, $group)) {
+                $ids[$tpiId] = true;
+                break;
+            }
         }
     }
 
     return array_values(array_keys($ids));
 }
 
-function staticVoteFindExistingSubmission(string $tokenHash, string $campaignId, string $tpiId): ?array
+function staticVoteFindExistingSubmission(string $tokenHash, string $campaignId, string $tpiId, array $group): ?array
 {
-    return staticVoteFindExistingRecordInList(staticVoteReadRecords(), $tokenHash, $campaignId, $tpiId);
+    return staticVoteFindExistingRecordInList(staticVoteReadRecords(), $tokenHash, $campaignId, $tpiId, $group);
 }
 
 function staticVoteRandomId(string $tokenHash, string $tpiId): string
@@ -3767,7 +3853,7 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         $onlyAvailabilitySlotIds = [];
     }
 
-    $existingSubmission = staticVoteFindExistingSubmission($tokenHash, $campaignId, $tpiId);
+    $existingSubmission = staticVoteFindExistingSubmission($tokenHash, $campaignId, $tpiId, $group);
     if ($existingSubmission !== null) {
         staticVoteJson(409, [
             'success' => false,
@@ -3788,6 +3874,7 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
             ? staticVoteText($group['tpi']['reference'] ?? '')
             : '',
         'fixedVoteId' => $fixedVoteId,
+        'fixedSlotId' => staticVoteText($group['fixedSlotId'] ?? ''),
         'fixedSlot' => isset($group['fixedSlot']) && is_array($group['fixedSlot']) ? $group['fixedSlot'] : null,
         'mode' => $mode,
         'proposedSlotIds' => $proposedSlotIds,
@@ -3805,7 +3892,7 @@ function staticVoteHandleSubmit(array $payload, array $accessEntry, string $toke
         'tokenHash' => $tokenHash,
     ];
 
-    $existingSubmission = staticVoteAppendUniqueRecord($record, $tokenHash, $campaignId, $tpiId);
+    $existingSubmission = staticVoteAppendUniqueRecord($record, $tokenHash, $campaignId, $tpiId, $group);
     if ($existingSubmission !== null) {
         staticVoteJson(409, [
             'success' => false,
@@ -3856,7 +3943,8 @@ $staticVoteBrowserPayload['viewer'] = $staticVoteViewer;
 $staticVoteBrowserPayload['groups'] = staticVoteFilteredGroups($staticVotePayload, $staticVoteAccessEntry);
 $staticVoteBrowserPayload['submittedTpiIds'] = staticVoteSubmittedTpiIds(
     $staticVoteTokenHash,
-    staticVoteText($staticVotePayload['campaignId'] ?? '')
+    staticVoteText($staticVotePayload['campaignId'] ?? ''),
+    $staticVoteBrowserPayload['groups']
 );
 $staticVoteBootstrap = '<script>window.__STATIC_VOTE_BOOTSTRAP__=' .
     json_encode($staticVoteBrowserPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) .
@@ -4314,6 +4402,7 @@ async function getStaticVotePublicationStatus(year, deploymentConfig = null) {
     deniedIndexPath: getDeniedIndexPath(normalizedYear),
     htaccessPath: getHtaccessPath(normalizedYear),
     manifestPath,
+    campaignArchivePath: getCampaignArchivePath(normalizedYear),
     previewPath: available ? getPreviewPath(normalizedYear) : null,
     publicUrl: await getPublicUrl(normalizedYear, resolvedDeploymentConfig),
     remoteDir: normalizeVoteRemoteDir(normalizedYear, resolvedDeploymentConfig),
@@ -4338,11 +4427,16 @@ async function generateStaticVotesSite(year) {
   const normalizedYear = parseYear(year)
   const deploymentConfig = await getPublicationDeploymentConfigIfAvailable()
   const generatedAt = new Date().toISOString()
+  const previousPayload = await loadStaticVoteCampaignSnapshot(normalizedYear)
   const campaignPayload = await buildStaticVoteCampaignPayload(normalizedYear, generatedAt)
   const html = buildStaticVoteHtml(campaignPayload)
   const outputDir = getOutputDir(normalizedYear)
 
   await fs.promises.mkdir(outputDir, { recursive: true })
+  const archivedCampaign = previousPayload?.campaignId &&
+    previousPayload.campaignId !== campaignPayload.campaignId
+    ? await archiveStaticVoteCampaignPayload(normalizedYear, previousPayload)
+    : { archived: false }
   await fs.promises.writeFile(getIndexPath(normalizedYear), buildStaticVoteUnavailableHtml(normalizedYear), 'utf8')
 
   const accessFiles = await writeStaticVoteAccessFiles({
@@ -4361,6 +4455,8 @@ async function generateStaticVotesSite(year) {
     accessLinkCount: accessFiles.accessLinkCount,
     arbitrageConfigured: accessFiles.arbitrageConfigured,
     syncSecretConfigured: accessFiles.syncSecretConfigured,
+    archivedCampaignId: archivedCampaign.archived ? archivedCampaign.campaignId : null,
+    campaignArchivePath: getCampaignArchivePath(normalizedYear),
     previewPath: getPreviewPath(normalizedYear),
     publicUrl,
     remoteDir: normalizeVoteRemoteDir(normalizedYear, deploymentConfig)
@@ -4387,6 +4483,7 @@ async function generateStaticVotesSite(year) {
 async function publishStaticVotesSite(year) {
   const normalizedYear = parseYear(year)
   const deploymentConfig = await getPublicationDeploymentConfigIfAvailable({ includeSecret: true })
+  await generateStaticVotesSite(normalizedYear)
   const status = await getStaticVotePublicationStatus(normalizedYear, deploymentConfig)
 
   if (!status.available) {
@@ -4685,6 +4782,109 @@ async function loadStaticVoteCampaignSnapshot(year) {
   }
 }
 
+function normalizeStaticVoteCampaignArchive(value) {
+  const records = Array.isArray(value?.campaigns)
+    ? value.campaigns
+    : Array.isArray(value)
+      ? value
+      : []
+
+  return records
+    .filter((record) => record && typeof record === 'object' && !Array.isArray(record))
+    .map((record) => {
+      const payload = record.payload && typeof record.payload === 'object' && !Array.isArray(record.payload)
+        ? record.payload
+        : record
+      const campaignId = compactText(record.campaignId || payload.campaignId)
+
+      if (!campaignId || !Array.isArray(payload.groups)) {
+        return null
+      }
+
+      return {
+        campaignId,
+        generatedAt: compactText(record.generatedAt || payload.generatedAt) || null,
+        archivedAt: compactText(record.archivedAt) || null,
+        payload
+      }
+    })
+    .filter(Boolean)
+}
+
+async function readStaticVoteCampaignArchive(year) {
+  const archivePath = getCampaignArchivePath(year)
+
+  try {
+    return normalizeStaticVoteCampaignArchive(JSON.parse(await fs.promises.readFile(archivePath, 'utf8')))
+  } catch (error) {
+    return []
+  }
+}
+
+async function archiveStaticVoteCampaignPayload(year, payload = null) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return {
+      archived: false,
+      reason: 'missing_payload'
+    }
+  }
+
+  const campaignId = compactText(payload.campaignId)
+  if (!campaignId || !Array.isArray(payload.groups)) {
+    return {
+      archived: false,
+      reason: 'invalid_payload'
+    }
+  }
+
+  const archivePath = getCampaignArchivePath(year)
+  const existing = await readStaticVoteCampaignArchive(year)
+  const withoutDuplicate = existing.filter((record) => record.campaignId !== campaignId)
+  const nextArchive = [
+    {
+      campaignId,
+      generatedAt: compactText(payload.generatedAt) || null,
+      archivedAt: new Date().toISOString(),
+      payload
+    },
+    ...withoutDuplicate
+  ].slice(0, 20)
+
+  await fs.promises.mkdir(path.dirname(archivePath), { recursive: true })
+  await fs.promises.writeFile(
+    archivePath,
+    JSON.stringify({ campaigns: nextArchive }, null, 2),
+    'utf8'
+  )
+
+  return {
+    archived: true,
+    campaignId,
+    archivePath
+  }
+}
+
+async function loadArchivedStaticVoteCampaignSnapshot(year, campaignId = '') {
+  const normalizedCampaignId = compactText(campaignId)
+  if (!normalizedCampaignId) {
+    return null
+  }
+
+  const archive = await readStaticVoteCampaignArchive(year)
+  const match = archive.find((record) => record.campaignId === normalizedCampaignId)
+  return match?.payload || null
+}
+
+async function loadStaticVoteCampaignSnapshotForRecord(record) {
+  const currentSnapshot = await loadStaticVoteCampaignSnapshot(record.year)
+  if (!record.campaignId || currentSnapshot?.campaignId === record.campaignId) {
+    return currentSnapshot
+  }
+
+  return await loadArchivedStaticVoteCampaignSnapshot(record.year, record.campaignId) ||
+    currentSnapshot
+}
+
 function buildStaticVoteArchiveGroupFromRecord(record = {}) {
   const proposalOptions = Array.isArray(record.proposalOptions)
     ? record.proposalOptions.map(normalizeStaticVoteProposalSnapshot).filter(Boolean)
@@ -4735,7 +4935,7 @@ async function findStaticVoteArchiveGroup(record) {
     return embeddedGroup
   }
 
-  const snapshot = await loadStaticVoteCampaignSnapshot(record.year)
+  const snapshot = await loadStaticVoteCampaignSnapshotForRecord(record)
   return findStaticVoteArchiveGroupInPayload(record, snapshot)
 }
 

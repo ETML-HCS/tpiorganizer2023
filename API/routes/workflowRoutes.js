@@ -124,6 +124,29 @@ function buildPlanningVoteMigrationWarnings(summary = null) {
   return warnings
 }
 
+function buildStaticVoteSyncWarnings(result = null) {
+  if (!result || typeof result !== 'object') {
+    return []
+  }
+
+  const imported = Number(result.importedCount || 0)
+  const skipped = Number(result.skippedCount || 0)
+  const failed = Number(result.failedCount || 0)
+  const received = Number(result.receivedCount || 0)
+  const warnings = []
+
+  if (received > 0) {
+    warnings.push(
+      `Synchronisation mini-site vote: ${imported}/${received} réponse(s) importée(s)` +
+      (skipped > 0 ? `, ${skipped} déjà connue(s)` : '') +
+      (failed > 0 ? `, ${failed} erreur(s)` : '') +
+      '.'
+    )
+  }
+
+  return warnings
+}
+
 function normalizeBaseUrl(rawValue, fallbackValue) {
   if (typeof rawValue === 'string' && rawValue.trim().length > 0) {
     return rawValue.trim().replace(/\/+$/, '')
@@ -191,6 +214,33 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+async function syncStaticVotesForProtectedUpdate(year) {
+  const status = await staticVotePublicationService.getStaticVotePublicationStatus(year)
+
+  if (!status.available) {
+    return {
+      skipped: true,
+      reason: 'static_vote_not_generated'
+    }
+  }
+
+  if (!status.syncSecretConfigured) {
+    const error = new Error('Synchronisation mini-site vote requise avant mise à jour, mais STATIC_VOTE_SYNC_SECRET n’est pas configuré.')
+    error.statusCode = 409
+    throw error
+  }
+
+  const result = await staticVotePublicationService.syncStaticVoteResponses({ year })
+  if (!result.success) {
+    const error = new Error('Synchronisation mini-site vote incomplète: mise à jour bloquée pour protéger les réponses en cours.')
+    error.statusCode = 409
+    error.details = result
+    throw error
+  }
+
+  return result
 }
 
 async function getConfiguredSoutenancePublicUrl(year) {
@@ -752,13 +802,23 @@ router.post(
         ? req.body.legacyRooms
         : null
       let migrationSummary = null
+      let staticVoteSyncSummary = null
 
       if (legacyRooms) {
+        const existingPlanningCount = await TpiPlanning.countDocuments({ year })
+        if (existingPlanningCount > 0) {
+          staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+        }
+
         migrationSummary = await rebuildWorkflowFromLegacyPlanning({
           year,
           legacyRooms,
           createdBy: req.user
         })
+
+        if (existingPlanningCount === 0) {
+          staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+        }
       }
 
       const validation = await coordinationValidationService.validatePlanningForYear(year)
@@ -770,11 +830,18 @@ router.post(
         summary: validation.summary,
         issues: validation.issues,
         hardConflicts: validation.hardConflicts,
-        warnings: buildPlanningVoteMigrationWarnings(migrationSummary)
+        warnings: [
+          ...buildStaticVoteSyncWarnings(staticVoteSyncSummary),
+          ...buildPlanningVoteMigrationWarnings(migrationSummary)
+        ]
       }
 
       if (migrationSummary) {
         response.migrationSummary = migrationSummary
+      }
+
+      if (staticVoteSyncSummary && !staticVoteSyncSummary.skipped) {
+        response.staticVoteSyncSummary = staticVoteSyncSummary
       }
 
       if (includeEntries) {
@@ -784,7 +851,10 @@ router.post(
       return res.status(200).json(response)
     } catch (error) {
       console.error('Erreur validation planification:', error)
-      return res.status(500).json({ error: 'Erreur lors de la validation de la planification.' })
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la validation de la planification.',
+        details: error.details
+      })
     }
   }
 )
@@ -840,16 +910,26 @@ router.post(
       ? req.body.legacyRooms
       : null
     let migrationSummary = null
+    let staticVoteSyncSummary = null
 
     try {
       await workflowService.getWorkflowYearState(year)
 
       if (legacyRooms) {
+        const existingPlanningCount = await TpiPlanning.countDocuments({ year })
+        if (existingPlanningCount > 0) {
+          staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+        }
+
         migrationSummary = await rebuildWorkflowFromLegacyPlanning({
           year,
           legacyRooms,
           createdBy: req.user
         })
+
+        if (existingPlanningCount === 0) {
+          staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+        }
       }
 
       const planningCount = await TpiPlanning.countDocuments({ year })
@@ -858,6 +938,7 @@ router.post(
           year,
           createdBy: req.user
         })
+        staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
       }
 
       const result = await coordinationValidationService.freezePlanningSnapshot({
@@ -881,7 +962,13 @@ router.post(
       return res.status(201).json({
         success: true,
         summary: migrationSummary,
-        warnings: buildPlanningVoteMigrationWarnings(migrationSummary),
+        staticVoteSyncSummary: staticVoteSyncSummary && !staticVoteSyncSummary.skipped
+          ? staticVoteSyncSummary
+          : undefined,
+        warnings: [
+          ...buildStaticVoteSyncWarnings(staticVoteSyncSummary),
+          ...buildPlanningVoteMigrationWarnings(migrationSummary)
+        ],
         snapshot: {
           year: result.snapshot.year,
           version: result.snapshot.version,
@@ -906,6 +993,24 @@ router.post(
         })
 
         return res.status(error.statusCode || 409).json({
+          error: error.message,
+          details: error.details
+        })
+      }
+
+      if (error.statusCode) {
+        await workflowService.logWorkflowAuditEvent({
+          year,
+          action: 'workflow.planification.freeze',
+          user: req.user,
+          payload: {
+            allowHardConflicts
+          },
+          success: false,
+          error: error.message
+        })
+
+        return res.status(error.statusCode).json({
           error: error.message,
           details: error.details
         })
@@ -1018,6 +1123,7 @@ router.post(
       : null
     const skipEmails = true
     let migrationSummary = null
+    let staticVoteSyncSummary = null
     const workflowWarnings = []
 
     try {
@@ -1037,11 +1143,22 @@ router.post(
       if (legacyRooms || votingTpiCount === 0) {
         const existingPlanningCount = await TpiPlanning.countDocuments({ year })
         if (legacyRooms || existingPlanningCount === 0) {
+          if (existingPlanningCount > 0) {
+            staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+            workflowWarnings.push(...buildStaticVoteSyncWarnings(staticVoteSyncSummary))
+          }
+
           migrationSummary = await rebuildWorkflowFromLegacyPlanning({
             year,
             legacyRooms,
             createdBy: req.user
           })
+
+          if (existingPlanningCount === 0) {
+            staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+            workflowWarnings.push(...buildStaticVoteSyncWarnings(staticVoteSyncSummary))
+          }
+
           workflowWarnings.push(...buildPlanningVoteMigrationWarnings(migrationSummary))
         }
       }
@@ -1076,6 +1193,7 @@ router.post(
           successfulEmails: result.successfulEmails,
           emailsSkipped: result.emailsSkipped === true,
           emailSkipReason: result.emailSkipReason || AUTOMATIC_EMAIL_SENDS_DISABLED_REASON,
+          staticVoteSyncSummary,
           warnings: workflowWarnings
         },
         success: true
@@ -1089,11 +1207,17 @@ router.post(
         activePhases: nextWorkflow?.activePhases || [],
         warnings: workflowWarnings,
         summary: migrationSummary,
+        staticVoteSyncSummary: staticVoteSyncSummary && !staticVoteSyncSummary.skipped
+          ? staticVoteSyncSummary
+          : undefined,
         ...result
       })
     } catch (error) {
       console.error('Erreur lancement campagne votes:', error)
-      return res.status(500).json({ error: 'Erreur lors du lancement de la campagne de votes.' })
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors du lancement de la campagne de votes.',
+        details: error.details
+      })
     }
   }
 )
@@ -1526,6 +1650,9 @@ async function refreshGeneratedAccessPublications({
 
   if (voteLinkTarget === 'static') {
     try {
+      const staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
+      result.warnings.push(...buildStaticVoteSyncWarnings(staticVoteSyncSummary))
+
       const generated = await staticVotePublicationService.generateStaticVotesSite(year)
       let published = null
 
@@ -1538,6 +1665,9 @@ async function refreshGeneratedAccessPublications({
       }
 
       result.votePublication = published || generated
+      if (staticVoteSyncSummary && !staticVoteSyncSummary.skipped) {
+        result.votePublication.staticVoteSyncSummary = staticVoteSyncSummary
+      }
     } catch (error) {
       result.warnings.push(`Mini-site vote non rafraîchi: ${error.message}`)
     }
@@ -2838,7 +2968,16 @@ router.post(
     const year = req.validatedParams.year
 
     try {
+      const staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
       const result = await staticVotePublicationService.generateStaticVotesSite(year)
+      const response = {
+        ...result,
+        warnings: buildStaticVoteSyncWarnings(staticVoteSyncSummary)
+      }
+
+      if (staticVoteSyncSummary && !staticVoteSyncSummary.skipped) {
+        response.staticVoteSyncSummary = staticVoteSyncSummary
+      }
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -2849,12 +2988,13 @@ router.post(
           groupCount: result.groupCount,
           accessLinkCount: result.accessLinkCount,
           previewPath: result.previewPath,
-          remoteDir: result.remoteDir
+          remoteDir: result.remoteDir,
+          staticVoteSyncSummary
         },
         success: true
       })
 
-      return res.status(200).json(result)
+      return res.status(200).json(response)
     } catch (error) {
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -2867,7 +3007,8 @@ router.post(
 
       console.error('Erreur generation publication vote statique:', error)
       return res.status(error.statusCode || 500).json({
-        error: error.message || 'Erreur lors de la generation de la publication vote statique.'
+        error: error.message || 'Erreur lors de la generation de la publication vote statique.',
+        details: error.details
       })
     }
   }
@@ -2882,7 +3023,16 @@ router.post(
     const year = req.validatedParams.year
 
     try {
+      const staticVoteSyncSummary = await syncStaticVotesForProtectedUpdate(year)
       const result = await staticVotePublicationService.publishStaticVotesSite(year)
+      const response = {
+        ...result,
+        warnings: buildStaticVoteSyncWarnings(staticVoteSyncSummary)
+      }
+
+      if (staticVoteSyncSummary && !staticVoteSyncSummary.skipped) {
+        response.staticVoteSyncSummary = staticVoteSyncSummary
+      }
 
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -2892,12 +3042,13 @@ router.post(
           publicUrl: result.publicUrl,
           remoteDir: result.remoteDir,
           groupCount: result.groupCount,
-          accessLinkCount: result.accessLinkCount
+          accessLinkCount: result.accessLinkCount,
+          staticVoteSyncSummary
         },
         success: true
       })
 
-      return res.status(200).json(result)
+      return res.status(200).json(response)
     } catch (error) {
       await workflowService.logWorkflowAuditEvent({
         year,
@@ -2910,7 +3061,8 @@ router.post(
 
       console.error('Erreur publication vote statique FTP:', error)
       return res.status(error.statusCode || 500).json({
-        error: error.message || 'Erreur lors de la publication vote statique par FTP.'
+        error: error.message || 'Erreur lors de la publication vote statique par FTP.',
+        details: error.details
       })
     }
   }

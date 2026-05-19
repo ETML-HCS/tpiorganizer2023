@@ -980,6 +980,9 @@ test('POST /api/workflow/:year/access-links/generate orchestre la generation glo
       baseUrl: 'https://votes.example.ch',
       redirectPath: '/votes-2026/'
     })),
+    patchMethod(staticVotePublicationService, 'getStaticVotePublicationStatus', async () => ({
+      available: false
+    })),
     patchMethod(staticVotePublicationService, 'generateStaticVotesSite', async (year) => {
       calls.push(`vote-generate-${year}`)
       return { publicUrl: 'https://votes.example.ch/votes-2026/' }
