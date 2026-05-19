@@ -408,6 +408,32 @@ test('buildStaticDefenseHtml indique la publication source dans la note du formu
   assert.doesNotMatch(warning, /Page du/)
 })
 
+test('buildStaticDefenseHtml ne marque pas le formulaire stale quand le formulaire lie correspond a la publication', () => {
+  const html = buildStaticDefenseHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    publicationVersion: 2,
+    publicationPublishedAt: '2026-04-30T08:30:00.000Z',
+    rooms: []
+  })
+
+  const elements = runStaticDefenseRuntime(html, {
+    personId: 'person-1',
+    name: 'Alice Expert',
+    publicationVersion: 1,
+    voteAccessUrl: 'https://tpi26.test/votes-2026/?ml=vote-token',
+    voteAccessPublicationVersion: 2,
+    voteAccessCreatedAt: '2026-05-02T10:30:00.000Z'
+  })
+  const warningNode = elements.get('static-person-publication-warning')
+  const warning = warningNode.textContent
+
+  assert.match(warning, /Formulaire v2/)
+  assert.match(warning, /Publication du/)
+  assert.doesNotMatch(warning, /Dates à vérifier/)
+  assert.equal(warningNode.classList.contains('is-stale'), false)
+})
+
 test('buildStaticDefenseHtml trie la vue personnelle statique par date puis horaire visible', () => {
   const html = buildStaticDefenseHtml({
     year: 2026,
@@ -600,12 +626,13 @@ test('buildStaticDefenseHtml donne la vue générale et ses filtres aux liens no
   assert.equal(generalViewToggle.textContent, 'Vue générale')
   assert.equal(generalViewToggle.classList.contains('static-hidden'), false)
   assert.equal(filtersNode.classList.contains('static-hidden'), true)
+  assert.equal(elements.get('view-status').textContent, 'Vue pour Alex Expert')
 
   generalViewToggle.click()
 
   assert.match(roomsNode.innerHTML, /Alice Candidate/)
   assert.match(roomsNode.innerHTML, /Bob Candidate/)
-  assert.equal(generalViewToggle.textContent, 'Vue personnelle')
+  assert.equal(generalViewToggle.textContent, 'Vue pour Alex Expert')
   assert.equal(elements.get('view-status').textContent, 'Vue générale')
   assert.equal(filtersNode.classList.contains('static-hidden'), false)
   assert.equal(dateFilter.disabled, false)

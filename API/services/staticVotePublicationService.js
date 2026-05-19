@@ -133,6 +133,21 @@ function formatDateLabel(value) {
   }).format(date)
 }
 
+function formatDateTimeLabel(value) {
+  const date = toDateOrNull(value)
+  if (!date) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('fr-CH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
+}
+
 function formatPersonName(person) {
   if (!person) {
     return ''
@@ -1195,6 +1210,10 @@ function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', m
 
 function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
   const normalizedYear = parseYear(year)
+  const generatedAtLabel = formatDateTimeLabel(generatedAt)
+  const publicationLabel = generatedAtLabel
+    ? `Publication du ${generatedAtLabel}.`
+    : 'Publication disponible.'
 
   return `<!doctype html>
 <html lang="fr">
@@ -2066,6 +2085,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       <div class="vote-header-main">
         <span class="vote-kicker">Lien personnel</span>
         <h1>Votes ${normalizedYear}</h1>
+        <p class="vote-publication-line">${escapeHtml(publicationLabel)}</p>
         <p id="vote-viewer" class="vote-viewer-line">V&eacute;rification du lien.</p>
       </div>
       <aside class="vote-summary" aria-label="Résumé des votes">

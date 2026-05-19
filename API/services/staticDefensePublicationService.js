@@ -1366,13 +1366,17 @@ function buildStaticDefenseHtml({
           parsePublicationVersion(magicLinkViewer.scope && magicLinkViewer.scope.publicationVersion);
       }
 
-      function getVoteAccessPublicationVersion() {
+      function getLinkedVoteAccessPublicationVersion() {
         if (!magicLinkViewer) {
           return null;
         }
 
         return parsePublicationVersion(magicLinkViewer.voteAccessPublicationVersion) ||
-          parsePublicationVersion(magicLinkViewer.voteAccess && magicLinkViewer.voteAccess.publicationVersion) ||
+          parsePublicationVersion(magicLinkViewer.voteAccess && magicLinkViewer.voteAccess.publicationVersion);
+      }
+
+      function getVoteAccessPublicationVersion() {
+        return getLinkedVoteAccessPublicationVersion() ||
           getViewerPublicationVersion();
       }
 
@@ -1448,17 +1452,19 @@ function buildStaticDefenseHtml({
 
         var staticPublicationVersion = getStaticPublicationVersion();
         var viewerPublicationVersion = getViewerPublicationVersion();
+        var linkedVotePublicationVersion = getLinkedVoteAccessPublicationVersion();
+        var publicationVersionToCompare = linkedVotePublicationVersion || viewerPublicationVersion;
         var hasVersionMismatch = Boolean(
           staticPublicationVersion &&
-          viewerPublicationVersion &&
-          staticPublicationVersion !== viewerPublicationVersion
+          publicationVersionToCompare &&
+          staticPublicationVersion !== publicationVersionToCompare
         );
 
         personPublicationWarning.classList.remove('static-hidden');
         personPublicationWarning.classList.toggle('is-stale', hasVersionMismatch);
 
         if (hasVersionMismatch) {
-          var formMetaText = getModificationFormMetaText() || ('Formulaire v' + viewerPublicationVersion);
+          var formMetaText = getModificationFormMetaText() || ('Formulaire v' + publicationVersionToCompare);
           personPublicationWarning.textContent =
             formMetaText + '. Dates à vérifier.';
           return;
@@ -1856,19 +1862,21 @@ function buildStaticDefenseHtml({
 
         var hasGeneralAccess = canUseGeneralView(magicLinkViewer);
         var isGeneralView = isGeneralViewActive();
+        var viewerName = magicLinkViewer && magicLinkViewer.name ? String(magicLinkViewer.name).trim() : '';
+        var personalViewLabel = viewerName ? 'Vue pour ' + viewerName : 'Vue personnelle';
 
         generalViewToggle.classList.toggle('static-hidden', !hasGeneralAccess);
         generalViewToggle.disabled = !hasGeneralAccess;
         generalViewToggle.setAttribute('aria-pressed', isGeneralView ? 'true' : 'false');
-        generalViewToggle.textContent = isGeneralView ? 'Vue personnelle' : 'Vue générale';
+        generalViewToggle.textContent = isGeneralView ? personalViewLabel : 'Vue générale';
         generalViewToggle.setAttribute(
           'aria-label',
           isGeneralView
-            ? 'Revenir à votre vue personnelle'
+            ? 'Revenir à ' + personalViewLabel
             : 'Afficher la vue générale'
         );
         generalViewToggle.title = isGeneralView
-          ? 'Revenir à votre vue personnelle'
+          ? 'Revenir à ' + personalViewLabel
           : 'Afficher toutes les défenses; seuls date et type de classe restent pris en compte.';
       }
 
@@ -2206,11 +2214,12 @@ function buildStaticDefenseHtml({
         }
 
         if (magicLinkViewer && (magicLinkViewer.name || magicLinkViewer.personId)) {
+          var viewerName = magicLinkViewer.name ? String(magicLinkViewer.name).trim() : '';
           hideFocusBanner();
           renderViewStatus(
-            'Vue personnelle',
-            magicLinkViewer.name
-              ? 'Défenses liées à ' + magicLinkViewer.name + '.'
+            viewerName ? 'Vue pour ' + viewerName : 'Vue personnelle',
+            viewerName
+              ? 'Défenses liées à ' + viewerName + '.'
               : 'Défenses liées à votre lien magique.'
           );
           return;

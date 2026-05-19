@@ -507,6 +507,7 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   })
 
   assert.match(html, /class="vote-summary"/)
+  assert.match(html, /Publication du/)
   assert.match(html, /vote-date-group/)
   assert.match(html, /buildVoteDateGroups/)
   assert.match(html, /vote-period-group/)
