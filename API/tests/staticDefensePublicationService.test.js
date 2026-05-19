@@ -306,9 +306,10 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /id="defense-data"/)
   assert.match(html, /tpi-soutenance-page static-soutenance-page/)
   assert.match(html, /soutenance-toolbar/)
-  assert.match(html, /static-title-version/)
-  assert.match(html, />v2<\/span>/)
-  assert.match(html, /page créée le/)
+  assert.doesNotMatch(html, /static-title-version/)
+  assert.doesNotMatch(html, />v2<\/span>/)
+  assert.match(html, /Publication du/)
+  assert.doesNotMatch(html, /page créée le/)
   assert.match(html, /salles-container/)
   assert.match(html, /Alice Candidate/)
   assert.match(html, /MATU/)
@@ -329,10 +330,10 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /id="static-person-ical"/)
   assert.match(html, /id="static-person-ical-download"/)
   assert.match(html, /id="static-person-vote-link"/)
-  assert.match(html, /id="static-person-vote-meta"/)
+  assert.doesNotMatch(html, /id="static-person-vote-meta"/)
   assert.match(html, /id="static-person-publication-warning"/)
   assert.match(html, /Demander une modification/)
-  assert.match(html, /Formulaire lié à la publication affichée/)
+  assert.match(html, /Formulaire actif/)
   assert.match(html, /id="static-general-view-toggle"/)
   assert.match(html, /id="static-general-filters"/)
   assert.match(html, /id="static-general-filter-date"/)
@@ -376,14 +377,12 @@ test('buildStaticDefenseHtml avertit quand le lien personnel vise une autre publ
     voteAccessCreatedAt: '2026-05-02T10:30:00.000Z'
   })
   const warning = elements.get('static-person-publication-warning').textContent
-  const formMeta = elements.get('static-person-vote-meta').textContent
 
   assert.equal(elements.get('static-person-vote-link').href, 'https://tpi26.test/votes-2026/?ml=vote-token')
-  assert.match(formMeta, /Formulaire v3/)
-  assert.match(formMeta, /créé le/)
   assert.match(warning, /Formulaire v3/)
+  assert.match(warning, /du/)
   assert.doesNotMatch(warning, /mini-site/)
-  assert.match(warning, /Dates différentes possibles/)
+  assert.match(warning, /Dates à vérifier/)
 })
 
 test('buildStaticDefenseHtml indique la publication source dans la note du formulaire', () => {
@@ -404,8 +403,9 @@ test('buildStaticDefenseHtml indique la publication source dans la note du formu
   const warning = elements.get('static-person-publication-warning').textContent
 
   assert.match(warning, /Formulaire v2/)
-  assert.match(warning, /Publication v2 du/)
-  assert.match(warning, /page générée le/)
+  assert.match(warning, /Publication du/)
+  assert.doesNotMatch(warning, /Publication v2 du/)
+  assert.doesNotMatch(warning, /Page du/)
 })
 
 test('buildStaticDefenseHtml trie la vue personnelle statique par date puis horaire visible', () => {

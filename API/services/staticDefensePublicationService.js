@@ -735,20 +735,6 @@ body {
   flex-wrap: wrap;
 }
 
-.static-soutenance-page .static-title-version {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 2px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  font-size: 0.82rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
 .static-soutenance-page .static-hero-pdf-action {
   min-width: 56px;
   min-height: 34px;
@@ -809,20 +795,6 @@ body {
   background: #0f766e;
 }
 
-.static-soutenance-page .soutenance-person-vote-meta {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 1px solid #bfdbfe;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1e3a8a;
-  font-size: 0.78rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
 .static-soutenance-page .soutenance-person-publication-warning {
   flex: 1 0 100%;
   margin: -2px 0 0;
@@ -880,8 +852,7 @@ body {
   }
 
   .static-soutenance-page .soutenance-person-ical-button,
-  .static-soutenance-page .soutenance-person-vote-button,
-  .static-soutenance-page .soutenance-person-vote-meta {
+  .static-soutenance-page .soutenance-person-vote-button {
     width: 100%;
     min-width: 0;
     white-space: normal;
@@ -1007,24 +978,10 @@ function buildStaticDefenseHtml({
     rooms: normalizedRooms
   }
   const css = buildStaticSoutenanceCss()
-  const titleVersionBadge = normalizedPublicationVersion
-    ? `<span class="static-title-version">v${escapeHtml(normalizedPublicationVersion)}</span>`
-    : ''
-  const publicationMetaParts = []
   const publicationPublishedAtLabel = formatDateTimeLabel(normalizedPublicationPublishedAt)
-  const generatedAtLabel = formatDateTimeLabel(generatedAt)
-
-  if (publicationPublishedAtLabel) {
-    publicationMetaParts.push(`publiée le ${publicationPublishedAtLabel}`)
-  }
-
-  if (generatedAtLabel) {
-    publicationMetaParts.push(`page créée le ${generatedAtLabel}`)
-  }
-
-  const publicationGreeting = publicationMetaParts.length > 0
-    ? `Version statique ${publicationMetaParts.join(' · ')}.`
-    : 'Version statique publiée pour consultation.'
+  const publicationGreeting = publicationPublishedAtLabel
+    ? `Publication du ${publicationPublishedAtLabel}.`
+    : 'Publication disponible.'
 
   return `<!doctype html>
 <html lang="fr">
@@ -1039,7 +996,7 @@ function buildStaticDefenseHtml({
     <header class="soutenance-toolbar">
       <div class="soutenance-toolbar-head soutenance-toolbar-hero has-fullscreen-action">
         <div class="soutenance-toolbar-hero-content">
-          <div class="title static-title-line">Défenses ${escapeHtml(normalizedYear)}${titleVersionBadge ? ` ${titleVersionBadge}` : ''}</div>
+          <div class="title static-title-line">Défenses ${escapeHtml(normalizedYear)}</div>
           <p class="soutenance-toolbar-greeting">${escapeHtml(publicationGreeting)}</p>
           <div class="soutenance-hero-meta">
             <span class="static-filter-result" id="result-count"></span>
@@ -1116,7 +1073,7 @@ function buildStaticDefenseHtml({
     ></section>
 
     <section class="soutenance-person-ical static-hidden" id="static-person-ical">
-      <p id="static-person-actions-copy">Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.</p>
+      <p id="static-person-actions-copy">iCal disponible.</p>
       <div class="soutenance-person-ical-actions">
         <button
           type="button"
@@ -1134,10 +1091,6 @@ function buildStaticDefenseHtml({
           target="_blank"
           rel="noopener noreferrer"
         >Demander une modification</a>
-        <span
-          class="soutenance-person-vote-meta static-hidden"
-          id="static-person-vote-meta"
-        ></span>
         <button
           type="button"
           class="soutenance-person-ical-button static-general-view-toggle static-hidden"
@@ -1180,7 +1133,6 @@ function buildStaticDefenseHtml({
       var personIcalLabel = document.getElementById('static-person-ical-label');
       var personActionsCopy = document.getElementById('static-person-actions-copy');
       var personVoteLink = document.getElementById('static-person-vote-link');
-      var personVoteMeta = document.getElementById('static-person-vote-meta');
       var personPublicationWarning = document.getElementById('static-person-publication-warning');
       var generalViewToggle = document.getElementById('static-general-view-toggle');
       var generalFiltersNode = document.getElementById('static-general-filters');
@@ -1450,65 +1402,37 @@ function buildStaticDefenseHtml({
       }
 
       function getPublicationMetaText() {
-        var publicationVersion = getStaticPublicationVersion();
         var publicationPublishedAt = formatDateTime(payload.publicationPublishedAt);
         var generatedAt = formatDateTime(payload.generatedAt);
-        var publicationText = '';
-        var generationText = generatedAt ? 'page générée le ' + generatedAt : '';
 
-        if (publicationVersion && publicationPublishedAt) {
-          publicationText = 'Publication v' + publicationVersion + ' du ' + publicationPublishedAt;
-        } else if (publicationVersion) {
-          publicationText = 'Publication v' + publicationVersion;
-        } else if (publicationPublishedAt) {
-          publicationText = 'Publication des défenses du ' + publicationPublishedAt;
+        if (publicationPublishedAt) {
+          return 'Publication du ' + publicationPublishedAt + '.';
         }
 
-        if (publicationText && generationText && publicationPublishedAt !== generatedAt) {
-          return publicationText + '; ' + generationText + '.';
-        }
-
-        if (publicationText) {
-          return publicationText + '.';
-        }
-
-        if (generationText) {
-          return generationText.charAt(0).toUpperCase() + generationText.slice(1) + '.';
+        if (generatedAt) {
+          return 'Page du ' + generatedAt + '.';
         }
 
         return '';
       }
 
       function getModificationFormMetaText() {
-        var parts = [];
         var publicationVersion = getVoteAccessPublicationVersion();
         var createdAt = formatDateTime(getVoteAccessCreatedAt());
 
+        if (publicationVersion && createdAt) {
+          return 'Formulaire v' + publicationVersion + ' du ' + createdAt;
+        }
+
         if (publicationVersion) {
-          parts.push('Formulaire v' + publicationVersion);
+          return 'Formulaire v' + publicationVersion;
         }
 
         if (createdAt) {
-          parts.push('créé le ' + createdAt);
+          return 'Formulaire du ' + createdAt;
         }
 
-        return parts.join(' · ');
-      }
-
-      function syncPersonVoteMeta(hasVoteAccess) {
-        if (!personVoteMeta) {
-          return;
-        }
-
-        if (!hasVoteAccess) {
-          personVoteMeta.classList.add('static-hidden');
-          personVoteMeta.textContent = '';
-          return;
-        }
-
-        var formMetaText = getModificationFormMetaText();
-        personVoteMeta.textContent = formMetaText;
-        personVoteMeta.classList.toggle('static-hidden', !formMetaText);
+        return '';
       }
 
       function syncPersonPublicationWarning(hasVoteAccess) {
@@ -1536,7 +1460,7 @@ function buildStaticDefenseHtml({
         if (hasVersionMismatch) {
           var formMetaText = getModificationFormMetaText() || ('Formulaire v' + viewerPublicationVersion);
           personPublicationWarning.textContent =
-            formMetaText + '. Dates différentes possibles.';
+            formMetaText + '. Dates à vérifier.';
           return;
         }
 
@@ -1544,7 +1468,7 @@ function buildStaticDefenseHtml({
         var formMetaText = getModificationFormMetaText();
         personPublicationWarning.textContent =
           (formMetaText ? formMetaText + '. ' : '') +
-          (metaText || 'Formulaire lié à la publication affichée.');
+          (metaText || 'Formulaire actif.');
       }
 
       function decimalTime(value) {
@@ -1980,17 +1904,16 @@ function buildStaticDefenseHtml({
           }
         }
 
-        syncPersonVoteMeta(hasVoteAccess);
         syncPersonPublicationWarning(hasVoteAccess);
 
         if (personActionsCopy) {
           personActionsCopy.textContent = hasGeneralAccess
             ? (isGeneralViewActive()
-              ? 'Vue générale active. Vous pouvez revenir à votre vue personnelle.'
-              : 'Votre lien permet aussi de consulter la vue générale des défenses.')
+              ? 'Vue générale active.'
+              : 'Vue générale disponible.')
             : hasVoteAccess
-              ? 'Télécharger votre iCal ou demander une modification de créneau.'
-              : 'Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.';
+              ? 'iCal et modification disponibles.'
+              : 'iCal disponible.';
         }
 
         if (hasIcalEvents) {
@@ -1998,7 +1921,7 @@ function buildStaticDefenseHtml({
             'aria-label',
             'Télécharger votre iCal Outlook pour ' + (magicLinkViewer.name || 'vos défenses')
           );
-          personIcalLabel.textContent = 'Télécharger votre iCal (' + currentPersonIcalEvents.length + ')';
+          personIcalLabel.textContent = 'iCal (' + currentPersonIcalEvents.length + ')';
         }
       }
 

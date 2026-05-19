@@ -518,8 +518,8 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   assert.match(html, /mainGrid\.append\(side, content, asideRemark\)/)
   assert.match(html, /dataset\.proposalArea/)
   assert.match(html, /updateSummary/)
-  assert.match(html, /Transmettre/)
-  assert.match(html, /Créneaux alternatifs/)
+  assert.match(html, /Envoyer/)
+  assert.match(html, /Autres créneaux/)
   assert.match(html, /vote-proposal-head/)
   assert.match(html, /vote-proposal-title/)
   assert.doesNotMatch(html, /vote-proposal-context/)
@@ -533,8 +533,8 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   assert.match(html, /is-just-sent/)
   assert.match(html, /isAlreadySubmittedError/)
   assert.match(html, /response\.status !== 409/)
-  assert.match(html, /Vos informations pour le TPI de/)
-  assert.match(html, /Il n’est plus possible de les modifier/)
+  assert.match(html, /TPI de/)
+  assert.match(html, /Modification impossible/)
   assert.doesNotMatch(html, /Aucune date proposée ne convient/)
   assert.doesNotMatch(html, /data-hard-constraint/)
   assert.match(html, /Unique/)
@@ -572,7 +572,7 @@ test('buildStaticVoteHtml annonce la fermeture quand aucun vote n est ouvert', (
     groups: []
   })
 
-  assert.match(html, /Les demandes de modification d’horaires ne sont plus possibles\./)
+  assert.match(html, /Demandes fermées\./)
 })
 
 test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote folder', async (t) => {
@@ -723,7 +723,7 @@ test('buildStaticVoteArbitragePhp verifies signed arbitration tokens and stores 
   assert.match(php, /hash_hmac\('sha256', \$body, \$secret, true\)/)
   assert.match(php, /arbitrages\.jsonl/)
   assert.match(php, /Une raison est requise en cas de refus/)
-  assert.match(php, /Transmettre ma réponse/)
+  assert.match(php, /Envoyer ma réponse/)
 })
 
 test('buildStaticVoteSyncPhp requires the dedicated sync secret', () => {

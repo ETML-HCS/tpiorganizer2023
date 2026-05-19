@@ -1113,7 +1113,7 @@ async function buildStaticVoteCampaignPayload(year, generatedAt = new Date().toI
   }
 }
 
-function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', message = 'Le module de vote est accessible uniquement depuis le lien personnel transmis par email.') {
+function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', message = 'Ouvrez cette page depuis votre lien personnel.') {
   const normalizedYear = parseYear(year)
 
   return `<!doctype html>
@@ -1184,10 +1184,10 @@ function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', m
 </head>
 <body>
   <main>
-    <span class="vote-unavailable-kicker">Votes coordination ${normalizedYear}</span>
+    <span class="vote-unavailable-kicker">Votes ${normalizedYear}</span>
     <h1>${escapeHtml(title)}</h1>
     <p>${escapeHtml(message)}</p>
-    <p class="vote-unavailable-status">Aucun vote n'est affiche depuis l'adresse publique. Le contenu est charge uniquement apres validation du lien nominatif.</p>
+    <p class="vote-unavailable-status">Lien personnel requis.</p>
   </main>
 </body>
 </html>`
@@ -1202,7 +1202,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>Votes coordination ${normalizedYear}</title>
+  <title>Votes ${normalizedYear}</title>
   <style>
     :root {
       color-scheme: light;
@@ -2065,14 +2065,13 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     <header class="vote-header">
       <div class="vote-header-main">
         <span class="vote-kicker">Lien personnel</span>
-        <h1>Votes coordination ${normalizedYear}</h1>
-        <p id="vote-viewer" class="vote-viewer-line">V&eacute;rification du lien personnel.</p>
+        <h1>Votes ${normalizedYear}</h1>
+        <p id="vote-viewer" class="vote-viewer-line">V&eacute;rification du lien.</p>
       </div>
-      <aside class="vote-summary" aria-label="Resume des votes">
+      <aside class="vote-summary" aria-label="Résumé des votes">
         <strong id="vote-count">0 / 0 r&eacute;ponses</strong>
-        <span id="vote-progress-text">Chargement des votes.</span>
+        <span id="vote-progress-text">Chargement.</span>
         <div class="vote-progress" aria-hidden="true"><span id="vote-progress-fill"></span></div>
-        <small>Campagne ${escapeHtml(campaignId || '')}</small>
       </aside>
     </header>
     <main id="vote-root" class="vote-list" aria-live="polite"></main>
@@ -2262,7 +2261,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           var remaining = Math.max(total - completed, 0);
           var progress = section.querySelector('[data-date-progress]');
           if (progress) {
-            progress.textContent = completed + ' / ' + total + ' ' + pluralize(total, 'réponse transmise', 'réponses transmises');
+            progress.textContent = completed + '/' + total + ' transmis';
             progress.classList.toggle('is-complete', total > 0 && remaining === 0);
           }
         });
@@ -2271,8 +2270,8 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       function setViewer() {
         var name = bootstrap.viewer && bootstrap.viewer.name ? bootstrap.viewer.name : '';
         viewer.textContent = name
-          ? 'Lien vérifié pour ' + name
-          : 'Lien personnel valide.';
+          ? 'Pour ' + name
+          : 'Lien valide.';
       }
 
       function updateSummary() {
@@ -2285,16 +2284,16 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
 
         if (countLabel) {
           countLabel.textContent = total > 0
-            ? completed + ' / ' + total + ' ' + pluralize(total, 'réponse', 'réponses')
+            ? completed + '/' + total + ' ' + pluralize(total, 'réponse', 'réponses')
             : 'Aucun vote';
         }
 
         if (progressText) {
           progressText.textContent = total === 0
-            ? 'Aucun vote ouvert pour ce lien.'
+            ? 'Aucun vote ouvert.'
             : remaining === 0
-              ? 'Toutes les réponses sont transmises.'
-              : remaining + ' ' + pluralize(remaining, 'réponse restante', 'réponses restantes') + '.';
+              ? 'Tout est transmis.'
+              : remaining + ' à transmettre.';
         }
 
         if (progressFill) {
@@ -2349,7 +2348,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       }
 
       function getProposalLimitMessage(maxProposals) {
-        return 'Maximum ' + maxProposals + ' demi-journée' + (maxProposals > 1 ? 's' : '') + ' par réponse.';
+        return 'Maximum ' + maxProposals + ' demi-journée' + (maxProposals > 1 ? 's' : '') + '.';
       }
 
       function isSpecialRequestAllowed(group) {
@@ -2445,7 +2444,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           return {
             tone: 'busy',
             label: 'Très demandé',
-            title: 'Indicateur de génération: beaucoup de préférences pointaient déjà vers cette demi-journée.'
+            title: 'Beaucoup de demandes.'
           };
         }
 
@@ -2453,7 +2452,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           return {
             tone: 'medium',
             label: 'Déjà demandé',
-            title: 'Indicateur de génération: plusieurs préférences pointaient déjà vers cette demi-journée.'
+            title: 'Plusieurs demandes.'
           };
         }
 
@@ -2461,7 +2460,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           return {
             tone: 'easy',
             label: 'Peu demandé',
-            title: 'Indicateur de génération: peu de préférences pointaient vers cette demi-journée.'
+            title: 'Peu de demandes.'
           };
         }
 
@@ -2789,8 +2788,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           createTextElement(
             'p',
             '',
-            'Vos informations pour le TPI de ' + getTpiCandidateName(group) +
-              ' ont été transmises. Il n’est plus possible de les modifier.'
+            'TPI de ' + getTpiCandidateName(group) + ' transmis. Modification impossible.'
           )
         );
         sent.append(copy, badge);
@@ -2814,12 +2812,12 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var state = getCardState(card);
 
         if (state.mode !== 'ok' && state.mode !== 'proposal') {
-          setStatus(card, 'Choisissez une réponse avant de transmettre.', 'error');
+          setStatus(card, 'Choisissez une réponse.', 'error');
           return;
         }
 
         if (state.mode === 'proposal' && state.proposedSlotIds.length === 0 && !state.specialRequest) {
-          setStatus(card, 'Choisissez une date proposée ou une demande spéciale hors liste.', 'error');
+          setStatus(card, 'Choisissez une date ou Hors liste.', 'error');
           return;
         }
 
@@ -2830,24 +2828,24 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         }
 
         if (state.mode === 'proposal' && state.specialRequest && state.proposedSlotIds.length > 0) {
-          setStatus(card, 'La demande spéciale hors liste remplace les dates proposées.', 'error');
+          setStatus(card, 'Hors liste remplace les dates cochées.', 'error');
           return;
         }
 
         if (state.onlyAvailabilitySlotIds.length > 0 && state.onlyAvailabilitySlotIds.some(function (slotId) { return state.proposedSlotIds.indexOf(slotId) === -1; })) {
-          setStatus(card, 'La seule disponibilité doit correspondre à une demi-journée cochée.', 'error');
+          setStatus(card, 'Unique doit correspondre à une case cochée.', 'error');
           return;
         }
 
         if (state.specialRequest && (!state.specialRequest.reason || !state.specialRequest.requestedDate)) {
-          setStatus(card, 'La demande spéciale hors liste exige une date et une raison.', 'error');
+          setStatus(card, 'Indiquez une date et une raison.', 'error');
           return;
         }
 
         var submitButton = card.querySelector('button[type="submit"]');
         submitButton.disabled = true;
-        submitButton.textContent = 'Transmission...';
-        setStatus(card, 'Transmission en cours...', '');
+        submitButton.textContent = 'Envoi...';
+        setStatus(card, 'Envoi en cours...', '');
 
         try {
           var response = await fetch(buildSubmitUrl(), {
@@ -2874,7 +2872,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           }
 
           if (!response.ok || data.success !== true) {
-            throw new Error(data.error || 'Réponse refusée.');
+            throw new Error(data.error || 'Envoi refusé.');
           }
 
           submittedTpiIds.add(getGroupTpiId(group));
@@ -2882,8 +2880,8 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           updateSummary();
         } catch (error) {
           submitButton.disabled = false;
-          submitButton.textContent = 'Transmettre';
-          setStatus(card, error && error.message ? error.message : 'Erreur lors de la transmission.', 'error');
+          submitButton.textContent = 'Envoyer';
+          setStatus(card, error && error.message ? error.message : 'Envoi impossible.', 'error');
         }
       }
 
@@ -3104,19 +3102,19 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var fixedSection = document.createElement('section');
         fixedSection.className = 'vote-section';
         var fixedTitle = document.createElement('h3');
-        fixedTitle.textContent = 'Créneau proposé';
+        fixedTitle.textContent = 'Créneau';
         fixedSection.append(fixedTitle, createSlotNode(group.fixedSlot, 'is-fixed'));
 
         var decisionSection = document.createElement('section');
         decisionSection.className = 'vote-section';
         var decisionTitle = document.createElement('h3');
-        decisionTitle.textContent = 'Votre réponse';
+        decisionTitle.textContent = 'Réponse';
 
         var mode = document.createElement('div');
         mode.className = 'vote-mode';
         mode.append(
-          createModeChoice(card, 'ok', 'Garder ce créneau', 'La date proposée convient.'),
-          createModeChoice(card, 'proposal', 'Demander un autre créneau', 'Choisir une demi-journée ou une demande hors liste.')
+          createModeChoice(card, 'ok', 'Accepter', 'Ce créneau convient.'),
+          createModeChoice(card, 'proposal', 'Autre créneau', 'Choisissez une demi-journée ou Hors liste.')
         );
         decisionSection.append(decisionTitle, mode);
 
@@ -3128,7 +3126,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         proposalHead.className = 'vote-proposal-head';
         var proposalTitle = document.createElement('h3');
         proposalTitle.className = 'vote-proposal-title';
-        proposalTitle.textContent = 'Créneaux alternatifs';
+        proposalTitle.textContent = 'Autres créneaux';
         var proposalCount = document.createElement('span');
         proposalCount.className = 'vote-proposal-count';
         proposalCount.dataset.proposalCount = 'true';
@@ -3142,7 +3140,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
           var emptyProposal = document.createElement('p');
           emptyProposal.className = 'vote-empty-note';
           emptyProposal.textContent = 'Aucune option publiée.';
-          emptyProposal.title = 'Utilisez une demande hors liste si nécessaire.';
+          emptyProposal.title = 'Utilisez Hors liste.';
           proposalList.append(emptyProposal);
         }
         proposalSection.append(proposalHead, proposalList);
@@ -3153,7 +3151,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         special.hidden = true;
         var specialLabel = document.createElement('label');
         specialLabel.className = 'vote-special-toggle';
-        specialLabel.title = 'Demande spéciale hors liste: remplace les dates proposées.';
+        specialLabel.title = 'Hors liste remplace les dates cochées.';
         var specialInput = document.createElement('input');
         specialInput.type = 'checkbox';
         specialInput.dataset.specialEnabled = 'true';
@@ -3171,15 +3169,15 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var specialReason = document.createElement('textarea');
         specialReason.dataset.specialReason = 'true';
         specialReason.rows = 1;
-        specialReason.placeholder = 'Contrainte ou raison';
-        specialReason.setAttribute('aria-label', 'Contrainte ou raison');
+        specialReason.placeholder = 'Raison';
+        specialReason.setAttribute('aria-label', 'Raison');
         specialFields.append(specialDate, specialReason);
         special.append(specialLabel, specialFields);
 
         var remark = document.createElement('section');
         remark.className = 'vote-section vote-remark';
         var remarkLabel = createTextElement('label', '', 'Remarque');
-        remarkLabel.title = 'Message général optionnel pour l’administration.';
+        remarkLabel.title = 'Optionnel.';
         var remarkId = card.dataset.groupName + '-remark';
         remarkLabel.setAttribute('for', remarkId);
         var remarkField = document.createElement('textarea');
@@ -3187,7 +3185,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         remarkField.dataset.voteRemark = 'true';
         remarkField.rows = 2;
         remarkField.placeholder = 'Optionnel';
-        remarkField.setAttribute('aria-label', 'Remarque générale optionnelle');
+        remarkField.setAttribute('aria-label', 'Remarque optionnelle');
         remark.append(remarkLabel, remarkField);
 
         var actions = document.createElement('div');
@@ -3200,7 +3198,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         var button = document.createElement('button');
         button.className = 'vote-submit';
         button.type = 'submit';
-        button.textContent = 'Transmettre';
+        button.textContent = 'Envoyer';
         button.disabled = false;
         actions.append(status, button);
 
@@ -3210,7 +3208,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         content.className = 'vote-card-content';
         var side = document.createElement('aside');
         side.className = 'vote-card-side';
-        side.setAttribute('aria-label', 'Créneau proposé');
+        side.setAttribute('aria-label', 'Créneau');
         side.append(fixedSection);
         var asideRemark = document.createElement('div');
         asideRemark.className = 'vote-card-aside-remark';
@@ -3313,7 +3311,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         if (!groups.length) {
           var empty = document.createElement('div');
           empty.className = 'vote-empty';
-          empty.textContent = 'Les demandes de modification d’horaires ne sont plus possibles.';
+          empty.textContent = 'Demandes fermées.';
           root.append(empty);
           return;
         }
@@ -3382,7 +3380,7 @@ function staticVoteUnavailable(int $statusCode, string $title, string $message):
     header('Content-Type: text/html; charset=utf-8');
     $safeTitle = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
     $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f5f7fb;--muted:#526071;--line:#d8dee8;--accent:#0f766e;--accent-soft:#e7f5f1;--info:#1d4ed8;--info-soft:#eaf2ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#eaf1f4 0,#f8fafc 220px,#f5f7fb 100%)}main{width:min(560px,calc(100vw - 32px));display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(23,32,51,.10)}.kicker{display:inline-flex;width:fit-content;min-height:28px;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}h1{margin:0;font-size:1.62rem;line-height:1.12;letter-spacing:0}p{margin:0;color:var(--muted);line-height:1.55}.status{padding:12px;border-left:4px solid var(--info);background:var(--info-soft);color:var(--muted);line-height:1.45}</style></head><body><main><span class="kicker">Votes coordination ${normalizedYear}</span><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p><p class="status">Aucun vote n&#039;est affiche depuis cette adresse sans validation du lien nominatif.</p></main></body></html>';
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f5f7fb;--muted:#526071;--line:#d8dee8;--accent:#0f766e;--accent-soft:#e7f5f1;--info:#1d4ed8;--info-soft:#eaf2ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#eaf1f4 0,#f8fafc 220px,#f5f7fb 100%)}main{width:min(560px,calc(100vw - 32px));display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(23,32,51,.10)}.kicker{display:inline-flex;width:fit-content;min-height:28px;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}h1{margin:0;font-size:1.62rem;line-height:1.12;letter-spacing:0}p{margin:0;color:var(--muted);line-height:1.55}.status{padding:12px;border-left:4px solid var(--info);background:var(--info-soft);color:var(--muted);line-height:1.45}</style></head><body><main><span class="kicker">Votes ${normalizedYear}</span><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p><p class="status">Lien personnel requis.</p></main></body></html>';
     exit;
 }
 
@@ -4043,7 +4041,7 @@ function arbitrageRender(array $proposal, string $tokenHash, ?array $existing = 
     if ($name !== '' || $role !== '') {
         echo '<p class="muted">' . trim($name . ($role !== '' ? ' · ' . $role : '')) . '</p>';
     }
-    echo '<div class="meta"><div class="row"><span>Candidat</span><strong>' . $candidate . '</strong></div><div class="row"><span>Sujet</span><span>' . $subject . '</span></div><div class="row"><span>Créneau proposé</span><strong>' . $slot . '</strong></div></div>';
+    echo '<div class="meta"><div class="row"><span>Candidat</span><strong>' . $candidate . '</strong></div><div class="row"><span>Sujet</span><span>' . $subject . '</span></div><div class="row"><span>Créneau</span><strong>' . $slot . '</strong></div></div>';
     if ($message !== '') {
         echo '<div class="message">' . nl2br($message) . '</div>';
     }
@@ -4061,7 +4059,7 @@ function arbitrageRender(array $proposal, string $tokenHash, ?array $existing = 
         echo '</section></main></body></html>';
         return;
     }
-    echo '<form method="post"><div class="choices"><label class="choice"><input type="radio" name="decision" value="accepted" required><span><strong>J’accepte le créneau proposé</strong><br><span class="muted">L’administration pourra confirmer le TPI sur ce créneau.</span></span></label><label class="choice"><input type="radio" name="decision" value="rejected" required><span><strong>Je refuse ce créneau</strong><br><span class="muted">Une raison est requise. Vous pouvez ajouter une proposition.</span></span></label></div><p><label><strong>Raison du refus</strong><textarea name="reason" placeholder="Obligatoire si refus"></textarea></label></p><p><label><strong>Proposition éventuelle</strong><textarea name="alternativeProposal" placeholder="Créneau ou contrainte à considérer"></textarea></label></p><button type="submit">Transmettre ma réponse</button></form></section></main></body></html>';
+    echo '<form method="post"><div class="choices"><label class="choice"><input type="radio" name="decision" value="accepted" required><span><strong>J’accepte</strong><br><span class="muted">Le TPI pourra être confirmé.</span></span></label><label class="choice"><input type="radio" name="decision" value="rejected" required><span><strong>Je refuse</strong><br><span class="muted">Raison requise.</span></span></label></div><p><label><strong>Raison du refus</strong><textarea name="reason" placeholder="Obligatoire si refus"></textarea></label></p><p><label><strong>Autre proposition</strong><textarea name="alternativeProposal" placeholder="Créneau ou contrainte"></textarea></label></p><button type="submit">Envoyer ma réponse</button></form></section></main></body></html>';
 }
 
 if (!is_string($staticVoteArbitrageSecret) || trim($staticVoteArbitrageSecret) === '') {
