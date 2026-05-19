@@ -790,21 +790,21 @@ body {
   white-space: nowrap;
 }
 
-.static-soutenance-page .static-admin-filters {
+.static-soutenance-page .static-general-filters {
   padding: var(--soutenance-space-2);
 }
 
-.static-soutenance-page .static-admin-filters .soutenance-toolbar-filters {
+.static-soutenance-page .static-general-filters .soutenance-toolbar-filters {
   justify-content: flex-start;
 }
 
-.static-soutenance-page .static-admin-view-toggle {
+.static-soutenance-page .static-general-view-toggle {
   border-color: #1d4ed8;
   background: #1d4ed8;
   color: #ffffff;
 }
 
-.static-soutenance-page .static-admin-view-toggle[aria-pressed="true"] {
+.static-soutenance-page .static-general-view-toggle[aria-pressed="true"] {
   border-color: #0f766e;
   background: #0f766e;
 }
@@ -856,13 +856,13 @@ body {
     line-height: 1.3;
   }
 
-  .static-soutenance-page .static-admin-filters .soutenance-toolbar-filters {
+  .static-soutenance-page .static-general-filters .soutenance-toolbar-filters {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .static-soutenance-page .static-admin-filters .soutenance-filter-block {
+  .static-soutenance-page .static-general-filters .soutenance-filter-block {
     min-width: 0;
   }
 
@@ -895,7 +895,7 @@ body {
 }
 
 @media (max-width: 430px) {
-  .static-soutenance-page .static-admin-filters .soutenance-toolbar-filters {
+  .static-soutenance-page .static-general-filters .soutenance-toolbar-filters {
     grid-template-columns: 1fr;
   }
 }
@@ -1057,15 +1057,15 @@ function buildStaticDefenseHtml({
     </header>
 
     <section
-      class="soutenance-toolbar static-admin-filters static-hidden"
-      id="static-admin-filters"
-      aria-label="Filtres de la vue générale admin"
+      class="soutenance-toolbar static-general-filters static-hidden"
+      id="static-general-filters"
+      aria-label="Filtres de la vue générale"
     >
       <div class="soutenance-toolbar-filters">
         <label class="soutenance-filter-block">
           <select
-            id="static-admin-filter-date"
-            aria-label="Filtrer la vue admin par date"
+            id="static-general-filter-date"
+            aria-label="Filtrer la vue générale par date"
             disabled
           >
             <option value="">Date</option>
@@ -1073,8 +1073,8 @@ function buildStaticDefenseHtml({
         </label>
         <label class="soutenance-filter-block">
           <select
-            id="static-admin-filter-class-type"
-            aria-label="Filtrer la vue admin par type de classe"
+            id="static-general-filter-class-type"
+            aria-label="Filtrer la vue générale par type de classe"
             disabled
           >
             <option value="">Type</option>
@@ -1140,12 +1140,12 @@ function buildStaticDefenseHtml({
         ></span>
         <button
           type="button"
-          class="soutenance-person-ical-button static-admin-view-toggle static-hidden"
-          id="static-admin-view-toggle"
-          aria-label="Afficher la vue générale administrateur"
+          class="soutenance-person-ical-button static-general-view-toggle static-hidden"
+          id="static-general-view-toggle"
+          aria-label="Afficher la vue générale"
           aria-pressed="false"
           disabled
-        >Vue admin</button>
+        >Vue générale</button>
       </div>
       <p
         class="soutenance-person-publication-warning static-hidden"
@@ -1182,14 +1182,14 @@ function buildStaticDefenseHtml({
       var personVoteLink = document.getElementById('static-person-vote-link');
       var personVoteMeta = document.getElementById('static-person-vote-meta');
       var personPublicationWarning = document.getElementById('static-person-publication-warning');
-      var adminViewToggle = document.getElementById('static-admin-view-toggle');
-      var adminFiltersNode = document.getElementById('static-admin-filters');
-      var adminDateFilter = document.getElementById('static-admin-filter-date');
-      var adminClassTypeFilter = document.getElementById('static-admin-filter-class-type');
+      var generalViewToggle = document.getElementById('static-general-view-toggle');
+      var generalFiltersNode = document.getElementById('static-general-filters');
+      var generalDateFilter = document.getElementById('static-general-filter-date');
+      var generalClassTypeFilter = document.getElementById('static-general-filter-class-type');
       var printScheduleNode = document.getElementById('static-print-schedule');
       var SLOT_NAME_MAX_LENGTH = ${STATIC_SLOT_NAME_MAX_LENGTH};
       var currentPersonIcalEvents = [];
-      var adminGeneralView = false;
+      var generalView = false;
       var filters = {
         site: '',
         date: '',
@@ -1253,27 +1253,16 @@ function buildStaticDefenseHtml({
         ));
       }
 
-      function isAdminViewer(viewer) {
-        if (!viewer) {
-          return false;
-        }
-
-        if (viewer.isAdmin === true) {
-          return true;
-        }
-
-        var roles = Array.isArray(viewer.roles) ? viewer.roles : [];
-        return roles.some(function (role) {
-          return String(role || '').trim().toLowerCase() === 'admin';
-        });
+      function canUseGeneralView(viewer) {
+        return Boolean(viewer);
       }
 
-      function isAdminGeneralViewActive() {
-        return Boolean(adminGeneralView && isAdminViewer(magicLinkViewer));
+      function isGeneralViewActive() {
+        return Boolean(generalView && canUseGeneralView(magicLinkViewer));
       }
 
       function getEffectiveFilters() {
-        if (!isAdminGeneralViewActive()) {
+        if (!isGeneralViewActive()) {
           return filters;
         }
 
@@ -1290,7 +1279,7 @@ function buildStaticDefenseHtml({
         };
       }
 
-      function getUniqueAdminDateOptions() {
+      function getUniqueGeneralDateOptions() {
         var seen = new Set();
         return rooms.reduce(function (options, room) {
           var label = (room._static && room._static.dateLabel) || room.date || '';
@@ -1311,9 +1300,9 @@ function buildStaticDefenseHtml({
         });
       }
 
-      function populateAdminFilters() {
-        if (adminDateFilter) {
-          adminDateFilter.innerHTML = '<option value="">Date</option>' + getUniqueAdminDateOptions()
+      function populateGeneralFilters() {
+        if (generalDateFilter) {
+          generalDateFilter.innerHTML = '<option value="">Date</option>' + getUniqueGeneralDateOptions()
             .map(function (date) {
               return '<option value="' + html(date) + '">' + html(date) + '</option>';
             })
@@ -1347,21 +1336,21 @@ function buildStaticDefenseHtml({
         window.history.replaceState({}, '', nextUrl.toString());
       }
 
-      function syncAdminFilters() {
-        var isGeneralView = isAdminGeneralViewActive();
+      function syncGeneralFilters() {
+        var isGeneralView = isGeneralViewActive();
 
-        if (adminFiltersNode) {
-          adminFiltersNode.classList.toggle('static-hidden', !isGeneralView);
+        if (generalFiltersNode) {
+          generalFiltersNode.classList.toggle('static-hidden', !isGeneralView);
         }
 
-        if (adminDateFilter) {
-          adminDateFilter.disabled = !isGeneralView;
-          setSelectValue(adminDateFilter, filters.date);
+        if (generalDateFilter) {
+          generalDateFilter.disabled = !isGeneralView;
+          setSelectValue(generalDateFilter, filters.date);
         }
 
-        if (adminClassTypeFilter) {
-          adminClassTypeFilter.disabled = !isGeneralView;
-          setSelectValue(adminClassTypeFilter, filters.classType);
+        if (generalClassTypeFilter) {
+          generalClassTypeFilter.disabled = !isGeneralView;
+          setSelectValue(generalClassTypeFilter, filters.classType);
         }
       }
 
@@ -1670,7 +1659,7 @@ function buildStaticDefenseHtml({
       }
 
       function shouldShowEmptySlots() {
-        if ((magicLinkViewer && !isAdminGeneralViewActive()) || magicLinkPending || magicLinkError) {
+        if ((magicLinkViewer && !isGeneralViewActive()) || magicLinkPending || magicLinkError) {
           return false;
         }
 
@@ -1718,7 +1707,7 @@ function buildStaticDefenseHtml({
         var effectiveFilters = getEffectiveFilters();
         if (!tpi) return false;
         if (magicLinkPending || magicLinkError) return false;
-        if (!isAdminGeneralViewActive() && !doesTpiMatchViewer(tpi, magicLinkViewer)) return false;
+        if (!isGeneralViewActive() && !doesTpiMatchViewer(tpi, magicLinkViewer)) return false;
         if (effectiveFilters.reference && !matchesReferenceFilter(effectiveFilters.reference, tpi.refTpi)) return false;
         if (effectiveFilters.candidate && !normalizeText(tpi.candidat).includes(normalizeText(effectiveFilters.candidate))) return false;
         if (effectiveFilters.experts && !(
@@ -1908,14 +1897,14 @@ function buildStaticDefenseHtml({
         URL.revokeObjectURL(url);
       }
 
-      function updateAdminViewQueryParam() {
+      function updateGeneralViewQueryParam() {
         if (!window.history || typeof window.history.replaceState !== 'function') {
           return;
         }
 
         var nextUrl = new URL(window.location.href);
-        if (isAdminGeneralViewActive()) {
-          nextUrl.searchParams.set('view', 'admin');
+        if (isGeneralViewActive()) {
+          nextUrl.searchParams.set('view', 'general');
           nextUrl.searchParams.delete('mode');
           nextUrl.searchParams.delete('admin');
           nextUrl.searchParams.delete('adminView');
@@ -1930,31 +1919,31 @@ function buildStaticDefenseHtml({
         window.history.replaceState({}, '', nextUrl.toString());
       }
 
-      function setAdminGeneralView(nextValue) {
-        adminGeneralView = Boolean(nextValue && isAdminViewer(magicLinkViewer));
-        updateAdminViewQueryParam();
+      function setGeneralView(nextValue) {
+        generalView = Boolean(nextValue && canUseGeneralView(magicLinkViewer));
+        updateGeneralViewQueryParam();
         render();
       }
 
-      function syncAdminViewToggle() {
-        if (!adminViewToggle) {
+      function syncGeneralViewToggle() {
+        if (!generalViewToggle) {
           return;
         }
 
-        var hasAdminAccess = isAdminViewer(magicLinkViewer);
-        var isGeneralView = isAdminGeneralViewActive();
+        var hasGeneralAccess = canUseGeneralView(magicLinkViewer);
+        var isGeneralView = isGeneralViewActive();
 
-        adminViewToggle.classList.toggle('static-hidden', !hasAdminAccess);
-        adminViewToggle.disabled = !hasAdminAccess;
-        adminViewToggle.setAttribute('aria-pressed', isGeneralView ? 'true' : 'false');
-        adminViewToggle.textContent = isGeneralView ? 'Vue perso' : 'Vue admin';
-        adminViewToggle.setAttribute(
+        generalViewToggle.classList.toggle('static-hidden', !hasGeneralAccess);
+        generalViewToggle.disabled = !hasGeneralAccess;
+        generalViewToggle.setAttribute('aria-pressed', isGeneralView ? 'true' : 'false');
+        generalViewToggle.textContent = isGeneralView ? 'Vue personnelle' : 'Vue générale';
+        generalViewToggle.setAttribute(
           'aria-label',
           isGeneralView
             ? 'Revenir à votre vue personnelle'
-            : 'Afficher la vue générale administrateur'
+            : 'Afficher la vue générale'
         );
-        adminViewToggle.title = isGeneralView
+        generalViewToggle.title = isGeneralView
           ? 'Revenir à votre vue personnelle'
           : 'Afficher toutes les défenses; seuls date et type de classe restent pris en compte.';
       }
@@ -1965,14 +1954,14 @@ function buildStaticDefenseHtml({
         var hasIcalEvents = currentPersonIcalEvents.length > 0;
         var voteAccessUrl = magicLinkViewer && magicLinkViewer.voteAccessUrl ? String(magicLinkViewer.voteAccessUrl) : '';
         var hasVoteAccess = Boolean(voteAccessUrl);
-        var hasAdminAccess = isAdminViewer(magicLinkViewer);
-        var shouldShow = Boolean(magicLinkViewer && (hasIcalEvents || hasVoteAccess || hasAdminAccess));
+        var hasGeneralAccess = canUseGeneralView(magicLinkViewer);
+        var shouldShow = Boolean(magicLinkViewer && (hasIcalEvents || hasVoteAccess || hasGeneralAccess));
 
         personIcalNode.classList.toggle('static-hidden', !shouldShow);
         personIcalButton.disabled = !hasIcalEvents;
         personIcalButton.classList.toggle('static-hidden', !hasIcalEvents);
         personVoteLink.classList.toggle('static-hidden', !hasVoteAccess);
-        syncAdminViewToggle();
+        syncGeneralViewToggle();
 
         if (hasVoteAccess) {
           personVoteLink.href = voteAccessUrl;
@@ -1995,10 +1984,10 @@ function buildStaticDefenseHtml({
         syncPersonPublicationWarning(hasVoteAccess);
 
         if (personActionsCopy) {
-          personActionsCopy.textContent = hasAdminAccess
-            ? (isAdminGeneralViewActive()
+          personActionsCopy.textContent = hasGeneralAccess
+            ? (isGeneralViewActive()
               ? 'Vue générale active. Vous pouvez revenir à votre vue personnelle.'
-              : 'Votre lien administrateur permet aussi d afficher la vue générale.')
+              : 'Votre lien permet aussi de consulter la vue générale des défenses.')
             : hasVoteAccess
               ? 'Télécharger votre iCal ou demander une modification de créneau.'
               : 'Télécharger votre iCal pour insérer vos défenses dans votre agenda Outlook.';
@@ -2048,7 +2037,9 @@ function buildStaticDefenseHtml({
         }
 
         var rows = collectPrintRows(filteredRooms);
-        var title = magicLinkViewer && magicLinkViewer.name
+        var title = isGeneralViewActive()
+          ? 'Horaires des défenses ' + payload.year
+          : magicLinkViewer && magicLinkViewer.name
           ? 'Horaires de ' + magicLinkViewer.name
           : 'Horaires des défenses ' + payload.year;
         var meta = rows.length + ' défense' + (rows.length > 1 ? 's' : '');
@@ -2094,7 +2085,7 @@ function buildStaticDefenseHtml({
 
       function isAnyFilterApplied() {
         var effectiveFilters = getEffectiveFilters();
-        return Boolean((magicLinkViewer && !isAdminGeneralViewActive()) || magicLinkPending || magicLinkError) || Object.keys(effectiveFilters).some(function (key) {
+        return Boolean((magicLinkViewer && !isGeneralViewActive()) || magicLinkPending || magicLinkError) || Object.keys(effectiveFilters).some(function (key) {
           return Boolean(effectiveFilters[key]);
         });
       }
@@ -2239,11 +2230,11 @@ function buildStaticDefenseHtml({
         }
       }
 
-      function shouldOpenAdminGeneralViewFromUrl() {
+      function shouldOpenGeneralViewFromUrl() {
         var viewParam = normalizeText(queryParams.get('view') || queryParams.get('mode') || '');
-        var adminParam = normalizeText(queryParams.get('admin') || queryParams.get('adminView') || '');
+        var legacyAdminParam = normalizeText(queryParams.get('admin') || queryParams.get('adminView') || '');
 
-        return viewParam === 'admin' || viewParam === 'general' || adminParam === '1' || adminParam === 'true';
+        return viewParam === 'admin' || viewParam === 'general' || legacyAdminParam === '1' || legacyAdminParam === 'true';
       }
 
       function hideFocusBanner() {
@@ -2282,10 +2273,10 @@ function buildStaticDefenseHtml({
           return;
         }
 
-        if (isAdminGeneralViewActive()) {
+        if (isGeneralViewActive()) {
           hideFocusBanner();
           renderViewStatus(
-            'Vue générale admin',
+            'Vue générale',
             'Toutes les défenses publiées sont affichées. Seuls les filtres date et type de classe restent appliqués.'
           );
           return;
@@ -2332,7 +2323,7 @@ function buildStaticDefenseHtml({
         renderFocusBanner(filteredRooms);
         renderPrintSchedule(filteredRooms);
         syncPersonIcal();
-        syncAdminFilters();
+        syncGeneralFilters();
       }
 
       function getResponsiveColumns() {
@@ -2377,8 +2368,8 @@ function buildStaticDefenseHtml({
           }
 
           magicLinkViewer = data.viewer || null;
-          if (shouldOpenAdminGeneralViewFromUrl()) {
-            adminGeneralView = isAdminViewer(magicLinkViewer);
+          if (shouldOpenGeneralViewFromUrl()) {
+            generalView = canUseGeneralView(magicLinkViewer);
           }
         } catch (error) {
           magicLinkError = error && error.message ? error.message : 'Lien magique invalide ou expiré.';
@@ -2388,9 +2379,9 @@ function buildStaticDefenseHtml({
         }
       }
 
-      populateAdminFilters();
+      populateGeneralFilters();
       readUrlFilters();
-      adminGeneralView = shouldOpenAdminGeneralViewFromUrl() && isAdminViewer(magicLinkViewer);
+      generalView = shouldOpenGeneralViewFromUrl() && canUseGeneralView(magicLinkViewer);
       function triggerStaticPrint() {
         var printButton = document.getElementById('static-print');
         var originalLabel = printButton ? printButton.textContent : '';
@@ -2417,16 +2408,16 @@ function buildStaticDefenseHtml({
 
       document.getElementById('static-print').addEventListener('click', triggerStaticPrint);
       personIcalButton.addEventListener('click', downloadPersonIcal);
-      adminViewToggle.addEventListener('click', function () {
-        setAdminGeneralView(!isAdminGeneralViewActive());
+      generalViewToggle.addEventListener('click', function () {
+        setGeneralView(!isGeneralViewActive());
       });
-      adminDateFilter.addEventListener('change', function () {
-        filters.date = adminDateFilter.value || '';
+      generalDateFilter.addEventListener('change', function () {
+        filters.date = generalDateFilter.value || '';
         updateFilterQueryParam('date', filters.date);
         render();
       });
-      adminClassTypeFilter.addEventListener('change', function () {
-        filters.classType = adminClassTypeFilter.value || '';
+      generalClassTypeFilter.addEventListener('change', function () {
+        filters.classType = generalClassTypeFilter.value || '';
         updateFilterQueryParam('classType', filters.classType);
         render();
       });

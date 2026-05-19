@@ -486,7 +486,7 @@ function buildSoutenanceResponseDeadlineCopy(data = {}) {
   return ''
 }
 
-function buildAdminSoutenanceViewUrl(value) {
+function buildGeneralSoutenanceViewUrl(value) {
   const rawUrl = String(value || '').trim()
 
   if (!rawUrl) {
@@ -495,7 +495,7 @@ function buildAdminSoutenanceViewUrl(value) {
 
   try {
     const url = new URL(rawUrl)
-    url.searchParams.set('view', 'admin')
+    url.searchParams.set('view', 'general')
     return url.toString()
   } catch (error) {
     return rawUrl
@@ -513,20 +513,20 @@ function buildSoutenanceAccessEmail(data) {
     ? data.recipientRoles.map((role) => String(role || '').trim().toLowerCase()).filter(Boolean)
     : []
   const isAdminRecipient = data.isAdmin === true || recipientRoles.includes('admin')
-  const adminGeneralViewUrl = escapeHtml(buildAdminSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl))
+  const generalViewUrl = escapeHtml(buildGeneralSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl))
   const responseDeadlineCopy = buildSoutenanceResponseDeadlineCopy(data)
   const responseDeadlineCopyHtml = escapeHtml(responseDeadlineCopy)
   const responseDeadlineHtml = responseDeadlineCopyHtml
     ? `<p style="margin:0 0 14px; font-size:15px; line-height:23px; color:#0f172a;"><strong style="color:#0f766e;">${responseDeadlineCopyHtml}</strong></p>`
     : ''
   const adminAccessHtml = isAdminRecipient
-    ? `<p style="margin:0 0 14px; color:#1e40af; font-size:15px; line-height:24px;"><strong>Accès administrateur:</strong> ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.</p><p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;"><a href="${adminGeneralViewUrl}" style="color:#1d4ed8; font-weight:700;">Ouvrir la vue générale admin</a></p>`
+    ? `<p style="margin:0 0 14px; color:#1e40af; font-size:15px; line-height:24px;"><strong>Accès administrateur:</strong> ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.</p><p style="margin:0 0 14px; color:#334155; font-size:15px; line-height:24px;"><a href="${generalViewUrl}" style="color:#1d4ed8; font-weight:700;">Ouvrir la vue générale</a></p>`
     : ''
   const responseDeadlineText = responseDeadlineCopy
     ? `\n      ${responseDeadlineCopy}\n`
     : ''
   const adminAccessText = isAdminRecipient
-    ? `\n      Accès administrateur: ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.\n      Vue générale admin: ${buildAdminSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl)}\n`
+    ? `\n      Accès administrateur: ce lien personnel permet aussi d’afficher la vue générale des défenses. Dans cette vue, seuls les filtres date et type de classe restent appliqués.\n      Vue générale: ${buildGeneralSoutenanceViewUrl(data.adminGeneralViewUrl || data.magicLinkUrl)}\n`
     : ''
 
   if (isScheduleUpdateMessage) {

@@ -464,7 +464,7 @@ test('Email soutenanceAccess template falls back to standard wording for unknown
   assert.match(email.text, /L’horaire des défenses TPI 2026 est publié/)
 })
 
-test('Email soutenanceAccess template mentions admin general view for administrators', () => {
+test('Email soutenanceAccess template mentions general view for administrators', () => {
   const email = emailService.emailTemplates.soutenanceAccess({
     brandName: 'Commission TPI',
     recipientName: 'Ada Admin',
@@ -476,12 +476,12 @@ test('Email soutenanceAccess template mentions admin general view for administra
 
   assert.match(email.html, /Accès administrateur/)
   assert.match(email.html, /vue générale des défenses/)
-  assert.match(email.html, /Ouvrir la vue générale admin/)
-  assert.match(email.html, /view=admin/)
+  assert.match(email.html, /Ouvrir la vue générale/)
+  assert.match(email.html, /view=general/)
   assert.match(email.html, /filtres date et type de classe/)
   assert.match(email.text, /Accès administrateur/)
   assert.match(email.text, /vue générale des défenses/)
-  assert.match(email.text, /view=admin/)
+  assert.match(email.text, /view=general/)
 })
 
 test('Email templates should reflect configured brand and reply contact', () => {

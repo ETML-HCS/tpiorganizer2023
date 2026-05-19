@@ -82,6 +82,7 @@ function extractStaticRuntimeScript(html) {
 
 function createFakeStaticElement(id) {
   const classes = new Set()
+  const listeners = new Map()
 
   return {
     id,
@@ -114,7 +115,19 @@ function createFakeStaticElement(id) {
         return classes.has(className)
       }
     },
-    addEventListener() {},
+    addEventListener(eventName, handler) {
+      const handlers = listeners.get(eventName) || []
+      handlers.push(handler)
+      listeners.set(eventName, handlers)
+    },
+    dispatchEvent(event = {}) {
+      const eventName = event.type || event
+      const handlers = listeners.get(eventName) || []
+      handlers.forEach((handler) => handler(event))
+    },
+    click() {
+      this.dispatchEvent({ type: 'click', target: this })
+    },
     setAttribute(name, value) {
       this[name] = String(value)
     },
@@ -320,20 +333,22 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   assert.match(html, /id="static-person-publication-warning"/)
   assert.match(html, /Demander une modification/)
   assert.match(html, /Formulaire lié à la publication affichée/)
-  assert.match(html, /id="static-admin-view-toggle"/)
-  assert.match(html, /id="static-admin-filters"/)
-  assert.match(html, /id="static-admin-filter-date"/)
-  assert.match(html, /id="static-admin-filter-class-type"/)
-  assert.match(html, /Filtrer la vue admin par date/)
-  assert.match(html, /Filtrer la vue admin par type de classe/)
+  assert.match(html, /id="static-general-view-toggle"/)
+  assert.match(html, /id="static-general-filters"/)
+  assert.match(html, /id="static-general-filter-date"/)
+  assert.match(html, /id="static-general-filter-class-type"/)
+  assert.match(html, /Filtrer la vue générale par date/)
+  assert.match(html, /Filtrer la vue générale par type de classe/)
   assert.match(html, /align-items: stretch/)
   assert.match(html, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
-  assert.match(html, /static-admin-filters \.soutenance-toolbar-filters/)
+  assert.match(html, /static-general-filters \.soutenance-toolbar-filters/)
   assert.match(html, /soutenance-person-vote-button/)
   assert.match(html, /@media \(max-width: 430px\)/)
-  assert.match(html, /syncAdminFilters/)
-  assert.match(html, /Vue générale admin/)
-  assert.match(html, /isAdminViewer/)
+  assert.match(html, /syncGeneralFilters/)
+  assert.match(html, /Vue générale/)
+  assert.match(html, /canUseGeneralView/)
+  assert.doesNotMatch(html, />Vue admin</)
+  assert.doesNotMatch(html, /Vue générale admin/)
   assert.match(html, /getEffectiveFilters/)
   assert.match(html, /buildIcalContent/)
   assert.match(html, /getMagicLinkViewerRooms/)
@@ -509,6 +524,111 @@ test('buildStaticDefenseHtml trie la vue personnelle statique par date puis hora
   assert.ok(earlySlotPosition < lateSlotPosition)
   assert.ok(lateSlotPosition < lateDatePosition)
   assert.doesNotMatch(renderedRooms, /Other Person Candidate/)
+})
+
+test('buildStaticDefenseHtml donne la vue générale et ses filtres aux liens non admin', () => {
+  const html = buildStaticDefenseHtml({
+    year: 2026,
+    generatedAt: '2026-05-01T10:00:00.000Z',
+    rooms: [
+      {
+        idRoom: 1,
+        date: '2026-06-10',
+        site: 'ETML',
+        name: 'A101',
+        roomClassMode: 'matu',
+        configSite: {
+          numSlots: 1,
+          firstTpiStart: 8,
+          tpiTime: 1,
+          breakline: 0
+        },
+        tpiDatas: [
+          {
+            id: 'room-personal_0',
+            period: 1,
+            refTpi: '2163',
+            candidat: 'Alice Candidate',
+            expert1: { name: 'Alex Expert', personId: 'person-1' },
+            expert2: { name: 'Expert Two' },
+            boss: { name: 'Boss One' }
+          }
+        ]
+      },
+      {
+        idRoom: 2,
+        date: '2026-06-11',
+        site: 'ETML',
+        name: 'A102',
+        roomClassMode: 'special',
+        configSite: {
+          numSlots: 1,
+          firstTpiStart: 9,
+          tpiTime: 1,
+          breakline: 0
+        },
+        tpiDatas: [
+          {
+            id: 'room-other_0',
+            period: 1,
+            refTpi: '2164',
+            candidat: 'Bob Candidate',
+            expert1: { name: 'Other Expert', personId: 'person-2' },
+            expert2: { name: 'Expert Three' },
+            boss: { name: 'Boss Two' }
+          }
+        ]
+      }
+    ]
+  })
+
+  const elements = runStaticDefenseRuntime(html, {
+    personId: 'person-1',
+    name: 'Alex Expert',
+    roles: ['expert'],
+    isAdmin: false
+  })
+  const roomsNode = elements.get('rooms')
+  const generalViewToggle = elements.get('static-general-view-toggle')
+  const filtersNode = elements.get('static-general-filters')
+  const dateFilter = elements.get('static-general-filter-date')
+  const classTypeFilter = elements.get('static-general-filter-class-type')
+
+  assert.match(roomsNode.innerHTML, /Alice Candidate/)
+  assert.doesNotMatch(roomsNode.innerHTML, /Bob Candidate/)
+  assert.equal(generalViewToggle.disabled, false)
+  assert.equal(generalViewToggle.textContent, 'Vue générale')
+  assert.equal(generalViewToggle.classList.contains('static-hidden'), false)
+  assert.equal(filtersNode.classList.contains('static-hidden'), true)
+
+  generalViewToggle.click()
+
+  assert.match(roomsNode.innerHTML, /Alice Candidate/)
+  assert.match(roomsNode.innerHTML, /Bob Candidate/)
+  assert.equal(generalViewToggle.textContent, 'Vue personnelle')
+  assert.equal(elements.get('view-status').textContent, 'Vue générale')
+  assert.equal(filtersNode.classList.contains('static-hidden'), false)
+  assert.equal(dateFilter.disabled, false)
+  assert.equal(classTypeFilter.disabled, false)
+  assert.match(dateFilter.innerHTML, /10\.06\.2026/)
+  assert.match(dateFilter.innerHTML, /11\.06\.2026/)
+
+  classTypeFilter.value = 'special'
+  classTypeFilter.dispatchEvent({ type: 'change', target: classTypeFilter })
+
+  assert.doesNotMatch(roomsNode.innerHTML, /Alice Candidate/)
+  assert.match(roomsNode.innerHTML, /Bob Candidate/)
+
+  classTypeFilter.value = ''
+  classTypeFilter.dispatchEvent({ type: 'change', target: classTypeFilter })
+
+  const dateOptionMatch = dateFilter.innerHTML.match(/<option value="([^"]*10\.06\.2026[^"]*)">/)
+  assert.ok(dateOptionMatch, 'date filter should expose the first defense date')
+  dateFilter.value = dateOptionMatch[1]
+  dateFilter.dispatchEvent({ type: 'change', target: dateFilter })
+
+  assert.match(roomsNode.innerHTML, /Alice Candidate/)
+  assert.doesNotMatch(roomsNode.innerHTML, /Bob Candidate/)
 })
 
 test('buildStaticDefenseHtml applique le tronquage statique des noms de défense à 24 caractères', () => {
