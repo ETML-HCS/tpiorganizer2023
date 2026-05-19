@@ -668,6 +668,63 @@ function formatVoteSlotLabel(slot) {
   return [dateLabel, periodLabel, roomLabel].filter(Boolean).join(' · ') || 'Creneau a verifier'
 }
 
+function normalizeVoteSlotMatchText(value) {
+  return compactText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function getVoteSlotRoomKeys(slot) {
+  const room = slot?.room && typeof slot.room === 'object' ? slot.room : {}
+  const roomName = compactText(room.name || slot?.roomName || (typeof slot?.room === 'string' ? slot.room : ''))
+  const roomSite = compactText(room.site || slot?.roomSite)
+  const rawKeys = [
+    roomName,
+    roomSite && roomName ? `${roomSite} ${roomName}` : '',
+    roomSite && roomName ? `${roomSite} - ${roomName}` : ''
+  ]
+
+  return Array.from(
+    new Set(rawKeys.map(normalizeVoteSlotMatchText).filter(Boolean))
+  )
+}
+
+function voteSlotRoomKeysMatch(leftKeys, rightKeys) {
+  if (leftKeys.length === 0 || rightKeys.length === 0) {
+    return true
+  }
+
+  return leftKeys.some((leftKey) => rightKeys.some((rightKey) => (
+    leftKey === rightKey ||
+    leftKey.endsWith(` ${rightKey}`) ||
+    rightKey.endsWith(` ${leftKey}`)
+  )))
+}
+
+function voteSlotsMatch(leftSlot, rightSlot) {
+  if (!leftSlot || !rightSlot) {
+    return false
+  }
+
+  const leftDateKey = toPlanningDateKey(leftSlot.date)
+  const rightDateKey = toPlanningDateKey(rightSlot.date)
+  if (!leftDateKey || !rightDateKey || leftDateKey !== rightDateKey) {
+    return false
+  }
+
+  const leftPeriod = normalizeVoteSlotMatchText(getVoteSlotPeriodLabel(leftSlot))
+  const rightPeriod = normalizeVoteSlotMatchText(getVoteSlotPeriodLabel(rightSlot))
+  if (leftPeriod && rightPeriod && leftPeriod !== rightPeriod) {
+    return false
+  }
+
+  return voteSlotRoomKeysMatch(getVoteSlotRoomKeys(leftSlot), getVoteSlotRoomKeys(rightSlot))
+}
+
 function normalizeVoteSlotDisplayLabel(value) {
   const parts = compactText(value).split('·').map((part) => part.trim())
 
@@ -701,12 +758,14 @@ function getVoteDecisionSlots(tpi) {
   const slots = Array.isArray(tpi?.voteDecision?.slots)
     ? tpi.voteDecision.slots
     : []
+  const livePlanningSlot = tpi?.livePlanningSlot || null
 
   const normalizedSlots = slots
     .filter((slot) => compactText(slot?.slotId))
     .map((slot) => ({
       ...slot,
       label: formatVoteSlotLabel(slot.slot),
+      isLivePlanningMatch: voteSlotsMatch(livePlanningSlot, slot.slot),
       positiveCount: Number(slot.positiveCount || 0),
       rejectedCount: Number(slot.rejectedCount || 0),
       pendingCount: Number(slot.pendingCount || 0),
@@ -751,6 +810,75 @@ function getVoteDecisionSlots(tpi) {
         roleDecisions.some((decision) => decision?.hardConstraint)
     }
   })
+}
+
+function getLivePlanningDecisionSlot(tpi, decisionSlots) {
+  if (!tpi?.livePlanningSlot) {
+    return null
+  }
+
+  return (Array.isArray(decisionSlots) ? decisionSlots : [])
+    .find((slot) => slot?.isLivePlanningMatch) || null
+}
+
+function getRoleDecisionFromSlot(slot, role) {
+  const normalizedRole = compactText(role)
+  return (Array.isArray(slot?.roleDecisions) ? slot.roleDecisions : [])
+    .find((decision) => compactText(decision?.role) === normalizedRole) || null
+}
+
+function isLivePlanningConformDecision(decision) {
+  return decision?.decision === 'accepted' || decision?.decision === 'preferred'
+}
+
+function applyLivePlanningRoleStatus(entry, livePlanningDecisionSlot) {
+  const decision = getRoleDecisionFromSlot(livePlanningDecisionSlot, entry?.role)
+  if (!decision) {
+    return entry
+  }
+
+  if (isLivePlanningConformDecision(decision)) {
+    return {
+      ...entry,
+      status: {
+        ...entry.status,
+        decision: 'accepted',
+        responseMode: 'ok',
+        hardConstraint: false,
+        availabilityException: false,
+        specialRequestReason: '',
+        specialRequestDate: null,
+        livePlanningConform: true,
+        livePlanningDecision: decision.decision,
+        voterName: compactText(entry.status?.voterName) || compactText(decision.voterName)
+      }
+    }
+  }
+
+  if (decision.decision === 'pending') {
+    return {
+      ...entry,
+      status: {
+        ...entry.status,
+        decision: 'pending',
+        responseMode: 'pending',
+        hardConstraint: false,
+        livePlanningPending: true,
+        voterName: compactText(entry.status?.voterName) || compactText(decision.voterName)
+      }
+    }
+  }
+
+  return {
+    ...entry,
+    status: {
+      ...entry.status,
+      decision: decision.decision || entry.status?.decision || 'pending',
+      hardConstraint: Boolean(decision.hardConstraint),
+      livePlanningDecision: decision.decision,
+      voterName: compactText(entry.status?.voterName) || compactText(decision.voterName)
+    }
+  }
 }
 
 function isGenericVoteProposalComment(value) {
@@ -1229,26 +1357,36 @@ function buildAdminSlotForceReason(reference, slot) {
 function buildVoteWorkflowRow(tpi) {
   const initialRoleEntries = getVoteRoleEntries(tpi)
   const decisionSlots = getVoteDecisionSlots(tpi)
+  const livePlanningDecisionSlot = getLivePlanningDecisionSlot(tpi, decisionSlots)
   const blockingRolesFromSlots = new Set()
   decisionSlots.forEach((slot) => {
     const roleDecisions = Array.isArray(slot?.roleDecisions) ? slot.roleDecisions : []
     roleDecisions.forEach((decision) => {
+      if (livePlanningDecisionSlot && slot !== livePlanningDecisionSlot) {
+        return
+      }
+
+      if (livePlanningDecisionSlot && isLivePlanningConformDecision(decision)) {
+        return
+      }
+
       if (decision?.hardConstraint || isOnlyAvailabilityVoteComment(decision?.comment)) {
         blockingRolesFromSlots.add(compactText(decision?.role))
       }
     })
   })
-  const roleEntries = initialRoleEntries.map((entry) =>
-    blockingRolesFromSlots.has(entry.role)
+  const roleEntries = initialRoleEntries.map((entry) => {
+    const liveEntry = applyLivePlanningRoleStatus(entry, livePlanningDecisionSlot)
+    return blockingRolesFromSlots.has(liveEntry.role)
       ? {
-          ...entry,
+          ...liveEntry,
           status: {
-            ...entry.status,
+            ...liveEntry.status,
             hardConstraint: true
           }
         }
-      : entry
-  )
+      : liveEntry
+  })
   const constraintSummary = buildVoteConstraintRowSummary({ decisionSlots, roleEntries })
   const respondedRoles = roleEntries.filter((entry) => hasVoteRoleResponded(entry.status))
   const missingRoles = roleEntries.filter((entry) => !hasVoteRoleResponded(entry.status))
@@ -1286,6 +1424,7 @@ function buildVoteWorkflowRow(tpi) {
     fixedSlotLabel: formatVoteSlotLabel(getVoteFixedSlot(tpi)),
     livePlanningSlot: tpi?.livePlanningSlot || null,
     hasLivePlanningSlot: Boolean(tpi?.livePlanningSlot),
+    livePlanningDecisionSlot,
     decisionSlots,
     proposalSummaries: getVoteProposalSummaries(tpi),
     resolutionProposals: Array.isArray(tpi?.resolutionProposals) ? tpi.resolutionProposals : [],

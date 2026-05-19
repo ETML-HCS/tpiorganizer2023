@@ -1050,10 +1050,15 @@ const VoteCommandCenter = ({
     return selectedRow.decisionSlots.map((slot) => {
       const rawDecision = getDecisionForRole(slot, selectedRoleEntry.role)
       const slotId = compactText(slot.slotId)
+      const isLivePlanningMatch = Boolean(slot.isLivePlanningMatch)
       const isOnlyAvailabilityProposal = Boolean(
         selectedRoleProposal?.hasHardConstraint &&
         isOnlyAvailabilityVoteComment(selectedRoleProposal?.comment) &&
         selectedRoleProposalSlotsById.has(slotId) &&
+        rawDecision?.decision === 'preferred'
+      )
+      const isConformWithLivePlanning = isLivePlanningMatch && (
+        rawDecision?.decision === 'accepted' ||
         rawDecision?.decision === 'preferred'
       )
       const decision = isOnlyAvailabilityProposal
@@ -1072,7 +1077,11 @@ const VoteCommandCenter = ({
         slot,
         decision,
         proposalSlot: selectedRoleProposalSlotsById.get(slotId) || null,
-        tone: decision.hardConstraint || isOnlyAvailabilityVoteComment(decision.comment)
+        isLivePlanningMatch,
+        isConformWithLivePlanning,
+        tone: isConformWithLivePlanning
+          ? 'ok'
+          : decision.hardConstraint || isOnlyAvailabilityVoteComment(decision.comment)
           ? 'hard'
           : getSlotDecisionTone(decision.decision),
         isRiskSlot
@@ -1931,7 +1940,7 @@ const VoteCommandCenter = ({
                     ) : null}
 
                     <div className="vote-command-role-slot-list">
-                      {selectedRoleSlotDecisions.map(({ slot, decision, proposalSlot, tone, isRiskSlot }) => {
+                      {selectedRoleSlotDecisions.map(({ slot, decision, proposalSlot, tone, isRiskSlot, isLivePlanningMatch, isConformWithLivePlanning }) => {
                         const isOnlyAvailabilityNote = isOnlyAvailabilityVoteComment(decision.comment)
                         const isBlockingDecision = Boolean(decision.hardConstraint || isOnlyAvailabilityNote)
                         const isConfirmedCase = normalizeCoordinationStatus(selectedRow.tpi?.status) === COORDINATION_STATUS.CONFIRMED
@@ -1959,7 +1968,11 @@ const VoteCommandCenter = ({
                           >
                             <div className="vote-command-role-slot-main">
                               <span>
-                                {slot.isFixed
+                                {isConformWithLivePlanning
+                                  ? 'Conforme'
+                                  : isLivePlanningMatch
+                                    ? 'Planification actuelle'
+                                    : slot.isFixed
                                   ? (selectedLivePlanningLabel ? 'Vote initial' : 'Créneau proposé')
                                   : isOnlyAvailabilityNote
                                     ? 'Seule disponibilité'
@@ -1970,7 +1983,11 @@ const VoteCommandCenter = ({
                               <strong>{slot.label}</strong>
                             </div>
                             <span className={`vote-command-role-decision is-${tone}`}>
-                              {decision.hardConstraint ? 'Contrainte dure' : getSlotDecisionLabel(decision.decision, slot.isFixed)}
+                              {isConformWithLivePlanning
+                                ? 'OK'
+                                : decision.hardConstraint
+                                  ? 'Contrainte dure'
+                                  : getSlotDecisionLabel(decision.decision, slot.isFixed)}
                             </span>
                             {note ? <p>{note}</p> : null}
                             <div className="vote-command-role-slot-meta">
