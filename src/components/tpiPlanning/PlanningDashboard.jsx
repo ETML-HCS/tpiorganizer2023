@@ -678,33 +678,6 @@ function normalizeVoteSlotMatchText(value) {
     .trim()
 }
 
-function getVoteSlotRoomKeys(slot) {
-  const room = slot?.room && typeof slot.room === 'object' ? slot.room : {}
-  const roomName = compactText(room.name || slot?.roomName || (typeof slot?.room === 'string' ? slot.room : ''))
-  const roomSite = compactText(room.site || slot?.roomSite)
-  const rawKeys = [
-    roomName,
-    roomSite && roomName ? `${roomSite} ${roomName}` : '',
-    roomSite && roomName ? `${roomSite} - ${roomName}` : ''
-  ]
-
-  return Array.from(
-    new Set(rawKeys.map(normalizeVoteSlotMatchText).filter(Boolean))
-  )
-}
-
-function voteSlotRoomKeysMatch(leftKeys, rightKeys) {
-  if (leftKeys.length === 0 || rightKeys.length === 0) {
-    return true
-  }
-
-  return leftKeys.some((leftKey) => rightKeys.some((rightKey) => (
-    leftKey === rightKey ||
-    leftKey.endsWith(` ${rightKey}`) ||
-    rightKey.endsWith(` ${leftKey}`)
-  )))
-}
-
 function voteSlotsMatch(leftSlot, rightSlot) {
   if (!leftSlot || !rightSlot) {
     return false
@@ -722,7 +695,7 @@ function voteSlotsMatch(leftSlot, rightSlot) {
     return false
   }
 
-  return voteSlotRoomKeysMatch(getVoteSlotRoomKeys(leftSlot), getVoteSlotRoomKeys(rightSlot))
+  return true
 }
 
 function normalizeVoteSlotDisplayLabel(value) {

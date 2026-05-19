@@ -463,7 +463,7 @@ describe('PlanningDashboard', () => {
     localStorage.setItem(STORAGE_KEYS.ORGANIZER_DATA, JSON.stringify([
       {
         site: 'ETML',
-        name: 'B202',
+        name: 'C303',
         date: '2026-06-11',
         configSite: {
           firstTpiStartTime: '13:00',
@@ -486,10 +486,40 @@ describe('PlanningDashboard', () => {
     fireEvent.click(screen.getByRole('tab', { name: /expert 2 ok/i }))
 
     expect(screen.getAllByText(/Planification actuelle/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/11\.06\.2026 .* Après-midi .* B202/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/11\.06\.2026 .* Après-midi .* C303/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/^Conforme$/i)).toBeInTheDocument()
     expect(screen.getAllByText(/^OK$/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/^Vote initial$/i)).toBeInTheDocument()
+  })
+
+  test('ne marque pas une alternative conforme quand seule la date correspond sans la demi-journée', async () => {
+    localStorage.setItem(STORAGE_KEYS.ORGANIZER_DATA, JSON.stringify([
+      {
+        site: 'ETML',
+        name: 'A22',
+        date: '2026-06-11',
+        configSite: {
+          firstTpiStartTime: '08:00',
+          tpiTimeMinutes: 60,
+          breaklineMinutes: 10
+        },
+        tpiDatas: [
+          { refTpi: '42', period: 1 }
+        ]
+      }
+    ]))
+    coordinationServices.workflowCoordinationService.getYearState.mockResolvedValue({ state: 'voting_open' })
+    coordinationServices.tpiCoordinationService.getByYear.mockResolvedValue([buildVoteProposalTpi()])
+
+    renderDashboard({ initialEntries: ['/coordination/2026?tab=votes'] })
+
+    expect(await screen.findByText('TPI-2026-042')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /expert 2 proposition/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: /expert 2 proposition/i }))
+
+    expect(screen.getAllByText(/11\.06\.2026 .* Matin .* A22/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/^Conforme$/i)).not.toBeInTheDocument()
   })
 
   test('synchronise automatiquement les votes du mini-site au chargement admin', async () => {
