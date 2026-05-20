@@ -47,6 +47,9 @@ const {
   getSharedPlanningCatalog,
   saveSharedPlanningCatalog
 } = require('../services/coordinationCatalogService')
+const {
+  COORDINATION_VOTE_STATUSES
+} = require('../modules/coordination/status')
 const { VOTING_STAKEHOLDER_ROLES } = require('../modules/stakeholders/stakeholderDefinitions')
 
 // Middleware d'authentification
@@ -61,6 +64,8 @@ const ALLOWED_VOTE_DECISIONS = new Set(['accepted', 'rejected', 'preferred'])
 const ALLOWED_VOTE_RESPONSE_MODES = new Set(['ok', 'proposal'])
 const INDICATIVE_QUEUE_VOTE_DECISIONS = ['accepted', 'preferred']
 const VOTE_REQUIRED_ROLES = VOTING_STAKEHOLDER_ROLES
+const OPEN_VOTE_TPI_STATUSES = new Set(COORDINATION_VOTE_STATUSES)
+const CLOSED_VOTE_CAMPAIGN_MESSAGE = 'La campagne de vote est fermée pour ce TPI.'
 const FORCE_OK_ALLOWED_STATUSES = new Set(['pending_slots', 'voting', 'pending_validation', 'manual_required'])
 const FORCE_OK_ROLE_GROUPS = Object.freeze({
   all: VOTE_REQUIRED_ROLES,
@@ -828,6 +833,10 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function isVoteCampaignOpenForTpi(tpi) {
+  return OPEN_VOTE_TPI_STATUSES.has(compactText(tpi?.status))
 }
 
 function normalizeVoteCommentText(value) {
@@ -2298,9 +2307,16 @@ router.get('/votes/pending', authMiddleware, async (req, res) => {
 
     const context = getVoteMagicLinkContext(req)
     if (context) {
-      const scopedTpiIds = await TpiPlanning.find(
-        buildScopedVoteTpiFilter(req, context.year)
-      ).distinct('_id')
+      const scopedTpiFilter = buildScopedVoteTpiFilter(req, context.year)
+
+      if (!scopedTpiFilter) {
+        return res.json([])
+      }
+
+      const scopedTpiIds = await TpiPlanning.find({
+        ...scopedTpiFilter,
+        status: { $in: COORDINATION_VOTE_STATUSES }
+      }).distinct('_id')
 
       if (scopedTpiIds.length === 0) {
         return res.json([])
@@ -2317,12 +2333,16 @@ router.get('/votes/pending', authMiddleware, async (req, res) => {
           { path: 'proposedSlots.slot', select: 'date period startTime endTime room status' }
         ]
       })
-      .populate('slot', 'date period startTime endTime room')
+      .populate('slot', 'date period startTime endTime room status')
 
     // Grouper par TPI
     const votesByTpi = {}
 
     for (const vote of votes) {
+      if (!vote.tpiPlanning || !isVoteCampaignOpenForTpi(vote.tpiPlanning) || !isActiveVoteDocument(vote)) {
+        continue
+      }
+
       const tpiId = vote.tpiPlanning._id.toString()
 
       if (!votesByTpi[tpiId]) {
@@ -2517,6 +2537,10 @@ router.post('/votes/respond/:tpiId', authMiddleware, requireObjectIdParam('tpiId
 
     if (!isVoteScopeCompatibleWithTpi(req, tpi, tpi.year)) {
       return rejectVoteScope(res, 'TPI hors scope du lien de vote.')
+    }
+
+    if (!isVoteCampaignOpenForTpi(tpi)) {
+      return res.status(409).json({ error: CLOSED_VOTE_CAMPAIGN_MESSAGE })
     }
 
     const voteSettings = await getVoteSettingsForYear(tpi.year)
@@ -2739,11 +2763,11 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
     for (const voteData of votes) {
       const vote = await Vote.findById(voteData.voteId)
         .populate([
-          { path: 'tpiPlanning', select: 'year' },
+          { path: 'tpiPlanning', select: 'year status' },
           { path: 'slot', select: 'status' }
         ])
 
-      if (!vote || vote.voter.toString() !== voterObjectId.toString()) {
+      if (!vote || !vote.tpiPlanning || vote.voter.toString() !== voterObjectId.toString()) {
         results.push({ voteId: voteData.voteId, success: false, error: 'Non autorisé' })
         continue
       }
@@ -2755,6 +2779,11 @@ router.post('/votes/bulk', authMiddleware, async (req, res) => {
 
       if (context?.scope?.tpiId && String(vote.tpiPlanning?._id || '') !== String(context.scope.tpiId)) {
         results.push({ voteId: voteData.voteId, success: false, error: 'Hors scope du lien de vote' })
+        continue
+      }
+
+      if (!isVoteCampaignOpenForTpi(vote.tpiPlanning)) {
+        results.push({ voteId: voteData.voteId, success: false, error: CLOSED_VOTE_CAMPAIGN_MESSAGE })
         continue
       }
 
@@ -3153,7 +3182,10 @@ router.post('/votes/:id', authMiddleware, requireObjectIdParam('id', 'Identifian
     }
 
     const vote = await Vote.findById(req.params.id)
-      .populate('tpiPlanning', 'year')
+      .populate([
+        { path: 'tpiPlanning', select: 'year status' },
+        { path: 'slot', select: 'status' }
+      ])
 
     if (!vote) {
       return res.status(404).json({ error: 'Vote non trouvé' })
@@ -3170,6 +3202,14 @@ router.post('/votes/:id', authMiddleware, requireObjectIdParam('id', 'Identifian
 
     if (context?.scope?.tpiId && String(vote.tpiPlanning?._id || '') !== String(context.scope.tpiId)) {
       return rejectVoteScope(res, 'Vote hors scope du lien de vote.')
+    }
+
+    if (!isVoteCampaignOpenForTpi(vote.tpiPlanning)) {
+      return res.status(409).json({ error: CLOSED_VOTE_CAMPAIGN_MESSAGE })
+    }
+
+    if (!isActiveVoteDocument(vote)) {
+      return res.status(409).json({ error: 'Vote archivé' })
     }
 
     if (decision === 'preferred') {

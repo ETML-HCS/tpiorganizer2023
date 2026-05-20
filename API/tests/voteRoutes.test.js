@@ -6,6 +6,7 @@ const mongoose = require('mongoose')
 const { loadTestApp } = require('./helpers/loadTestApp')
 const Vote = require('../models/voteModel')
 const TpiPlanning = require('../models/tpiCoordinationModel')
+const Slot = require('../models/slotModel')
 const schedulingService = require('../services/schedulingService')
 
 const VALID_OBJECT_ID = '507f1f77bcf86cd799439011'
@@ -42,10 +43,10 @@ function patchMethod(target, key, implementation) {
   }
 }
 
-function createVoteRecord({ voteId, voterId, tpiId, year = 2026 }) {
+function createVoteRecord({ voteId, voterId, tpiId, year = 2026, tpiStatus = 'voting' }) {
   return {
     _id: new mongoose.Types.ObjectId(voteId),
-    tpiPlanning: { _id: tpiId, year },
+    tpiPlanning: { _id: tpiId, year, status: tpiStatus },
     voter: voterId,
     voterRole: 'expert1',
     decision: 'pending',
@@ -72,6 +73,26 @@ function makeFindQuery(result) {
       return this
     },
     sort: async () => result
+  }
+}
+
+function makeThenableQuery(result) {
+  return {
+    populate() {
+      return this
+    },
+    select() {
+      return this
+    },
+    sort() {
+      return this
+    },
+    lean() {
+      return this
+    },
+    then(resolve, reject) {
+      return Promise.resolve(result).then(resolve, reject)
+    }
   }
 }
 
@@ -293,6 +314,153 @@ test('POST /api/coordination/votes/bulk refuse un 4e créneau préféré', async
   }
 })
 
+test('GET /api/coordination/votes/pending masque les TPI dont la campagne est fermee', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['expert1'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+  const voterId = new mongoose.Types.ObjectId(VALID_OBJECT_ID)
+  const openTpiId = new mongoose.Types.ObjectId()
+  const closedTpiId = new mongoose.Types.ObjectId()
+  const openSlotId = new mongoose.Types.ObjectId()
+  const closedSlotId = new mongoose.Types.ObjectId()
+  const votes = [
+    {
+      _id: new mongoose.Types.ObjectId(),
+      tpiPlanning: {
+        _id: openTpiId,
+        year: 2026,
+        status: 'voting',
+        candidat: { firstName: 'Alice', lastName: 'Candidate' },
+        proposedSlots: [{ slot: { _id: openSlotId } }]
+      },
+      slot: {
+        _id: openSlotId,
+        date: new Date('2026-06-10T08:00:00.000Z'),
+        period: 'AM',
+        startTime: '08:00',
+        endTime: '08:45',
+        room: { name: 'A101' },
+        status: ''
+      },
+      voter: voterId,
+      voterRole: 'expert1'
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      tpiPlanning: {
+        _id: closedTpiId,
+        year: 2026,
+        status: 'manual_required',
+        candidat: { firstName: 'Bob', lastName: 'Candidate' },
+        proposedSlots: [{ slot: { _id: closedSlotId } }]
+      },
+      slot: {
+        _id: closedSlotId,
+        date: new Date('2026-06-11T08:00:00.000Z'),
+        period: 'AM',
+        startTime: '08:00',
+        endTime: '08:45',
+        room: { name: 'B101' },
+        status: ''
+      },
+      voter: voterId,
+      voterRole: 'expert1'
+    }
+  ]
+
+  const restore = [
+    patchMethod(Vote, 'find', (filter) => {
+      assert.equal(String(filter.voter), String(voterId))
+      assert.equal(filter.decision, 'pending')
+      return makeThenableQuery(votes)
+    }),
+    patchMethod(Slot, 'find', () => makeThenableQuery([])),
+    patchMethod(schedulingService, 'findAvailableSlotsForTpi', async () => [])
+  ]
+
+  try {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/pending`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    const body = await response.json()
+    assert.equal(response.status, 200, body.error)
+    assert.equal(body.length, 1)
+    assert.equal(body[0].tpi._id, String(openTpiId))
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/coordination/votes/bulk refuse un TPI ferme', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['expert1'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+  const voterId = new mongoose.Types.ObjectId(VALID_OBJECT_ID)
+  const tpiId = new mongoose.Types.ObjectId()
+  const voteId = new mongoose.Types.ObjectId().toString()
+  const vote = createVoteRecord({
+    voteId,
+    voterId,
+    tpiId,
+    tpiStatus: 'manual_required'
+  })
+  const registerCalls = []
+
+  const restore = [
+    patchMethod(Vote, 'findById', () => makeVoteQuery(vote)),
+    patchMethod(schedulingService, 'registerVoteAndCheckValidation', async (...args) => {
+      registerCalls.push(args)
+      return { success: true }
+    })
+  ]
+
+  try {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/bulk`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        votes: [
+          { voteId, decision: 'accepted' }
+        ]
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.results.length, 1)
+    assert.equal(body.results[0].success, false)
+    assert.match(body.results[0].error, /campagne de vote est fermée/i)
+    assert.equal(vote.decision, 'pending')
+    assert.equal(registerCalls.length, 0)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
 test('POST /api/coordination/votes/respond/:tpiId enregistre une proposition scoped sur le TPI', async () => {
   const jwtSecret = 'test-jwt-secret'
   const scopedTpiId = new mongoose.Types.ObjectId().toString()
@@ -366,6 +534,7 @@ test('POST /api/coordination/votes/respond/:tpiId enregistre une proposition sco
       populate: async () => ({
         _id: scopedTpiId,
         year: 2026,
+        status: 'voting',
         expert1: { _id: voterId },
         expert2: { _id: new mongoose.Types.ObjectId() },
         chefProjet: { _id: new mongoose.Types.ObjectId() },
@@ -407,6 +576,87 @@ test('POST /api/coordination/votes/respond/:tpiId enregistre une proposition sco
     assert.equal(existingVotes[0].comment, 'Proposition de créneaux alternatifs')
     assert.equal(existingVotes[1].decision, 'preferred')
     assert.equal(existingVotes[1].priority, 1)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/coordination/votes/respond/:tpiId refuse un TPI ferme', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const scopedTpiId = new mongoose.Types.ObjectId().toString()
+  const fixedSlotId = new mongoose.Types.ObjectId().toString()
+  const fixedVoteId = new mongoose.Types.ObjectId().toString()
+
+  const token = jwt.sign(
+    {
+      id: VALID_OBJECT_ID,
+      email: 'expert@example.com',
+      roles: ['expert1'],
+      authContext: {
+        type: 'vote_magic_link',
+        year: 2026,
+        personId: VALID_OBJECT_ID,
+        scope: {
+          tpiId: scopedTpiId
+        }
+      }
+    },
+    jwtSecret,
+    { expiresIn: '1h' }
+  )
+
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+  const voterId = new mongoose.Types.ObjectId(VALID_OBJECT_ID)
+  const voteFindCalls = []
+
+  const restore = [
+    patchMethod(TpiPlanning, 'findById', () => ({
+      populate: async () => ({
+        _id: scopedTpiId,
+        year: 2026,
+        status: 'confirmed',
+        expert1: { _id: voterId },
+        expert2: { _id: new mongoose.Types.ObjectId() },
+        chefProjet: { _id: new mongoose.Types.ObjectId() },
+        proposedSlots: [
+          {
+            slot: { _id: fixedSlotId }
+          }
+        ]
+      })
+    })),
+    patchMethod(Vote, 'find', (...args) => {
+      voteFindCalls.push(args)
+      return makeFindQuery([])
+    })
+  ]
+
+  try {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/respond/${scopedTpiId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fixedVoteId,
+        mode: 'ok'
+      })
+    })
+
+    assert.equal(response.status, 409)
+    const body = await response.json()
+    assert.match(body.error, /campagne de vote est fermée/i)
+    assert.equal(voteFindCalls.length, 0)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -543,6 +793,7 @@ test('POST /api/coordination/votes/respond/:tpiId conserve la seule disponibilit
       populate: async () => ({
         _id: scopedTpiId,
         year: 2026,
+        status: 'voting',
         expert1: { _id: voterId },
         expert2: { _id: new mongoose.Types.ObjectId() },
         chefProjet: { _id: new mongoose.Types.ObjectId() },
@@ -726,6 +977,7 @@ test('POST /api/coordination/votes/respond/:tpiId enregistre une réponse OK sim
       populate: async () => ({
         _id: scopedTpiId,
         year: 2026,
+        status: 'voting',
         expert1: { _id: voterId },
         expert2: { _id: new mongoose.Types.ObjectId() },
         chefProjet: { _id: new mongoose.Types.ObjectId() },
@@ -874,6 +1126,7 @@ test('POST /api/coordination/votes/respond/:tpiId enregistre une contrainte dure
       populate: async () => ({
         _id: scopedTpiId,
         year: 2026,
+        status: 'voting',
         expert1: { _id: voterId },
         expert2: { _id: new mongoose.Types.ObjectId() },
         chefProjet: { _id: new mongoose.Types.ObjectId() },
@@ -917,6 +1170,60 @@ test('POST /api/coordination/votes/respond/:tpiId enregistre une contrainte dure
     assert.equal(existingVotes[0].hardConstraint, true)
     assert.equal(existingVotes[1].decision, 'rejected')
     assert.equal(existingVotes[1].hardConstraint, true)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await new Promise(resolve => server.close(resolve))
+    restoreEnv()
+  }
+})
+
+test('POST /api/coordination/votes/:id refuse un vote ferme', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['expert1'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const { server, baseUrl } = await startServer(app)
+  const voterId = new mongoose.Types.ObjectId(VALID_OBJECT_ID)
+  const tpiId = new mongoose.Types.ObjectId()
+  const voteId = new mongoose.Types.ObjectId().toString()
+  const vote = createVoteRecord({
+    voteId,
+    voterId,
+    tpiId,
+    tpiStatus: 'confirmed'
+  })
+  const registerCalls = []
+
+  const restore = [
+    patchMethod(Vote, 'findById', () => makeVoteQuery(vote)),
+    patchMethod(schedulingService, 'registerVoteAndCheckValidation', async (...args) => {
+      registerCalls.push(args)
+      return { success: true }
+    })
+  ]
+
+  try {
+    const response = await fetch(`${baseUrl}/api/coordination/votes/${voteId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        decision: 'accepted'
+      })
+    })
+
+    assert.equal(response.status, 409)
+    const body = await response.json()
+    assert.match(body.error, /campagne de vote est fermée/i)
+    assert.equal(vote.decision, 'pending')
+    assert.equal(registerCalls.length, 0)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
