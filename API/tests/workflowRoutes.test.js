@@ -1913,6 +1913,70 @@ test('POST /api/workflow/:year/publication/final-schedule/send calls final deliv
   }
 })
 
+test('POST /api/workflow/:year/publication/final-schedule/manual-package downloads zip package', async () => {
+  const jwtSecret = 'test-jwt-secret'
+  const token = buildSessionToken(jwtSecret, ['admin'])
+  const { app, restoreEnv } = loadTestApp({
+    NODE_ENV: 'development',
+    JWT_SECRET: jwtSecret
+  })
+
+  const finalScheduleDeliveryService = require('../services/finalScheduleDeliveryService')
+  const workflowService = require('../services/workflowService')
+  let receivedPayload = null
+  const restore = [
+    patchMethod(workflowService, 'logWorkflowAuditEvent', async () => {}),
+    patchMethod(finalScheduleDeliveryService, 'buildManualFinalSchedulePackage', async (payload) => {
+      receivedPayload = payload
+      return {
+        success: true,
+        available: true,
+        year: payload.year,
+        publicationVersion: payload.publicationVersion,
+        filename: 'manual-package.zip',
+        contentType: 'application/zip',
+        buffer: Buffer.from('PK-test'),
+        summary: {
+          packagedCount: 3
+        }
+      }
+    })
+  ]
+
+  const { server, baseUrl } = await startServer(app)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/workflow/2026/publication/final-schedule/manual-package`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        publicationVersion: 4,
+        forceResend: true
+      })
+    })
+
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type'), /application\/zip/)
+    assert.match(response.headers.get('content-disposition'), /manual-package\.zip/)
+    assert.equal(response.headers.get('x-final-schedule-packaged-count'), '3')
+    assert.equal(Buffer.from(await response.arrayBuffer()).toString('utf8'), 'PK-test')
+    assert.deepEqual(receivedPayload, {
+      year: 2026,
+      publicationVersion: 4,
+      forceResend: true
+    })
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+    await closeServer(server)
+    restoreEnv()
+  }
+})
+
 test('GET /api/workflow/:year/publication/defense-changes/preview returns targeted notification preview', async () => {
   const jwtSecret = 'test-jwt-secret'
   const token = buildSessionToken(jwtSecret, ['admin'])

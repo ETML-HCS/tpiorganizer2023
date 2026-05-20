@@ -33,6 +33,18 @@ const GLOBAL_PDF_COLUMNS = [
   { key: 'expert2Name', label: 'Expert 2', width: 38 },
   { key: 'projectLeadName', label: 'CDP', width: 36 }
 ]
+const ZIP_UTF8_FLAG = 0x0800
+const ZIP_STORE_METHOD = 0
+
+const ZIP_CRC_TABLE = Array.from({ length: 256 }, (_, tableIndex) => {
+  let value = tableIndex
+  for (let bitIndex = 0; bitIndex < 8; bitIndex += 1) {
+    value = (value & 1)
+      ? (0xedb88320 ^ (value >>> 1))
+      : (value >>> 1)
+  }
+  return value >>> 0
+})
 
 function compactText(value) {
   if (value === null || value === undefined) {
@@ -129,6 +141,65 @@ function sanitizeFileNamePart(value, fallback = 'soutenances') {
     .replace(/^_+|_+$/g, '')
 
   return normalized || fallback
+}
+
+function normalizeZipPathSegment(value, fallback = 'element') {
+  return sanitizeFileNamePart(value, fallback).replace(/^\.+$/, fallback)
+}
+
+function escapeCsvField(value) {
+  const text = compactText(value)
+  return /[;"\r\n]/.test(text)
+    ? `"${text.replace(/"/g, '""')}"`
+    : text
+}
+
+function buildCsvLine(values = []) {
+  return values.map(escapeCsvField).join(';')
+}
+
+function encodeMimeHeader(value) {
+  const text = compactText(value).replace(/[\r\n]+/g, ' ')
+  if (!text) {
+    return ''
+  }
+
+  return /^[\x20-\x7e]+$/.test(text)
+    ? text
+    : `=?UTF-8?B?${Buffer.from(text, 'utf8').toString('base64')}?=`
+}
+
+function encodeMimeAddressName(value) {
+  const text = compactText(value).replace(/[\r\n]+/g, ' ')
+  if (!text) {
+    return ''
+  }
+
+  return /^[\x20-\x7e]+$/.test(text)
+    ? `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+    : encodeMimeHeader(text)
+}
+
+function buildMimeAddressHeader(name, email) {
+  const safeEmail = compactText(email).replace(/[<>\r\n]+/g, '')
+  const safeName = encodeMimeAddressName(name)
+  return safeName ? `${safeName} <${safeEmail}>` : safeEmail
+}
+
+function foldBase64Content(content) {
+  return normalizeZipEntryContent(content)
+    .toString('base64')
+    .replace(/.{1,76}/g, '$&\r\n')
+    .trimEnd()
+}
+
+function buildMimeBoundary(prefix, target) {
+  return [
+    '----',
+    prefix,
+    sanitizeFileNamePart(target.personId || target.personName, 'participant'),
+    Date.now().toString(36)
+  ].join('_')
 }
 
 function buildScheduleFromRoomConfig(room = {}) {
@@ -879,6 +950,341 @@ function buildAttachments({ target, year, publicationVersion, globalRoomsPdf, ge
   ]
 }
 
+function getZipDosDateTime(value = new Date()) {
+  const date = normalizeDate(value) || new Date()
+  const safeYear = Math.min(Math.max(date.getFullYear(), 1980), 2107)
+
+  return {
+    dosTime: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    dosDate: ((safeYear - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+  }
+}
+
+function getCrc32(contentBuffer) {
+  let crc = 0xffffffff
+
+  for (const byte of contentBuffer) {
+    crc = ZIP_CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8)
+  }
+
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function normalizeZipEntryContent(content) {
+  if (Buffer.isBuffer(content)) {
+    return content
+  }
+
+  return Buffer.from(String(content || ''), 'utf8')
+}
+
+function createZipBuffer(entries = []) {
+  const localParts = []
+  const centralParts = []
+  const { dosTime, dosDate } = getZipDosDateTime()
+  let offset = 0
+
+  for (const rawEntry of entries) {
+    const filename = compactText(rawEntry.path).replace(/\\/g, '/')
+    if (!filename) {
+      continue
+    }
+
+    const filenameBuffer = Buffer.from(filename, 'utf8')
+    const contentBuffer = normalizeZipEntryContent(rawEntry.content)
+    const crc32 = getCrc32(contentBuffer)
+
+    const localHeader = Buffer.alloc(30)
+    localHeader.writeUInt32LE(0x04034b50, 0)
+    localHeader.writeUInt16LE(20, 4)
+    localHeader.writeUInt16LE(ZIP_UTF8_FLAG, 6)
+    localHeader.writeUInt16LE(ZIP_STORE_METHOD, 8)
+    localHeader.writeUInt16LE(dosTime, 10)
+    localHeader.writeUInt16LE(dosDate, 12)
+    localHeader.writeUInt32LE(crc32, 14)
+    localHeader.writeUInt32LE(contentBuffer.length, 18)
+    localHeader.writeUInt32LE(contentBuffer.length, 22)
+    localHeader.writeUInt16LE(filenameBuffer.length, 26)
+    localHeader.writeUInt16LE(0, 28)
+
+    localParts.push(localHeader, filenameBuffer, contentBuffer)
+
+    const centralHeader = Buffer.alloc(46)
+    centralHeader.writeUInt32LE(0x02014b50, 0)
+    centralHeader.writeUInt16LE(20, 4)
+    centralHeader.writeUInt16LE(20, 6)
+    centralHeader.writeUInt16LE(ZIP_UTF8_FLAG, 8)
+    centralHeader.writeUInt16LE(ZIP_STORE_METHOD, 10)
+    centralHeader.writeUInt16LE(dosTime, 12)
+    centralHeader.writeUInt16LE(dosDate, 14)
+    centralHeader.writeUInt32LE(crc32, 16)
+    centralHeader.writeUInt32LE(contentBuffer.length, 20)
+    centralHeader.writeUInt32LE(contentBuffer.length, 24)
+    centralHeader.writeUInt16LE(filenameBuffer.length, 28)
+    centralHeader.writeUInt16LE(0, 30)
+    centralHeader.writeUInt16LE(0, 32)
+    centralHeader.writeUInt16LE(0, 34)
+    centralHeader.writeUInt16LE(0, 36)
+    centralHeader.writeUInt32LE(0, 38)
+    centralHeader.writeUInt32LE(offset, 42)
+
+    centralParts.push(centralHeader, filenameBuffer)
+    offset += localHeader.length + filenameBuffer.length + contentBuffer.length
+  }
+
+  const centralDirectoryOffset = offset
+  const centralDirectorySize = centralParts.reduce((total, part) => total + part.length, 0)
+  const entryCount = centralParts.length / 2
+  const endHeader = Buffer.alloc(22)
+  endHeader.writeUInt32LE(0x06054b50, 0)
+  endHeader.writeUInt16LE(0, 4)
+  endHeader.writeUInt16LE(0, 6)
+  endHeader.writeUInt16LE(entryCount, 8)
+  endHeader.writeUInt16LE(entryCount, 10)
+  endHeader.writeUInt32LE(centralDirectorySize, 12)
+  endHeader.writeUInt32LE(centralDirectoryOffset, 16)
+  endHeader.writeUInt16LE(0, 20)
+
+  return Buffer.concat([...localParts, ...centralParts, endHeader])
+}
+
+function buildManualEmailContent({ target, year, publicationVersion, roomCount, generatedAtLabel, emailSettings }) {
+  const templateData = emailService.buildTemplateData({
+    recipientName: target.personName,
+    year,
+    publicationVersion,
+    tpiCount: target.tpiCount,
+    roomCount,
+    generatedAtLabel
+  }, { emailSettings })
+
+  return emailService.emailTemplates.soutenanceSchedulePackage(templateData)
+}
+
+function buildOutlookDraftEml({ target, emailContent, attachments = [], emailSettings }) {
+  const sender = emailService.resolveMailSender(emailSettings)
+  const mixedBoundary = buildMimeBoundary('mixed', target)
+  const alternativeBoundary = buildMimeBoundary('alternative', target)
+  const textContent = compactText(emailContent.text)
+  const htmlContent = compactText(emailContent.html)
+  const lines = [
+    `From: ${sender.header}`,
+    `To: ${buildMimeAddressHeader(target.personName, target.recipientEmail)}`,
+    `Subject: ${encodeMimeHeader(emailContent.subject)}`,
+    `Date: ${new Date().toUTCString()}`,
+    'MIME-Version: 1.0',
+    'X-Unsent: 1',
+    'Content-Class: urn:content-classes:message',
+    `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
+    '',
+    `--${mixedBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`,
+    '',
+    `--${alternativeBoundary}`,
+    'Content-Type: text/plain; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    foldBase64Content(Buffer.from(textContent, 'utf8')),
+    '',
+    `--${alternativeBoundary}`,
+    'Content-Type: text/html; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    foldBase64Content(Buffer.from(htmlContent, 'utf8')),
+    '',
+    `--${alternativeBoundary}--`
+  ]
+
+  for (const attachment of attachments) {
+    const filename = sanitizeFileNamePart(attachment.filename, 'piece_jointe')
+    lines.push(
+      '',
+      `--${mixedBoundary}`,
+      `Content-Type: ${attachment.contentType || 'application/octet-stream'}; name="${filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${filename}"`,
+      '',
+      foldBase64Content(attachment.content)
+    )
+  }
+
+  lines.push('', `--${mixedBoundary}--`, '')
+  return lines.join('\r\n')
+}
+
+function buildManualPackageSummary(targets = [], packagedTargets = []) {
+  const targetSummary = summarizeTargets(targets)
+
+  return {
+    ...targetSummary,
+    packagedCount: packagedTargets.length,
+    skippedCount: Math.max(targets.length - packagedTargets.length, 0)
+  }
+}
+
+function buildManualManifestCsv({ targets = [], publicationVersion, year, generatedAtLabel }) {
+  const lines = [
+    buildCsvLine([
+      'Nom',
+      'Email',
+      'TPI',
+      'Publication',
+      'Généré le',
+      'Statut',
+      'Fichiers'
+    ])
+  ]
+
+  for (const target of targets) {
+    const baseName = `${year}_${sanitizeFileNamePart(target.personName, 'participant')}`
+    lines.push(buildCsvLine([
+      target.personName,
+      target.recipientEmail,
+      target.tpiCount,
+      publicationVersion,
+      generatedAtLabel,
+      'brouillon Outlook à envoyer',
+      [
+        `${baseName}_outlook.eml`,
+        `${baseName}_horaire.ics`,
+        `${baseName}_horaire_personnel.pdf`,
+        `${year}_planification_salles.pdf`
+      ].join(' | ')
+    ]))
+  }
+
+  return `${lines.join('\r\n')}\r\n`
+}
+
+async function buildManualFinalSchedulePackage({
+  year,
+  publicationVersion = null,
+  forceResend = false
+} = {}) {
+  const context = await buildFinalScheduleContext({ year, publicationVersion })
+
+  if (!context.available) {
+    return {
+      success: false,
+      year: context.year,
+      available: false,
+      reason: context.reason,
+      summary: buildManualPackageSummary([], [])
+    }
+  }
+
+  const generatedAt = new Date()
+  const generatedAtLabel = formatDateTimeLabel(generatedAt)
+  const emailSettings = await coordinationCatalogService.getSharedEmailSettingsIfAvailable()
+  const globalRoomsPdf = buildGlobalRoomsPdfBuffer({
+    events: context.events,
+    year: context.year,
+    publicationVersion: context.publicationVersion,
+    generatedAtLabel
+  })
+  const roomCount = Array.isArray(context.rooms) ? context.rooms.length : 0
+  const packageTargets = context.targets.filter((target) => (
+    target.canSendEmail &&
+    (forceResend === true || (!target.alreadySent && !target.inProgress))
+  ))
+  const zipEntries = [
+    {
+      path: 'README.txt',
+      content: [
+        `Paquet Outlook manuel horaires définitifs TPI ${context.year}`,
+        `Publication: ${context.publicationVersion}`,
+        `Généré le: ${generatedAtLabel}`,
+        `Destinataires préparés: ${packageTargets.length}`,
+        '',
+        'Chaque dossier destinataire contient un brouillon Outlook .eml, le message HTML/TXT, le fichier iCal personnel, le PDF personnel et le PDF global des salles.',
+        'Ouvrir le fichier .eml dans Outlook, vérifier le message, puis cliquer sur Envoyer.',
+        'Aucun email SMTP n’a été envoyé par cette action.'
+      ].join('\r\n')
+    },
+    {
+      path: 'manifest.csv',
+      content: buildManualManifestCsv({
+        targets: packageTargets,
+        publicationVersion: context.publicationVersion,
+        year: context.year,
+        generatedAtLabel
+      })
+    }
+  ]
+
+  packageTargets.forEach((target, index) => {
+    const folderName = [
+      String(index + 1).padStart(2, '0'),
+      normalizeZipPathSegment(target.personName, 'participant'),
+      normalizeZipPathSegment(target.personId, 'person').slice(-8)
+    ].filter(Boolean).join('_')
+    const folderPath = `destinataires/${folderName}`
+    const emailContent = buildManualEmailContent({
+      target,
+      year: context.year,
+      publicationVersion: context.publicationVersion,
+      roomCount,
+      generatedAtLabel,
+      emailSettings
+    })
+    const attachments = buildAttachments({
+      target,
+      year: context.year,
+      publicationVersion: context.publicationVersion,
+      globalRoomsPdf,
+      generatedAtLabel
+    })
+    const emlFilename = `${context.year}_${sanitizeFileNamePart(target.personName, 'participant')}_outlook.eml`
+
+    zipEntries.push(
+      {
+        path: `${folderPath}/${emlFilename}`,
+        content: buildOutlookDraftEml({
+          target,
+          emailContent,
+          attachments,
+          emailSettings
+        })
+      },
+      {
+        path: `${folderPath}/message.txt`,
+        content: [
+          `À: ${target.recipientEmail}`,
+          `Sujet: ${emailContent.subject}`,
+          '',
+          compactText(emailContent.text)
+        ].join('\r\n')
+      },
+      {
+        path: `${folderPath}/message.html`,
+        content: emailContent.html
+      },
+      ...attachments.map((attachment) => ({
+        path: `${folderPath}/${attachment.filename}`,
+        content: attachment.content
+      }))
+    )
+  })
+
+  const filename = [
+    context.year,
+    'horaires_definitifs',
+    `publication_${context.publicationVersion}`,
+    'outlook.zip'
+  ].join('_')
+
+  return {
+    success: true,
+    year: context.year,
+    available: true,
+    publicationVersion: context.publicationVersion,
+    filename,
+    contentType: 'application/zip',
+    buffer: createZipBuffer(zipEntries),
+    summary: buildManualPackageSummary(context.targets, packageTargets)
+  }
+}
+
 async function markDelivery({
   year,
   publicationVersion,
@@ -1208,6 +1614,7 @@ module.exports = {
   buildIcalContent,
   buildPersonalPdfBuffer,
   buildGlobalRoomsPdfBuffer,
+  buildManualFinalSchedulePackage,
   collectScheduleEvents,
   previewFinalScheduleDelivery,
   sendFinalScheduleDelivery

@@ -233,6 +233,56 @@
   color: #b45309;
 }
 
+.vote-command-delivery-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 34px;
+  padding: 3px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.vote-command-delivery-toggle label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.vote-command-delivery-toggle label.is-active {
+  background: #ffffff;
+  color: #0f766e;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.vote-command-delivery-toggle input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.vote-command-delivery-toggle label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.vote-command-delivery-toggle label:focus-within {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+}
+
 .vote-command-alert {
   display: grid;
   gap: 10px;

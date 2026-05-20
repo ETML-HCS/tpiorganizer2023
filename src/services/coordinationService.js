@@ -722,6 +722,17 @@ export const workflowCoordinationService = {
     )
   },
 
+  downloadFinalSchedulePackage: async (year, options = {}) => {
+    return await apiService.postBlob(
+      `${WORKFLOW_BASE_URL}/${year}/publication/final-schedule/manual-package`,
+      {
+        publicationVersion: options?.publicationVersion || null,
+        forceResend: options?.forceResend === true
+      },
+      TIMEOUTS.EMAIL_SEND
+    )
+  },
+
   getDefenseChangeNotificationPreview: async (year, options = {}) => {
     const params = new URLSearchParams()
     if (options.publicationVersion) {

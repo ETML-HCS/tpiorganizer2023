@@ -750,6 +750,7 @@ const VoteCommandCenter = ({
   staticVotePublicationInfo,
   defenseChangeNotificationInfo,
   finalScheduleDeliveryPreview,
+  finalScheduleDeliveryMode = 'smtp',
   preferenceActionLoadingKey,
   proposalMoveLoadingKey,
   proposalMoveApplying,
@@ -771,6 +772,7 @@ const VoteCommandCenter = ({
   onSendPublicationLinks,
   onPreviewFinalScheduleDelivery,
   onSendFinalScheduleDelivery,
+  onFinalScheduleDeliveryModeChange,
   onSendDefenseChangeNotifications,
   onOpenPublishedView,
   onOpenManualResolver,
@@ -863,6 +865,7 @@ const VoteCommandCenter = ({
   const finalScheduleAlreadySentCount = Number(finalScheduleSummary.alreadySentCount || 0)
   const finalScheduleInProgressCount = Number(finalScheduleSummary.inProgressCount || 0)
   const finalScheduleRecipientCount = Number(finalScheduleSummary.recipientCount || 0)
+  const isFinalScheduleManualMode = finalScheduleDeliveryMode === 'manual'
   const finalScheduleSkippedConfigCount = Number(finalScheduleSummary.disabledEmailCount || 0) +
     Number(finalScheduleSummary.missingEmailCount || 0) +
     Number(finalScheduleSummary.personNotFoundCount || 0) +
@@ -886,6 +889,9 @@ const VoteCommandCenter = ({
     !finalScheduleAvailable ||
     finalSchedulePendingCount <= 0 ||
     typeof onSendFinalScheduleDelivery !== 'function'
+  const finalScheduleActionKey = isFinalScheduleManualMode
+    ? 'downloadFinalSchedulePackage'
+    : 'sendFinalScheduleDelivery'
 
   const [selectedCaseId, setSelectedCaseId] = useState('')
   const detailPanelRef = useRef(null)
@@ -1540,21 +1546,53 @@ const VoteCommandCenter = ({
             >
               {finalSchedulePreviewLabel}
             </WorkflowActionButton>
+            <div
+              className="vote-command-delivery-toggle"
+              role="radiogroup"
+              aria-label="Mode d'envoi des horaires définitifs"
+            >
+              <label className={!isFinalScheduleManualMode ? 'is-active' : ''}>
+                <input
+                  type="radio"
+                  name={`final-schedule-delivery-mode-${year}`}
+                  checked={!isFinalScheduleManualMode}
+                  disabled={workflowActionLoading}
+                  onChange={() => onFinalScheduleDeliveryModeChange?.('smtp')}
+                />
+                <span>SMTP</span>
+              </label>
+              <label className={isFinalScheduleManualMode ? 'is-active' : ''}>
+                <input
+                  type="radio"
+                  name={`final-schedule-delivery-mode-${year}`}
+                  checked={isFinalScheduleManualMode}
+                  disabled={workflowActionLoading}
+                  onChange={() => onFinalScheduleDeliveryModeChange?.('manual')}
+                />
+                <span>Outlook</span>
+              </label>
+            </div>
             <WorkflowActionButton
-              actionKey="sendFinalScheduleDelivery"
+              actionKey={finalScheduleActionKey}
               primaryActionKey={primaryAction.key}
-              className="success"
+              className={isFinalScheduleManualMode ? 'secondary' : 'success'}
               onClick={onSendFinalScheduleDelivery}
               disabled={finalScheduleSendDisabled}
               isActionRunning={isActionRunning}
-              icon={<SendIcon className="button-icon" />}
-              runningLabel="Envoi..."
+              icon={isFinalScheduleManualMode
+                ? <FileTextIcon className="button-icon" />
+                : <SendIcon className="button-icon" />}
+              runningLabel={isFinalScheduleManualMode ? 'Préparation...' : 'Envoi...'}
               title={finalScheduleAvailable
-                ? 'Envoyer iCal personnel, PDF personnel et PDF global des salles.'
+                ? isFinalScheduleManualMode
+                  ? 'Télécharger un ZIP avec brouillons .eml Outlook, iCal et PDF joints.'
+                  : 'Envoyer iCal personnel, PDF personnel et PDF global des salles.'
                 : 'Préparer l’aperçu final avant l’envoi.'}
-              ariaLabel="Envoyer les horaires définitifs avec pièces jointes."
+              ariaLabel={isFinalScheduleManualMode
+                ? 'Télécharger les brouillons Outlook des horaires définitifs.'
+                : 'Envoyer les horaires définitifs avec pièces jointes.'}
             >
-              Envoyer horaires
+              {isFinalScheduleManualMode ? 'Brouillons Outlook' : 'Envoyer horaires'}
             </WorkflowActionButton>
             {finalScheduleDeliveryPreview ? (
               <span className={`vote-command-action-note ${finalScheduleAvailable ? 'is-ok' : 'is-warning'}`.trim()}>

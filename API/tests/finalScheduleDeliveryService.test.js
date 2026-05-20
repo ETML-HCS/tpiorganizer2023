@@ -274,6 +274,40 @@ test('sendFinalScheduleDelivery sends PDF and iCal attachments once per publicat
   }
 })
 
+test('buildManualFinalSchedulePackage creates a zip without sending SMTP email', async () => {
+  const finalScheduleDeliveryService = require('../services/finalScheduleDeliveryService')
+  let smtpCalled = false
+  const restore = [
+    ...patchPublicationContext(),
+    patchMethod(emailService, 'sendEmail', async () => {
+      smtpCalled = true
+      return { success: false }
+    })
+  ]
+
+  try {
+    const result = await finalScheduleDeliveryService.buildManualFinalSchedulePackage({ year: 2026 })
+
+    assert.equal(result.success, true)
+    assert.equal(result.available, true)
+    assert.equal(result.publicationVersion, 7)
+    assert.equal(result.summary.packagedCount, 4)
+    assert.equal(smtpCalled, false)
+    assert.ok(Buffer.isBuffer(result.buffer))
+    assert.equal(result.buffer.slice(0, 2).toString('utf8'), 'PK')
+    assert.equal(result.buffer.includes(Buffer.from('manifest.csv')), true)
+    assert.equal(result.buffer.includes(Buffer.from('message.txt')), true)
+    assert.equal(result.buffer.includes(Buffer.from('_outlook.eml')), true)
+    assert.equal(result.buffer.includes(Buffer.from('X-Unsent: 1')), true)
+    assert.equal(result.buffer.includes(Buffer.from('Content-Disposition: attachment')), true)
+    assert.match(result.filename, /horaires_definitifs.*outlook\.zip$/)
+  } finally {
+    while (restore.length > 0) {
+      restore.pop()()
+    }
+  }
+})
+
 test('sendFinalScheduleDelivery does not mark a sent email as failed when delivery logging fails', async () => {
   const finalScheduleDeliveryService = require('../services/finalScheduleDeliveryService')
   const sentEmails = []

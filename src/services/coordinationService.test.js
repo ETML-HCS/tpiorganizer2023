@@ -7,6 +7,7 @@ jest.mock('./apiService', () => ({
   default: {
     get: jest.fn(),
     post: jest.fn(),
+    postBlob: jest.fn(),
     put: jest.fn(),
     delete: jest.fn()
   }
@@ -16,6 +17,7 @@ describe('workflowCoordinationService email access payloads', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     apiService.post.mockResolvedValue({ success: true })
+    apiService.postBlob.mockResolvedValue({ blob: new Blob(), filename: 'manual.zip' })
   })
 
   test('previewSoutenanceAccessEmail transmet le type de message au backend', async () => {
@@ -78,6 +80,22 @@ describe('workflowCoordinationService email access payloads', () => {
         forceResend: true,
         messageType: 'schedule_update',
         baseUrl: 'http://localhost'
+      },
+      TIMEOUTS.EMAIL_SEND
+    )
+  })
+
+  test('downloadFinalSchedulePackage demande le paquet manuel avec le timeout email', async () => {
+    await workflowCoordinationService.downloadFinalSchedulePackage(2026, {
+      publicationVersion: 7,
+      forceResend: true
+    })
+
+    expect(apiService.postBlob).toHaveBeenCalledWith(
+      '/api/workflow/2026/publication/final-schedule/manual-package',
+      {
+        publicationVersion: 7,
+        forceResend: true
       },
       TIMEOUTS.EMAIL_SEND
     )

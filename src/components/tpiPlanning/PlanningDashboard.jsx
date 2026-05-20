@@ -51,11 +51,38 @@ const WORKFLOW_LABELS = {
 }
 
 const shouldLogWorkflowDebug = IS_DEBUG && process.env.NODE_ENV !== 'test'
+const FINAL_SCHEDULE_DELIVERY_MODES = Object.freeze({
+  SMTP: 'smtp',
+  MANUAL: 'manual'
+})
 
 function logWorkflowDebug(...args) {
   if (shouldLogWorkflowDebug) {
     console.debug(...args)
   }
+}
+
+function triggerBrowserDownload(blob, filename) {
+  if (!blob || typeof window === 'undefined' || typeof document === 'undefined') {
+    return false
+  }
+
+  const objectUrl = window.URL?.createObjectURL?.(blob)
+  if (!objectUrl) {
+    return false
+  }
+
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename || 'horaires_definitifs_outlook.zip'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => {
+    window.URL?.revokeObjectURL?.(objectUrl)
+  }, 0)
+
+  return true
 }
 
 const STATUS_FILTER_LABELS = {
@@ -1446,6 +1473,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
   const [staticVotePublicationInfo, setStaticVotePublicationInfo] = useState(null)
   const [defenseChangeNotificationInfo, setDefenseChangeNotificationInfo] = useState(null)
   const [finalScheduleDeliveryPreview, setFinalScheduleDeliveryPreview] = useState(null)
+  const [finalScheduleDeliveryMode, setFinalScheduleDeliveryMode] = useState(FINAL_SCHEDULE_DELIVERY_MODES.SMTP)
   const [magicLinkViewer, setMagicLinkViewer] = useState(null)
   const [isMagicLinkReady, setIsMagicLinkReady] = useState(false)
   const [planningClassTypes, setPlanningClassTypes] = useState([])
@@ -3217,29 +3245,49 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
     const summary = finalScheduleDeliveryPreview?.summary || {}
     const pendingCount = Number(summary.pendingSendCount || summary.sendableCount || 0)
     const alreadySentCount = Number(summary.alreadySentCount || 0)
-    const confirmMessage = pendingCount > 0
-      ? `Envoyer l’horaire définitif à ${pendingCount} partie(s) prenante(s) ? Chaque email aura un iCal personnel, un PDF personnel et le PDF global des salles.${alreadySentCount > 0 ? ` ${alreadySentCount} destinataire(s) déjà envoyé(s) seront ignoré(s).` : ''}`
-      : 'Aucun destinataire en attente selon le dernier aperçu. Relancer quand même la vérification d’envoi ?'
+    const isManualMode = finalScheduleDeliveryMode === FINAL_SCHEDULE_DELIVERY_MODES.MANUAL
+    const confirmMessage = isManualMode
+      ? pendingCount > 0
+        ? `Télécharger les brouillons Outlook pour ${pendingCount} partie(s) prenante(s) ? Aucun email SMTP ne sera envoyé. Le ZIP contiendra les fichiers .eml Outlook avec iCal et PDF joints.${alreadySentCount > 0 ? ` ${alreadySentCount} destinataire(s) déjà envoyé(s) seront ignoré(s).` : ''}`
+        : 'Aucun destinataire en attente selon le dernier aperçu. Télécharger quand même les brouillons Outlook ?'
+      : pendingCount > 0
+        ? `Envoyer l’horaire définitif à ${pendingCount} partie(s) prenante(s) ? Chaque email aura un iCal personnel, un PDF personnel et le PDF global des salles.${alreadySentCount > 0 ? ` ${alreadySentCount} destinataire(s) déjà envoyé(s) seront ignoré(s).` : ''}`
+        : 'Aucun destinataire en attente selon le dernier aperçu. Relancer quand même la vérification d’envoi ?'
 
     await executeWorkflowAction({
-      actionKey: 'sendFinalScheduleDelivery',
+      actionKey: isManualMode ? 'downloadFinalSchedulePackage' : 'sendFinalScheduleDelivery',
       confirmMessage,
-      run: () => workflowCoordinationService.sendFinalScheduleDelivery(year, {
-        publicationVersion: finalScheduleDeliveryPreview?.publicationVersion || null
-      }),
+      run: () => isManualMode
+        ? workflowCoordinationService.downloadFinalSchedulePackage(year, {
+          publicationVersion: finalScheduleDeliveryPreview?.publicationVersion || null
+        })
+        : workflowCoordinationService.sendFinalScheduleDelivery(year, {
+          publicationVersion: finalScheduleDeliveryPreview?.publicationVersion || null
+        }),
       successBuilder: (result) => {
+        if (isManualMode) {
+          return `Brouillons Outlook téléchargés: ${result?.filename || 'horaires_definitifs_outlook.zip'}.`
+        }
+
         const resultSummary = result?.summary || {}
         const recordingWarning = Number(resultSummary.recordingFailedCount || 0) > 0
           ? `, ${resultSummary.recordingFailedCount} statut(s) non enregistré(s)`
           : ''
         return `Horaires définitifs: ${resultSummary.sentCount || 0} envoyé(s), ${resultSummary.skippedCount || 0} ignoré(s), ${resultSummary.failedCount || 0} échec(s)${recordingWarning}.`
       },
-      errorFallback: 'Erreur lors de l’envoi des horaires définitifs.',
+      errorFallback: isManualMode
+        ? 'Erreur lors du téléchargement des brouillons Outlook des horaires définitifs.'
+        : 'Erreur lors de l’envoi des horaires définitifs.',
       onSuccess: (result) => {
+        if (isManualMode) {
+          triggerBrowserDownload(result?.blob, result?.filename)
+          return
+        }
+
         setFinalScheduleDeliveryPreview(result?.preview || null)
       }
     })
-  }, [year, executeWorkflowAction, finalScheduleDeliveryPreview])
+  }, [year, executeWorkflowAction, finalScheduleDeliveryPreview, finalScheduleDeliveryMode])
 
   const handleSendDefenseChangeNotifications = useCallback(async () => {
     const pendingCount = Number(defenseChangeNotificationInfo?.summary?.pendingRecipientCount || 0)
@@ -3943,6 +3991,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             staticVotePublicationInfo={staticVotePublicationInfo}
             defenseChangeNotificationInfo={defenseChangeNotificationInfo}
             finalScheduleDeliveryPreview={finalScheduleDeliveryPreview}
+            finalScheduleDeliveryMode={finalScheduleDeliveryMode}
             preferenceActionLoadingKey={preferenceActionLoadingKey}
             proposalMoveLoadingKey={proposalMoveLoadingKey}
             proposalMoveApplying={proposalMoveApplying}
@@ -3964,6 +4013,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
             onSendPublicationLinks={handleSendPublicationLinks}
             onPreviewFinalScheduleDelivery={handlePreviewFinalScheduleDelivery}
             onSendFinalScheduleDelivery={handleSendFinalScheduleDelivery}
+            onFinalScheduleDeliveryModeChange={setFinalScheduleDeliveryMode}
             onSendDefenseChangeNotifications={handleSendDefenseChangeNotifications}
             onOpenPublishedView={handleOpenPublishedView}
             onOpenManualResolver={openManualResolver}

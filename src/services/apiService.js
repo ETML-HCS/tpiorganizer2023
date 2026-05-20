@@ -157,6 +157,48 @@ const handleResponse = async (response, endpoint) => {
   return data
 }
 
+const getFilenameFromContentDisposition = (headerValue) => {
+  const header = String(headerValue || '')
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ''))
+    } catch (_error) {
+      return utf8Match[1].trim().replace(/^"|"$/g, '')
+    }
+  }
+
+  const filenameMatch = header.match(/filename="?([^";]+)"?/i)
+  return filenameMatch ? filenameMatch[1].trim() : ''
+}
+
+const handleBlobResponse = async (response, endpoint) => {
+  const scope = getAuthScopeForEndpoint(endpoint)
+  const { source } = resolveStoredAuthToken(endpoint)
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    const message = response.status === 401
+      ? scope === 'app'
+        ? 'Session invalide ou expirée. Veuillez vous reconnecter.'
+        : source === 'coordination' || source === 'planning'
+          ? 'Session de coordination invalide ou expirée. Veuillez rouvrir le lien.'
+          : 'Accès de coordination requis.'
+      : data?.message || data?.error || ERROR_MESSAGES.NETWORK_ERROR
+
+    if (response.status === 401) {
+      clearExpiredSessionState(endpoint, scope)
+    }
+
+    throw new ApiError(message, response.status, data)
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: getFilenameFromContentDisposition(response.headers.get('Content-Disposition'))
+  }
+}
+
 /**
  * Service API principal
  */
@@ -182,6 +224,15 @@ const apiService = {
       body: JSON.stringify(body)
     }, timeout)
     return handleResponse(response, endpoint)
+  },
+
+  postBlob: async (endpoint, body, timeout = TIMEOUTS.API_REQUEST) => {
+    const response = await fetchWithTimeout(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: getDefaultHeaders(endpoint),
+      body: JSON.stringify(body)
+    }, timeout)
+    return handleBlobResponse(response, endpoint)
   },
 
   /**

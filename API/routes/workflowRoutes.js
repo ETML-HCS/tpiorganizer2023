@@ -2644,6 +2644,69 @@ router.post(
   }
 )
 
+router.post(
+  '/:year/publication/final-schedule/manual-package',
+  requireYearParam('year'),
+  authMiddleware,
+  requireRole('admin'),
+  async (req, res) => {
+    const year = req.validatedParams.year
+
+    try {
+      const result = await finalScheduleDeliveryService.buildManualFinalSchedulePackage({
+        year,
+        publicationVersion: parseOptionalPositiveInteger(req.body?.publicationVersion),
+        forceResend: parseBoolean(req.body?.forceResend, false)
+      })
+
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.final-schedule.manual-package',
+        user: req.user,
+        payload: {
+          publicationVersion: result.publicationVersion || null,
+          summary: result.summary || null,
+          available: result.available === true,
+          reason: result.reason || null
+        },
+        success: result.success !== false
+      })
+
+      if (!result.available || !Buffer.isBuffer(result.buffer)) {
+        return res.status(409).json({
+          error: 'Aucune publication de défenses active pour préparer le paquet manuel.',
+          reason: result.reason || 'manual_package_unavailable'
+        })
+      }
+
+      return res
+        .status(200)
+        .set({
+          'Content-Type': result.contentType || 'application/zip',
+          'Content-Disposition': `attachment; filename="${result.filename || `${year}_horaires_definitifs_outlook.zip`}"`,
+          'X-Final-Schedule-Packaged-Count': String(result.summary?.packagedCount || 0)
+        })
+        .send(result.buffer)
+    } catch (error) {
+      await workflowService.logWorkflowAuditEvent({
+        year,
+        action: 'workflow.publication.final-schedule.manual-package',
+        user: req.user,
+        payload: {
+          publicationVersion: parseOptionalPositiveInteger(req.body?.publicationVersion)
+        },
+        success: false,
+        error: error?.message || 'Erreur inconnue'
+      })
+
+      console.error('Erreur paquet manuel horaires définitifs:', error)
+      return res.status(error.statusCode || 500).json({
+        error: error.message || 'Erreur lors de la préparation du paquet manuel des horaires définitifs.'
+      })
+    }
+  }
+)
+
 router.get(
   '/:year/publication/defense-changes/preview',
   requireYearParam('year'),
