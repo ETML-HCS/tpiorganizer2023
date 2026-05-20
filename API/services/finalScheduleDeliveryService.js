@@ -33,6 +33,18 @@ const GLOBAL_PDF_COLUMNS = [
   { key: 'expert2Name', label: 'Expert 2', width: 38 },
   { key: 'projectLeadName', label: 'CDP', width: 36 }
 ]
+const ROOM_GRID_PDF_COLORS = {
+  ink: [15, 23, 42],
+  muted: [71, 85, 105],
+  subtle: [100, 116, 139],
+  line: [203, 213, 225],
+  softLine: [226, 232, 240],
+  page: [248, 250, 252],
+  panel: [255, 255, 255],
+  primary: [37, 99, 235],
+  amber: [245, 158, 11],
+  white: [255, 255, 255]
+}
 const ZIP_UTF8_FLAG = 0x0800
 const ZIP_STORE_METHOD = 0
 
@@ -116,6 +128,23 @@ function formatDateLabel(value) {
     month: '2-digit',
     year: 'numeric'
   })
+}
+
+function formatLongDateLabel(value) {
+  const date = normalizeDate(value)
+  if (!date) {
+    return compactText(value) || 'Date à confirmer'
+  }
+
+  return new Intl.DateTimeFormat('fr-FR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }).format(date)
+}
+
+function formatTimeRangeLabel(startTime, endTime) {
+  return startTime && endTime ? `${startTime} - ${endTime}` : 'Horaire indisponible'
 }
 
 function formatDateTimeLabel(value) {
@@ -326,11 +355,6 @@ function hasPublishedDefense(tpiData = {}) {
 
 function getParticipantEntries(tpiData = {}) {
   return [
-    {
-      role: 'candidat',
-      personId: compactText(tpiData.candidatPersonId),
-      name: compactText(tpiData.candidat)
-    },
     {
       role: 'expert1',
       personId: compactText(tpiData.expert1?.personId),
@@ -899,23 +923,499 @@ function buildPersonalPdfBuffer({ target, year, publicationVersion, generatedAtL
   return createPdfBuffer(doc)
 }
 
-function buildGlobalRoomsPdfBuffer({ events, year, publicationVersion, generatedAtLabel }) {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
-  const title = `Planification des salles TPI ${year}`
-  const subtitle = `Vue globale - publication ${publicationVersion}`
-  drawPdfHeader(doc, title, subtitle)
+function buildGlobalRoomsPdfBuffer({ rooms = [], events = [], year, publicationVersion, generatedAtLabel }) {
+  return buildRoomGridPdfBuffer({
+    rooms,
+    fallbackEvents: events,
+    year,
+    publicationVersion,
+    generatedAtLabel
+  })
+}
 
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(71, 85, 105)
-  doc.text(`${events.length} défense(s) planifiée(s)`, PDF_MARGIN, 25)
+function setRoomGridFillColor(pdf, color) {
+  pdf.setFillColor(...color)
+}
 
-  renderTable(doc, events, GLOBAL_PDF_COLUMNS, {
-    title,
-    subtitle,
-    startY: 31,
-    generatedAtLabel,
-    fontSize: 6.5
+function setRoomGridTextColor(pdf, color) {
+  pdf.setTextColor(...color)
+}
+
+function setRoomGridDrawColor(pdf, color) {
+  pdf.setDrawColor(...color)
+}
+
+function drawRoomGridRect(pdf, x, y, width, height, style = 'F', radius = 0) {
+  if (radius > 0 && typeof pdf.roundedRect === 'function') {
+    pdf.roundedRect(x, y, width, height, radius, radius, style)
+    return
+  }
+
+  pdf.rect(x, y, width, height, style)
+}
+
+function estimateRoomGridTextWidth(text, fontSize) {
+  return Math.max(0, compactText(text).length * fontSize * 0.42)
+}
+
+function getRoomGridTextWidth(pdf, text, fontSize) {
+  if (fontSize) {
+    pdf.setFontSize(fontSize)
+  }
+
+  return typeof pdf.getTextWidth === 'function'
+    ? pdf.getTextWidth(String(text || ''))
+    : estimateRoomGridTextWidth(text, fontSize || 8)
+}
+
+function trimRoomGridTextToWidth(pdf, value, width, fontSize = 7) {
+  const text = compactText(value).replace(/\s+/g, ' ') || '-'
+  const safeWidth = Math.max(4, width)
+
+  if (getRoomGridTextWidth(pdf, text, fontSize) <= safeWidth) {
+    return text
+  }
+
+  const ellipsis = '...'
+  let candidate = text
+  while (candidate.length > 1) {
+    candidate = candidate.slice(0, -1).trimEnd()
+    if (getRoomGridTextWidth(pdf, `${candidate}${ellipsis}`, fontSize) <= safeWidth) {
+      return `${candidate}${ellipsis}`
+    }
+  }
+
+  return ellipsis
+}
+
+function getRoomGridClassLabel(room = {}) {
+  const roomClassMode = compactText(room.roomClassMode).toLowerCase()
+
+  if (roomClassMode === 'matu') {
+    return 'matu'
+  }
+
+  if (roomClassMode === 'special') {
+    return 'SPECIAL'
+  }
+
+  return ''
+}
+
+function getRoomGridAccentColor(site = '') {
+  const normalizedSite = compactText(site).toUpperCase()
+
+  if (normalizedSite.includes('CFPV')) {
+    return [222, 32, 146]
+  }
+
+  if (normalizedSite.includes('ETML') || normalizedSite.includes('VENNES')) {
+    return [103, 0, 227]
+  }
+
+  return ROOM_GRID_PDF_COLORS.primary
+}
+
+function getRoomGridClassTagColors(label = '') {
+  const normalizedLabel = compactText(label).toLowerCase()
+
+  if (normalizedLabel === 'special') {
+    return {
+      fill: [254, 243, 199],
+      text: [120, 53, 15],
+      stroke: [251, 191, 36]
+    }
+  }
+
+  if (normalizedLabel === 'matu') {
+    return {
+      fill: [224, 242, 254],
+      text: [12, 74, 110],
+      stroke: [125, 211, 252]
+    }
+  }
+
+  return {
+    fill: ROOM_GRID_PDF_COLORS.white,
+    text: ROOM_GRID_PDF_COLORS.ink,
+    stroke: ROOM_GRID_PDF_COLORS.softLine
+  }
+}
+
+function compareRoomGridText(left, right) {
+  return compactText(left).localeCompare(compactText(right), 'fr', { sensitivity: 'base' })
+}
+
+function getSortableTimeValue(time) {
+  const match = compactText(time).match(/^(\d{1,2}):(\d{2})/)
+  return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER
+}
+
+function buildRoomGridSectionsFromRooms(rooms = []) {
+  const exportSlots = (Array.isArray(rooms) ? rooms : []).flatMap((room) => {
+    const roomSlots = getRoomSlots(room)
+    const site = compactText(room.site)
+    const roomName = compactText(room.name) || 'Salle à confirmer'
+    const roomClassLabel = getRoomGridClassLabel(room)
+    const dateSort = normalizeDate(room.date)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const dateLabel = formatLongDateLabel(room.date)
+
+    return roomSlots.map(({ tpiData, displayedSlot, index }) => {
+      const hasPublishedTpi = Boolean(tpiData && hasPublishedDefense(tpiData))
+      const startTime = compactText(displayedSlot?.startTime)
+      const endTime = compactText(displayedSlot?.endTime)
+
+      return {
+        roomKey: `${dateSort}|${site}|${roomName}`,
+        dateSort,
+        timeSort: getSortableTimeValue(startTime),
+        slotIndex: Number.isInteger(index) ? index : 0,
+        date: dateLabel,
+        horaire: formatTimeRangeLabel(startTime, endTime),
+        site,
+        salle: roomName,
+        roomClassLabel,
+        hasPublishedTpi,
+        candidat: hasPublishedTpi ? compactText(tpiData?.candidat) : '',
+        expert1: hasPublishedTpi ? compactText(tpiData?.expert1?.name) : '',
+        expert2: hasPublishedTpi ? compactText(tpiData?.expert2?.name) : '',
+        cdp: hasPublishedTpi ? compactText(tpiData?.boss?.name) : ''
+      }
+    })
+  }).sort((left, right) => (
+    left.dateSort - right.dateSort ||
+    left.timeSort - right.timeSort ||
+    compareRoomGridText(left.site, right.site) ||
+    compareRoomGridText(left.salle, right.salle) ||
+    left.slotIndex - right.slotIndex ||
+    compareRoomGridText(left.candidat, right.candidat)
+  ))
+
+  const sections = new Map()
+
+  exportSlots.forEach((slot) => {
+    if (!sections.has(slot.roomKey)) {
+      sections.set(slot.roomKey, {
+        key: slot.roomKey,
+        title: `Salle ${slot.salle}`,
+        sortDate: slot.dateSort,
+        sortSite: slot.site,
+        sortRoom: slot.salle,
+        roomName: slot.salle,
+        site: slot.site,
+        date: slot.date,
+        roomClassLabel: slot.roomClassLabel,
+        slots: []
+      })
+    }
+
+    sections.get(slot.roomKey).slots.push(slot)
+  })
+
+  return Array.from(sections.values())
+    .sort((left, right) => (
+      left.sortDate - right.sortDate ||
+      compareRoomGridText(left.sortSite, right.sortSite) ||
+      compareRoomGridText(left.sortRoom, right.sortRoom)
+    ))
+    .map((section) => ({
+      ...section,
+      publishedCount: section.slots.filter((slot) => slot.hasPublishedTpi).length,
+      rows: section.slots.map((slot) => ({
+        horaire: slot.horaire,
+        candidat: slot.candidat,
+        expert1: slot.expert1,
+        expert2: slot.expert2,
+        cdp: slot.cdp
+      }))
+    }))
+}
+
+function buildRoomGridSectionsFromEvents(events = []) {
+  const sections = new Map()
+
+  ;(Array.isArray(events) ? events : []).forEach((event) => {
+    const roomKey = `${compactText(event.dateKey)}|${compactText(event.site)}|${compactText(event.roomName)}`
+    if (!sections.has(roomKey)) {
+      sections.set(roomKey, {
+        key: roomKey,
+        sortDate: normalizeDate(event.date)?.getTime() ?? Number.MAX_SAFE_INTEGER,
+        sortSite: compactText(event.site),
+        sortRoom: compactText(event.roomName),
+        roomName: compactText(event.roomName) || 'Salle à confirmer',
+        site: compactText(event.site),
+        date: formatLongDateLabel(event.date),
+        roomClassLabel: '',
+        rows: []
+      })
+    }
+
+    sections.get(roomKey).rows.push({
+      horaire: event.timeLabel,
+      candidat: event.candidateName,
+      expert1: event.expert1Name,
+      expert2: event.expert2Name,
+      cdp: event.projectLeadName
+    })
+  })
+
+  return Array.from(sections.values())
+    .sort((left, right) => (
+      left.sortDate - right.sortDate ||
+      compareRoomGridText(left.sortSite, right.sortSite) ||
+      compareRoomGridText(left.sortRoom, right.sortRoom)
+    ))
+}
+
+function getRoomGridCardHeight(section) {
+  const slotCount = Math.max(1, section.rows.length)
+  return 15 + slotCount * 21 + 3
+}
+
+function getRoomGridMaxCardHeight(section) {
+  const slotCount = Math.max(1, section.rows.length)
+  return 15 + slotCount * 24 + 3
+}
+
+function getRoomGridColumnCount(sections = []) {
+  const roomCount = Math.max(1, sections.length)
+  if (roomCount <= 2) {
+    return roomCount
+  }
+
+  const largestSlotCount = Math.max(1, ...sections.map((section) => Math.max(1, section.rows.length)))
+  const maxLandscapeColumns = largestSlotCount > 10 ? 3 : 4
+  const targetColumns = roomCount >= maxLandscapeColumns ? maxLandscapeColumns : roomCount
+
+  return Math.min(roomCount, Math.max(2, targetColumns))
+}
+
+function buildRoomGridPages({ sections, contentX, contentY, contentWidth, pageHeight }) {
+  const startY = contentY
+  const bottomY = pageHeight - 10
+  const columnCount = getRoomGridColumnCount(sections)
+  const gap = columnCount >= 4 ? 3 : 4
+  const rawCardWidth = (contentWidth - gap * (columnCount - 1)) / columnCount
+  const cardWidth = Math.min(rawCardWidth, 96)
+  const gridWidth = cardWidth * columnCount + gap * (columnCount - 1)
+  const gridX = contentX + Math.max(0, (contentWidth - gridWidth) / 2)
+  const pages = [[]]
+  let currentPageIndex = 0
+  let columnCursors = Array.from({ length: columnCount }, () => startY)
+
+  const stretchPageItems = (items) => {
+    if (!items.length) {
+      return
+    }
+
+    const itemsByColumn = new Map()
+    items.forEach((item) => {
+      if (!itemsByColumn.has(item.columnIndex)) {
+        itemsByColumn.set(item.columnIndex, [])
+      }
+      itemsByColumn.get(item.columnIndex).push(item)
+    })
+
+    itemsByColumn.forEach((columnItems) => {
+      const sortedItems = columnItems.sort((left, right) => left.y - right.y)
+      const totalGap = gap * Math.max(0, sortedItems.length - 1)
+      const availableHeight = bottomY - startY - totalGap
+      const baseHeight = sortedItems.reduce((sum, item) => sum + item.height, 0)
+      const stretchCapacity = sortedItems.reduce((sum, item) => sum + Math.max(0, item.maxHeight - item.height), 0)
+      const appliedStretch = Math.min(Math.max(0, availableHeight - baseHeight), stretchCapacity)
+      let nextY = startY
+
+      sortedItems.forEach((item) => {
+        const itemCapacity = Math.max(0, item.maxHeight - item.height)
+        const itemStretch = stretchCapacity > 0 ? appliedStretch * (itemCapacity / stretchCapacity) : 0
+        item.y = nextY
+        item.height += itemStretch
+        nextY += item.height + gap
+      })
+    })
+  }
+
+  const getNextColumnIndex = (cardHeight) => {
+    const fittingColumns = columnCursors
+      .map((cursor, index) => ({ cursor, index }))
+      .filter(({ cursor }) => cursor + cardHeight <= bottomY)
+
+    if (!fittingColumns.length) {
+      return -1
+    }
+
+    return fittingColumns.sort((left, right) => left.cursor - right.cursor || left.index - right.index)[0].index
+  }
+
+  sections.forEach((section) => {
+    const cardHeight = Math.min(getRoomGridCardHeight(section), bottomY - startY)
+    const maxCardHeight = Math.min(getRoomGridMaxCardHeight(section), bottomY - startY)
+    let columnIndex = getNextColumnIndex(cardHeight)
+
+    if (columnIndex === -1 && pages[currentPageIndex].length > 0) {
+      stretchPageItems(pages[currentPageIndex])
+      pages.push([])
+      currentPageIndex += 1
+      columnCursors = Array.from({ length: columnCount }, () => startY)
+      columnIndex = getNextColumnIndex(cardHeight)
+    }
+
+    const safeColumnIndex = columnIndex === -1 ? 0 : columnIndex
+    const cursorY = columnCursors[safeColumnIndex]
+
+    pages[currentPageIndex].push({
+      section,
+      x: gridX + safeColumnIndex * (cardWidth + gap),
+      y: cursorY,
+      width: cardWidth,
+      height: cardHeight,
+      maxHeight: maxCardHeight,
+      columnIndex: safeColumnIndex
+    })
+
+    columnCursors[safeColumnIndex] = cursorY + cardHeight + gap
+  })
+
+  stretchPageItems(pages[currentPageIndex])
+  return pages
+}
+
+function drawRoomGridFooter({ pdf, contentX, contentWidth, pageHeight, generatedAtLabel, pageIndex, pageCount }) {
+  setRoomGridDrawColor(pdf, ROOM_GRID_PDF_COLORS.softLine)
+  pdf.setLineWidth(0.2)
+  pdf.line(contentX, pageHeight - 9, contentX + contentWidth, pageHeight - 9)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7)
+  setRoomGridTextColor(pdf, ROOM_GRID_PDF_COLORS.subtle)
+  pdf.text(
+    trimRoomGridTextToWidth(pdf, `Généré le ${generatedAtLabel}`, contentWidth - 42, 7),
+    contentX,
+    pageHeight - 5
+  )
+  pdf.text(`${pageIndex + 1}/${pageCount}`, contentX + contentWidth, pageHeight - 5, { align: 'right' })
+}
+
+function renderRoomGridCard({ pdf, item }) {
+  const { section, x, y, width, height } = item
+  const accentColor = getRoomGridAccentColor(section.site)
+  const headerHeight = 14
+  const slotCount = Math.max(1, section.rows.length)
+  const rowHeight = Math.max(20.5, (height - headerHeight - 3) / slotCount)
+  const innerX = x + 3
+  const timeColumnWidth = Math.min(23, Math.max(17, width * 0.24))
+  const textX = x + timeColumnWidth + 6
+  const textWidth = Math.max(22, width - timeColumnWidth - 9)
+  const siteWidth = Math.min(24, Math.max(16, width * 0.26))
+  const roomClassTag = compactText(section.roomClassLabel).toUpperCase()
+  const roomClassTagWidth = roomClassTag
+    ? Math.min(24, Math.max(13, estimateRoomGridTextWidth(roomClassTag, 5.5) + 5))
+    : 0
+
+  setRoomGridFillColor(pdf, ROOM_GRID_PDF_COLORS.panel)
+  setRoomGridDrawColor(pdf, ROOM_GRID_PDF_COLORS.line)
+  pdf.setLineWidth(0.25)
+  drawRoomGridRect(pdf, x, y, width, height, 'FD', 2.2)
+
+  setRoomGridFillColor(pdf, accentColor)
+  drawRoomGridRect(pdf, x, y, width, headerHeight, 'F', 2.2)
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8.2)
+  setRoomGridTextColor(pdf, ROOM_GRID_PDF_COLORS.white)
+  pdf.text(trimRoomGridTextToWidth(pdf, section.roomName || section.title, width - siteWidth - 9, 8.2), innerX, y + 5.7)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(6.4)
+  setRoomGridTextColor(pdf, [226, 232, 240])
+  pdf.text(
+    trimRoomGridTextToWidth(pdf, section.date, width - 7 - (roomClassTagWidth ? roomClassTagWidth + 3 : 0), 6.4),
+    innerX,
+    y + 10.8
+  )
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(6.2)
+  setRoomGridTextColor(pdf, ROOM_GRID_PDF_COLORS.white)
+  pdf.text(trimRoomGridTextToWidth(pdf, section.site || 'Site', siteWidth, 6.2), x + width - 3, y + 5.7, { align: 'right' })
+
+  if (roomClassTag) {
+    const tagColors = getRoomGridClassTagColors(roomClassTag)
+    const tagX = x + width - 3 - roomClassTagWidth
+    const tagY = y + 8.1
+    setRoomGridFillColor(pdf, tagColors.fill)
+    setRoomGridDrawColor(pdf, tagColors.stroke)
+    pdf.setLineWidth(0.15)
+    drawRoomGridRect(pdf, tagX, tagY, roomClassTagWidth, 4.6, 'FD', 1.6)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(5.5)
+    setRoomGridTextColor(pdf, tagColors.text)
+    pdf.text(trimRoomGridTextToWidth(pdf, roomClassTag, roomClassTagWidth - 3, 5.5), tagX + roomClassTagWidth / 2, tagY + 3.3, { align: 'center' })
+  }
+
+  let rowY = y + headerHeight
+  section.rows.forEach((row, index) => {
+    if (rowY + rowHeight > y + height - 2) {
+      return
+    }
+
+    const hasCandidate = Boolean(compactText(row.candidat))
+    setRoomGridFillColor(pdf, index % 2 === 0 ? ROOM_GRID_PDF_COLORS.panel : ROOM_GRID_PDF_COLORS.page)
+    pdf.rect(x, rowY, width, rowHeight, 'F')
+    setRoomGridDrawColor(pdf, ROOM_GRID_PDF_COLORS.softLine)
+    pdf.line(x + 2, rowY, x + width - 2, rowY)
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(6.4)
+    setRoomGridTextColor(pdf, ROOM_GRID_PDF_COLORS.ink)
+    pdf.text(trimRoomGridTextToWidth(pdf, row.horaire || 'Horaire', timeColumnWidth, 6.4), innerX, rowY + Math.max(5.2, rowHeight / 2 - 2.2))
+
+    const lineGap = Math.max(3.5, Math.min(4.2, rowHeight / 5.2))
+    const firstLineY = rowY + Math.max(5.5, (rowHeight - lineGap * 3) / 2 + 2.4)
+
+    pdf.setFont('helvetica', hasCandidate ? 'bold' : 'normal')
+    pdf.setFontSize(6.8)
+    setRoomGridTextColor(pdf, hasCandidate ? ROOM_GRID_PDF_COLORS.ink : ROOM_GRID_PDF_COLORS.subtle)
+    pdf.text(trimRoomGridTextToWidth(pdf, hasCandidate ? row.candidat : 'Créneau libre', textWidth, 6.8), textX, firstLineY)
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(5.8)
+    setRoomGridTextColor(pdf, ROOM_GRID_PDF_COLORS.muted)
+    pdf.text(trimRoomGridTextToWidth(pdf, `E1 ${row.expert1 || '-'}`, textWidth, 5.8), textX, firstLineY + lineGap)
+    pdf.text(trimRoomGridTextToWidth(pdf, `E2 ${row.expert2 || '-'}`, textWidth, 5.8), textX, firstLineY + lineGap * 2)
+    pdf.text(trimRoomGridTextToWidth(pdf, `CDP ${row.cdp || '-'}`, textWidth, 5.8), textX, firstLineY + lineGap * 3)
+
+    rowY += rowHeight
+  })
+}
+
+function buildRoomGridPdfBuffer({ rooms = [], fallbackEvents = [], year, publicationVersion, generatedAtLabel }) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape', compress: true })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const contentX = 10
+  const contentY = 10
+  const contentWidth = pageWidth - 20
+  const sections = Array.isArray(rooms) && rooms.length > 0
+    ? buildRoomGridSectionsFromRooms(rooms)
+    : buildRoomGridSectionsFromEvents(fallbackEvents)
+  const pages = buildRoomGridPages({ sections, contentX, contentY, contentWidth, pageHeight })
+
+  pages.forEach((items, pageIndex) => {
+    if (pageIndex > 0) {
+      doc.addPage()
+    }
+
+    items.forEach((item) => renderRoomGridCard({ pdf: doc, item }))
+
+    drawRoomGridFooter({
+      pdf: doc,
+      contentX,
+      contentWidth,
+      pageHeight,
+      generatedAtLabel: `${generatedAtLabel} · publication ${publicationVersion} · TPI ${year}`,
+      pageIndex,
+      pageCount: pages.length
+    })
   })
 
   return createPdfBuffer(doc)
@@ -943,7 +1443,7 @@ function buildAttachments({ target, year, publicationVersion, globalRoomsPdf, ge
       contentType: 'application/pdf'
     },
     {
-      filename: `${year}_planification_salles.pdf`,
+      filename: `defenses_${year}_vue_ecran_salles_toutes.pdf`,
       content: globalRoomsPdf,
       contentType: 'application/pdf'
     }
@@ -1148,7 +1648,7 @@ function buildManualManifestCsv({ targets = [], publicationVersion, year, genera
         `${baseName}_outlook.eml`,
         `${baseName}_horaire.ics`,
         `${baseName}_horaire_personnel.pdf`,
-        `${year}_planification_salles.pdf`
+        `defenses_${year}_vue_ecran_salles_toutes.pdf`
       ].join(' | ')
     ]))
   }
@@ -1177,6 +1677,7 @@ async function buildManualFinalSchedulePackage({
   const generatedAtLabel = formatDateTimeLabel(generatedAt)
   const emailSettings = await coordinationCatalogService.getSharedEmailSettingsIfAvailable()
   const globalRoomsPdf = buildGlobalRoomsPdfBuffer({
+    rooms: context.rooms,
     events: context.events,
     year: context.year,
     publicationVersion: context.publicationVersion,
@@ -1447,6 +1948,7 @@ async function sendFinalScheduleDelivery({
   const generatedAtLabel = formatDateTimeLabel(new Date())
   const emailSettings = await coordinationCatalogService.getSharedEmailSettingsIfAvailable()
   const globalRoomsPdf = buildGlobalRoomsPdfBuffer({
+    rooms: context.rooms,
     events: context.events,
     year: context.year,
     publicationVersion: context.publicationVersion,

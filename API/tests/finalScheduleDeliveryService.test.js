@@ -133,11 +133,13 @@ test('previewFinalScheduleDelivery prepares one recipient with multiple TPI even
     assert.equal(preview.publicationVersion, 7)
     assert.equal(preview.roomCount, 1)
     assert.equal(preview.tpiCount, 2)
-    assert.equal(preview.summary.recipientCount, 6)
-    assert.equal(preview.summary.sendableCount, 4)
-    assert.equal(preview.summary.pendingSendCount, 4)
+    assert.equal(preview.summary.recipientCount, 4)
+    assert.equal(preview.summary.sendableCount, 2)
+    assert.equal(preview.summary.pendingSendCount, 2)
     assert.equal(preview.summary.missingEmailCount, 1)
     assert.equal(preview.summary.disabledEmailCount, 1)
+    assert.equal(preview.recipients.some((recipient) => recipient.personId === PERSON_IDS.candidate1), false)
+    assert.equal(preview.recipients.some((recipient) => recipient.personId === PERSON_IDS.candidate2), false)
 
     const expert = preview.recipients.find((recipient) => recipient.personId === PERSON_IDS.expert1)
     assert.equal(expert.personName, 'Eva Expert')
@@ -166,7 +168,7 @@ test('previewFinalScheduleDelivery reports invalid or missing stakeholders witho
 
     assert.equal(preview.summary.invalidPersonIdCount, 1)
     assert.equal(preview.summary.personNotFoundCount, 1)
-    assert.equal(preview.summary.pendingSendCount, 4)
+    assert.equal(preview.summary.pendingSendCount, 2)
 
     const invalidRecipient = preview.recipients.find((recipient) => recipient.personId === 'legacy-expert')
     assert.equal(invalidRecipient.canSendEmail, false)
@@ -200,7 +202,7 @@ test('previewFinalScheduleDelivery keeps pending deliveries out of the sendable 
     const preview = await finalScheduleDeliveryService.previewFinalScheduleDelivery({ year: 2026 })
 
     assert.equal(preview.summary.inProgressCount, 1)
-    assert.equal(preview.summary.pendingSendCount, 3)
+    assert.equal(preview.summary.pendingSendCount, 1)
 
     const expert = preview.recipients.find((recipient) => recipient.personId === PERSON_IDS.expert1)
     assert.equal(expert.canSendEmail, true)
@@ -252,21 +254,21 @@ test('sendFinalScheduleDelivery sends PDF and iCal attachments once per publicat
     const firstResult = await finalScheduleDeliveryService.sendFinalScheduleDelivery({ year: 2026 })
 
     assert.equal(firstResult.success, true)
-    assert.equal(firstResult.summary.sentCount, 4)
+    assert.equal(firstResult.summary.sentCount, 2)
     assert.equal(firstResult.summary.skippedCount, 2)
-    assert.equal(sentEmails.length, 4)
+    assert.equal(sentEmails.length, 2)
     assert.equal(sentEmails[0].template, 'soutenanceSchedulePackage')
     assert.equal(sentEmails[0].attachments.length, 3)
     assert.ok(sentEmails[0].attachments.some((attachment) => attachment.filename.endsWith('.ics')))
     assert.ok(sentEmails[0].attachments.some((attachment) => attachment.filename.endsWith('_horaire_personnel.pdf')))
-    assert.ok(sentEmails[0].attachments.some((attachment) => attachment.filename.endsWith('_planification_salles.pdf')))
-    assert.equal(deliveryRecords.filter((record) => record.status === 'sent').length, 4)
+    assert.ok(sentEmails[0].attachments.some((attachment) => attachment.filename === 'defenses_2026_vue_ecran_salles_toutes.pdf'))
+    assert.equal(deliveryRecords.filter((record) => record.status === 'sent').length, 2)
 
     const secondResult = await finalScheduleDeliveryService.sendFinalScheduleDelivery({ year: 2026 })
 
     assert.equal(secondResult.summary.sentCount, 0)
-    assert.equal(secondResult.summary.alreadySentCount, 4)
-    assert.equal(sentEmails.length, 4)
+    assert.equal(secondResult.summary.alreadySentCount, 2)
+    assert.equal(sentEmails.length, 2)
   } finally {
     while (restore.length > 0) {
       restore.pop()()
@@ -291,7 +293,7 @@ test('buildManualFinalSchedulePackage creates a zip without sending SMTP email',
     assert.equal(result.success, true)
     assert.equal(result.available, true)
     assert.equal(result.publicationVersion, 7)
-    assert.equal(result.summary.packagedCount, 4)
+    assert.equal(result.summary.packagedCount, 2)
     assert.equal(smtpCalled, false)
     assert.ok(Buffer.isBuffer(result.buffer))
     assert.equal(result.buffer.slice(0, 2).toString('utf8'), 'PK')
@@ -300,6 +302,7 @@ test('buildManualFinalSchedulePackage creates a zip without sending SMTP email',
     assert.equal(result.buffer.includes(Buffer.from('_outlook.eml')), true)
     assert.equal(result.buffer.includes(Buffer.from('X-Unsent: 1')), true)
     assert.equal(result.buffer.includes(Buffer.from('Content-Disposition: attachment')), true)
+    assert.equal(result.buffer.includes(Buffer.from('defenses_2026_vue_ecran_salles_toutes.pdf')), true)
     assert.match(result.filename, /horaires_definitifs.*outlook\.zip$/)
   } finally {
     while (restore.length > 0) {
@@ -351,11 +354,11 @@ test('sendFinalScheduleDelivery does not mark a sent email as failed when delive
     const result = await finalScheduleDeliveryService.sendFinalScheduleDelivery({ year: 2026 })
 
     assert.equal(result.success, false)
-    assert.equal(result.summary.sentCount, 4)
+    assert.equal(result.summary.sentCount, 2)
     assert.equal(result.summary.failedCount, 0)
-    assert.equal(result.summary.recordingFailedCount, 4)
-    assert.equal(sentEmails.length, 4)
-    assert.equal(deliveryRecords.filter((record) => record.status === 'pending').length, 4)
+    assert.equal(result.summary.recordingFailedCount, 2)
+    assert.equal(sentEmails.length, 2)
+    assert.equal(deliveryRecords.filter((record) => record.status === 'pending').length, 2)
     assert.equal(deliveryRecords.filter((record) => record.status === 'failed').length, 0)
   } finally {
     while (restore.length > 0) {
