@@ -1511,7 +1511,7 @@ ${buildStaticSiteFaviconHead()}
         if (hasVersionMismatch) {
           var formMetaText = getModificationFormMetaText() || ('Formulaire v' + publicationVersionToCompare);
           personPublicationWarning.textContent =
-            formMetaText + '. Dates à vérifier.';
+            formMetaText + '. Les dates peuvent avoir changé. Utilisez le dernier lien reçu ou contactez l\\'organisateur si un TPI manque.';
           return;
         }
 

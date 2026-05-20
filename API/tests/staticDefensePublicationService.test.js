@@ -384,7 +384,9 @@ test('buildStaticDefenseHtml avertit quand le lien personnel vise une autre publ
   assert.match(warning, /Formulaire v3/)
   assert.match(warning, /du/)
   assert.doesNotMatch(warning, /mini-site/)
-  assert.match(warning, /Dates à vérifier/)
+  assert.match(warning, /Les dates peuvent avoir changé/)
+  assert.match(warning, /dernier lien reçu/)
+  assert.match(warning, /si un TPI manque/)
 })
 
 test('buildStaticDefenseHtml indique la publication source dans la note du formulaire', () => {
@@ -432,7 +434,7 @@ test('buildStaticDefenseHtml ne marque pas le formulaire stale quand le formulai
 
   assert.match(warning, /Formulaire v2/)
   assert.match(warning, /Publication du/)
-  assert.doesNotMatch(warning, /Dates à vérifier/)
+  assert.doesNotMatch(warning, /Les dates peuvent avoir changé/)
   assert.equal(warningNode.classList.contains('is-stale'), false)
 })
 
