@@ -22,6 +22,7 @@ const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
 const FTP_RESPONSE_TIMEOUT_MS = 15000
 const DEFAULT_STATIC_PUBLIC_PATH_PREFIX = 'soutenances'
+const STATIC_SITE_FAVICON_FILES = Object.freeze(['favicon.ico', 'logo192.png', 'logo512.png'])
 const STATIC_VOTE_LINK_CIPHER = 'aes-256-gcm'
 const STATIC_VOTE_LINK_KEY_PREFIX = 'tpi-static-defense-linked-vote:'
 const STATIC_MAGIC_LINK_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_MAGIC_LINK_BOOTSTRAP -->'
@@ -39,6 +40,49 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function getStaticSitePublicAssetPath(fileName) {
+  return path.resolve(rootDir, 'public', fileName)
+}
+
+function buildStaticSiteFaviconHead(indent = '  ') {
+  const prefix = typeof indent === 'string' ? indent : ''
+
+  return [
+    '<link rel="icon" href="favicon.ico" sizes="any">',
+    '<link rel="icon" type="image/png" sizes="192x192" href="logo192.png">',
+    '<link rel="apple-touch-icon" href="logo192.png">'
+  ].map((line) => `${prefix}${line}`).join('\n')
+}
+
+async function copyStaticSiteFavicons(outputDir) {
+  const copiedFiles = []
+
+  for (const fileName of STATIC_SITE_FAVICON_FILES) {
+    const sourcePath = getStaticSitePublicAssetPath(fileName)
+
+    if (!fs.existsSync(sourcePath)) {
+      continue
+    }
+
+    await fs.promises.copyFile(sourcePath, path.join(outputDir, fileName))
+    copiedFiles.push(fileName)
+  }
+
+  return copiedFiles
+}
+
+async function uploadStaticSiteFavicons(ftpClient, outputDir) {
+  await copyStaticSiteFavicons(outputDir)
+
+  for (const fileName of STATIC_SITE_FAVICON_FILES) {
+    const localPath = path.join(outputDir, fileName)
+
+    if (fs.existsSync(localPath)) {
+      await ftpClient.uploadFile(localPath, fileName)
+    }
+  }
 }
 
 function parseYear(value) {
@@ -988,6 +1032,7 @@ function buildStaticDefenseHtml({
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+${buildStaticSiteFaviconHead()}
   <title>Défenses ${escapeHtml(normalizedYear)}</title>
   <style>${css}</style>
 </head>
@@ -2371,6 +2416,7 @@ function buildStaticAccessDeniedHtml(year) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
+${buildStaticSiteFaviconHead()}
   <title>Accès protégé</title>
   <style>
     body {
@@ -2903,6 +2949,7 @@ async function generateStaticDefensesSite(year) {
   }
 
   await fs.promises.mkdir(outputDir, { recursive: true })
+  await copyStaticSiteFavicons(outputDir)
   await fs.promises.writeFile(indexPath, html, 'utf8')
   const accessFiles = await writeStaticPublicationAccessFiles({
     year: normalizedYear,
@@ -3249,6 +3296,7 @@ async function publishStaticDefensesSite(year) {
   try {
     await ftpClient.connect()
     manifest.remoteDir = await ftpClient.ensureDirectory(remoteDir)
+    await uploadStaticSiteFavicons(ftpClient, status.outputDir)
     await ftpClient.uploadFile(accessFiles.deniedIndexPath, 'index.html')
     await ftpClient.uploadFile(accessFiles.phpIndexPath, 'index.php')
     await fs.promises.writeFile(status.manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
@@ -3269,6 +3317,8 @@ module.exports = {
   buildStaticAccessDeniedHtml,
   buildStaticDefenseHtml,
   buildStaticDefensePhp,
+  buildStaticSiteFaviconHead,
+  copyStaticSiteFavicons,
   flattenPublishedRooms,
   generateStaticDefensesSite,
   getFtpConfig,
@@ -3278,5 +3328,6 @@ module.exports = {
   joinSlashPaths,
   listStaticPublicationAccessLinks,
   normalizeSlashPath,
-  publishStaticDefensesSite
+  publishStaticDefensesSite,
+  uploadStaticSiteFavicons
 }

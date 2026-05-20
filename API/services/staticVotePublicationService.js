@@ -32,9 +32,12 @@ const {
 } = require('./publicationDeploymentConfigService')
 const {
   SimpleFtpClient,
+  buildStaticSiteFaviconHead,
+  copyStaticSiteFavicons,
   getFtpConfig,
   joinSlashPaths,
-  normalizeSlashPath
+  normalizeSlashPath,
+  uploadStaticSiteFavicons
 } = require('./staticDefensePublicationService')
 const { COORDINATION_VOTE_STATUSES } = require('../modules/coordination/status')
 
@@ -1178,6 +1181,7 @@ function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', m
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
+${buildStaticSiteFaviconHead()}
   <title>${escapeHtml(title)} ${normalizedYear}</title>
   <style>
     :root {
@@ -1263,6 +1267,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [], conta
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
+${buildStaticSiteFaviconHead()}
   <title>Votes ${normalizedYear}</title>
   <style>
     :root {
@@ -3437,6 +3442,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [], conta
 
 function buildStaticVotePhp({ html, year, campaignPayload, accessLinks = [] }) {
   const normalizedYear = parseYear(year)
+  const faviconHead = buildStaticSiteFaviconHead('')
 
   const phpPreamble = `<?php
 declare(strict_types=1);
@@ -3472,7 +3478,7 @@ function staticVoteUnavailable(int $statusCode, string $title, string $message):
     header('Content-Type: text/html; charset=utf-8');
     $safeTitle = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
     $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f5f7fb;--muted:#526071;--line:#d8dee8;--accent:#0f766e;--accent-soft:#e7f5f1;--info:#1d4ed8;--info-soft:#eaf2ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#eaf1f4 0,#f8fafc 220px,#f5f7fb 100%)}main{width:min(560px,calc(100vw - 32px));display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(23,32,51,.10)}.kicker{display:inline-flex;width:fit-content;min-height:28px;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}h1{margin:0;font-size:1.62rem;line-height:1.12;letter-spacing:0}p{margin:0;color:var(--muted);line-height:1.55}.status{padding:12px;border-left:4px solid var(--info);background:var(--info-soft);color:var(--muted);line-height:1.45}</style></head><body><main><span class="kicker">Votes ${normalizedYear}</span><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p><p class="status">Lien personnel requis.</p></main></body></html>';
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">${faviconHead}<title>' . $safeTitle . '</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f5f7fb;--muted:#526071;--line:#d8dee8;--accent:#0f766e;--accent-soft:#e7f5f1;--info:#1d4ed8;--info-soft:#eaf2ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#eaf1f4 0,#f8fafc 220px,#f5f7fb 100%)}main{width:min(560px,calc(100vw - 32px));display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(23,32,51,.10)}.kicker{display:inline-flex;width:fit-content;min-height:28px;align-items:center;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}h1{margin:0;font-size:1.62rem;line-height:1.12;letter-spacing:0}p{margin:0;color:var(--muted);line-height:1.55}.status{padding:12px;border-left:4px solid var(--info);background:var(--info-soft);color:var(--muted);line-height:1.45}</style></head><body><main><span class="kicker">Votes ${normalizedYear}</span><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p><p class="status">Lien personnel requis.</p></main></body></html>';
     exit;
 }
 
@@ -4027,6 +4033,7 @@ $staticVoteBootstrap = '<script>window.__STATIC_VOTE_BOOTSTRAP__=' .
 
 function buildStaticVoteArbitragePhp({ year, tokenSecret }) {
   const normalizedYear = parseYear(year)
+  const faviconHead = buildStaticSiteFaviconHead('')
 
   return `<?php
 declare(strict_types=1);
@@ -4075,7 +4082,7 @@ function arbitrageUnavailable(int $statusCode, string $title, string $message): 
     header('Content-Type: text/html; charset=utf-8');
     $safeTitle = arbitrageEscape($title);
     $safeMessage = arbitrageEscape($message);
-    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . $safeTitle . '</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#172033;font-family:Inter,Arial,sans-serif}main{width:min(560px,calc(100vw - 32px));background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;box-shadow:0 20px 60px rgba(23,32,51,.08)}h1{margin:0 0 10px;font-size:1.45rem}p{margin:0;color:#526071;line-height:1.55}</style></head><body><main><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p></main></body></html>';
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">${faviconHead}<title>' . $safeTitle . '</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#172033;font-family:Inter,Arial,sans-serif}main{width:min(560px,calc(100vw - 32px));background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;box-shadow:0 20px 60px rgba(23,32,51,.08)}h1{margin:0 0 10px;font-size:1.45rem}p{margin:0;color:#526071;line-height:1.55}</style></head><body><main><h1>' . $safeTitle . '</h1><p>' . $safeMessage . '</p></main></body></html>';
     exit;
 }
 
@@ -4212,7 +4219,7 @@ function arbitrageRender(array $proposal, string $tokenHash, ?array $existing = 
     $name = arbitrageEscape($proposal['recipientName'] ?? ($proposal['name'] ?? ''));
     $role = arbitrageEscape($proposal['roleLabel'] ?? '');
     $safeError = arbitrageEscape($error);
-    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Arbitrage TPI ${normalizedYear}</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f4f6f8;--line:#d8dee8;--muted:#526071;--accent:#0f766e;--danger:#b42318}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(180deg,#eef4f2 0,#f7f8fa 230px,#f4f6f8 100%)}main{width:min(760px,calc(100vw - 28px));margin:0 auto;padding:18px 0 34px}.panel{display:grid;gap:16px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px;box-shadow:0 18px 50px rgba(23,32,51,.08)}.kicker{display:inline-flex;width:fit-content;min-height:26px;align-items:center;padding:3px 10px;border-radius:999px;background:#e7f5f1;color:#0b5e57;font-weight:800;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}h1{margin:0;font-size:1.45rem;letter-spacing:0}.meta{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px}.row span:first-child{color:var(--muted);font-weight:700}.message{padding:12px;border-left:4px solid var(--accent);background:#f8fcfb;color:#243044;line-height:1.5}.alert{padding:12px;border-radius:8px;border:1px solid #fecaca;background:#fff1f0;color:var(--danger);font-weight:700}.success{padding:12px;border-radius:8px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-weight:800}.choices{display:grid;gap:8px}.choice{display:flex;gap:8px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fff}.choice input{margin-top:3px;accent-color:var(--accent)}textarea{width:100%;min-height:82px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}button{min-height:40px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:800;padding:9px 14px;cursor:pointer}button:hover{background:#0b5e57}.muted{color:var(--muted);line-height:1.45}@media(max-width:620px){.row{grid-template-columns:1fr}}</style></head><body><main><section class="panel"><span class="kicker">Arbitrage TPI ${normalizedYear}</span><h1>' . $reference . '</h1>';
+    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow">${faviconHead}<title>Arbitrage TPI ${normalizedYear}</title><style>:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f4f6f8;--line:#d8dee8;--muted:#526071;--accent:#0f766e;--danger:#b42318}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(180deg,#eef4f2 0,#f7f8fa 230px,#f4f6f8 100%)}main{width:min(760px,calc(100vw - 28px));margin:0 auto;padding:18px 0 34px}.panel{display:grid;gap:16px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px;box-shadow:0 18px 50px rgba(23,32,51,.08)}.kicker{display:inline-flex;width:fit-content;min-height:26px;align-items:center;padding:3px 10px;border-radius:999px;background:#e7f5f1;color:#0b5e57;font-weight:800;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}h1{margin:0;font-size:1.45rem;letter-spacing:0}.meta{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px}.row span:first-child{color:var(--muted);font-weight:700}.message{padding:12px;border-left:4px solid var(--accent);background:#f8fcfb;color:#243044;line-height:1.5}.alert{padding:12px;border-radius:8px;border:1px solid #fecaca;background:#fff1f0;color:var(--danger);font-weight:700}.success{padding:12px;border-radius:8px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-weight:800}.choices{display:grid;gap:8px}.choice{display:flex;gap:8px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fff}.choice input{margin-top:3px;accent-color:var(--accent)}textarea{width:100%;min-height:82px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}button{min-height:40px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:800;padding:9px 14px;cursor:pointer}button:hover{background:#0b5e57}.muted{color:var(--muted);line-height:1.45}@media(max-width:620px){.row{grid-template-columns:1fr}}</style></head><body><main><section class="panel"><span class="kicker">Arbitrage TPI ${normalizedYear}</span><h1>' . $reference . '</h1>';
     if ($name !== '' || $role !== '') {
         echo '<p class="muted">' . trim($name . ($role !== '' ? ' · ' . $role : '')) . '</p>';
     }
@@ -4523,6 +4530,7 @@ async function generateStaticVotesSite(year) {
   const outputDir = getOutputDir(normalizedYear)
 
   await fs.promises.mkdir(outputDir, { recursive: true })
+  await copyStaticSiteFavicons(outputDir)
   const archivedCampaign = previousPayload?.campaignId &&
     previousPayload.campaignId !== campaignPayload.campaignId
     ? await archiveStaticVoteCampaignPayload(normalizedYear, previousPayload)
@@ -4625,6 +4633,7 @@ async function publishStaticVotesSite(year) {
   try {
     await ftpClient.connect()
     manifest.remoteDir = await ftpClient.ensureDirectory(remoteDir)
+    await uploadStaticSiteFavicons(ftpClient, status.outputDir)
     await ftpClient.uploadFile(status.deniedIndexPath, 'index.html')
     await ftpClient.uploadFile(status.phpIndexPath, 'index.php')
     await ftpClient.uploadFile(status.syncPhpPath, 'sync.php')

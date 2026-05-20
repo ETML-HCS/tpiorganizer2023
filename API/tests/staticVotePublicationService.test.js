@@ -508,6 +508,8 @@ test('buildStaticVoteHtml renders a guided stakeholder vote interface', () => {
   })
 
   assert.match(html, /class="vote-summary"/)
+  assert.match(html, /rel="icon" href="favicon\.ico"/)
+  assert.match(html, /rel="apple-touch-icon" href="logo192\.png"/)
   assert.match(html, /Publication du/)
   assert.match(html, /vote-date-group/)
   assert.match(html, /buildVoteDateGroups/)
@@ -576,6 +578,7 @@ test('buildStaticVoteHtml annonce la fermeture quand aucun vote n est ouvert', (
   })
 
   assert.match(html, /Demandes fermées\./)
+  assert.match(html, /rel="icon" href="favicon\.ico"/)
   assert.match(html, /La campagne de votes est fermée\./)
   assert.match(html, /mailto:' \+ contactEmail/)
   assert.match(html, /admin\.vote@example\.test/)
@@ -652,7 +655,10 @@ test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote
       assert.equal(fs.existsSync(result.arbitragePhpPath), true)
       assert.equal(fs.existsSync(result.htaccessPath), true)
       assert.equal(fs.existsSync(result.manifestPath), true)
+      assert.equal(fs.existsSync(path.join(result.outputDir, 'favicon.ico')), true)
+      assert.equal(fs.existsSync(path.join(result.outputDir, 'logo192.png')), true)
       assert.match(fs.readFileSync(result.phpIndexPath, 'utf8'), /window\.__STATIC_VOTE_BOOTSTRAP__/)
+      assert.match(fs.readFileSync(result.phpIndexPath, 'utf8'), /rel="icon" href="favicon\.ico"/)
       assert.match(fs.readFileSync(result.syncPhpPath, 'utf8'), /HTTP_X_SYNC_SECRET/)
       assert.match(fs.readFileSync(result.arbitragePhpPath, 'utf8'), /STATIC_VOTE_ARBITRAGE_SECRET_JSON/)
 
@@ -719,6 +725,7 @@ test('buildStaticVotePhp gates the vote UI with token hashes and writes JSONL su
   assert.match(php, /staticVoteHandleSubmit/)
   assert.match(php, /votes\.jsonl/)
   assert.match(php, /window\.__STATIC_VOTE_BOOTSTRAP__/)
+  assert.match(php, /rel="icon" href="favicon\.ico"/)
   assert.doesNotMatch(php, /STATIC_VOTE_BOOTSTRAP -->/)
 })
 
@@ -740,6 +747,7 @@ test('buildStaticVoteArbitragePhp verifies signed arbitration tokens and stores 
   assert.match(php, /gzinflate/)
   assert.match(php, /hash_hmac\('sha256', \$body, \$secret, true\)/)
   assert.match(php, /arbitrages\.jsonl/)
+  assert.match(php, /rel="icon" href="favicon\.ico"/)
   assert.match(php, /Une raison est requise en cas de refus/)
   assert.match(php, /Envoyer ma réponse/)
 })

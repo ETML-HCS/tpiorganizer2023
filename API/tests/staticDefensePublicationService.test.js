@@ -303,6 +303,8 @@ test('buildStaticDefenseHtml embeds data and static rendering script in one html
   })
 
   assert.match(html, /<title>Défenses 2026<\/title>/)
+  assert.match(html, /rel="icon" href="favicon\.ico"/)
+  assert.match(html, /rel="apple-touch-icon" href="logo192\.png"/)
   assert.match(html, /id="defense-data"/)
   assert.match(html, /tpi-soutenance-page static-soutenance-page/)
   assert.match(html, /soutenance-toolbar/)
@@ -860,6 +862,7 @@ test('buildStaticAccessDeniedHtml does not expose defense data', () => {
   const html = buildStaticAccessDeniedHtml(2026)
 
   assert.match(html, /Accès protégé/)
+  assert.match(html, /rel="icon" href="favicon\.ico"/)
   assert.doesNotMatch(html, /id="defense-data"/)
   assert.doesNotMatch(html, /static-soutenance-page/)
 })
