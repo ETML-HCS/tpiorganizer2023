@@ -20,7 +20,8 @@ const {
   importStaticVoteRecord,
   listStaticVoteAccessLinks,
   normalizeVotePublicPath,
-  normalizeVoteRemoteDir
+  normalizeVoteRemoteDir,
+  syncStaticVoteResponses
 } = require('../services/staticVotePublicationService')
 const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
@@ -570,10 +571,15 @@ test('buildStaticVoteHtml annonce la fermeture quand aucun vote n est ouvert', (
     year: 2026,
     generatedAt: '2026-05-01T10:00:00.000Z',
     campaignId: 'vote-2026-closed',
-    groups: []
+    groups: [],
+    contactEmail: 'admin.vote@example.test'
   })
 
   assert.match(html, /Demandes fermées\./)
+  assert.match(html, /La campagne de votes est fermée\./)
+  assert.match(html, /mailto:' \+ contactEmail/)
+  assert.match(html, /admin\.vote@example\.test/)
+  assert.doesNotMatch(html, /helder\.costa@eduvaud\.ch/)
 })
 
 test('generateStaticVotesSite writes PHP, sync endpoint and manifest in the vote folder', async (t) => {
@@ -749,8 +755,64 @@ test('buildStaticVoteSyncPhp requires the dedicated sync secret', () => {
   assert.match(php, /votes\.jsonl/)
   assert.match(php, /arbitrages\.jsonl/)
   assert.match(php, /arbitrageRecords/)
+  assert.match(php, /STATIC_VOTE_CAMPAIGN_ID_JSON/)
   assert.match(php, /'year' => 2026/)
   assert.doesNotMatch(php, /STATIC_VOTE_ACCESS_JSON/)
+})
+
+test('syncStaticVoteResponses ignore les réponses d une campagne vote inconnue', async () => {
+  const year = 2026
+  const publicationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tpiorganizer-static-vote-sync-campaign-'))
+
+  await withVoteEnv({
+    STATIC_VOTE_PUBLICATION_DIR: publicationRoot,
+    STATIC_VOTE_SYNC_SECRET: 'sync-secret'
+  }, async () => {
+    const outputDir = path.join(publicationRoot, 'votes', String(year))
+    fs.mkdirSync(outputDir, { recursive: true })
+    fs.writeFileSync(path.join(outputDir, 'index.php'), buildStaticVotePhp({
+      html: '<main></main>',
+      year,
+      campaignPayload: {
+        year,
+        campaignId: 'vote-2026-current',
+        groups: []
+      },
+      accessLinks: []
+    }), 'utf8')
+
+    const result = await syncStaticVoteResponses({
+      year,
+      remoteUrl: 'https://tpi26.ch/votes-2026/sync.php',
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          records: [{
+            id: 'old-submission',
+            year,
+            campaignId: 'vote-2026-old',
+            personId: String(new mongoose.Types.ObjectId()),
+            tpiId: String(new mongoose.Types.ObjectId()),
+            fixedVoteId: String(new mongoose.Types.ObjectId()),
+            mode: 'ok',
+            submittedAt: '2026-05-10T08:00:00.000Z',
+            tokenHash: 'f'.repeat(64)
+          }],
+          arbitrageRecords: []
+        })
+      })
+    })
+
+    assert.equal(result.success, true)
+    assert.equal(result.receivedCount, 1)
+    assert.equal(result.voteReceivedCount, 1)
+    assert.equal(result.voteProcessedCount, 0)
+    assert.equal(result.ignoredCampaignCount, 1)
+    assert.deepEqual(result.ignoredCampaignIds, ['vote-2026-old'])
+    assert.equal(result.failedCount, 0)
+  })
 })
 
 test('fetchStaticVoteRecords calls remote sync.php with X-Sync-Secret', async () => {

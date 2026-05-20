@@ -3295,7 +3295,7 @@ const PlanningDashboard = ({ year, isAdmin = false, toggleArrow, isArrowUp }) =>
       actionKey: 'staticVoteSync',
       run: () => workflowCoordinationService.syncStaticVotePublication(year),
       successBuilder: (result) =>
-        `Mini-site synchronise: ${result?.voteImportedCount ?? result?.importedCount ?? 0}/${result?.voteReceivedCount ?? result?.receivedCount ?? 0} vote(s), ${result?.arbitrageImportedCount || 0}/${result?.arbitrageReceivedCount || 0} arbitrage(s), ${result?.failedCount || 0} erreur(s).`,
+        `Mini-site synchronise: ${result?.voteImportedCount ?? result?.importedCount ?? 0}/${result?.voteProcessedCount ?? result?.voteReceivedCount ?? result?.receivedCount ?? 0} vote(s), ${result?.arbitrageImportedCount || 0}/${result?.arbitrageReceivedCount || 0} arbitrage(s), ${result?.ignoredCampaignCount || 0} obsolète(s), ${result?.failedCount || 0} erreur(s).`,
       errorFallback: 'Erreur lors de la synchronisation des votes statiques.',
       reloadAfterSuccess: true
     })

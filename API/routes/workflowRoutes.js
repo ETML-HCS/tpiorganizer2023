@@ -133,12 +133,14 @@ function buildStaticVoteSyncWarnings(result = null) {
   const skipped = Number(result.skippedCount || 0)
   const failed = Number(result.failedCount || 0)
   const received = Number(result.receivedCount || 0)
+  const ignoredCampaign = Number(result.ignoredCampaignCount || 0)
   const warnings = []
 
   if (received > 0) {
     warnings.push(
       `Synchronisation mini-site vote: ${imported}/${received} réponse(s) importée(s)` +
       (skipped > 0 ? `, ${skipped} déjà connue(s)` : '') +
+      (ignoredCampaign > 0 ? `, ${ignoredCampaign} campagne(s) obsolète(s) ignorée(s)` : '') +
       (failed > 0 ? `, ${failed} erreur(s)` : '') +
       '.'
     )
@@ -3090,11 +3092,14 @@ router.post(
         payload: {
           receivedCount: result.receivedCount,
           voteReceivedCount: result.voteReceivedCount,
+          voteProcessedCount: result.voteProcessedCount,
           arbitrageReceivedCount: result.arbitrageReceivedCount,
           importedCount: result.importedCount,
           arbitrageImportedCount: result.arbitrageImportedCount,
           skippedCount: result.skippedCount,
           failedCount: result.failedCount,
+          ignoredCampaignCount: result.ignoredCampaignCount,
+          ignoredCampaignIds: result.ignoredCampaignIds,
           sourceUrl: result.sourceUrl
         },
         success: result.failedCount === 0

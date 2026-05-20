@@ -141,6 +141,27 @@ function requestElementFullscreen(element) {
   return requestFullscreen.call(element)
 }
 
+function buildPlanningRoomsHash(rooms = []) {
+  return JSON.stringify(
+    (Array.isArray(rooms) ? rooms : []).map((room) => ({
+      site: room?.site || "",
+      name: room?.name || "",
+      date: room?.date || "",
+      tpis: (Array.isArray(room?.tpiDatas) ? room.tpiDatas : [])
+        .map((tpiData, index) => ({
+          period: Number.parseInt(String(tpiData?.period || index + 1), 10) || index + 1,
+          refTpi: tpiData?.refTpi == null ? "" : String(tpiData.refTpi),
+          candidatPersonId: tpiData?.candidatPersonId || "",
+          expert1PersonId: tpiData?.expert1?.personId || "",
+          expert2PersonId: tpiData?.expert2?.personId || "",
+          bossPersonId: tpiData?.boss?.personId || "",
+          isConstraintOverride: Boolean(tpiData?.isConstraintOverride)
+        }))
+        .sort((left, right) => left.period - right.period)
+    }))
+  )
+}
+
 function exitDocumentFullscreen(doc = document) {
   const exitFullscreen =
     doc.exitFullscreen ||
@@ -2087,11 +2108,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
   }
 
   const hasSnapshotForCurrentPlanning = Boolean(activeSnapshotVersion)
-  const currentPlanningHash = JSON.stringify(newRooms.map(r => ({
-    name: r.name,
-    date: r.date,
-    tpiCount: r.tpiDatas?.length || 0
-  })))
+  const currentPlanningHash = useMemo(() => buildPlanningRoomsHash(newRooms), [newRooms])
   const hasStaleSnapshotForCurrentPlanning = Boolean(
     roomsHashAtFreeze &&
     currentPlanningHash &&
@@ -2306,13 +2323,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
 
     if (result?.snapshot?.version) {
       setActiveSnapshotVersion(result.snapshot.version)
-      // Stocker le hash des salles actuelles pour détecter les modifications futures
-      const hash = JSON.stringify(newRooms.map(r => ({
-        name: r.name,
-        date: r.date,
-        tpiCount: r.tpiDatas?.length || 0
-      })))
-      setRoomsHashAtFreeze(hash)
+      setRoomsHashAtFreeze(currentPlanningHash)
     }
   }
 
@@ -2709,7 +2720,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
       actionKey: "staticVoteSync",
       run: () => workflowCoordinationService.syncStaticVotePublication(selectedYear),
       successMessage: (result) =>
-        `Votes web synchronisés: ${result?.importedCount || 0}/${result?.receivedCount || 0} importé(s), ${result?.failedCount || 0} erreur(s).`,
+        `Votes web synchronisés: ${result?.importedCount || 0}/${result?.voteProcessedCount ?? result?.receivedCount ?? 0} importé(s), ${result?.ignoredCampaignCount || 0} obsolète(s), ${result?.failedCount || 0} erreur(s).`,
       onSuccess: (result) => {
         applyStaticVoteSyncResult(result, {
           lastSyncMessage: "Synchronisation manuelle votes web effectuée."
@@ -3872,7 +3883,7 @@ const TpiSchedule = ({ toggleArrow, isArrowUp }) => {
           showNewRoomForm={isNewRoomFormOpen}
           existingRooms={roomEntries}
           roomsHashAtFreeze={roomsHashAtFreeze}
-          currentRoomsHash={JSON.stringify(newRooms.map(r => ({ name: r.name, date: r.date, tpiCount: r.tpiDatas?.length || 0 })))}
+          currentRoomsHash={currentPlanningHash}
           isRoomsFocusMode={isRoomsFocusMode}
           isRoomsWrapMode={isRoomsWrapMode}
           isRoomsChronologicalSortMode={isRoomsChronologicalSortMode}

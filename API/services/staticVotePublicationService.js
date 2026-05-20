@@ -8,6 +8,7 @@ const { rootDir } = require('../config/loadEnv')
 const Slot = require('../models/slotModel')
 const TpiPlanning = require('../models/tpiCoordinationModel')
 const Vote = require('../models/voteModel')
+const Person = require('../models/personModel')
 const { MagicLink } = require('../models/magicLinkModel')
 const { ResolutionProposal } = require('../models/resolutionProposalModel')
 const schedulingService = require('./schedulingService')
@@ -41,6 +42,7 @@ const DEFAULT_OUTPUT_ROOT = path.resolve(rootDir, 'static-publication')
 const DEFAULT_PUBLIC_BASE_URL = 'https://tpi26.ch'
 const DEFAULT_STATIC_VOTE_PATH_PREFIX = 'votes'
 const DEFAULT_STATIC_VOTE_SYNC_TIMEOUT_MS = 15000
+const DEFAULT_STATIC_VOTE_CONTACT_EMAIL = 'helder.costa@eduvaud.ch'
 const STATIC_VOTE_BOOTSTRAP_PLACEHOLDER = '<!-- STATIC_VOTE_BOOTSTRAP -->'
 const STATIC_VOTE_CAMPAIGN_ARCHIVE_FILE = 'campaign-archive.json'
 const STATIC_VOTE_IMPORT_PREFIX = 'static-vote'
@@ -53,6 +55,40 @@ function compactText(value) {
   }
 
   return String(value).trim()
+}
+
+function normalizeStaticVoteContactEmail(value) {
+  const configuredFallback = compactText(process.env.STATIC_VOTE_CONTACT_EMAIL).toLowerCase()
+  const fallback = /^\S+@\S+\.\S+$/.test(configuredFallback)
+    ? configuredFallback
+    : DEFAULT_STATIC_VOTE_CONTACT_EMAIL
+  const email = compactText(value || fallback).toLowerCase()
+
+  return /^\S+@\S+\.\S+$/.test(email) ? email : fallback
+}
+
+async function resolveStaticVoteContactEmail() {
+  const fallback = normalizeStaticVoteContactEmail()
+
+  if (mongoose.connection.readyState !== 1) {
+    return fallback
+  }
+
+  try {
+    const admin = await Person.findOne({
+      isActive: true,
+      roles: 'admin',
+      email: { $exists: true, $ne: '' }
+    })
+      .select('email')
+      .sort({ sendEmails: -1, lastName: 1, firstName: 1 })
+      .lean()
+
+    return normalizeStaticVoteContactEmail(admin?.email || fallback)
+  } catch (error) {
+    console.warn('Contact administrateur du mini-site vote indisponible:', error?.message || error)
+    return fallback
+  }
 }
 
 function parseYear(value) {
@@ -1213,8 +1249,9 @@ function buildStaticVoteUnavailableHtml(year, title = 'Lien personnel requis', m
 </html>`
 }
 
-function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
+function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [], contactEmail = DEFAULT_STATIC_VOTE_CONTACT_EMAIL }) {
   const normalizedYear = parseYear(year)
+  const staticVoteContactEmail = normalizeStaticVoteContactEmail(contactEmail)
   const generatedAtLabel = formatDateTimeLabel(generatedAt)
   const publicationLabel = generatedAtLabel
     ? `Publication du ${generatedAtLabel}.`
@@ -1992,12 +2029,30 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
     .vote-submit:hover:not(:disabled) { background: var(--accent-strong); }
     .vote-submit:disabled { opacity: .58; cursor: default; box-shadow: none; }
     .vote-empty {
+      display: grid;
+      gap: 8px;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 24px;
       color: var(--muted);
       box-shadow: var(--shadow);
+    }
+    .vote-empty h2 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 1.12rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .vote-empty p {
+      margin: 0;
+      line-height: 1.45;
+    }
+    .vote-empty a {
+      color: var(--accent-strong);
+      font-weight: 700;
+      overflow-wrap: anywhere;
     }
     @media (max-width: 780px) {
       .vote-shell { width: min(100vw - 18px, 1080px); padding: 10px 0 22px; }
@@ -2113,6 +2168,7 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
       var progressText = document.getElementById('vote-progress-text');
       var progressFill = document.getElementById('vote-progress-fill');
       var DEFAULT_MAX_PROPOSALS = 3;
+      var contactEmail = ${serializeJsonForHtml(staticVoteContactEmail)};
 
       function escapeText(value) {
         return String(value == null ? '' : value);
@@ -3336,7 +3392,18 @@ function buildStaticVoteHtml({ year, generatedAt, campaignId, groups = [] }) {
         if (!groups.length) {
           var empty = document.createElement('div');
           empty.className = 'vote-empty';
-          empty.textContent = 'Demandes fermées.';
+          var title = createTextElement('h2', '', 'Demandes fermées.');
+          var message = createTextElement(
+            'p',
+            '',
+            'La campagne de votes est fermée. Pour toute question, contactez l\\'administrateur de la campagne.'
+          );
+          var contactLine = createTextElement('p', 'vote-empty-contact', 'Contact: ');
+          var contactLink = document.createElement('a');
+          contactLink.href = 'mailto:' + contactEmail;
+          contactLink.textContent = contactEmail;
+          contactLine.append(contactLink);
+          empty.append(title, message, contactLine);
           root.append(empty);
           return;
         }
@@ -4233,8 +4300,9 @@ arbitrageRender($arbitragePayload, $tokenHash, $existingRecord);
 `
 }
 
-function buildStaticVoteSyncPhp({ year, syncSecret }) {
+function buildStaticVoteSyncPhp({ year, syncSecret, campaignId = '' }) {
   const normalizedYear = parseYear(year)
+  const normalizedCampaignId = compactText(campaignId)
 
   return `<?php
 declare(strict_types=1);
@@ -4247,6 +4315,10 @@ header('Content-Type: application/json; charset=utf-8');
 $staticVoteSyncSecret = json_decode(<<<'STATIC_VOTE_SYNC_SECRET_JSON'
 ${serializeJsonForPhp(compactText(syncSecret))}
 STATIC_VOTE_SYNC_SECRET_JSON, true);
+
+$staticVoteCampaignId = json_decode(<<<'STATIC_VOTE_CAMPAIGN_ID_JSON'
+${serializeJsonForPhp(normalizedCampaignId)}
+STATIC_VOTE_CAMPAIGN_ID_JSON, true);
 
 function staticVoteSyncRespond(int $statusCode, array $payload): void
 {
@@ -4278,7 +4350,19 @@ if (file_exists($recordsPath)) {
     if (is_array($lines)) {
         foreach ($lines as $line) {
             $record = json_decode($line, true);
-            if (is_array($record) && (int)($record['year'] ?? 0) === ${normalizedYear}) {
+            $recordCampaignId = is_array($record) && isset($record['campaignId']) && is_string($record['campaignId'])
+                ? trim($record['campaignId'])
+                : '';
+            if (
+                is_array($record) &&
+                (int)($record['year'] ?? 0) === ${normalizedYear} &&
+                (
+                    !is_string($staticVoteCampaignId) ||
+                    trim($staticVoteCampaignId) === '' ||
+                    $recordCampaignId === '' ||
+                    $recordCampaignId === trim($staticVoteCampaignId)
+                )
+            ) {
                 $records[] = $record;
             }
         }
@@ -4342,7 +4426,8 @@ async function writeStaticVoteAccessFiles({ year, html, campaignPayload }) {
     getSyncPhpPath(normalizedYear),
     buildStaticVoteSyncPhp({
       year: normalizedYear,
-      syncSecret
+      syncSecret,
+      campaignId: campaignPayload?.campaignId
     }),
     'utf8'
   )
@@ -4413,6 +4498,7 @@ async function getStaticVotePublicationStatus(year, deploymentConfig = null) {
     voterCount: Number(manifest.voterCount || 0),
     groupCount: Number(manifest.groupCount || 0),
     accessLinkCount: Number(manifest.accessLinkCount || 0),
+    contactEmail: normalizeStaticVoteContactEmail(manifest.contactEmail),
     arbitrageConfigured: Boolean(manifest.arbitrageConfigured),
     siteSyncSecretConfigured: Boolean(manifest.syncSecretConfigured),
     syncSecretConfigured: Boolean(getSyncSecret())
@@ -4429,7 +4515,11 @@ async function generateStaticVotesSite(year) {
   const generatedAt = new Date().toISOString()
   const previousPayload = await loadStaticVoteCampaignSnapshot(normalizedYear)
   const campaignPayload = await buildStaticVoteCampaignPayload(normalizedYear, generatedAt)
-  const html = buildStaticVoteHtml(campaignPayload)
+  const contactEmail = await resolveStaticVoteContactEmail()
+  const html = buildStaticVoteHtml({
+    ...campaignPayload,
+    contactEmail
+  })
   const outputDir = getOutputDir(normalizedYear)
 
   await fs.promises.mkdir(outputDir, { recursive: true })
@@ -4453,6 +4543,7 @@ async function generateStaticVotesSite(year) {
     voterCount: countUnique(campaignPayload.groups.map((group) => group.personId)),
     groupCount: campaignPayload.groups.length,
     accessLinkCount: accessFiles.accessLinkCount,
+    contactEmail,
     arbitrageConfigured: accessFiles.arbitrageConfigured,
     syncSecretConfigured: accessFiles.syncSecretConfigured,
     archivedCampaignId: archivedCampaign.archived ? archivedCampaign.campaignId : null,
@@ -4500,7 +4591,11 @@ async function publishStaticVotesSite(year) {
     campaignId: status.campaignId,
     groups: []
   }
-  const html = buildStaticVoteHtml(campaignPayload)
+  const contactEmail = normalizeStaticVoteContactEmail(status.contactEmail || await resolveStaticVoteContactEmail())
+  const html = buildStaticVoteHtml({
+    ...campaignPayload,
+    contactEmail
+  })
   const accessFiles = await writeStaticVoteAccessFiles({
     year: normalizedYear,
     html,
@@ -4517,6 +4612,7 @@ async function publishStaticVotesSite(year) {
     voterCount: status.voterCount || 0,
     groupCount: status.groupCount || 0,
     accessLinkCount: accessFiles.accessLinkCount,
+    contactEmail,
     arbitrageConfigured: accessFiles.arbitrageConfigured,
     syncSecretConfigured: accessFiles.syncSecretConfigured,
     previewPath: getPreviewPath(normalizedYear),
@@ -4873,6 +4969,25 @@ async function loadArchivedStaticVoteCampaignSnapshot(year, campaignId = '') {
   const archive = await readStaticVoteCampaignArchive(year)
   const match = archive.find((record) => record.campaignId === normalizedCampaignId)
   return match?.payload || null
+}
+
+async function getImportableStaticVoteCampaignIds(year) {
+  const campaignIds = new Set()
+  const currentSnapshot = await loadStaticVoteCampaignSnapshot(year)
+  const currentCampaignId = compactText(currentSnapshot?.campaignId)
+
+  if (currentCampaignId) {
+    campaignIds.add(currentCampaignId)
+  }
+
+  for (const record of await readStaticVoteCampaignArchive(year)) {
+    const archivedCampaignId = compactText(record?.campaignId)
+    if (archivedCampaignId) {
+      campaignIds.add(archivedCampaignId)
+    }
+  }
+
+  return campaignIds
 }
 
 async function loadStaticVoteCampaignSnapshotForRecord(record) {
@@ -5703,6 +5818,18 @@ async function syncStaticVoteResponses({
     fetchImpl,
     timeoutMs
   })
+  const importableCampaignIds = await getImportableStaticVoteCampaignIds(normalizedYear)
+  const ignoredCampaignRecords = []
+  const voteRecords = remote.records.filter((record) => {
+    const recordCampaignId = compactText(record?.campaignId)
+
+    if (importableCampaignIds.size === 0 || !recordCampaignId || importableCampaignIds.has(recordCampaignId)) {
+      return true
+    }
+
+    ignoredCampaignRecords.push(record)
+    return false
+  })
 
   const results = []
   const arbitrageResults = []
@@ -5716,7 +5843,7 @@ async function syncStaticVoteResponses({
   let arbitrageSkippedCount = 0
   let arbitrageFailedCount = 0
 
-  for (const record of remote.records) {
+  for (const record of voteRecords) {
     try {
       const result = await importStaticVoteRecord(record, normalizedYear)
       results.push(result)
@@ -5774,6 +5901,11 @@ async function syncStaticVoteResponses({
     sourceUrl: remote.sourceUrl,
     receivedCount: remote.records.length + remote.arbitrageRecords.length,
     voteReceivedCount: remote.records.length,
+    voteProcessedCount: voteRecords.length,
+    ignoredCampaignCount: ignoredCampaignRecords.length,
+    ignoredCampaignIds: Array.from(
+      new Set(ignoredCampaignRecords.map((record) => compactText(record?.campaignId)).filter(Boolean))
+    ).sort(),
     arbitrageReceivedCount: remote.arbitrageRecords.length,
     importedCount,
     skippedCount,
